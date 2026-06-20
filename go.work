@@ -1,0 +1,6 @@
+go 1.23
+
+use (
+	./hertz_gen
+	./media_example
+)

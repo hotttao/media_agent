@@ -1,0 +1,262 @@
+// idl/config/config.proto
+//
+// Workspace 级共享配置 schema，用 Protobuf 约束：
+// - 每个基础设施依赖 = 一个独立配置段
+// - 每个本服务（app / server）配置 = 一个段
+// - 调用其他服务时 = 在 client map 里加一段
+//
+// 字段命名约定：
+//   - snake_case
+//   - 治理类 message 第一个字段统一 `bool enabled = 1;`
+//   - 服务名 / app 名走 `app.name`，禁止 `service.name`
+//
+// 加载链路：YAML → protojson → proto.Unmarshal(Config)
+syntax = "proto3";
+
+package config;
+
+option go_package = "media_agent/hertz_gen/config";
+
+// ============================================================================
+// 顶层 Config
+// ============================================================================
+//
+// 生命周期规则：
+//   1. 系统新增一个微服务  → 复制本 Config 模板，本服务 app/server 段保持单例
+//   2. 本服务调用某下游服务 → 在 client map 里加一项 key=<下游 app 名>
+//   3. 引入新基础设施依赖   → 在 Config 顶层加一个 *Config 段（如 nacos / kafka）
+//   4. 所有段都可通过 enabled=false 关闭，未启用段不参与初始化
+message Config {
+  // 本服务自描述：app.name 是本服务的逻辑名（被 server 注册、被下游 client 引用）
+  AppConfig app = 1;
+
+  // 服务端配置（监听、超时、registry 行为开关）
+  ServerConfig server = 2;
+
+  // ---- 数据存储 ----
+  DatabaseConfig database = 10;
+  RedisConfig redis = 11;
+
+  // ---- 注册中心 / 服务发现 ----
+  // consul：服务端注册（本服务把自己注册进去）
+  ConsulConfig consul = 20;
+  // consul_discovery：客户端发现（本服务调下游时拿地址）
+  ConsulDiscoveryConfig consul_discovery = 21;
+
+  // ---- 可观测 ----
+  OtelConfig otel = 30;
+  PrometheusConfig prometheus = 31;
+  AccessLogConfig access_log = 32;
+
+  // ---- 服务端中间件 ----
+  RecoveryConfig recovery = 40;
+  RequestIdConfig request_id = 41;
+  CorsConfig cors = 42;
+  RateLimitConfig rate_limit = 43;
+  CircuitBreakerConfig circuit_breaker = 44;
+
+  // ---- 运维端点 ----
+  PprofConfig pprof = 50;
+  HealthConfig health = 51;
+
+  // ---- 客户端：调用其他服务 ----
+  // key = 下游 app.name；value = 该下游 client 的治理配置。
+  // 新增下游 = 在这里加一项；不再调用 = 删一项。
+  map<string, AppClientConfig> client = 100;
+}
+
+// ============================================================================
+// 本服务自描述
+// ============================================================================
+message AppConfig {
+  // 服务逻辑名（用于注册到 registry、被其他服务的 client.<name> 引用）
+  string name = 1;
+  // 版本号，注入到 trace / metrics / log
+  string version = 2;
+  // 部署环境：dev / staging / prod
+  string env = 3;
+}
+
+// ============================================================================
+// 服务端
+// ============================================================================
+message ServerConfig {
+  bool enabled = 1;
+  // 监听地址，例如 ":8888" 或 "0.0.0.0:8888"
+  string address = 2;
+  // Hertz server-level 超时
+  TimeoutConfig timeout = 3;
+}
+
+// ============================================================================
+// 数据存储
+// ============================================================================
+message DatabaseConfig {
+  bool enabled = 1;
+  string driver = 2;          // mysql / postgres / sqlite
+  string dsn = 3;
+  int32 max_open_conns = 4;
+  int32 max_idle_conns = 5;
+  int32 conn_max_lifetime_seconds = 6;
+}
+
+message RedisConfig {
+  bool enabled = 1;
+  string address = 2;         // host:port
+  string password = 3;
+  int32 db = 4;
+  int32 pool_size = 5;
+  int32 dial_timeout_ms = 6;
+}
+
+// ============================================================================
+// 注册中心：服务端注册
+// ============================================================================
+message ConsulConfig {
+  bool enabled = 1;
+  string address = 2;                  // consul agent: host:port
+  string scheme = 3;                   // http / https
+  string token = 4;
+  // 注册元数据
+  string service_address = 10;         // 对外可达地址（覆盖 address 的 host）
+  int32 service_port = 11;             // 对外可达端口
+  repeated string tags = 12;
+  string health_check_path = 13;       // 例如 "/health"
+  int32 health_check_interval_seconds = 14;
+  int32 health_check_timeout_seconds = 15;
+  int32 deregister_critical_after_seconds = 16;
+}
+
+// ============================================================================
+// 注册中心：客户端发现
+// ============================================================================
+message ConsulDiscoveryConfig {
+  bool enabled = 1;
+  string address = 2;
+  string scheme = 3;
+  string token = 4;
+  int32 refresh_interval_seconds = 10;
+  string datacenter = 11;
+}
+
+// ============================================================================
+// 可观测
+// ============================================================================
+message OtelConfig {
+  bool enabled = 1;
+  string export_endpoint = 2;          // OTLP collector，例如 "localhost:4317"
+  bool insecure = 3;
+  double sample_ratio = 4;             // 0.0 - 1.0
+}
+
+message PrometheusConfig {
+  bool enabled = 1;
+  string address = 2;                  // 暴露 /metrics 的监听地址，例如 ":9091"
+  string path = 3;                     // 例如 "/metrics"
+}
+
+message AccessLogConfig {
+  bool enabled = 1;
+  // 例如 "[${time}] ${status} - ${latency} ${method} ${path}"
+  string format = 2;
+  string time_format = 3;
+}
+
+// ============================================================================
+// 服务端中间件
+// ============================================================================
+message RecoveryConfig {
+  bool enabled = 1;
+  bool print_stack = 2;
+}
+
+message RequestIdConfig {
+  bool enabled = 1;
+  string header = 2;                   // 默认 "X-Request-ID"
+}
+
+message CorsConfig {
+  bool enabled = 1;
+  repeated string allow_origins = 2;
+  repeated string allow_methods = 3;
+  repeated string allow_headers = 4;
+  bool allow_credentials = 5;
+  int32 max_age_seconds = 6;
+}
+
+message RateLimitConfig {
+  bool enabled = 1;
+  // 资源名规则：服务端 = "<app>:<method>:<path>"；客户端 = "<caller_app>->;<callee_app>"
+  // 留空走默认提取规则
+  string resource_pattern = 2;
+  // sentinel: 单位时间窗口内的阈值（QPS）
+  double threshold = 3;
+  int32 stat_interval_ms = 4;
+}
+
+message CircuitBreakerConfig {
+  bool enabled = 1;
+  // sentinel circuit breaker 策略：slow_request_ratio / error_ratio / error_count
+  string strategy = 2;
+  double threshold = 3;
+  int32 stat_interval_ms = 4;
+  int32 retry_timeout_ms = 5;          // 半开状态探测间隔
+  int32 min_request_amount = 6;
+}
+
+// ============================================================================
+// 运维端点
+// ============================================================================
+message PprofConfig {
+  bool enabled = 1;
+  string prefix = 2;                   // 默认 "/debug/pprof"
+}
+
+message HealthConfig {
+  bool enabled = 1;
+  string path = 2;                     // 默认 "/health"
+}
+
+// ============================================================================
+// 通用：超时 / 重试
+// ============================================================================
+message TimeoutConfig {
+  bool enabled = 1;
+  int32 connect_timeout_ms = 2;        // 仅 client 用
+  int32 read_timeout_ms = 3;
+  int32 write_timeout_ms = 4;
+  int32 request_timeout_ms = 5;        // server / client 整体超时
+}
+
+message RetryConfig {
+  bool enabled = 1;
+  int32 max_attempt_times = 2;         // Hertz retry.WithMaxAttemptTimes
+  int32 initial_delay_ms = 3;
+  int32 max_delay_ms = 4;
+  double delay_multiplier = 5;
+  // 触发重试的 HTTP 状态码白名单（空则按 Hertz 默认）
+  repeated int32 retry_status_codes = 6;
+}
+
+// ============================================================================
+// 客户端：调用其他服务
+// ============================================================================
+//
+// 一个 key = 一个下游 app；本服务通过 clients.<KEY>() 拿到 client 实例。
+message AppClientConfig {
+  bool enabled = 1;
+  // 下游服务的逻辑名（必须与下游 app.name 一致）
+  string service_name = 2;
+  // 走域名直连时使用；走 discovery 时留空
+  string base_domain = 3;
+  // 走服务发现时启用
+  bool use_discovery = 4;
+
+  TimeoutConfig timeout = 10;
+  RetryConfig retry = 11;
+  CircuitBreakerConfig circuit_breaker = 12;
+  RateLimitConfig rate_limit = 13;
+
+  // 负载均衡策略：weighted_random / round_robin / consistent_hash
+  string load_balance = 20;
+}
