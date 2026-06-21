@@ -2,7 +2,10 @@ module media_agent/media_example
 
 go 1.22.4
 
-require github.com/cloudwego/hertz v0.10.5
+require (
+	github.com/cloudwego/hertz v0.10.5
+	github.com/google/wire v0.7.0
+)
 
 require (
 	github.com/bytedance/gopkg v0.1.4 // indirect

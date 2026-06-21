@@ -41,3 +41,10 @@ hz-update:
 # hz-gen：一键重新生成 model + handler/router。
 .PHONY: hz-gen
 hz-gen: hz-update
+
+# 初始化 lefthook git hooks：安装 lefthook 并写入 .git/hooks。
+# lefthook.yml 已纳入版本库，团队成员 clone 后跑一次即可。
+.PHONY: lefthook-install
+lefthook-install:
+	go install github.com/evilmartians/lefthook@latest
+	lefthook install

@@ -1,6 +1,8 @@
-go 1.23
+go 1.26.3
 
 use (
+	./harness
 	./hertz_gen
+	./media-cli
 	./media_example
 )
