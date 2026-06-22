@@ -231,6 +231,8 @@ biz/service/
 
 应用层稳定通用类型：分页、Clock 接口、ID 生成器、可复用辅助类型。
 
+包含 `client/` 子目录：业务级下游 client 实例装配层（`clients.go` 声明全局变量、`init.go` / `init_<downstream_app>.go` 初始化），消费 `hertz_infra/clienthertz` 的治理能力。详见 [`contributing/client-cn.md`](client-cn.md) §7。
+
 **命名规则**：用具体名字（`clock.go` / `id.go` / `pagination.go`），禁止 `utils.go` / `common.go` / `helper.go`。
 
 ---
@@ -327,7 +329,7 @@ shared   ─X→ domain / policy / service / workflow / dal / handler / model（
 
 - 任何文件 import `biz/dal/query` 或 `biz/dal/model` → 必须位于 `biz/dal/repo` 或 `biz/dal` 初始化代码
 - 任何文件 import `hertz_gen/model/**`（API DTO）→ 仅 `biz/handler/**` 允许
-- 任何文件 import `hertz_gen/<app>/**`（下游 client stub）→ 仅 `hertz_infra/clienthertz/` 允许
+- 任何文件 import `hertz_gen/<app>/**`（下游 client stub）→ 仅 `<app>/biz/shared/client/` 允许（实例装配层）；`hertz_infra/clienthertz/` 只提供治理能力，不 import client stub
 - `domain` 不出现 JSON / query / form / ORM tag；不依赖日志、配置、框架
 - `policy` 不查 DB / Redis / 外部 API；只接收 service 加载好的事实做决策
 
@@ -387,3 +389,85 @@ make arch-check                       # 垂直层边界 + 同层 domain 隔离 +
 # 方式二:
 cd media_example && go run ../harness/tools/archcheck
 ```
+
+---
+
+## 配置加载层
+
+配置加载是跨服务共享的基础设施能力，收口在 `hertz_infra/config/`。
+
+### 模块定位
+
+`hertz_infra/config` 是独立 module（同 `hertz_infra`），所有 hertz 微服务共享。它只依赖 `yaml.v3` + `fsnotify` + `godotenv` + `protojson`，**不依赖 Consul SDK**——Consul KV 源实现放在 `hertz_infra/serverhertz/consul_kv.go`，通过 `Source` 接口解耦。
+
+### Source 接口与 Loader
+
+所有配置源（文件 / Consul KV / 未来 Nacos）实现统一接口，Loader 只依赖这一个抽象：
+
+```go
+type Source interface {
+    Get() (map[string]any, error)
+    Watch(onChange func()) error
+    Close() error
+    Priority() int                        // 数值低先合并，高优先级覆盖低优先级
+}
+```
+
+- `file_source.go`：`priority=10`，`fsnotify` 监听 + 200ms 去抖；
+- `serverhertz/consul_kv.go`：`priority=20`，Consul KV blocking-query 模式。
+
+Loader 管理多个 Source，统一 reload + 通知订阅者：
+
+```go
+func NewLoader() (*Loader, error)                  // .env + APP_ENV → conf/<env>.yaml
+func NewLoaderFromPath(path string) (*Loader, error)
+func (l *Loader) Current() *Config                  // 当前合并后的配置快照
+func (l *Loader) Attach(src Source) error           // 挂载额外源（nil 无操作）
+func (l *Loader) Watch() error                      // 统一启动所有 source 的 watch
+func (l *Loader) Subscribe(handler func(*Config))   // 注册配置变更回调
+func (l *Loader) Close()                            // 统一 Close（必须 defer 调用）
+```
+
+### 加载链
+
+```text
+.env (godotenv)
+  → APP_ENV
+  → conf/<env>.yaml
+  → expandEnv (shell ${VAR:-default}，isEnvName 过滤模板变量)
+  → yaml.v3 unmarshal → map[string]any
+  → [可选] Consul KV JSON deep-merge（按 priority 升序合并）
+  → json.Marshal → protojson.Unmarshal → *configpb.Config
+  → fsnotify / Consul KV blocking-query 触发 reload
+  → 通知 Subscribe 回调
+```
+
+### 配置订阅职责切分
+
+| 订阅方 | 订阅方式 | 原因 |
+|---|---|---|
+| ServerSuite 启动期固化能力（server options / middleware chain / registry） | 不订阅，一次性消费 `loader.Current()` | Hertz server 启动后不可变 |
+| 可热更新能力组件（限流规则 / 熔断规则） | 在 `NewServerSuite` 内部 `loader.Subscribe` 自行订阅 | 组件自己最清楚哪些字段能热加载 |
+
+`ServerSuite` 持有 `*config.Loader` 不持有 cfg 快照——`NewServerSuite(loader)` 收 loader 不收 cfg。
+
+### 依赖与 import 规则
+
+**允许**：
+- `hertz_infra/config` import `yaml.v3` / `fsnotify` / `godotenv` / `protojson`；
+- `hertz_infra/serverhertz/consul_kv.go` import `consul/api`（实现 `config.Source` 接口）；
+- 业务层 `import config "media_agent/hertz_infra/config"` 订阅配置。
+
+
+### 配置 proto 与 YAML
+
+配置结构由 `idl/config/config.proto` 定义，`protoc` 生成 `hertz_gen/config/config.pb.go`。后端类型由 proto message 名锁定（`ConsulKVConfig`），不用字符串字段区分。YAML 顶级块与 proto message 一一对应：
+
+```yaml
+consul_kv:              # 对应 ConsulKVConfig
+  enabled: ${CONSUL_KV_ENABLED:-false}
+  address: ${CONSUL_KV_ADDR:-127.0.0.1:8500}
+  data_id: ${CONSUL_KV_DATA_ID:-media-example/config}
+```
+
+`consul:`（服务注册）、`consul_discovery:`（客户端发现）、`consul_kv:`（配置中心）三块物理隔离，不混字段。

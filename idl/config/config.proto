@@ -59,6 +59,11 @@ message Config {
   PprofConfig pprof = 50;
   HealthConfig health = 51;
 
+  // ---- 配置中心（Consul KV 动态加载） ----
+  // 启用后 Loader 会订阅 Consul KV，按 proto option [(config.dynamic)=true]
+  // 标注的字段运行期覆盖基线；未标注字段保持启动期只读。
+  ConsulKVConfig consul_kv = 60;
+
   // ---- 客户端：调用其他服务 ----
   // key = 下游 app.name；value = 该下游 client 的治理配置。
   // 新增下游 = 在这里加一项；不再调用 = 删一项。
@@ -215,6 +220,24 @@ message PprofConfig {
 message HealthConfig {
   bool enabled = 1;
   string path = 2;                     // 默认 "/health"
+}
+
+// ============================================================================
+// 配置中心：Consul KV
+// ============================================================================
+//
+// 后端锁定为 Consul KV（与 consul: / consul_discovery: 的命名 pattern 一致，
+// 后端编码进字段名）。YAGNI：未来若引入 Nacos / Apollo，新增独立顶级块和对应
+// proto message，不在本 message 里加 backend 判别字段。
+//
+// 启用后 Loader 会订阅 Consul KV 的 blocking-query，KV value 必须是 JSON 文本
+// （与 protojson 兼容），变更触发 reload + 订阅者回调。
+message ConsulKVConfig {
+  bool enabled = 1;
+  // Consul agent 地址（host:port）
+  string address = 2;
+  // Consul KV key，例如 "media-example/config"
+  string data_id = 3;
 }
 
 // ============================================================================

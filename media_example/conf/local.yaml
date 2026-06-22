@@ -1,0 +1,129 @@
+# local.yaml — 本机开发默认配置
+#
+# 使用 shell 风格 ${VAR:-default} 插值：
+#   - VAR 已设置且非空 → 取 VAR
+#   - 否则              → 取 default
+# .env 里设置的环境变量会被 godotenv 灌入 process env，再被这里读取。
+
+app:
+  name: media-example
+  version: v1
+  env: ${APP_ENV:-local}
+
+server:
+  enabled: true
+  address: ${SERVER_ADDR:-:8888}
+  timeout:
+    enabled: true
+    read_timeout_ms: 10000
+    write_timeout_ms: 10000
+
+database:
+  enabled: ${MYSQL_ENABLED:-false}
+  driver: mysql
+  dsn: ${MYSQL_DSN:-}
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime_seconds: 3600
+
+redis:
+  enabled: ${REDIS_ENABLED:-false}
+  address: ${REDIS_ADDR:-127.0.0.1:6379}
+  password: ${REDIS_PASSWORD:-}
+  db: 0
+  pool_size: 10
+  dial_timeout_ms: 200
+
+# 服务端服务注册，由 hertz_infra/serverhertz 消费。
+consul:
+  enabled: ${CONSUL_ENABLED:-false}
+  address: ${CONSUL_ADDR:-127.0.0.1:8500}
+  service_address: ${CONSUL_SERVICE_ADDRESS:-127.0.0.1}
+  service_port: ${CONSUL_SERVICE_PORT:-8888}
+  tags: [local]
+  health_check_path: /health
+  health_check_interval_seconds: 5
+
+# 客户端服务发现（本服务调下游时用）
+consul_discovery:
+  enabled: ${CONSUL_DISCOVERY_ENABLED:-false}
+  address: ${CONSUL_DISCOVERY_ADDR:-127.0.0.1:8500}
+  refresh_interval_seconds: 5
+
+# 可观测
+otel:
+  enabled: ${OTEL_ENABLED:-false}
+  export_endpoint: ${OTEL_EXPORT_ENDPOINT:-localhost:4317}
+  insecure: true
+  sample_ratio: 1.0
+
+prometheus:
+  enabled: ${PROMETHEUS_ENABLED:-false}
+  address: ${PROMETHEUS_ADDR:-:9091}
+  path: /metrics
+
+access_log:
+  enabled: true
+  format: "[${time}] ${status} - ${latency} ${method} ${path}"
+
+# 服务端中间件
+recovery:
+  enabled: true
+  print_stack: true
+
+request_id:
+  enabled: true
+  header: "X-Request-ID"
+
+cors:
+  enabled: true
+  allow_origins: ["*"]
+  allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allow_headers: ["*"]
+  allow_credentials: false
+  max_age_seconds: 600
+
+rate_limit:
+  enabled: false
+  threshold: 100
+  stat_interval_ms: 1000
+
+circuit_breaker:
+  enabled: false
+  strategy: "error_ratio"
+  threshold: 0.5
+  stat_interval_ms: 10000
+  retry_timeout_ms: 5000
+  min_request_amount: 20
+
+# 运维端点
+pprof:
+  enabled: true
+  prefix: "/debug/pprof"
+
+health:
+  enabled: true
+  path: "/health"
+
+# 配置中心：Consul KV（启用后 Loader 订阅 KV 变更触发热更新）
+consul_kv:
+  enabled: ${CONSUL_KV_ENABLED:-false}
+  address: ${CONSUL_KV_ADDR:-127.0.0.1:8500}
+  data_id: ${CONSUL_KV_DATA_ID:-media-example/config}
+
+# 下游 client（按需添加）
+# client:
+#   media_scheduler:
+#     enabled: true
+#     service_name: "media-scheduler"
+#     base_domain: "discovery://media-scheduler"
+#     use_discovery: true
+#     timeout:
+#       enabled: true
+#       connect_timeout_ms: 200
+#       read_timeout_ms: 1000
+#     retry:
+#       enabled: true
+#       max_attempt_times: 3
+#       initial_delay_ms: 50
+#       max_delay_ms: 2000

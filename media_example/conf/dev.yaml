@@ -1,0 +1,107 @@
+# dev.yaml — 开发环境配置
+#
+# 与 local.yaml 的差别：默认开启 consul 注册 + otel + prometheus + 限流。
+# 仍使用 ${VAR:-default} 插值，dev 环境的 env 由部署平台注入。
+
+app:
+  name: media-example
+  version: v1
+  env: ${APP_ENV:-dev}
+
+server:
+  enabled: true
+  address: ${SERVER_ADDR:-:8888}
+  timeout:
+    enabled: true
+    read_timeout_ms: 10000
+    write_timeout_ms: 10000
+
+database:
+  enabled: ${MYSQL_ENABLED:-true}
+  driver: mysql
+  dsn: ${MYSQL_DSN:-}
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime_seconds: 3600
+
+redis:
+  enabled: ${REDIS_ENABLED:-true}
+  address: ${REDIS_ADDR:-127.0.0.1:6379}
+  password: ${REDIS_PASSWORD:-}
+  db: 0
+  pool_size: 20
+  dial_timeout_ms: 200
+
+# dev 环境默认开启注册
+consul:
+  enabled: ${CONSUL_ENABLED:-true}
+  address: ${CONSUL_ADDR:-127.0.0.1:8500}
+  service_address: ${CONSUL_SERVICE_ADDRESS:-127.0.0.1}
+  service_port: ${CONSUL_SERVICE_PORT:-8888}
+  tags: [dev]
+  health_check_path: /health
+  health_check_interval_seconds: 5
+
+consul_discovery:
+  enabled: ${CONSUL_DISCOVERY_ENABLED:-true}
+  address: ${CONSUL_DISCOVERY_ADDR:-127.0.0.1:8500}
+  refresh_interval_seconds: 5
+
+# dev 环境默认开启 otel
+otel:
+  enabled: ${OTEL_ENABLED:-true}
+  export_endpoint: ${OTEL_EXPORT_ENDPOINT:-localhost:4317}
+  insecure: true
+  sample_ratio: 1.0
+
+prometheus:
+  enabled: ${PROMETHEUS_ENABLED:-true}
+  address: ${PROMETHEUS_ADDR:-:9091}
+  path: /metrics
+
+access_log:
+  enabled: true
+  format: "[${time}] ${status} - ${latency} ${method} ${path}"
+
+recovery:
+  enabled: true
+  print_stack: true
+
+request_id:
+  enabled: true
+  header: "X-Request-ID"
+
+cors:
+  enabled: true
+  allow_origins: ["*"]
+  allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allow_headers: ["*"]
+  allow_credentials: false
+  max_age_seconds: 600
+
+# dev 环境限流开低阈值便于观察
+rate_limit:
+  enabled: true
+  threshold: 50
+  stat_interval_ms: 1000
+
+circuit_breaker:
+  enabled: true
+  strategy: "error_ratio"
+  threshold: 0.5
+  stat_interval_ms: 10000
+  retry_timeout_ms: 5000
+  min_request_amount: 20
+
+pprof:
+  enabled: true
+  prefix: "/debug/pprof"
+
+health:
+  enabled: true
+  path: "/health"
+
+consul_kv:
+  enabled: ${CONSUL_KV_ENABLED:-false}
+  address: ${CONSUL_KV_ADDR:-127.0.0.1:8500}
+  data_id: ${CONSUL_KV_DATA_ID:-media-example/config}
