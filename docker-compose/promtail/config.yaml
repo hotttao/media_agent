@@ -1,0 +1,43 @@
+# promtail-config.yaml — 采集 ../media_logs/*/*.log 推送 Loki
+#
+# promtail 是 Loki 官方日志采集 agent（filebeat 8.x 已移除 output.loki，故改用 promtail，
+# 拓扑不变：app 文件日志 → 采集 agent → Loki）。
+# 挂载 host ../media_logs 为 /logs（只读），递归采集所有 app 日志。
+# zap 输出 JSON 行，promtail 用 json stage 解析，把 trace_id 提取为 label 便于 Grafana 关联。
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: media-app
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: media-app
+          __path__: /logs/*/*.log
+    pipeline_stages:
+      # zap JSON 行解析
+      - json:
+          expressions:
+            level: level
+            ts: ts
+            trace_id: trace_id
+            span_id: span_id
+            caller: caller
+            msg: msg
+      # trace_id 提升为 label（缺失则空，不影响入库）
+      - labels:
+          level:
+          trace_id:
+      # timestamp 用 zap 的 ts 字段
+      - timestamp:
+          source: ts
+          format: RFC3339Nano
+          action_on_failure: skip

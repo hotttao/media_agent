@@ -1,0 +1,42 @@
+# otel-collector.yaml — OTel Collector 采集分流配置
+#
+# 接收 app 的 OTLP trace（gRPC + HTTP），批量处理后转发 Jaeger（OTLP）。
+# metrics 不经 collector（app 走 monitor-prometheus /metrics pull），故无 metrics pipeline。
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  # OTLP exporter → Jaeger（all-in-one 开启 COLLECTOR_OTLP_ENABLED，监听 4317）
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  # 调试日志（debug 级别，按需在 service.pipelines.traces.exporters 启用）
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger]

@@ -1,0 +1,33 @@
+# docker-compose.override.yml — 本机端口冲突时的宿主端口重映射。
+#
+# 主 docker-compose.yml 使用规范端口（9090 / 3100 / 16686）。若宿主已被其它进程
+# 占用（如本地代理 clash 监听 9090），本 override 把冲突的宿主端口重映射到高位端口，
+# 容器内端口不变，容器间通信（service 名 + 容器端口）不受影响。
+#
+# 仅重映射"宿主:容器"左侧；右侧容器端口保持，prometheus/promtail/jaeger 互访仍走
+# docker 网络内的规范端口。e2e 命令需用 --jaeger-url / --loki-url 指向重映射后的宿主端口。
+#
+# 用法：docker compose up -d（override 自动加载）
+
+services:
+  # OTel Collector：8888 宿主端口与 app :8888 冲突，且仅 prometheus 经容器网络访问，
+  # 不必发布到宿主。4317/4318 仍发布（app 推 trace 用）。
+  otel-collector:
+    ports: !override
+      - "4317:4317"
+      - "4318:4318"
+
+  # Prometheus UI：9090 → 19090
+  prometheus:
+    ports: !override
+      - "19090:9090"
+
+  # Loki API：3100 → 13100
+  loki:
+    ports: !override
+      - "13100:3100"
+
+  # Jaeger UI：16686 → 16687
+  jaeger:
+    ports: !override
+      - "16687:16686"

@@ -1,0 +1,3 @@
+# Local data fallback dir (used when /data not writable).
+# Canonical stack data lives in /data/<service> — see prepare.sh.
+.data/
