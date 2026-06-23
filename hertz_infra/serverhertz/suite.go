@@ -35,7 +35,7 @@ import (
 
 	configpb "media_agent/hertz_gen/config"
 	"media_agent/hertz_infra/config"
-	"media_agent/hertz_infra/observability"
+	"media_agent/hertz_infra/globalhertz"
 )
 
 // ServerSuite 聚合服务端启动期需要的全部 hertz options 与 middleware 顺序约束，
@@ -81,14 +81,12 @@ func NewServerSuite(loader *config.Loader) *ServerSuite {
 	// 全局 tracer：metrics、tracing 都通过 server tracer 接入（启动期固化）
 	s.options = append(s.options, buildTracerOptions(cfg)...)
 
-	// 可热更新能力组件在此处自行 loader.Subscribe。
-	// 例（限流规则热加载）：
-	//   if rl := cfg.GetRateLimit(); rl != nil && rl.GetEnabled() {
-	//       loader.Subscribe(func(newCfg *configpb.Config) {
-	//           applyRateLimitRules(newCfg)
-	//       })
-	//   }
-	_ = cfg
+	// 限流规则：启动期下发 + 订阅热更新（contributing/server.md §配置订阅职责切分）。
+	// middleware 链在 NewServer 时固化（sentinel slot chain 注册一次），规则本身可热更。
+	_ = loadFlowRules(cfg.GetRateLimit())
+	loader.Subscribe(func(newCfg *configpb.Config) {
+		_ = loadFlowRules(newCfg.GetRateLimit())
+	})
 
 	return s
 }
@@ -117,11 +115,11 @@ func (s *ServerSuite) Loader() *config.Loader { return s.loader }
 // 各段 enabled=false 时对应能力 no-op，不报错（enabled 语义）。
 func (s *ServerSuite) InitObservability() (func(context.Context) error, error) {
 	cfg := s.Config()
-	if err := observability.InitLogger(cfg.GetApp(), cfg.GetLog()); err != nil {
+	if err := globalhertz.InitLogger(cfg.GetApp(), cfg.GetLog()); err != nil {
 		return nil, fmt.Errorf("serverhertz: init logger: %w", err)
 	}
-	shutdownTracing := observability.InitOTel(cfg.GetApp(), cfg.GetOtel())
-	if err := observability.InitMetrics(cfg.GetPrometheus()); err != nil {
+	shutdownTracing := globalhertz.InitOTel(cfg.GetApp(), cfg.GetOtel())
+	if err := initMetrics(cfg.GetPrometheus()); err != nil {
 		return nil, fmt.Errorf("serverhertz: init metrics: %w", err)
 	}
 	return shutdownTracing, nil

@@ -96,18 +96,14 @@ cors:
   allow_credentials: false
   max_age_seconds: 600
 
+# 服务端限流（限流只在 server 侧；熔断在 client.<app>.circuit_breaker）
+# repeated：一个 server 可配多条规则，每条针对一个资源（resource）。
+# resource 为 "media-example:GET:/hello" 形式；空=不下发固定规则（middleware 仍按动态资源名提取）。
 rate_limit:
-  enabled: false
-  threshold: 100
-  stat_interval_ms: 1000
-
-circuit_breaker:
-  enabled: false
-  strategy: "error_ratio"
-  threshold: 0.5
-  stat_interval_ms: 10000
-  retry_timeout_ms: 5000
-  min_request_amount: 20
+  - enabled: false
+    resource: "media-example:GET:/hello"
+    threshold: 100
+    stat_interval_ms: 1000
 
 # 运维端点
 pprof:
@@ -140,3 +136,9 @@ consul_kv:
 #       max_attempt_times: 3
 #       initial_delay_ms: 50
 #       max_delay_ms: 2000
+#     circuit_breaker:                # 熔断只在 client 侧
+#       enabled: true
+#       strategy: "error_ratio"
+#       threshold: 0.5
+#       retry_timeout_ms: 5000
+#       min_request_amount: 20

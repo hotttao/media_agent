@@ -29,6 +29,14 @@ func newMetricsMiddleware(cfg *configpb.PrometheusConfig) app.HandlerFunc {
 	return nil
 }
 
+// initMetrics 进程级 metrics 状态初始化（薄 no-op）。
+// monitor-prometheus 的 NewServerTracer 自管理独立 HTTP 服务器（buildTracerOptions 注入），
+// 进程级无需额外 exporter / registry 注册。保留入口以便未来切换 metrics 后端时收口。
+func initMetrics(p *configpb.PrometheusConfig) error {
+	_ = p
+	return nil
+}
+
 // newPrometheusServerTracer 构造 monitor-prometheus server tracer，包成 server option。
 // address / path 缺失走默认（:9091 / /metrics）。
 func newPrometheusServerTracer(p *configpb.PrometheusConfig) hertzconfig.Option {

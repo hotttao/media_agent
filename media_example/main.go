@@ -56,7 +56,7 @@ func main() {
 	defer shutdownObs(context.Background())
 
 	// 6. 初始化下游 client 装配层（当前模板无下游，baseSuite 仅做进程级装配）。
-	if _, err := client.Init(loader.Current()); err != nil {
+	if _, err := client.Init(loader); err != nil {
 		log.Fatalf("init clients: %v", err)
 	}
 

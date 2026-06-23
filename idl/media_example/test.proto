@@ -1,0 +1,52 @@
+// idl/media_example/test.proto
+//
+// e2e 测试专用 service：供 media-cli 用生成的 typed client 调用，验证 clienthertz 治理能力
+// （timeout / retry / circuitbreaker / tracing）。路径映射到 /_test/*，server 端由
+// media-cli serve 命令的 mountTestEndpoints 提供裸路由实现（test.proto 仅用于生成 client stub，
+// 不在 media_example 正式服务注册 handler，避免污染正式服务）。
+syntax = "proto3";
+
+package test;
+
+option go_package = "media_example/test";
+
+import "api.proto";
+
+message TestEchoReq {
+  string Name = 1[(api.query)="name"];
+}
+
+message TestEchoResp {
+  string Msg = 1[(api.body)="msg"];
+}
+
+message TestSlowReq {
+  int32 Ms = 1[(api.query)="ms"];
+}
+
+message TestErrorReq {
+  int32 Code = 1[(api.query)="code"];
+}
+
+message TestPanicReq {
+}
+
+service TestService {
+  // 立即返回，验证基本调用 + tracing
+  rpc Echo(TestEchoReq) returns(TestEchoResp) {
+    option (api.get) = "/_test/echo";
+  }
+  // 延迟 N 毫秒，验证 client timeout
+  rpc Slow(TestSlowReq) returns(TestEchoResp) {
+    option (api.get) = "/_test/slow";
+  }
+  // 返回指定状态码，验证 retry / circuitbreaker（注意：hertz client 不把 5xx 当 error，
+  // 熔断需 err!=nil 触发；本端点返回 5xx 供 retry 测试，circuitbreaker 测试用连接失败场景）
+  rpc Error(TestErrorReq) returns(TestEchoResp) {
+    option (api.get) = "/_test/error";
+  }
+  // 触发 panic，验证 server recovery
+  rpc Panic(TestPanicReq) returns(TestEchoResp) {
+    option (api.get) = "/_test/panic";
+  }
+}

@@ -48,7 +48,7 @@ hz-client:
 			--module $(HERTZ_GEN_MODULE) \
 			--idl ../idl/$$p \
 			--proto_path=../idl \
-			--force_client_dir=$$SERVICE \
+			--client_dir=$$SERVICE \
 			--use $(HERTZ_GEN_MODEL) || exit 1; \
 	done
 

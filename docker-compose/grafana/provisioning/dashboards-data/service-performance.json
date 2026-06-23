@@ -1,0 +1,240 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "服务性能面板：找慢路径 (P99)、看 QPS、错误率。Top 10 panels 反映全服务所有 path 的相对情况；点 Loki 数据源 + 已知 path 可继续追到 trace。",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Top 10 慢路径 (P99 延迟, 秒)",
+      "description": "topk 找出 P99 延迟最高的 10 条 path，时间序列可看趋势。某条持续上涨 = 该路径出问题。",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 0},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "topk(10, histogram_quantile(0.99, sum by (path, le) (rate(hertz_server_latency_us_bucket{path!=\"\"}[5m]))) / 1000000)",
+          "legendFormat": "{{path}}",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "fieldMinMax": false,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {"calcs": ["max", "mean"], "displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "pluginVersion": "10.0.0"
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Top 10 路径 QPS (每秒请求数)",
+      "description": "每条 path 的请求速率（rate over 1m）。可看到流量分布与突发。",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "topk(10, sum by (path) (rate(hertz_server_throughput{path!=\"\"}[1m])))",
+          "legendFormat": "{{path}}",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never"
+          },
+          "fieldMinMax": false,
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {"calcs": ["max", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "pluginVersion": "10.0.0"
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Top 10 错误路径 (5xx 速率)",
+      "description": "statusCode 匹配 5xx 的请求速率。持续非零 = 该路径在报错。",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 9},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "topk(10, sum by (path) (rate(hertz_server_throughput{path!=\"\",statusCode=~\"5..\"}[1m])))",
+          "legendFormat": "{{path}}",
+          "interval": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "red"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 25,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never"
+          },
+          "fieldMinMax": false,
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {"calcs": ["max", "mean"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "pluginVersion": "10.0.0"
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "路径延迟分布 (P50 / P95 / P99, 秒) — Top 10 by P99",
+      "description": "表格视图：每条 path 的 P50/P95/P99 延迟，一眼对比哪些 path 的尾部延迟最严重。",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 17},
+      "targets": [
+        {
+          "refId": "P50",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "topk(10, histogram_quantile(0.50, sum by (path, le) (rate(hertz_server_latency_us_bucket{path!=\"\"}[5m]))) / 1000000)",
+          "legendFormat": "P50",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "refId": "P95",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "topk(10, histogram_quantile(0.95, sum by (path, le) (rate(hertz_server_latency_us_bucket{path!=\"\"}[5m]))) / 1000000)",
+          "legendFormat": "P95",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "refId": "P99",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "topk(10, histogram_quantile(0.99, sum by (path, le) (rate(hertz_server_latency_us_bucket{path!=\"\"}[5m]))) / 1000000)",
+          "legendFormat": "P99",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {
+            "align": "auto",
+            "cellOptions": {"type": "auto"},
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 3}]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "P50"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "gauge", "mode": "gradient"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P95"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "gauge", "mode": "gradient"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P99"},
+            "properties": [
+              {"id": "custom.cellOptions", "value": {"type": "gauge", "mode": "gradient"}}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
+        "showHeader": true,
+        "sortBy": [{"displayName": "P99", "desc": true}]
+      },
+      "pluginVersion": "10.0.0"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["media-agent", "observability", "performance"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "Service Performance — 找慢路径",
+  "uid": "service-performance",
+  "version": 1,
+  "weekStart": ""
+}

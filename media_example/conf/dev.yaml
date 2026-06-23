@@ -79,19 +79,13 @@ cors:
   allow_credentials: false
   max_age_seconds: 600
 
-# dev 环境限流开低阈值便于观察
+# dev 环境限流开低阈值便于观察（限流只在 server 侧；熔断在 client.<app>.circuit_breaker）
+# repeated：多条规则，每条一个资源。
 rate_limit:
-  enabled: true
-  threshold: 50
-  stat_interval_ms: 1000
-
-circuit_breaker:
-  enabled: true
-  strategy: "error_ratio"
-  threshold: 0.5
-  stat_interval_ms: 10000
-  retry_timeout_ms: 5000
-  min_request_amount: 20
+  - enabled: true
+    resource: "media-example:GET:/hello"
+    threshold: 50
+    stat_interval_ms: 1000
 
 pprof:
   enabled: true

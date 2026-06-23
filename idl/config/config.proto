@@ -51,11 +51,12 @@ message Config {
   LogConfig log = 33;
 
   // ---- 服务端中间件 ----
+  // 限流只在 server 侧实现（rate_limit，可配多条规则，每条一个资源）；
+  // 熔断只在 client 侧实现（client.<app>.circuit_breaker）。
   RecoveryConfig recovery = 40;
   RequestIdConfig request_id = 41;
   CorsConfig cors = 42;
-  RateLimitConfig rate_limit = 43;
-  CircuitBreakerConfig circuit_breaker = 44;
+  repeated RateLimitConfig rate_limit = 43;
 
   // ---- 运维端点 ----
   PprofConfig pprof = 50;
@@ -207,9 +208,8 @@ message CorsConfig {
 
 message RateLimitConfig {
   bool enabled = 1;
-  // 资源名规则：服务端 = "<app>:<method>:<path>"；客户端 = "<caller_app>->;<callee_app>"
-  // 留空走默认提取规则
-  string resource_pattern = 2;
+  // 资源名，如 "media-example:GET:/hello"；空=该条不下发规则（middleware 仍按动态资源名提取）
+  string resource = 2;
   // sentinel: 单位时间窗口内的阈值（QPS）
   double threshold = 3;
   int32 stat_interval_ms = 4;
@@ -293,8 +293,8 @@ message AppClientConfig {
 
   TimeoutConfig timeout = 10;
   RetryConfig retry = 11;
+  // 熔断只在 client 侧实现；client 不做限流（限流归 server）。见 Config.rate_limit 注释。
   CircuitBreakerConfig circuit_breaker = 12;
-  RateLimitConfig rate_limit = 13;
 
   // 负载均衡策略：weighted_random / round_robin / consistent_hash
   string load_balance = 20;

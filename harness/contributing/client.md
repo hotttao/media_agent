@@ -25,7 +25,9 @@
 **配置粒度统一收敛到 app 级**：
 
 - 同一个下游 app 暴露的所有 service（如 `media-scheduler` 进程的 `JobService` + `WorkflowService`）共享同一份 `client.<app_name>` 配置；
-- 配置的 4 个行为（timeout / retry / circuit_breaker / rate_limit）应用在 app 级，不下沉到 service 级；
+- 配置的行为（timeout / retry / circuit_breaker）应用在 app 级，不下沉到 service 级；
+  - **熔断只在 client 侧**（`circuit_breaker`）；**限流只在 server 侧**（`serverhertz/ratelimit`，YAML 顶层 `rate_limit`），
+    故 `client.<app>` 不含 `rate_limit`。见 `contributing/server.md` §5.2。
 - 避免配置嵌套层级过深，2 层结构（`client.<app_name>`）即可。
 
 最终调用关系：
@@ -63,8 +65,7 @@ media_agent/                                    # workspace 根（go.work）
 │       ├── loadbalance.go                      # 负载均衡 option 工厂
 │       ├── timeout.go                          # 超时 option 工厂
 │       ├── retry.go                            # 重试 option 工厂
-│       ├── circuitbreaker.go                   # 熔断 middleware 工厂
-│       ├── ratelimit.go                        # 限流 middleware 工厂
+│       ├── circuitbreaker.go                   # 熔断 middleware 工厂（熔断只在 client 侧）
 │       ├── tracing.go                          # tracing provider 初始化 + middleware 工厂
 │       ├── metrics.go                          # metrics exporter 初始化 + middleware 工厂
 │       └── middleware.go                       # 中间件顺序约定
@@ -186,17 +187,13 @@ client:
       stat_interval_ms: 10000
       min_request_amount: 20
       retry_timeout_ms: 5000
-
-    rate_limit:
-      enabled: true
-      threshold: 100
-      stat_interval_ms: 1000
 ```
 
 - `media_scheduler` 是 caller 内部使用的 app key（用下划线，匹配 Go 变量命名风格）；
 - `service_name` 是注册中心里的下游服务名（可用连字符，如 `media-scheduler`）；
 - `base_domain` 是 Hertz client 访问地址，服务发现模式推荐 `discovery://<service-name>`，静态地址可用 `http://<host>:<port>`；
-- `timeout / retry / circuit_breaker / rate_limit` 是该 app 的 4 个治理行为，每个行为都必须显式配置 `enabled`；
+- `timeout / retry / circuit_breaker` 是该 app 的治理行为，每个行为都必须显式配置 `enabled`；
+  - **限流不在 `client.<app>` 配置**——限流只在 server 侧（YAML 顶层 `rate_limit`），见 `server.md` §5.2；
 - 同一个 app 暴露多个 service（如 `media-scheduler` 进程同时提供 `JobService` 和 `WorkflowService`）**共享这一份 `client.media_scheduler` 配置**——不按 service 拆分配置，避免嵌套层级过深。
 
 ### 5.3 治理能力与配置段对应表
@@ -208,9 +205,10 @@ client:
 | 超时 | `timeout` | — | `timeout.go` | `ClientSuite.Options()` |
 | 重试 | `retry` | — | `retry.go` | `ClientSuite.Options()` |
 | 熔断 | `circuit_breaker` | — | `circuitbreaker.go` | `ClientSuite.Middlewares()` |
-| 限流 | `rate_limit` | — | `ratelimit.go` | `ClientSuite.Middlewares()` |
 | 链路追踪 | `tracing`（可选，或复用 `otel` 顶级块） | `otel` 顶级块 | `tracing.go` | `ClientSuite.Middlewares()` + `InitTracing()` |
 | 指标采集 | `metrics`（可选，或复用 `prometheus` 顶级块） | `prometheus` 顶级块 | `metrics.go` | `ClientSuite.Middlewares()` + `InitMetrics()` |
+
+> 限流不在 client 侧：限流只在 server 侧（`serverhertz/ratelimit`，YAML 顶层 `rate_limit`），故本表无 rate_limit 行。
 
 ### 5.4 配置 struct 结构
 
@@ -226,8 +224,7 @@ Config
                          ├── BaseDomain
                          ├── Timeout        TimeoutConfig
                          ├── Retry          RetryConfig
-                         ├── CircuitBreaker CircuitBreakerConfig
-                         └── RateLimit      RateLimitConfig
+                         └── CircuitBreaker CircuitBreakerConfig
 ```
 
 规则：
@@ -259,8 +256,8 @@ go.opentelemetry.io/otel/...
 ```text
 ClientSuite
 ├── Options() []client.Option                    # 组装 option（discovery / loadbalance / timeout / retry）
-├── Middlewares(serviceName) []client.Middleware # 组装 middleware（tracing / metrics / circuitbreaker / ratelimit）
-└── 各能力字段（Discovery / LoadBalance / Timeout / Retry / CircuitBreaker / RateLimit / Tracing / Metrics）
+├── Middlewares(serviceName) []client.Middleware # 组装 middleware（tracing / metrics / circuitbreaker）
+└── 各能力字段（Discovery / LoadBalance / Timeout / Retry / CircuitBreaker / Tracing / Metrics）
 ```
 
 装配规则：
@@ -282,23 +279,23 @@ ClientSuite
 | `timeout.go` | 根据 `timeout` 创建超时 option | `Options()` | `client.<app>.timeout` |
 | `retry.go` | 根据 `retry` 创建重试 option（含幂等判断：GET/HEAD/OPTIONS/PUT/DELETE 可重试，POST 需 `Idempotency-Key`） | `Options()` | `client.<app>.retry` |
 | `circuitbreaker.go` | 根据 `circuit_breaker` 创建熔断 middleware | `Middlewares()` | `client.<app>.circuit_breaker` |
-| `ratelimit.go` | 根据 `rate_limit` 创建限流 middleware | `Middlewares()` | `client.<app>.rate_limit` |
 | `tracing.go` | 初始化 OTel provider（进程级）+ 创建 tracing middleware | `Middlewares()` + `InitTracing()` | `otel` 顶级块 |
 | `metrics.go` | 初始化 metrics exporter（进程级）+ 创建 metrics middleware | `Middlewares()` + `InitMetrics()` | `prometheus` 顶级块 |
 | `middleware.go` | 定义中间件顺序常量 | — | — |
+
+> 限流不在 client 侧（无 `ratelimit.go`）：限流只在 server 侧，见 `server.md` §5.2。
 
 ### 6.3 中间件顺序
 
 推荐顺序（由外到内）：
 
 ```text
-tracing → metrics → circuitbreaker → ratelimit → request
+tracing → metrics → circuitbreaker → request
 ```
 
 - tracing 放最外层，覆盖完整调用链；
 - metrics 记录端到端耗时；
 - circuitbreaker 在请求前快速失败；
-- ratelimit 控制客户端侧并发 / QPS；
 - retry 通常通过 client option 配置，不作为普通 middleware 排序。
 
 新增能力时按此顺序插入，并在 `middleware.go` 更新顺序说明。

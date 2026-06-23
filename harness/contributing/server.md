@@ -83,8 +83,7 @@ media_agent/                                    # workspace 根（go.work）
 │   │   ├── requestid.go                        # request id
 │   │   ├── accesslog.go                        # access log
 │   │   ├── cors.go                             # CORS
-│   │   ├── ratelimit.go                        # 服务端限流
-│   │   ├── circuitbreaker.go                   # 服务端熔断 / 降级，可选
+│   │   ├── ratelimit.go                        # 服务端限流（限流只在 server 侧）
 │   │   ├── tracing.go                          # 服务端链路追踪
 │   │   ├── metrics.go                          # 服务端指标
 │   │   ├── pprof.go                            # pprof / debug，可选
@@ -92,7 +91,7 @@ media_agent/                                    # workspace 根（go.work）
 │   │   └── middleware.go                       # 中间件顺序约束
 │   ├── clienthertz/                            # Hertz 客户端治理能力层（详见 client-cn.md）
 │   ├── cache/                                  # 跨服务共享的 cache 抽象与实现
-│   └── observability/                          # 跨服务共享的 logger / metrics / tracing 抽象
+│   └── globalhertz/                           # 进程级全局状态：otel provider / hlog logger / sentinel
 │
 └── <app>/                                      # 单个 hertz 微服务（module: media_agent/<app>）
     ├── main.go                                 # Hertz 程序入口，保持轻薄
@@ -120,7 +119,7 @@ media_agent/                                    # workspace 根（go.work）
     └── idl/                                    # 本服务专属 IDL（共享 IDL 在 workspace 根 idl/）
 ```
 
-> 跨服务共享的代码生成根 `hertz_gen/`、配置加载层 `hertz_infra/config`、Hertz 治理层 `hertz_infra/serverhertz` / `hertz_infra/clienthertz`、缓存抽象 `hertz_infra/cache`、可观测性抽象 `hertz_infra/observability` 都不在单个微服务目录内，而是 workspace 根的共享 module，通过 go.work 引用。本服务 `biz/` 下不再保留 `config` / `infra` / `cache` / `observability` 目录。
+> 跨服务共享的代码生成根 `hertz_gen/`、配置加载层 `hertz_infra/config`、Hertz 治理层 `hertz_infra/serverhertz` / `hertz_infra/clienthertz`、缓存抽象 `hertz_infra/cache`、全局状态 `hertz_infra/globalhertz` 都不在单个微服务目录内，而是 workspace 根的共享 module，通过 go.work 引用。本服务 `biz/` 下不再保留 `config` / `infra` / `cache` / `globalhertz` 目录。
 
 ---
 
@@ -163,7 +162,6 @@ media_agent/                                    # workspace 根（go.work）
 | access log | `access_log` | `accesslog.go` | `ServerSuite.Middlewares()` |
 | CORS | `cors` | `cors.go` | `ServerSuite.Middlewares()` |
 | 服务端限流 | `rate_limit` | `ratelimit.go` | `ServerSuite.Middlewares()` |
-| 服务端熔断 / 降级 | `circuit_breaker` | `circuitbreaker.go` | `ServerSuite.Middlewares()` |
 | 链路追踪 | `otel` | `tracing.go` | `ServerSuite.Middlewares()` + `InitTracing()` |
 | 指标采集 | `prometheus` | `metrics.go` | `ServerSuite.Middlewares()` + `InitMetrics()` + `RegisterMetricsRoute()` |
 | pprof / debug | `pprof` | `pprof.go` | `RegisterPProfRoutes()` |
@@ -194,8 +192,7 @@ Config
 ├── Recovery       RecoveryConfig
 ├── RequestID      RequestIDConfig
 ├── CORS           CORSConfig
-├── RateLimit      RateLimitConfig
-├── CircuitBreaker CircuitBreakerConfig
+├── RateLimit      RateLimitConfig      (服务端限流；熔断在 client.<app>.circuit_breaker)
 ├── PProf          PProfConfig
 └── Health         HealthConfig
 ```
@@ -258,8 +255,12 @@ ServerSuite
 推荐顺序（由外到内），在 `middleware.go` 中定义：
 
 ```text
-recovery → request_id → tracing → metrics → access_log → rate_limit → circuit_breaker → cors → handler
+recovery → request_id → tracing → metrics → access_log → rate_limit → cors → handler
 ```
+
+> 治理职责对称约定：**限流只在 server 侧**（`serverhertz/ratelimit`），**熔断只在 client 侧**
+> （`clienthertz/circuitbreaker`）。故 server 中间件链无 circuit_breaker——熔断保护的是"调下游"，
+> 归 clienthertz。
 
 新增 middleware 时按此顺序插入，并在 `middleware.go` 更新顺序说明。
 
@@ -296,7 +297,7 @@ recovery → request_id → tracing → metrics → access_log → rate_limit �
 - 请求级日志属于 middleware（`serverhertz/accesslog.go`）；
 - 业务事件日志属于 service / workflow；
 - domain 不应记录日志；
-- 具体的日志 / 追踪 SDK 留在 `hertz_infra/observability` 与 `hertz_infra/serverhertz`；
+- 具体的日志 / 追踪 SDK 留在 `hertz_infra/globalhertz`（全局状态）与 `hertz_infra/serverhertz`（server 实装）；
 - OpenTelemetry 集成必须隐藏在可观测性抽象之后；
 - Trace ID 与 request ID 应通过 `context.Context` 传播；
 - 不要把 `*app.RequestContext` 传出 Hertz 边界；

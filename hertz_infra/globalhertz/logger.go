@@ -1,4 +1,4 @@
-// logger.go：结构化应用日志初始化（zap + lumberjack + zapotel 桥接）。
+// logger.go：结构化应用日志全局初始化（zap + lumberjack + zapotel 桥接）。
 //
 // 对齐官方文档（cloudwego.io Hertz zap）：
 //
@@ -9,7 +9,7 @@
 //
 //	traceLogger := zapotel.NewLogger(zapotel.WithLogger(hZap))
 //	hlog.SetLogger(traceLogger)
-package observability
+package globalhertz
 
 import (
 	"fmt"
@@ -42,7 +42,7 @@ func initLogger(app *configpb.AppConfig, c *configpb.LogConfig) error {
 	// 文件输出：lumberjack 切割；目录缺失则创建。
 	fileWS, err := fileWriteSyncer(c)
 	if err != nil {
-		return fmt.Errorf("observability: logger file: %w", err)
+		return fmt.Errorf("globalhertz: logger file: %w", err)
 	}
 	if fileWS != nil {
 		if c.GetConsole() {

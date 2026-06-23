@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	helloclient "media_agent/hertz_gen/media_example"
+	helloclient "media_agent/hertz_gen/media_example/hello_service"
 	hellomodel "media_agent/hertz_gen/model/media_example/hello"
 )
 

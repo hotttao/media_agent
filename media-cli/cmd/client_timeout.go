@@ -1,4 +1,7 @@
-// client_timeout.go：用 clienthertz client 调 /_test/slow?ms=5000，期望超时返回。
+// client_timeout.go：用生成的 typed client 调 Slow（/_test/slow?ms=5000），期望超时返回。
+//
+// 验证 clienthertz 注入的 timeout option（client.WithClientReadTimeout）生效：
+// server 端 /_test/slow 延迟 5s，client 读超时 800ms → err 非 nil / 快速失败。
 package cmd
 
 import (
@@ -7,13 +10,15 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	testmodel "media_agent/hertz_gen/model/media_example/test"
 )
 
 var clientTimeoutCmd = &cobra.Command{
 	Use:   "timeout",
-	Short: "clienthertz client 超时测试",
+	Short: "typed client 超时测试（clienthertz timeout option）",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cli, _, err := buildClient(800, 1, false, false)
+		cli, _, err := buildTestClient(800, 1, false)
 		if err != nil {
 			return fail("client timeout", err.Error())
 		}
@@ -23,19 +28,19 @@ var clientTimeoutCmd = &cobra.Command{
 		defer endSpan()
 
 		start := time.Now()
-		status, body, err := cli.Get(ctx, nil, FlagHost+"/_test/slow?ms=5000")
+		_, _, err = cli.Slow(ctx, &testmodel.TestSlowReq{Ms: 5000})
 		elapsed := time.Since(start)
 		if FlagVerbose {
-			fmt.Printf("status=%d body=%s err=%v elapsed=%v\n", status, string(body), err, elapsed)
+			fmt.Printf("err=%v elapsed=%v\n", err, elapsed)
 		}
-		// client 侧超时通常返回 err 非 nil 或 status != 200。
-		if status == 200 && err == nil {
-			return fail("client timeout", "request succeeded, expected timeout")
+		// client 读超时 800ms → err 非 nil 且耗时 < 2s。
+		if err == nil {
+			return fail("client timeout", "request succeeded, expected timeout error")
 		}
 		if elapsed > 2*time.Second {
 			return fail("client timeout", fmt.Sprintf("timeout too late: %v", elapsed))
 		}
-		return pass("client timeout", fmt.Sprintf("timed out after %v", elapsed))
+		return pass("client timeout", fmt.Sprintf("timed out after %v (err=%v)", elapsed, err))
 	},
 }
 

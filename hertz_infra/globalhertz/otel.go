@@ -1,4 +1,4 @@
-// otel.go：进程级 OTel tracing provider 初始化。
+// otel.go：进程级 OTel tracing provider 全局单例初始化。
 //
 // 对齐官方文档（cloudwego.io Hertz OpenTelemetry）：
 //
@@ -11,7 +11,7 @@
 //
 // 本实现额外注入 app.version / app.env 资源属性与采样率；不开启 metrics
 // （WithEnableMetrics）——metrics 走 monitor-prometheus pull，避免双计数。
-package observability
+package globalhertz
 
 import (
 	"context"
@@ -62,7 +62,7 @@ func initOTel(app *configpb.AppConfig, otel *configpb.OtelConfig) func(context.C
 			if otelProvider != nil {
 				if e := otelProvider.Shutdown(ctx); e != nil {
 					err = e
-					log.Printf("observability: otel shutdown err: %v", e)
+					log.Printf("globalhertz: otel shutdown err: %v", e)
 				}
 			}
 		})

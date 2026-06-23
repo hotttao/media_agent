@@ -24,7 +24,7 @@ import (
 	"go.opentelemetry.io/otel"
 
 	configpb "media_agent/hertz_gen/config"
-	"media_agent/hertz_infra/observability"
+	"media_agent/hertz_infra/globalhertz"
 )
 
 // withSpan 在 ctx 上启动一个 OTel span，返回带 span 的 ctx 与 end closure。
@@ -49,13 +49,10 @@ var (
 // 由 Execute 调用并 defer。任一能力 enabled=false 时 no-op。
 func initCLIObservability() func(context.Context) error {
 	cfg := cliConfig()
-	if err := observability.InitLogger(cfg.GetApp(), cfg.GetLog()); err != nil {
+	if err := globalhertz.InitLogger(cfg.GetApp(), cfg.GetLog()); err != nil {
 		log.Printf("media-cli: init logger: %v", err)
 	}
-	shutdown := observability.InitOTel(cfg.GetApp(), cfg.GetOtel())
-	if err := observability.InitMetrics(cfg.GetPrometheus()); err != nil {
-		log.Printf("media-cli: init metrics: %v", err)
-	}
+	shutdown := globalhertz.InitOTel(cfg.GetApp(), cfg.GetOtel())
 	return shutdown
 }
 
