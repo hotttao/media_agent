@@ -9,5 +9,5 @@ import "github.com/google/wire"
 
 // ProviderSet 汇总 dal 层构造函数。初始仅含 NewDB；新增 repo 时在 repo/wire_set.go 注册。
 var ProviderSet = wire.NewSet(
-	// NewDB,
+// NewDB,
 )

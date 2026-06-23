@@ -1,4 +1,7 @@
-// server.go：基于 ServerSuite 构造 Hertz server 实例 + 挂载全局中间件。
+// server.go：Hertz server 启动 option 构造辅助。
+//
+// server 实例创建与 middleware 挂载归 ServerSuite.NewServer（见 suite.go）；
+// 本文件只提供从 cfg.Server 派生纯启动参数的 buildServerOptions。
 package serverhertz
 
 import (
@@ -7,28 +10,6 @@ import (
 
 	configpb "media_agent/hertz_gen/config"
 )
-
-// NewServer 基于 suite 构造 Hertz server，并按约定顺序挂载全局 middleware。
-//
-// 中间件顺序见 middleware.go：recovery → requestid → tracing → metrics → accesslog → cors → ratelimit → circuitbreaker。
-//
-// 启动期一次性消费 suite.Config()（转发 loader.Current()）构造 middleware chain
-// 与 pprof / health 路由——这些启动后不可变；可热更新能力由组件自己在
-// NewServerSuite 内部 loader.Subscribe 订阅。
-func NewServer(suite *ServerSuite) *server.Hertz {
-	h := server.New(suite.Options()...)
-	cfg := suite.Config()
-
-	for _, mw := range buildMiddlewareChain(cfg) {
-		h.Use(mw)
-	}
-
-	// pprof / health 走路由挂载，不走中间件链路
-	mountPprof(h, cfg)
-	mountHealth(h, cfg)
-
-	return h
-}
 
 // buildServerOptions 从 cfg.Server 派生 Hertz server 启动 option。
 //

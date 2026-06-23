@@ -1,13 +1,18 @@
 // main.go 是 Hertz 程序入口。
 //
-// 按服务端治理指南（contributing/server-cn.md）§8：
-//  1. config.Load 加载配置；
+// 所有服务端治理能力收口在 ServerSuite 上，main.go 只按顺序调用其方法
+// （详见 hertz_infra/serverhertz/suite.go 包注释）：
+//  1. config.NewLoader 加载配置；
 //  2. serverhertz.NewServerSuite 构造 ServerSuite；
-//  3. serverhertz.InitTracing / InitMetrics 进程级初始化（TODO：待治理实现补齐）；
-//  4. serverhertz.NewServer 创建 server + 挂全局 middleware；
-//  5. 注册生成的业务路由（hz update 后由 register(h) 提供）；
-//  6. serverhertz.RegisterService 注册服务，defer 反注册；
-//  7. h.Spin。
+//  3. loader.Attach(KVSource) + loader.Watch 启动配置热更新；
+//  4. suite.InitObservability 进程级可观测性初始化（logger + tracing + metrics）；
+//  5. client.Init 初始化下游 client 装配层；
+//  6. suite.NewServer 创建 server + 挂全局 middleware；
+//  7. InitDI() 注入 handler 端 service 实例（必须在 register 之前）；
+//  8. register(h) 注册生成的业务路由；
+//  9. suite.RegisterRoutes 注册运维端点（health / pprof / metrics）；
+//  10. suite.RegisterService 注册服务，defer 反注册；
+//  11. h.Spin。
 //
 // main.go 只做启动编排，不直接拼 options / middleware / 注册中心。
 package main
@@ -43,19 +48,32 @@ func main() {
 		log.Fatalf("start config watch: %v", err)
 	}
 
-	// 5. 初始化下游 client 装配层（当前模板无下游，baseSuite 仅做进程级装配）。
+	// 5. 进程级可观测性初始化（logger + tracing + metrics），必须在 NewServer 之前完成。
+	shutdownObs, err := suite.InitObservability()
+	if err != nil {
+		log.Fatalf("init observability: %v", err)
+	}
+	defer shutdownObs(context.Background())
+
+	// 6. 初始化下游 client 装配层（当前模板无下游，baseSuite 仅做进程级装配）。
 	if _, err := client.Init(loader.Current()); err != nil {
 		log.Fatalf("init clients: %v", err)
 	}
 
-	// 6. 创建 Hertz server + 挂全局 middleware。
-	h := serverhertz.NewServer(suite)
+	// 7. 创建 Hertz server + 挂全局 middleware。
+	h := suite.NewServer()
 
-	// 7. 注册生成的业务路由（hz update 后恢复 register(h) 调用）。
-	// register(h)
+	// 8. 依赖注入：把 service 装配到 handler 包级变量。
+	//    必须在 register(h) 之前完成，确保首个请求到达时 HelloSvc 非 nil。
+	InitDI()
 
-	// 8. 服务注册（consul.enabled=true 时生效），defer 反注册。
-	ctx := context.Background()
+	// 9. 注册生成的业务路由（hz update 由 router_gen.go + biz/router/register.go 提供）。
+	register(h)
+
+	// 10. 注册运维端点（health / pprof / metrics route），按 enabled 门控。
+	suite.RegisterRoutes(h)
+
+	// 11. 服务注册（consul.enabled=true 时生效），defer 反注册。
 	if err := suite.RegisterService(); err != nil {
 		log.Fatalf("register service: %v", err)
 	}
@@ -64,8 +82,7 @@ func main() {
 			log.Printf("deregister service: %v", err)
 		}
 	}()
-	_ = ctx
 
-	// 9. 启动。
+	// 12. 启动。
 	h.Spin()
 }

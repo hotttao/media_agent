@@ -1,44 +1,50 @@
 // tracing.go：服务端 OpenTelemetry 链路追踪。
 //
-// 实现：
-//   - 启动期通过 obs-opentelemetry/provider.NewOpenTelemetryProvider 初始化全局 TracerProvider；
-//   - 通过 hertztracing.NewServerTracer() 注入 server tracer（在 buildTracerOptions 中处理）；
-//   - 中间件层通过 hertztracing.ServerMiddleware(cfg) 接管 span 生命周期。
+// 实现（对齐官方文档 cloudwego.io Hertz OpenTelemetry）：
+//   - 进程级 provider 由 ServerSuite.InitObservability 委托 hertz_infra/observability
+//     （obs-opentelemetry/provider.NewOpenTelemetryProvider）初始化；
+//   - server tracer 通过 hertztracing.NewServerTracer() 返回 serverconfig.Option，
+//     经 buildTracerOptions 拼入 server options；
+//   - 中间件层 hertztracing.ServerMiddleware(cfg) 接管 span 生命周期。
 package serverhertz
 
 import (
-	"context"
-
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/cloudwego/hertz/pkg/common/config"
+	hertzconfig "github.com/cloudwego/hertz/pkg/common/config"
+	hertztracing "github.com/hertz-contrib/obs-opentelemetry/tracing"
 
 	configpb "media_agent/hertz_gen/config"
 )
 
 // newTracingMiddleware 返回 server-side tracing middleware。
-//
-// 缺少依赖时为 no-op；引入 hertz-contrib/obs-opentelemetry 后替换为：
-//
-//	return hertztracing.ServerMiddleware(tracingCfg)
+// otel 未启用时返回 nil（buildMiddlewareChain 自动跳过）。
 func newTracingMiddleware(cfg *configpb.Config) app.HandlerFunc {
 	otel := cfg.GetOtel()
 	if otel == nil || !otel.GetEnabled() {
 		return nil
 	}
-	return func(ctx context.Context, c *app.RequestContext) {
-		_ = ctx
-		_ = c
-		// 真正的实现：hertztracing.ServerMiddleware(tracingCfg)(ctx, c)
-	}
+	_, tracerCfg := hertztracing.NewServerTracer()
+	return hertztracing.ServerMiddleware(tracerCfg)
 }
 
-// buildTracerOptions 把 OTel + Prometheus 等 server-tracer 类 option 拼到一起。
+// buildTracerOptions 把 OTel server tracer（+ Prometheus metrics tracer）拼成 server options。
 //
-// 真实实现：
+//   - otel.enabled：append hertztracing.NewServerTracer() 返回的 serverconfig.Option；
+//   - prometheus.enabled：append server.WithTracer(prometheus.NewServerTracer(addr, path))，
+//     monitor-prometheus 自管理独立 :9091 暴露 /metrics（pull 模式）。
 //
-//	opts = append(opts, server.WithTracer(prometheus.NewServerTracer(addr, path)))
-//	opts = append(opts, hertztracing.NewServerTracer())
-func buildTracerOptions(cfg *configpb.Config) []config.Option {
-	_ = cfg
-	return nil
+// 两者未启用均不挂载，返回 nil。
+func buildTracerOptions(cfg *configpb.Config) []hertzconfig.Option {
+	if cfg == nil {
+		return nil
+	}
+	var opts []hertzconfig.Option
+	if otel := cfg.GetOtel(); otel != nil && otel.GetEnabled() {
+		tracer, _ := hertztracing.NewServerTracer()
+		opts = append(opts, tracer)
+	}
+	if p := cfg.GetPrometheus(); p != nil && p.GetEnabled() {
+		opts = append(opts, newPrometheusServerTracer(p))
+	}
+	return opts
 }

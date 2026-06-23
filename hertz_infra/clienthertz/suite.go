@@ -1,40 +1,53 @@
 // Package clienthertz 是 Hertz 客户端治理能力唯一收口。
 //
-// 按客户端调用指南（contributing/client-cn.md）§6：
-//   - 只提供治理能力（client.Option / client.Middleware 工厂）；
-//   - 不持有业务 client 实例，不调用 hclient.NewClient；
-//   - 实例化归 <app>/biz/shared/client/。
+// 按客户端调用指南（contributing/client.md）§6：
+//   - 只提供治理能力（client.Option / client.Middleware），不持有业务 client 实例，
+//     不调用 hclient.NewClient（NewClient 方法除外，它只是装配便捷入口）；
+//   - 实例化归 <app>/biz/shared/client。
+//
+// 对称 serverhertz：所有入口收口在 ClientSuite 上，不散落包级 Init/Apply 函数。
 //
 // 装配流程（调用方典型用法）：
 //
-//	baseSuite := clienthertz.BuildBaseSuite(cfg)              // 进程级
-//	appSuite  := clienthertz.BuildAppSuite(baseSuite, appCfg) // app 级（拷贝一次）
-//	opts      := clienthertz.BuildOptions(appSuite)           // []client.Option
-//	cli, _    := hclient.NewClient(opts...)
-//	clienthertz.ApplyMiddlewares(cli, appSuite, "media-scheduler")
+//	baseSuite := clienthertz.BuildBaseSuite(cfg)              // 进程级基底（含完整 cfg）
+//	shutdown, _ := baseSuite.InitObservability()              // logger + tracing + metrics
+//	defer shutdown(context.Background())
+//
+//	appSuite, _ := baseSuite.ForApp("media_scheduler")        // 派生下游 app 级 suite
+//	cli, _    := appSuite.NewClient()                         // NewClient + ApplyDiscovery + ApplyMiddlewares
+//
+//	// 或拆步用于 typed client（hertz_gen NewHertzClient）：
+//	//   cli, _ := hclient.NewClient(appSuite.Options()...)
+//	//   appSuite.ApplyDiscovery(cli)
+//	//   appSuite.ApplyMiddlewares(cli)
 package clienthertz
 
 import (
+	"context"
+	"fmt"
+
 	hclient "github.com/cloudwego/hertz/pkg/app/client"
 	"github.com/cloudwego/hertz/pkg/common/config"
 
 	configpb "media_agent/hertz_gen/config"
+	"media_agent/hertz_infra/observability"
 )
 
-// ClientSuite 聚合启动期所有 client 治理能力。
+// ClientSuite 聚合客户端治理能力。
 //
 // 由 BuildBaseSuite / BuildAppSuite 构造：
-//   - BuildBaseSuite 只填充进程级字段（discovery / otel / prometheus）；
-//   - BuildAppSuite 在 base 副本上叠加 app 级 4 行为（timeout / retry /
-//     circuit_breaker / rate_limit），每次调用返回一份独立副本，因为
-//     4 行为是 app 级共享的——同一 app 的多个 service 用同一份 suite。
+//   - BuildBaseSuite 填充进程级字段（cfg / consul_discovery / otel / prometheus）；
+//   - BuildAppSuite / ForApp 在 base 副本上叠加 app 级 4 行为（timeout / retry /
+//     circuit_breaker / rate_limit），每次返回独立副本——同一 app 的多个 service
+//     共享同一份 app suite。
 type ClientSuite struct {
 	// 进程级
+	cfg             *configpb.Config // 完整配置（供 InitObservability / ForApp）
 	consulDiscovery *configpb.ConsulDiscoveryConfig
 	otel            *configpb.OtelConfig
 	prometheus      *configpb.PrometheusConfig
 
-	// app 级（由 BuildAppSuite 填充）
+	// app 级（由 BuildAppSuite / ForApp 填充）
 	appName        string
 	appCfg         *configpb.AppClientConfig
 	timeoutOpts    []config.ClientOption
@@ -45,9 +58,40 @@ type ClientSuite struct {
 	rateLimit      *configpb.RateLimitConfig
 }
 
-// Options 组装该 suite 对应的 Hertz client.Option 列表（discovery / loadbalance / timeout / retry）。
+// InitObservability 进程级可观测性初始化（logger + tracing + metrics），对称 serverhertz。
 //
-// 中间件不通过 option 传递——见 ApplyMiddlewares。
+// 顺序：logger → tracing provider → metrics。返回统一 shutdown closure（幂等安全）。
+// 各段 enabled=false 时 no-op。调用方（main / biz/shared/client.Init / media-cli）defer 调用。
+func (s *ClientSuite) InitObservability() (func(context.Context) error, error) {
+	if s == nil || s.cfg == nil {
+		return func(context.Context) error { return nil }, nil
+	}
+	cfg := s.cfg
+	if err := observability.InitLogger(cfg.GetApp(), cfg.GetLog()); err != nil {
+		return nil, fmt.Errorf("clienthertz: init logger: %w", err)
+	}
+	shutdown := observability.InitOTel(cfg.GetApp(), cfg.GetOtel())
+	if err := observability.InitMetrics(cfg.GetPrometheus()); err != nil {
+		return nil, fmt.Errorf("clienthertz: init metrics: %w", err)
+	}
+	return shutdown, nil
+}
+
+// ForApp 派生下游 app 级 suite：从 cfg.Client[appName] 取配置，调用 BuildAppSuite。
+//
+// 下游 app 未配置时返回 error（contributing/client.md §7.2：配置缺失不得静默忽略）。
+func (s *ClientSuite) ForApp(appName string) (*ClientSuite, error) {
+	if s == nil || s.cfg == nil {
+		return nil, fmt.Errorf("clienthertz: base suite not initialized")
+	}
+	appCfg, ok := s.cfg.GetClient()[appName]
+	if !ok || appCfg == nil {
+		return nil, fmt.Errorf("clienthertz: downstream app %q not configured in client map", appName)
+	}
+	return BuildAppSuite(s, appName, appCfg), nil
+}
+
+// Options 组装该 suite 对应的 Hertz client.Option（discovery 由 ApplyDiscovery 单独挂）。
 func (s *ClientSuite) Options() []config.ClientOption {
 	opts := []config.ClientOption{}
 	opts = append(opts, s.timeoutOpts...)
@@ -55,10 +99,9 @@ func (s *ClientSuite) Options() []config.ClientOption {
 	return opts
 }
 
-// Middlewares 返回该 suite 对应的 client middleware 列表（tracing / metrics / ratelimit / circuitbreaker）。
-//
-// 返回 middleware 构造器列表，由 ApplyMiddlewares 统一挂到 client。
-// 这里返回已绑定配置的 closure，调用方不需要再传配置。
+// Middlewares 返回 client middleware 构造器列表（tracing / metrics / ratelimit / circuitbreaker），
+// 顺序见 client.md §6.3（tracing → metrics → ratelimit → circuitbreaker）。
+// 由 ApplyMiddlewares 统一挂到 client；导出以支持顺序稳定性单测。
 func (s *ClientSuite) Middlewares() []func(*hclient.Client) {
 	mws := []func(*hclient.Client){}
 	if s.otel != nil && s.otel.GetEnabled() {
@@ -84,24 +127,58 @@ func (s *ClientSuite) Middlewares() []func(*hclient.Client) {
 	return mws
 }
 
-// AppName 返回该 suite 绑定的下游 app 名（供 biz/shared/client 命名资源）。
+// ApplyMiddlewares 把 suite 的 middleware 挂到 client（见 Middlewares 顺序）。
+func (s *ClientSuite) ApplyMiddlewares(cli *hclient.Client) {
+	if cli == nil || s == nil {
+		return
+	}
+	for _, mw := range s.Middlewares() {
+		mw(cli)
+	}
+}
+
+// ApplyDiscovery 把服务发现 middleware 挂到 client（若 suite 启用了 discovery）。
+// discovery 依赖 consul resolver，通常先于其它 middleware。
+func (s *ClientSuite) ApplyDiscovery(cli *hclient.Client) {
+	if cli == nil || s == nil || !s.useDiscovery {
+		return
+	}
+	applyDiscovery(cli, s.consulDiscovery, s.loadBalancer)
+}
+
+// NewClient 装配便捷入口：NewClient(Options()) + ApplyDiscovery + ApplyMiddlewares。
+//
+// 适用于使用裸 *hclient.Client 的场景（如 media-cli）。typed client（hertz_gen
+// NewHertzClient）请用 Options() + ApplyDiscovery + ApplyMiddlewares 自行装配。
+func (s *ClientSuite) NewClient() (*hclient.Client, error) {
+	cli, err := hclient.NewClient(s.Options()...)
+	if err != nil {
+		return nil, err
+	}
+	s.ApplyDiscovery(cli)
+	s.ApplyMiddlewares(cli)
+	return cli, nil
+}
+
+// AppName 返回该 suite 绑定的下游 app 名（供资源命名）。
 func (s *ClientSuite) AppName() string { return s.appName }
 
 // UseDiscovery 返回该下游是否走服务发现。
 func (s *ClientSuite) UseDiscovery() bool { return s.useDiscovery }
 
-// ConsulDiscovery 返回进程级服务发现配置（供 biz/shared/client 决定是否挂 discovery middleware）。
+// ConsulDiscovery 返回进程级服务发现配置。
 func (s *ClientSuite) ConsulDiscovery() *configpb.ConsulDiscoveryConfig { return s.consulDiscovery }
 
 // LoadBalancer 返回负载均衡策略字符串。
 func (s *ClientSuite) LoadBalancer() string { return s.loadBalancer }
 
-// BuildBaseSuite 从进程级配置构造 ClientSuite 基底。
+// BuildBaseSuite 从完整配置构造进程级 ClientSuite 基底。
 //
-// 只填充进程级字段（consul_discovery / otel / prometheus）；
-// app 级 4 行为由 BuildAppSuite 在副本上叠加。
+// 只填充进程级字段（cfg / consul_discovery / otel / prometheus）；
+// app 级 4 行为由 BuildAppSuite / ForApp 在副本上叠加。
 func BuildBaseSuite(cfg *configpb.Config) *ClientSuite {
 	return &ClientSuite{
+		cfg:             cfg,
 		consulDiscovery: cfg.GetConsulDiscovery(),
 		otel:            cfg.GetOtel(),
 		prometheus:      cfg.GetPrometheus(),
@@ -115,8 +192,7 @@ func BuildAppSuite(base *ClientSuite, appName string, appCfg *configpb.AppClient
 	if base == nil {
 		return nil
 	}
-	// 拷贝一份 base
-	suite := *base
+	suite := *base // 拷贝 base（含 cfg / 进程级字段）
 	suite.appName = appName
 	suite.appCfg = appCfg
 	suite.timeoutOpts = buildTimeoutOptions(appCfg.GetTimeout())
@@ -126,35 +202,4 @@ func BuildAppSuite(base *ClientSuite, appName string, appCfg *configpb.AppClient
 	suite.circuitBreaker = appCfg.GetCircuitBreaker()
 	suite.rateLimit = appCfg.GetRateLimit()
 	return &suite
-}
-
-// BuildOptions 是 s.Options() 的便捷别名，供 biz/shared/client 直接传给 hclient.NewClient。
-func BuildOptions(s *ClientSuite) []config.ClientOption {
-	if s == nil {
-		return nil
-	}
-	return s.Options()
-}
-
-// ApplyMiddlewares 把 suite 的 middleware 按 §6.3 顺序挂到 client。
-//
-// 顺序（外→内）：tracing → metrics → ratelimit → circuitbreaker → request
-// discovery 不作为普通 middleware，由 biz/shared/client 在 NewClient 后单独 cli.Use。
-func ApplyMiddlewares(cli *hclient.Client, s *ClientSuite) {
-	if cli == nil || s == nil {
-		return
-	}
-	for _, mw := range s.Middlewares() {
-		mw(cli)
-	}
-}
-
-// ApplyDiscovery 把服务发现 middleware 挂到 client（若 suite 启用了 discovery）。
-//
-// 单独抽出来是因为 discovery 依赖 consul resolver，且通常需要先于其它 middleware。
-func ApplyDiscovery(cli *hclient.Client, s *ClientSuite) {
-	if cli == nil || s == nil || !s.useDiscovery {
-		return
-	}
-	applyDiscovery(cli, s.consulDiscovery, s.loadBalancer)
 }

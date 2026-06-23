@@ -22,11 +22,15 @@ var clientCmd = &cobra.Command{
 }
 
 // buildClient 构造一个调本机 media-example 的 hertz client，挂治理 middleware。
+//
+// OTel 开关跟随 media-cli 可观测性配置（cliConfig）：OTEL_ENABLED=true 时挂
+// hertztracing.ClientMiddleware，向下游传播 trace_id，实现跨服务日志关联。
 func buildClient(timeoutMs, maxAttempts int32, cbEnabled, rlEnabled bool) (*hclient.Client, *clienthertz.ClientSuite, error) {
+	oc := cliConfig()
 	cfg := &configpb.Config{
-		App: &configpb.AppConfig{Name: "media-cli", Version: "v1", Env: "local"},
-		Otel: &configpb.OtelConfig{Enabled: false},
-		Prometheus: &configpb.PrometheusConfig{Enabled: false},
+		App:             oc.GetApp(),
+		Otel:            oc.GetOtel(), // 跟随 OTEL_ENABLED
+		Prometheus:      &configpb.PrometheusConfig{Enabled: false},
 		ConsulDiscovery: &configpb.ConsulDiscoveryConfig{Enabled: false},
 		Client: map[string]*configpb.AppClientConfig{
 			"media_example": {
@@ -45,27 +49,29 @@ func buildClient(timeoutMs, maxAttempts int32, cbEnabled, rlEnabled bool) (*hcli
 					MaxDelayMs:      100,
 				},
 				CircuitBreaker: &configpb.CircuitBreakerConfig{
-					Enabled: cbEnabled,
-					Strategy:           "error_ratio",
-					Threshold:          0.5,
-					StatIntervalMs:     10000,
-					RetryTimeoutMs:     5000,
-					MinRequestAmount:   5,
+					Enabled:          cbEnabled,
+					Strategy:         "error_ratio",
+					Threshold:        0.5,
+					StatIntervalMs:   10000,
+					RetryTimeoutMs:   5000,
+					MinRequestAmount: 5,
 				},
 				RateLimit: &configpb.RateLimitConfig{
-					Enabled:  rlEnabled,
+					Enabled:   rlEnabled,
 					Threshold: 5,
 				},
 			},
 		},
 	}
 	base := clienthertz.BuildBaseSuite(cfg)
-	suite := clienthertz.BuildAppSuite(base, "media_example", cfg.Client["media_example"])
-	cli, err := hclient.NewClient(suite.Options()...)
+	suite, err := base.ForApp("media_example")
 	if err != nil {
 		return nil, nil, err
 	}
-	clienthertz.ApplyMiddlewares(cli, suite)
+	cli, err := suite.NewClient()
+	if err != nil {
+		return nil, nil, err
+	}
 	return cli, suite, nil
 }
 

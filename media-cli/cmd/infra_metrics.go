@@ -1,7 +1,9 @@
 // infra_metrics.go：GET /metrics 期望 Prometheus 文本格式。
 //
-// 需要 server 配置 prometheus.enabled=true 且 metrics tracer 已挂载。
-// 当前 serverhertz metrics 是 no-op 占位，本命令会在 404 时返回 skip。
+// metrics 由 monitor-prometheus server tracer 自管理暴露在独立监听地址
+// PrometheusConfig.address（默认 :9091），不在主服务端口。
+// --metrics-url 默认 http://127.0.0.1:9091/metrics；prometheus.enabled=false 时
+// 连接会失败或返回非 200，本命令据此判定 skip / fail。
 package cmd
 
 import (
@@ -11,19 +13,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var metricsURL string
+
 var infraMetricsCmd = &cobra.Command{
 	Use:   "metrics",
-	Short: "测试 /metrics 端点",
+	Short: "测试 /metrics 端点（:9091）",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// prometheus.address 是独立监听地址，默认 :9091；
-		// 这里通过 --host 也可指定，但更稳的是从 server 推断。
-		url := strings.TrimRight(FlagHost, "/") + "/metrics"
-		status, _, body, err := doRequest("GET", url, nil, nil)
+		status, _, body, err := doRequest("GET", metricsURL, nil, nil)
 		if err != nil {
-			return fail("metrics", err.Error())
+			return skip("metrics", "connect failed: "+err.Error()+" (prometheus.enabled=false?)")
 		}
 		if status == 404 {
-			return pass("metrics", "404 (metrics tracer not mounted; prometheus.enabled=false?)")
+			return skip("metrics", "404 (metrics tracer not mounted; prometheus.enabled=false?)")
 		}
 		if status != 200 {
 			return fail("metrics", fmt.Sprintf("status=%d", status))
@@ -36,5 +37,6 @@ var infraMetricsCmd = &cobra.Command{
 }
 
 func init() {
+	infraMetricsCmd.Flags().StringVar(&metricsURL, "metrics-url", "http://127.0.0.1:9091/metrics", "metrics 端点地址（monitor-prometheus 独立监听）")
 	infraCmd.AddCommand(infraMetricsCmd)
 }

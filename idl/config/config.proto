@@ -47,6 +47,8 @@ message Config {
   OtelConfig otel = 30;
   PrometheusConfig prometheus = 31;
   AccessLogConfig access_log = 32;
+  // 结构化应用日志（zap + lumberjack + zapotel 注入 trace_id/span_id）
+  LogConfig log = 33;
 
   // ---- 服务端中间件 ----
   RecoveryConfig recovery = 40;
@@ -165,6 +167,20 @@ message AccessLogConfig {
   // 例如 "[${time}] ${status} - ${latency} ${method} ${path}"
   string format = 2;
   string time_format = 3;
+}
+
+// 结构化应用日志：zap + lumberjack 落盘，obs-opentelemetry/logging/zap 桥接
+// 自动从 context 注入 trace_id / span_id。与 access_log（访问日志中间件）职责分离。
+message LogConfig {
+  bool enabled = 1;
+  string level = 2;        // debug / info / warn / error，默认 info
+  string dir = 3;          // 日志目录，例如 /home/.../media_logs/media_example
+  string filename = 4;     // 默认 app.log
+  int32 max_size_mb = 5;   // lumberjack 单文件上限 MB，默认 100
+  int32 max_backups = 6;   // 保留旧文件数，默认 10
+  int32 max_age_days = 7;  // 保留天数，默认 7
+  bool compress = 8;       // 旧文件 gzip，默认 true
+  bool console = 9;        // 同时写 stdout，默认 true（e2e 友好）
 }
 
 // ============================================================================

@@ -24,6 +24,8 @@ var clientRetryCmd = &cobra.Command{
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		ctx, endSpan := withSpan(ctx, "client.retry")
+		defer endSpan()
 
 		start := time.Now()
 		status, _, err := cli.Get(ctx, nil, FlagHost+"/_test/error?code=503")

@@ -13,7 +13,9 @@ import (
 	configpb "media_agent/hertz_gen/config"
 )
 
-func mountHealth(h *server.Hertz, cfg *configpb.Config) {
+// registerHealthRoutes 注册健康检查路由（由 ServerSuite.RegisterRoutes 调用）。
+// health.enabled=false / 缺失时不注册（enabled 语义）。
+func registerHealthRoutes(h *server.Hertz, cfg *configpb.Config) {
 	hc := cfg.GetHealth()
 	if hc == nil || !hc.GetEnabled() {
 		return

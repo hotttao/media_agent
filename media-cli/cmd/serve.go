@@ -36,11 +36,23 @@ var serveConf string
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "启动 e2e 测试 server（带治理能力 + 测试端点）",
+	// 覆盖 root 的 PersistentPreRunE：serve 不走 media-cli CLI 可观测性，
+	// 改由 ServerSuite.InitObservability 用 loader 配置初始化（app.name=被测服务名）。
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 	RunE: func(cmd *cobra.Command, args []string) error {
 		loader := loadLoaderOrDie(serveConf)
 		suite := serverhertz.NewServerSuite(loader)
-		h := serverhertz.NewServer(suite)
+
+		// 进程级可观测性初始化（logger + tracing + metrics）。
+		shutdownObs, err := suite.InitObservability()
+		if err != nil {
+			log.Fatalf("serve: init observability: %v", err)
+		}
+		defer shutdownObs(context.Background())
+
+		h := suite.NewServer()
 		mountTestEndpoints(h)
+		suite.RegisterRoutes(h)
 		log.Printf("serve: listening on %s (conf=%s)", loader.Current().GetServer().GetAddress(), confDesc(serveConf))
 		if err := suite.RegisterService(); err != nil {
 			log.Printf("serve: register service: %v", err)

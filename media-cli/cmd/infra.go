@@ -59,6 +59,16 @@ func fail(label string, detail string) error {
 	return fmt.Errorf("❌ %s: %s", label, detail)
 }
 
+// skip 打印 ⚠️ 并返回 nil（能力未启用时跳过，不算失败）。
+func skip(label string, detail string) error {
+	if FlagVerbose {
+		fmt.Printf("⚠️  %s: %s\n", label, detail)
+	} else {
+		fmt.Printf("⚠️  %s\n", label)
+	}
+	return nil
+}
+
 // prettyJSON 把 JSON 字符串缩进打印。
 func prettyJSON(s string) string {
 	var v any

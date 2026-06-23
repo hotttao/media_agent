@@ -1,10 +1,10 @@
 // init.go：media_example 客户端初始化唯一入口。
 //
 // 按客户端调用指南（contributing/client-cn.md）§7.2：
-//   1. 调用 clienthertz 的进程级初始化（tracing / metrics 若未在 main 调用）；
-//   2. 调用 clienthertz.BuildBaseSuite 构造基底；
-//   3. 对每个下游 app 调用 init<App>Clients(cfg, baseSuite)；
-//   4. 下游 app 配置缺失必须返回错误。
+//  1. 调用 clienthertz 的进程级初始化（tracing / metrics 若未在 main 调用）；
+//  2. 调用 clienthertz.BuildBaseSuite 构造基底；
+//  3. 对每个下游 app 调用 init<App>Clients(cfg, baseSuite)；
+//  4. 下游 app 配置缺失必须返回错误。
 //
 // 当前模板无下游，Init 仅完成 baseSuite 构造，保留入口骨架。
 package client

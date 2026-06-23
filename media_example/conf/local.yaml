@@ -66,6 +66,19 @@ access_log:
   enabled: true
   format: "[${time}] ${status} - ${latency} ${method} ${path}"
 
+# 结构化应用日志（zap + lumberjack 落盘 + zapotel 注入 trace_id/span_id）
+# dir 为空时仅写 stdout；e2e 时通过 LOG_DIR 指向 media_logs/<app> 绝对路径供 filebeat 采集。
+log:
+  enabled: ${LOG_ENABLED:-false}
+  level: ${LOG_LEVEL:-info}
+  dir: ${LOG_DIR:-}
+  filename: app.log
+  max_size_mb: 100
+  max_backups: 10
+  max_age_days: 7
+  compress: true
+  console: true
+
 # 服务端中间件
 recovery:
   enabled: true

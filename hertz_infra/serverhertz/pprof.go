@@ -10,7 +10,9 @@ import (
 	configpb "media_agent/hertz_gen/config"
 )
 
-func mountPprof(h *server.Hertz, cfg *configpb.Config) {
+// registerPProfRoutes 注册 pprof debug 路由（由 ServerSuite.RegisterRoutes 调用）。
+// pprof.enabled=false / 缺失时不注册（enabled 语义）。
+func registerPProfRoutes(h *server.Hertz, cfg *configpb.Config) {
 	p := cfg.GetPprof()
 	if p == nil || !p.GetEnabled() {
 		return

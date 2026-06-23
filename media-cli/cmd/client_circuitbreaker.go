@@ -23,6 +23,8 @@ var clientCircuitBreakerCmd = &cobra.Command{
 		// 先发 5 次 500 触发熔断。
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
+		ctx, endSpan := withSpan(ctx, "client.circuitbreaker")
+		defer endSpan()
 		for i := 0; i < 5; i++ {
 			_, _, _ = cli.Get(ctx, nil, FlagHost+"/_test/error?code=500")
 		}

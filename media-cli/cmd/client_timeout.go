@@ -19,6 +19,8 @@ var clientTimeoutCmd = &cobra.Command{
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		ctx, endSpan := withSpan(ctx, "client.timeout")
+		defer endSpan()
 
 		start := time.Now()
 		status, body, err := cli.Get(ctx, nil, FlagHost+"/_test/slow?ms=5000")
