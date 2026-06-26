@@ -54,7 +54,13 @@ func main() {
 
 	// 3. 进程级可观测性（logger + OTel provider），必须在各 Init(cfg) 之前——
 	//    hello.Init 内部可能调 globalhertz 注入 trace context，client 同理。
-	if err := globalhertz.InitLogger(cfg.GetApp(), cfg.GetLog()); err != nil {
+	logCfg := cfg.GetLog()
+	if logCfg.GetDir() == "" {
+		// 默认 fallback：找仓库根（向上找 go.work），落 <root>/media_logs/<app.name>。
+		// 这样不显式设 LOG_DIR 也能写盘（promtail 可采集）。
+		logCfg.Dir = resolveDefaultLogDir(cfg.GetApp().GetName())
+	}
+	if err := globalhertz.InitLogger(cfg.GetApp(), logCfg); err != nil {
 		log.Printf("media-cli: init logger: %v", err)
 	}
 	shutdownObs := globalhertz.InitOTel(cfg.GetApp(), cfg.GetOtel())
@@ -91,4 +97,25 @@ func chdirToMediaCLI() error {
 		return err
 	}
 	return os.Chdir(target)
+}
+
+// resolveDefaultLogDir 在 cfg.GetLog().Dir 为空时使用：
+// 向上找 go.work 确定仓库根，返回 <root>/media_logs/<appName>；
+// 找不到仓库根时返回空（globalhertz.InitLogger 见空仅写 stdout）。
+func resolveDefaultLogDir(appName string) string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	dir := wd
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
+			return filepath.Join(dir, "media_logs", appName)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }

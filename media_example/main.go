@@ -20,6 +20,8 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"path/filepath"
 
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
@@ -49,6 +51,12 @@ func main() {
 	}
 
 	// 5. 进程级可观测性初始化（logger + tracing + metrics），必须在 NewServer 之前完成。
+	//    cfg.Log.Dir 为空时 fallback 到 <repo>/media_logs/<app.name>（向上找 go.work）；
+	//    proto message 原地修改，loader.Current() 后续读到的就是新值。
+	cfg := loader.Current()
+	if cfg.GetLog().GetDir() == "" {
+		cfg.GetLog().Dir = resolveDefaultLogDir(cfg.GetApp().GetName())
+	}
 	shutdownObs, err := suite.InitObservability()
 	if err != nil {
 		log.Fatalf("init observability: %v", err)
@@ -85,4 +93,25 @@ func main() {
 
 	// 12. 启动。
 	h.Spin()
+}
+
+// resolveDefaultLogDir 在 cfg.GetLog().Dir 为空时使用：
+// 向上找 go.work 确定仓库根，返回 <root>/media_logs/<appName>；
+// 找不到仓库根时返回空（globalhertz.InitLogger 见空仅写 stdout）。
+func resolveDefaultLogDir(appName string) string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	dir := wd
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
+			return filepath.Join(dir, "media_logs", appName)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }
