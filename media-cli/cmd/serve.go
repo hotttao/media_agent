@@ -36,9 +36,6 @@ var serveConf string
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "启动 e2e 测试 server（带治理能力 + 测试端点）",
-	// 覆盖 root 的 PersistentPreRunE：serve 不走 media-cli CLI 可观测性，
-	// 改由 ServerSuite.InitObservability 用 loader 配置初始化（app.name=被测服务名）。
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 	RunE: func(cmd *cobra.Command, args []string) error {
 		loader := loadLoaderOrDie(serveConf)
 		suite := serverhertz.NewServerSuite(loader)

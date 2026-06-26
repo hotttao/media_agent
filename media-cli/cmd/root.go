@@ -1,19 +1,18 @@
-// Package cmd 存放 media-cli 各子命令及根命令。
+// Package cmd 承载 media-cli 根命令、跨子命令共享的注册入口。
+//
+// 目录组织约定（与用户确认过的结构对齐）：
+//
+//	cmd/media_example/<app>/hello/   ← 一级 app / 二级 service（含共享 client init）
+//	cmd/infra/<feature>.go            ← infra 主题（含 WithSpan / config-reload 等治理工具与测试）
+//	cmd/client/<feature>.go           ← client 主题（e2e 测试）
+//
+// subpackage 通过 main.go 的 blank import 触发 init()，把各自子命令挂到 rootCmd。
+
 package cmd
 
 import (
-	"context"
-	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
 )
-
-// FlagHost 全局下游服务地址，各子命令可读取。
-var FlagHost string
-
-// FlagVerbose 详细输出。
-var FlagVerbose bool
 
 var rootCmd = &cobra.Command{
 	Use:   "media-cli",
@@ -24,42 +23,29 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
+	// 把 rootCmd 的 persistent flag 值绑定到本包的全局 var，
+	// 让 subpackage（infra / client / media_example）直接读 FlagHost / FlagVerbose。
 	rootCmd.PersistentFlags().StringVar(&FlagHost, "host", "http://127.0.0.1:8888", "被测服务地址")
 	rootCmd.PersistentFlags().BoolVarP(&FlagVerbose, "verbose", "v", false, "详细输出")
 }
 
 // RegisterCmd 注册子命令到 rootCmd。
+//
+// 各 subpackage（media_example / infra / client）的 init() 通过
+// main.go 的 blank import 触发注册。
 func RegisterCmd(c *cobra.Command) {
 	rootCmd.AddCommand(c)
 }
 
-// cliObsShutdown 由 root PersistentPreRunE 设置，Execute 退出时调用以 flush trace / 日志。
-// serve 子命令会覆盖 root 的 PersistentPreRunE（自身经 ServerSuite.InitObservability 初始化），
-// 此时本变量为 nil，不重复 shutdown。
-var cliObsShutdown func(context.Context) error
-
-func init() {
-	// root PersistentPreRunE：为所有「非 serve」子命令初始化 media-cli 可观测性。
-	// serve 自带 PersistentPreRunE 覆盖本钩子——它经 ServerSuite 用 loader 配置初始化，
-	// 避免与 CLI 可观测性争抢全局 OTel provider（observability.InitOTel 内部 sync.Once）。
-	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		cliObsShutdown = initCLIObservability()
-		return nil
-	}
-}
-
 // Execute 执行根命令。
 //
-// 非 serve 子命令：root PersistentPreRunE 初始化 media-cli 可观测性，Execute 退出时 shutdown。
-// serve 子命令：自带 PersistentPreRunE 跳过 CLI 可观测性，由 ServerSuite.InitObservability 用
-// loader 配置初始化（app.name=被测服务名，而非 media-cli）。
+// 设计：observability 初始化（globalhertz.InitLogger + InitOTel）由 main.go 在
+// cmd.Execute() 之前完成；shutdown 在 main.go 的 defer 里调用。本包不持有
+// shutdown 闭包（避免"乱倒配置 / 全局 var"模式——参考 cmd/observability.go 注释）。
 func Execute() {
-	err := rootCmd.Execute()
-	if cliObsShutdown != nil {
-		cliObsShutdown(context.Background())
-	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	if err := rootCmd.Execute(); err != nil {
+		// cobra 已自动打印错误到 stderr；这里只决定 exit code。
+		// main.go 的 defer 仍会跑（globalhertz shutdown）。
+		_ = err
 	}
 }

@@ -1,19 +1,4 @@
-// config_reload.go：配置热更新 e2e。
-//
-// 流程：
-//  1. 用 media_example/biz/config 的 Loader 加载目标 YAML；
-//  2. 修改 YAML 文件（改 app.version）；
-//  3. 等待 watcher 触发 reload；
-//  4. 检查 Loader.Current() 是否反映新值。
-//
-// --conf 行为：
-//   - 为空：调用 config.Load()（.env + APP_ENV）解析路径；
-//   - 非空：直接按该路径加载。
-//
-// 注意：该测试直接 import media_example/biz/config，
-// 会通过 hertz_infra/config 引入 yaml.v3 + fsnotify + consul/api 依赖；
-// 因此 media-cli 仅在 e2e 环境用。
-package cmd
+package infra
 
 import (
 	"fmt"
@@ -26,14 +11,30 @@ import (
 	"github.com/spf13/cobra"
 
 	"media_agent/hertz_infra/config"
+	"media_agent/media_cli/cmd"
 )
 
+// reloadConf config-reload 命令的 --conf flag。
 var reloadConf string
 
+// configReloadCmd 测试 YAML 文件变更触发热更新。
+//
+// 流程：
+//  1. 用 hertz_infra/config 的 Loader 加载目标 YAML；
+//  2. 修改 YAML 文件（改 app.version）；
+//  3. 等待 watcher 触发 reload；
+//  4. 检查 Loader.Current() 是否反映新值。
+//
+// --conf 行为：
+//   - 为空：调用 config.Load()（.env + APP_ENV）解析路径；
+//   - 非空：直接按该路径加载。
+//
+// 注意：该测试直接 import hertz_infra/config，
+// 会引入 yaml.v3 + fsnotify + consul/api 依赖；因此仅在 e2e 环境用。
 var configReloadCmd = &cobra.Command{
 	Use:   "config-reload",
 	Short: "测试 YAML 文件变更触发热更新",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(c *cobra.Command, args []string) error {
 		// 1. 解析路径：--conf > CONFIG_FILE > APP_ENV 约定。
 		path := reloadConf
 		if path == "" {
@@ -52,29 +53,29 @@ var configReloadCmd = &cobra.Command{
 		// 2. 加载初始配置（NewLoaderFromPath 不读 .env，路径由上面解析）。
 		loader, err := config.NewLoaderFromPath(path)
 		if err != nil {
-			return fail("config-reload", "load "+path+": "+err.Error())
+			return cmd.Fail("config-reload", "load "+path+": "+err.Error())
 		}
 		defer loader.Close()
 		// 启动文件 watch（reload 依赖 fsnotify 推送，不主动 watch 等不到变更）。
 		if err := loader.Watch(); err != nil {
-			return fail("config-reload", "start watch: "+err.Error())
+			return cmd.Fail("config-reload", "start watch: "+err.Error())
 		}
 		origVersion := loader.Current().GetApp().GetVersion()
-		if FlagVerbose {
+		if cmd.FlagVerbose {
 			fmt.Printf("initial app.version=%s (conf=%s)\n", origVersion, path)
 		}
 
 		// 3. 备份原文件，修改 app.version。
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return fail("config-reload", err.Error())
+			return cmd.Fail("config-reload", err.Error())
 		}
 		backup := append([]byte(nil), raw...)
 		newVersion := "e2e-reloaded-" + time.Now().Format("150405")
 		// 简单替换 `version: <orig>` 行。
 		modified := replaceYAMLField(string(raw), "version", origVersion, newVersion)
 		if err := os.WriteFile(path, []byte(modified), 0644); err != nil {
-			return fail("config-reload", err.Error())
+			return cmd.Fail("config-reload", err.Error())
 		}
 		defer func() {
 			abs, _ := filepath.Abs(path)
@@ -85,11 +86,11 @@ var configReloadCmd = &cobra.Command{
 		deadline := time.Now().Add(10 * time.Second)
 		for time.Now().Before(deadline) {
 			if loader.Current().GetApp().GetVersion() == newVersion {
-				return pass("config-reload", fmt.Sprintf("version %s → %s", origVersion, newVersion))
+				return cmd.Pass("config-reload", fmt.Sprintf("version %s → %s", origVersion, newVersion))
 			}
 			time.Sleep(200 * time.Millisecond)
 		}
-		return fail("config-reload", fmt.Sprintf("version not reloaded after 10s, still %s", loader.Current().GetApp().GetVersion()))
+		return cmd.Fail("config-reload", fmt.Sprintf("version not reloaded after 10s, still %s", loader.Current().GetApp().GetVersion()))
 	},
 }
 
@@ -115,6 +116,5 @@ func indexOf(s, sub string) int {
 
 func init() {
 	configReloadCmd.Flags().StringVar(&reloadConf, "conf", "", "配置文件路径；为空则按 .env + APP_ENV 自动选择")
-	RegisterCmd(configReloadCmd)
+	infraCmd.AddCommand(configReloadCmd)
 }
-

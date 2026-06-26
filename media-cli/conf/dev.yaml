@@ -1,0 +1,42 @@
+# media-cli/conf/dev.yaml — dev / staging / prod-like 部署配置
+#
+# 语义：dev = 「只开可观测」。
+#   - 没有 server/database/redis/consul 等段；
+#   - client.* 可不填（CLI 在 dev 下主要做 trace / 日志验证，不一定打真实被测服务）；
+#   - 如确需在 dev 打被测服务，在 client.<name> 段补全即可（enabled=true）。
+#
+# 与 local.yaml 的差别：local 默认带 client.media_example 全套治理，dev 默认空。
+
+app:
+  name: media-cli
+  version: v1
+  env: ${APP_ENV:-dev}
+
+# ---- 可观测（dev 唯一保留的能力） ----
+otel:
+  enabled: true
+  export_endpoint: ${OTEL_EXPORT_ENDPOINT:-otel-collector:4317}
+  insecure: true
+  sample_ratio: 1.0
+
+log:
+  enabled: true
+  level: ${LOG_LEVEL:-info}
+  dir: ${LOG_DIR:-}
+  filename: app.log
+  max_size_mb: 100
+  max_backups: 10
+  max_age_days: 7
+  compress: true
+  console: true
+
+# ---- 被测 client（dev 默认空；需要时按 local.yaml 模式补全） ----
+# client:
+#   media_example:
+#     enabled: true
+#     service_name: media-example
+#     base_domain: ${MEDIA_EXAMPLE_ADDR:-http://media-example:8888}
+#     use_discovery: true
+#     timeout:
+#       enabled: true
+#       read_timeout_ms: 5000

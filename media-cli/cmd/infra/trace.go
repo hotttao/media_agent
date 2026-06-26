@@ -1,8 +1,4 @@
-// infra_trace.go：发一个请求 → 查 Jaeger API 断言出现 span。
-//
-// 依赖：otel.enabled=true 且 otel-collector + jaeger 已启动（docker-compose）。
-// --jaeger-url 默认 http://127.0.0.1:16686；服务名从 --service 取（默认 media-example）。
-package cmd
+package infra
 
 import (
 	"encoding/json"
@@ -11,6 +7,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"media_agent/media_cli/cmd"
 )
 
 var (
@@ -18,18 +16,19 @@ var (
 	traceService   string
 )
 
+// infraTraceCmd 发请求并查 Jaeger 断言 span 入库。
 var infraTraceCmd = &cobra.Command{
 	Use:   "trace",
 	Short: "发请求并查 Jaeger 断言 span 入库",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(c *cobra.Command, args []string) error {
 		// 1. 触发一次请求（被 hertztracing 生成 span）。
-		url := FlagHost + "/_test/echo?name=trace-test"
-		status, _, _, err := doRequest("GET", url, nil, nil)
+		url := cmd.FlagHost + "/_test/echo?name=trace-test"
+		status, _, _, err := cmd.DoRequest("GET", url, nil, nil)
 		if err != nil {
-			return fail("trace", "trigger request: "+err.Error())
+			return cmd.Fail("trace", "trigger request: "+err.Error())
 		}
 		if status != 200 {
-			return fail("trace", fmt.Sprintf("trigger status=%d", status))
+			return cmd.Fail("trace", fmt.Sprintf("trigger status=%d", status))
 		}
 
 		// 2. 轮询 Jaeger API 查该 service 的 trace（导出有延迟，重试几秒）。
@@ -42,7 +41,7 @@ var infraTraceCmd = &cobra.Command{
 			n, err := jaegerTraceCount(apiURL)
 			if err != nil {
 				// Jaeger 不可达（未启动栈）→ skip。
-				return skip("trace", "jaeger unreachable: "+err.Error())
+				return cmd.Skip("trace", "jaeger unreachable: "+err.Error())
 			}
 			if n > 0 {
 				found = n
@@ -50,15 +49,15 @@ var infraTraceCmd = &cobra.Command{
 			}
 		}
 		if found == 0 {
-			return fail("trace", "no span found in jaeger (otel.enabled=false or collector down?)")
+			return cmd.Fail("trace", "no span found in jaeger (otel.enabled=false or collector down?)")
 		}
-		return pass("trace", fmt.Sprintf("%d span(s) in jaeger for service=%s", found, traceService))
+		return cmd.Pass("trace", fmt.Sprintf("%d span(s) in jaeger for service=%s", found, traceService))
 	},
 }
 
 // jaegerTraceCount 查 Jaeger /api/traces，返回 trace 条数。
 func jaegerTraceCount(apiURL string) (int, error) {
-	resp, err := httpClient().Get(apiURL)
+	resp, err := cmd.HTTPClient().Get(apiURL)
 	if err != nil {
 		return 0, err
 	}

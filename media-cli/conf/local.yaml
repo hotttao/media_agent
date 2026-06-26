@@ -1,0 +1,59 @@
+# media-cli/conf/local.yaml — 本地测试配置
+#
+# 语义：env=local = 「CLI 工具用于本机全栈 e2e」。配套组件已起：
+# media_example server + OTel collector + Prometheus。
+#
+# media-cli 不是 server，没有 server/database/redis/consul 等段——
+# 它的 client.* 段才是核心：声明要打的被测服务 + 治理能力。
+#
+# 字段约定（harness/contributing/config.md）：snake_case；治理段首字段 bool enabled。
+
+app:
+  name: media-cli
+  version: v1
+  env: ${APP_ENV:-local}
+
+# ---- 可观测（全开：CLI 发起请求时希望 trace 透传，便于在 Jaeger 看全链路） ----
+otel:
+  enabled: true
+  export_endpoint: ${OTEL_EXPORT_ENDPOINT:-localhost:4317}
+  insecure: true
+  sample_ratio: 1.0
+
+log:
+  enabled: true
+  level: ${LOG_LEVEL:-debug}
+  dir: ${LOG_DIR:-}
+  filename: app.log
+  max_size_mb: 100
+  max_backups: 10
+  max_age_days: 7
+  compress: true
+  console: true
+
+# ---- 被测 client：本地默认打 http://127.0.0.1:8888 的 media_example ----
+client:
+  media_example:
+    enabled: true
+    service_name: media-example
+    base_domain: ${MEDIA_EXAMPLE_ADDR:-http://127.0.0.1:8888}
+    use_discovery: false
+    timeout:
+      enabled: true
+      connect_timeout_ms: 200
+      read_timeout_ms: 5000
+      write_timeout_ms: 5000
+      request_timeout_ms: 10000
+    retry:
+      enabled: true
+      max_attempt_times: 3
+      initial_delay_ms: 50
+      max_delay_ms: 500
+      delay_multiplier: 2.0
+    circuit_breaker:
+      enabled: true
+      strategy: error_ratio
+      threshold: 0.5
+      stat_interval_ms: 10000
+      retry_timeout_ms: 5000
+      min_request_amount: 10
