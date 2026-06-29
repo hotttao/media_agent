@@ -138,3 +138,92 @@ media-cli (client 起点_span) ──traceparent header──→ media_example (
 - **业务日志必须用 `hlog.CtxXX(ctx, ...)`**（传 ctx），不传 ctx 不会注入 trace_id。
 - **每个服务日志目录用 `app.name` 命名**（`media_logs/<app.name>/app.log`），promtail 按目录区分来源，避免混肴。
 - 联调脚本应输出本次调用的 trace_id，便于人工或自动接续 Loki/Jaeger 查询。
+
+---
+
+## go test e2e（testcontainers，按需细粒度断言）
+
+治理 / HTTP / 可观测 e2e 走 media-cli（脚本驱动，见上文）；但 **migration 正确性/幂等性、跨 domain 事务回滚、repository 行为**等需要细粒度断言的场景，media-cli 测不了，用 `go test` + [testcontainers-go](https://golang.testcontainers.org/) 起真实容器测。
+
+### 分工
+
+| 测试类型 | 驱动方式 | 覆盖 |
+|---------|---------|------|
+| 治理 / HTTP / 可观测 | media-cli 命令（脚本） | 限流 / 熔断 / tracing / 日志 / swagger |
+| 代码层细粒度（migration / 事务 / repo） | `go test -tags=e2e`（testcontainers） | 迁移幂等 / 表存在 / 事务提交回滚 / 数据一致性 |
+
+### 目录组织（可扩展结构）
+
+每个服务的 e2e 测试收口在 `<app>/e2e/`，独立 `package e2e`，与业务代码物理隔离：
+
+```text
+<app>/e2e/
+├── e2e_test.go            # //go:build e2e + TestMain（进程级共享资源）+ 包级 build tag
+├── <topic>_test.go        # 按主题分文件：migration_test.go / like_flow_test.go / ...
+└── fixtures/              # 资源 fixture + 测试替身
+    ├── mysql.go           # NewMySQL / NewDatabase：容器 + 隔离 database，t.Cleanup teardown
+    ├── migrate.go         # Migrate(t, db)：封装 dal.Migrate
+    ├── app.go             # NewXxxEnv(t)：装配 service/workflow 供测试用
+    ├── assert.go          # 复用断言辅助（TableExists / LikesCount ...）
+    └── fakes.go           # 测试替身（FailingCounterRepo ...）
+```
+
+### 资源管理范式（setup / teardown）
+
+**核心**：每个资源一个 `NewXxx(t)` fixture 函数，setup 资源并用 `t.Cleanup` 注册 teardown；测试只声明「需要什么资源」，不写 cleanup。`t.Cleanup` 按 LIFO 自动执行（测试结束/失败/panic 都触发）。
+
+```go
+// fixtures/mysql.go：测试调 NewDatabase(t)，不管容器怎么起、database 怎么删。
+func NewDatabase(t *testing.T) *Database {
+    // 在共享容器里建独立 database（隔离）
+    root.Exec("CREATE DATABASE `e2e_N`")
+    t.Cleanup(func() { root.Exec("DROP DATABASE `e2e_N`") })  // teardown: 删 database
+    db, _ := gorm.Open(...)
+    t.Cleanup(func() { sql,_ := db.DB(); sql.Close() })        // teardown: 关连接
+    return &Database{Gorm: db, DSN: dsn}
+}
+```
+
+**重资源共享**：MySQL 容器由 `TestMain`（`e2e_test.go`）起一次，全进程复用；各测试经 `NewDatabase` 派生独立 database 隔离，既不互相干扰又省容器启动开销。无 docker 时 `TestMain` skip 整个包。
+
+```go
+// e2e/e2e_test.go
+func TestMain(m *testing.M) {
+    mysql, err := fixtures.StartSharedMySQL(ctx)
+    if err != nil { os.Exit(0) }            // 无 docker 不算失败
+    defer mysql.Terminate(ctx)
+    fixtures.SetSharedMySQL(mysql)
+    os.Exit(m.Run())
+}
+```
+
+### 新增 e2e 测试 / 新增资源（扩展指南）
+
+**新增一个 e2e 测试**（如测订单流程）：
+1. 在 `e2e/` 下新建 `<topic>_test.go`（如 `order_flow_test.go`），顶部 `//go:build e2e`；
+2. 用现有 fixture 组合资源（如 `env := fixtures.NewOrderFlowEnv(t)`），写断言；
+3. 不动 fixtures、不动 TestMain。
+
+**新增一种资源**（如 Redis）：
+1. 在 `e2e/fixtures/` 加 `<resource>.go`（如 `redis.go`），写 `NewRedis(t)` + `t.Cleanup` teardown；
+2. 重资源需共享则在 `TestMain` 加 `StartSharedRedis` + `SetSharedRedis`，轻量则每测试独立起；
+3. 在 `app.go` 加组合 fixture（如 `NewOrderFlowEnv` 引入 Redis）。
+
+**新增测试替身**：放 `e2e/fixtures/fakes.go`，实现对应 domain 接口，供多个测试复用。
+
+### 运行
+
+```bash
+# 需 docker（testcontainers 起容器）
+cd <app> && go test -tags=e2e ./e2e/ -v
+# 无 docker 自动 skip；普通 go test（无 -tags=e2e）不跑 e2e
+```
+
+### 约定
+
+- **build tag**：`//go:build e2e` 只在 `e2e/` 包内声明（同包共享），普通 `go test` 不参与，避免拖慢。
+- **隔离**：重资源（容器）TestMain 共享，数据资源（database/schema）每测试独立 + `t.Cleanup` 删，杜绝测试间状态泄漏。
+- **migration 用独立 `*sql.DB`**：`dal.Migrate` 按 dsn 新开连接，迁移完即关，不碰业务 gorm 连接——golang-migrate 的 `m.Close()` 会关闭其驱动，复用 gorm 连接会导致业务连接被关。
+- **迁移 SQL 运行时读磁盘**：migrations 不 embed，`dal.Migrate(dir, cfg)` 用 `os.DirFS(dir)` 读 `.sql`；e2e fixture `resolveMigrationsDir` 从测试 cwd 向上找 `migrations/` 解析绝对路径，不依赖 cwd。
+- **失败注入用 fake**：回滚测试用 fake repo（实现 domain Repo 接口、返回 error），断言事务整体回滚，不依赖真实失败触发。
+- **断言复用**：通用断言（查表/查计数）放 `fixtures/assert.go`，测试调 `fixtures.TableExists(t, ...)`，不重复写 SQL。

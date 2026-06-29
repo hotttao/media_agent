@@ -3,16 +3,17 @@
 // 所有服务端治理能力收口在 ServerSuite 上，main.go 只按顺序调用其方法
 // （详见 hertz_infra/serverhertz/suite.go 包注释）：
 //  1. config.NewLoader 加载配置；
-//  2. serverhertz.NewServerSuite 构造 ServerSuite；
-//  3. loader.Attach(KVSource) + loader.Watch 启动配置热更新；
-//  4. suite.InitObservability 进程级可观测性初始化（logger + tracing + metrics）；
-//  5. client.Init 初始化下游 client 装配层；
-//  6. suite.NewServer 创建 server + 挂全局 middleware；
-//  7. InitDI() 注入 handler 端 service 实例（必须在 register 之前）；
-//  8. register(h) 注册生成的业务路由；
-//  9. suite.RegisterRoutes 注册运维端点（health / pprof / metrics）；
-//  10. suite.RegisterService 注册服务，defer 反注册；
-//  11. h.Spin。
+//  2. dal.NewDB + dal.Migrate：数据库初始化 + 启动期迁移（database.migrate_on_start 门控，幂等）；
+//  3. serverhertz.NewServerSuite 构造 ServerSuite；
+//  4. loader.Attach(KVSource) + loader.Watch 启动配置热更新；
+//  5. suite.InitObservability 进程级可观测性初始化（logger + tracing + metrics）；
+//  6. client.Init 初始化下游 client 装配层；
+//  7. suite.NewServer 创建 server + 挂全局 middleware；
+//  8. InitDI(db) 注入 handler 端 service / workflow 实例（必须在 register 之前）；
+//  9. register(h) 注册生成的业务路由；
+//  10. suite.RegisterRoutes 注册运维端点（health / pprof / metrics / swagger）；
+//  11. suite.RegisterService 注册服务，defer 反注册；
+//  12. h.Spin。
 //
 // main.go 只做启动编排，不直接拼 options / middleware / 注册中心。
 package main
@@ -25,6 +26,7 @@ import (
 
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
+	"media_agent/media_example/biz/dal"
 	"media_agent/media_example/biz/shared/client"
 )
 
@@ -37,7 +39,18 @@ func main() {
 	}
 	defer loader.Close()
 
-	// 2. 构造 ServerSuite（收 loader 不收 cfg；可热更新能力组件在 suite 内部自行 loader.Subscribe）。
+	// 2. 数据库初始化 + 启动期迁移（database.enabled=false 时 NewDB 返回 nil；migrate_on_start 门控）。
+	//    迁移幂等：已最新 no-op，落后执行到最新。必须在 NewServer / InitDI 之前，确保 schema 就绪。
+	dbCfg := loader.Current().GetDatabase()
+	db, err := dal.NewDB(dbCfg)
+	if err != nil {
+		log.Fatalf("init db: %v", err)
+	}
+	if err := dal.Migrate("migrations", dbCfg); err != nil {
+		log.Fatalf("db migrate: %v", err)
+	}
+
+	// 3. 构造 ServerSuite（收 loader 不收 cfg；可热更新能力组件在 suite 内部自行 loader.Subscribe）。
 	suite := serverhertz.NewServerSuite(loader)
 
 	// 3. Attach Consul KV source（consul_kv.enabled=false 时 KVSource() 返回 nil，Attach 无操作）。
@@ -71,9 +84,9 @@ func main() {
 	// 7. 创建 Hertz server + 挂全局 middleware。
 	h := suite.NewServer()
 
-	// 8. 依赖注入：把 service 装配到 handler 包级变量。
-	//    必须在 register(h) 之前完成，确保首个请求到达时 HelloSvc 非 nil。
-	InitDI()
+	// 8. 依赖注入：把 service / workflow 装配到 handler 包级变量。
+	//    必须在 register(h) 之前完成，确保首个请求到达时依赖非 nil。
+	InitDI(db)
 
 	// 9. 注册生成的业务路由（hz update 由 router_gen.go + biz/router/register.go 提供）。
 	register(h)

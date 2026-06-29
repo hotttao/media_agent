@@ -106,6 +106,7 @@ message DatabaseConfig {
   int32 max_open_conns = 4;
   int32 max_idle_conns = 5;
   int32 conn_max_lifetime_seconds = 6;
+  bool migrate_on_start = 7;  // 启动期自动执行迁移（幂等）；local/dev 默认 true，prod 可关由运维手动 migrate
 }
 
 message RedisConfig {

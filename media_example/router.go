@@ -9,8 +9,8 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
-	handler "media_agent/media_example/biz/handler"
 	"media_agent/hertz_infra/serverhertz/swaggerui"
+	handler "media_agent/media_example/biz/handler"
 )
 
 // openapiSpec 是本服务的 OpenAPI spec（make swagger-gen 从业务 IDL 生成），

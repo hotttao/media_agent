@@ -34,6 +34,7 @@ database:
   max_open_conns: 50
   max_idle_conns: 10
   conn_max_lifetime_seconds: 3600
+  migrate_on_start: true   # 启动期自动迁移（local 全栈）
 
 redis:
   enabled: true

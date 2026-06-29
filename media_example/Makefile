@@ -75,6 +75,28 @@ skill-gen:
 		../media_example/swagger/openapi.yaml \
 		-o . --name $(SKILL_NAME) --groupBy=path --force
 
+# ---- 数据库 Migration（golang-migrate） ----
+# migrations/ 在项目根；启动期由 main.go 经 go:embed 自动执行（database.migrate_on_start 门控）。
+# 下面三个目标供手动操作：新建迁移 / 升级到最新 / 回滚一步（prod 运维或本地调试）。
+# 依赖：migrate CLI（go install -tags 'mysql' github.com/golang-migrate/migrate/v4/cmd/migrate@latest）。
+MYSQL_DSN ?= mysql://$(MYSQL_DSN)
+
+.PHONY: migrate-new
+# migrate-new：生成一对空 up/down 迁移文件。用法：make migrate-new NAME=add_xxx
+migrate-new:
+	@test -n "$(NAME)" || { echo "usage: make migrate-new NAME=add_xxx"; exit 1; }
+	migrate create -ext sql -dir migrations -seq $(NAME)
+
+.PHONY: migrate-up
+# migrate-up：执行所有未应用的迁移到最新。
+migrate-up:
+	migrate -path migrations -database "$(MYSQL_DSN)" up
+
+.PHONY: migrate-down
+# migrate-down：回滚最近一步迁移。
+migrate-down:
+	migrate -path migrations -database "$(MYSQL_DSN)" down 1
+
 # 初始化 lefthook git hooks：安装 lefthook 并写入 .git/hooks。
 # lefthook.yml 已纳入版本库，团队成员 clone 后跑一次即可。
 .PHONY: lefthook-install

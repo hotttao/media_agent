@@ -12,7 +12,7 @@
 4. 不要手工编辑生成的 router / model / query 文件，除非本文档"生成代码修改权限矩阵"明确标注为 🟡 谨慎修改。
 5. IDL 变更后用项目脚本重新生成 Hertz 代码：`make hz-model` / `make hz-client` / `make -C <app> hz-update`。
 6. API 文档变更时，更新 `idl/<app>/*.proto` 的 `google.api.http` 与 `api.*` 双重注解，再运行 `make swagger-gen`，必要时 `make skills-gen` 同步 Skill 文档。
-7. 数据库 schema 变更时，先添加或更新 `migrations/` 迁移，再按需重新生成 GORM Gen 代码。
+7. 数据库 schema 变更时，先添加或更新 `migrations/` 迁移，执行迁移，再按需重新生成 GORM Gen 代码（详见「biz/dal — 数据库 Migration」）。
 8. 保持 handler 轻薄：请求绑定 → 转 Command → 调 `service` / `workflow` → 响应映射。
 9. `service` 与 `policy` 远离 Hertz、生成 DTO 与具体基础设施（`hertz_infra/**` 是唯一 import 入口）。
 10. 完成前运行项目检查：
@@ -143,16 +143,19 @@ idl/<app>/<file>.proto
 
 ```text
 biz/dal/
-├── db.go                # 数据库初始化
-├── transaction.go       # 事务实现
+├── db.go                # 数据库初始化（NewDB：gorm.Open）
+├── migrate.go           # 启动期迁移（os.DirFS 读 migrations/ + golang-migrate Up）
+├── transaction.go       # 事务抽象（TxRunner + ctx 传递 tx）
 ├── model/               # GORM / GORM Gen 行模型
 ├── query/               # 🔴 GORM Gen 生成的查询代码
 └── repo/                # domain 仓库接口的实现
 ```
 
-| 子目录 | 职责 | 修改权限 |
+| 子目录 / 文件 | 职责 | 修改权限 |
 |--------|------|----------|
-| `db.go` / `transaction.go` | 连接、事务封装 | 🟢 手写 |
+| `db.go` | 连接初始化 | 🟢 手写 |
+| `migrate.go` | 启动期迁移 | 🟢 手写 |
+| `transaction.go` | 事务封装 | 🟢 手写 |
 | `model/` | DB 行模型，承载 GORM tag | 🟢 手写 |
 | `query/` | GORM Gen 生成的类型安全查询 | 🔴 禁改，schema 变更 → 重新生成 |
 | `repo/` | 实现 `domain/<feature>` 中定义的仓库接口 repository；唯一可 import `dal/query` 的位置 | 🟢 手写 |
@@ -160,6 +163,78 @@ biz/dal/
 **职责边界**：
 - `repo` 把 DB 行模型转为 domain 对象，禁止把 GORM 行模型泄漏给上层
 - 业务规则禁止下沉到 repository 实现
+
+##### 数据库 Migration
+
+- **工具**：`golang-migrate/migrate`，SQL-first（纯 `.up.sql` / `.down.sql`），版本表 `schema_migrations`。
+- **位置**：`<app>/migrations/`（项目根目录，🟢 手写）。
+- **加载方式**：运行时从磁盘读取（不 embed）。`dal.Migrate(dir, cfg)` 用 `os.DirFS(dir)` + iofs source 读 `.sql`；故部署时需带上 `migrations/` 目录，或 prod 用 `migrate` CLI 单独跑（`migrate_on_start=false`）。
+- **启动期执行**：`main.go` 在 `dal.NewDB` 之后、`NewServerSuite` 之前调 `dal.Migrate("migrations", cfg)`——幂等（已最新则 no-op，落后则执行到最新）。由 `database.migrate_on_start` 门控（local/dev 默认 true，prod 可关由运维单独跑 `migrate` CLI）。
+- **独立连接**：`dal.Migrate` 按 `cfg.dsn` 新建独立 `*sql.DB` 执行迁移，不碰业务 `*gorm.DB`——golang-migrate 的 `m.Close()` 会关闭其驱动，复用 gorm 连接会导致业务连接被关。
+- **与 GORM Gen 的关系**：schema 变更流程 = 先加 migration SQL → 执行迁移 → 重跑 GORM Gen（`<app>/tools/gormgen`）。migration 定义 schema，GORM Gen 生成查询，二者各司其职。
+- **禁止**：用 GORM AutoMigrate 替代版本化迁移（仅适合原型，无版本/回滚/历史）。
+
+##### 事务（TxRunner + ctx 传递）
+
+事务边界由 `dal.TxRunner` 统一开启，通过 `context.Context` 隐式传递 tx，`*gorm.DB` 不泄漏给上层。
+
+```go
+// dal/transaction.go
+type TxRunner interface {
+    // RunInTx 在一个 DB 事务内执行 fn；fn 返回 error 回滚，nil 提交。
+    // tx 经 ctx 向下传递，repo 用 dal.FromContext(ctx, db) 取连接。
+    RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// repo 取连接：ctx 带 tx 用 tx，否则用默认 *gorm.DB（非事务读）。
+func FromContext(ctx context.Context, db *gorm.DB) *gorm.DB
+```
+
+**事务开启点（统一规则）**：
+
+| 场景 | 开启位置 | 说明 |
+|------|---------|------|
+| 单 domain 用例 | `service/<domain>` 顶部 `RunInTx` | service 编排单聚合的状态变更 |
+| 跨 domain 用例 | `workflow/<flow>` 顶部 `RunInTx` | workflow 是跨 domain 协调唯一合法入口 |
+| service 内部方法 / repo | **不开事务**，只透传 ctx | 永远 `dal.FromContext(ctx, db)` 取连接 |
+
+**跨 domain 事务模式**（以「点赞」为例：like domain 插入点赞记录 + counter domain 帖子点赞数 +1，同事务保证一致性）：
+
+```go
+// workflow/like_flow.go —— 持有 TxRunner，编排两个 domain 的 service
+// 点赞 = 记录点赞关系（like）+ 帖子点赞数 +1（counter），二者须同事务，
+// 避免「记了点赞但计数没涨」的不一致。
+func (f *LikeFlow) Like(ctx context.Context, userID, postID string) error {
+    return f.tx.RunInTx(ctx, func(txCtx context.Context) error {
+        if err := f.likeSvc.Like(txCtx, userID, postID); err != nil {
+            return err                  // 自动回滚
+        }
+        return f.counterSvc.IncrLikes(txCtx, postID)  // 任一失败整体回滚
+    })
+}
+
+// service/like/service.go —— 不开事务，用传入 ctx
+func (s *LikeService) Like(ctx context.Context, userID, postID string) error {
+    return s.repo.Save(ctx, &Like{UserID: userID, PostID: postID})
+}
+
+// dal/repo/like/like.go —— 从 ctx 取连接（自动加入上层事务）
+func (r *LikeRepo) Save(ctx context.Context, l *Like) error {
+    db := dal.FromContext(ctx, r.db)
+    return db.Create(l).Error
+}
+
+// service/counter/service.go —— 同样不开事务，透传 ctx
+func (s *CounterService) IncrLikes(ctx context.Context, postID string) error {
+    return r.repo.Incr(ctx, postID, "likes")
+}
+```
+
+**规则**：
+- `service/like` 不可 import `service/counter`（同层隔离）；跨 domain 一律经 workflow 持有 `TxRunner` 编排。
+- `domain` / `policy` 不持有 `TxRunner`，不感知事务。
+- `repo` 永远从 ctx 取连接，自身不开事务——这样无论上层是否在事务内，repo 行为一致。
+- 跨系统流程（外部副作用）不在持有 DB 事务时调用外部系统，用 saga / outbox（见 workflow 节）。
 
 ---
 

@@ -1,0 +1,28 @@
+// idl/media_example/like.proto
+//
+// 点赞服务 IDL：演示跨 domain 事务（like domain + counter domain 同事务）。
+// 对应 workflow/like_flow：handler 调 LikeFlow.Like，由 workflow 持 TxRunner 编排两个 service。
+syntax = "proto3";
+
+package like;
+
+option go_package = "media_example/like";
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+message LikeReq {
+   string user_id = 1[(api.path)="user_id"];
+   string post_id = 2[(api.path)="post_id"];
+}
+
+message LikeResp {
+   bool ok = 1;
+}
+
+service LikeService {
+   rpc Like(LikeReq) returns(LikeResp) {
+      option (api.post) = "/likes/:user_id/:post_id";
+      option (google.api.http) = { post: "/likes/{user_id}/{post_id}" };
+   }
+}
