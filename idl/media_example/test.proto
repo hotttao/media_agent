@@ -1,9 +1,13 @@
 // idl/media_example/test.proto
 //
 // e2e 测试专用 service：供 media-cli 用生成的 typed client 调用，验证 clienthertz 治理能力
-// （timeout / retry / circuitbreaker / tracing）。路径映射到 /_test/*，server 端由
-// media-cli serve 命令的 mountTestEndpoints 提供裸路由实现（test.proto 仅用于生成 client stub，
-// 不在 media_example 正式服务注册 handler，避免污染正式服务）。
+// （timeout / retry / circuitbreaker / tracing）。路径映射到 /_test/*。
+//
+// 该 service 注册到 media_example 正式 handler（hz 生成的 handler 是空壳，仅占路由），
+// 真实测试行为（echo 回显 / slow 延迟 / error 状态码 / panic）由 media-cli serve 命令的
+// mountTestEndpoints 提供裸路由实现。故 e2e 治理测试的被测 server 用 `media-cli serve`
+// （见 harness/contributing/e2e.md），而非直接跑 media_example。
+// test.proto 同时用于生成 client stub（media-cli/cmd/client 用 TestServiceClient）。
 syntax = "proto3";
 
 package test;
