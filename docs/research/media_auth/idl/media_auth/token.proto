@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package media_auth.token;
+
+import "api.proto";
+
+// Hertz 工具链:
+//   make hz-model     -> hertz_gen/model/media_auth/token/token.pb.go
+//   make hz-client    -> hertz_gen/media_auth/token_service.go            (供 control_plane 调用)
+//   make hz-update    -> media_auth/biz/handler/token/token_service.go   (handler 骨架)
+//
+// **internal service —— 仅 mTLS / 内网暴露,不挂网关路由,不出 OpenAPI。**
+// 故本 proto 只写 (api.post) 给 hz 生成路由用(且路由在 biz/router 内不注册到公共前缀,
+// 或注册到独立 internal listener),不写 google.api.http(不进 swagger)。
+option go_package = "media_auth/token";
+
+// TokenService —— 供 control_plane 网关验证 opaque Bearer service token。
+//
+// 背景:control_plane 抽离认证后仍需验 Authorization: Bearer <tos_xxx>。
+// service token 是 opaque(仅存 SHA-256 hash),无法本地验,故经 mTLS 调本 RPC。
+// cookie / bearer JWT 仍由 control_plane 用共享 JWT_SECRET 本地 HS256 验,
+// 不走本 RPC。详见 docs/adr/0001-media-auth-extraction-and-token-verification.md
+// 与 docs/workflow/0001-service-token-verification.md。
+service TokenService {
+  // POST /internal/token/verify —— 校验 token 并解析为鉴权主体
+  rpc VerifyToken(VerifyTokenRequest) returns(VerifyTokenResponse) {
+    option (api.post) = "/internal/token/verify";
+  };
+}
+
+message VerifyTokenRequest {
+  // tos_xxx 明文;media_auth 内部 sha256 后查 service_tokens.token_hash,
+  // 明文永不出 media_auth 边界。
+  string token = 1;
+  // 可选提示,目前固定 service_token;预留未来统一校验 JWT。
+  optional string token_type_hint = 2;
+}
+
+message VerifyTokenResponse {
+  bool active = 1;
+  // = service_tokens.created_by(control_plane 据此识别调用方)
+  optional string sub = 2;
+  // svc:{name}
+  optional string username = 3;
+  optional string name = 4;
+  // 固定 user
+  optional string role = 5;
+  // service_token
+  optional string token_type = 6;
+}

@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package media_auth.service_token;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+// Hertz 工具链:
+//   make hz-model     -> hertz_gen/model/media_auth/service_token/service_token.pb.go
+//   make hz-update    -> media_auth/biz/handler/service_token/service_token_service.go
+//   make swagger-gen  -> media_auth/swagger/openapi.yaml
+option go_package = "media_auth/service_token";
+
+// ServiceTokenService —— B2B API token 管理(tos_xxx 形式)。
+//
+// 安全要点:
+//   * POST 创建时 token 明文只返回一次,DB 存 token_hash(SHA-256)
+//   * LIST 只返 id/name/created_at/revoked_at/is_platform,绝不返 hash
+//   * DELETE 仅能撤销非 platform 的自己 token(is_platform = false 的 DB 约束)
+//   * 每用户至多一个 active platform token(DB 唯一部分索引保证)
+service ServiceTokenService {
+  // POST /api/service-tokens —— 创建 token,响应里 token 字段只此一次
+  rpc CreateServiceToken(CreateServiceTokenRequest) returns(CreateServiceTokenResponse) {
+    option (google.api.http) = {
+      post: "/api/service-tokens"
+      body: "*"
+    };
+    option (api.post) = "/api/service-tokens";
+  }
+
+  // GET /api/service-tokens —— 当前用户的有效 token 列表(不含 secret)
+  rpc ListServiceTokens(ListServiceTokensRequest) returns(ListServiceTokensResponse) {
+    option (google.api.http) = { get: "/api/service-tokens" };
+    option (api.get) = "/api/service-tokens";
+  }
+
+  // DELETE /api/service-tokens/:id —— 撤销自己名下的非 platform token
+  rpc RevokeServiceToken(RevokeServiceTokenRequest) returns(RevokeServiceTokenResponse) {
+    option (google.api.http) = { delete: "/api/service-tokens/{id}" };
+    option (api.delete) = "/api/service-tokens/:id";
+  }
+}
+
+// ───────────── 消息 ─────────────
+
+message CreateServiceTokenRequest {
+  string name = 1;
+}
+
+message CreateServiceTokenResponse {
+  string id = 1;
+  string name = 2;
+  // tos_xxx 明文,仅本次响应可见
+  string token = 3;
+  string created_at = 4;
+}
+
+message ListServiceTokensRequest {}
+
+message ListServiceTokensResponse {
+  repeated ServiceTokenRecord tokens = 1;
+}
+
+// ServiceTokenRecord —— 不含 token_hash / token 明文
+message ServiceTokenRecord {
+  string id = 1;
+  string name = 2;
+  string created_by = 3;
+  string created_at = 4;
+  optional string revoked_at = 5;
+  bool is_platform = 6;
+}
+
+message RevokeServiceTokenRequest {
+  string id = 1 [(api.path) = "id"];
+}
+
+message RevokeServiceTokenResponse {
+  bool success = 1;
+}

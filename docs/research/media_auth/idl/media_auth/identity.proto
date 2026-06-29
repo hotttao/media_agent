@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package media_auth.identity;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+// Hertz 工具链:
+//   make hz-model     -> hertz_gen/model/media_auth/identity/identity.pb.go
+//   make hz-update    -> media_auth/biz/handler/identity/identity_service.go
+//   make swagger-gen  -> media_auth/swagger/openapi.yaml
+option go_package = "media_auth/identity";
+
+// IdentityService —— 用户外部身份绑定的 generic CRUD。
+//
+// 控制面原 routes/wecom-auth.ts 把 list/delete 绑死在 /api/auth/wecom/*,
+// media_auth 抽象为按 provider 路由;前端可一次性拿到所有已绑 provider,
+// 后续新增 Google/GitHub provider 只需在 wecom.proto 旁加 google.proto。
+service IdentityService {
+  // GET /api/auth/identities —— 当前用户全部身份绑定
+  rpc ListIdentities(ListIdentitiesRequest) returns(ListIdentitiesResponse) {
+    option (google.api.http) = { get: "/api/auth/identities" };
+    option (api.get) = "/api/auth/identities";
+  }
+
+  // DELETE /api/auth/identities/:provider —— 解绑某个 provider
+  rpc DeleteIdentity(DeleteIdentityRequest) returns(DeleteIdentityResponse) {
+    option (google.api.http) = { delete: "/api/auth/identities/{provider}" };
+    option (api.delete) = "/api/auth/identities/:provider";
+  }
+}
+
+// ───────────── 消息 ─────────────
+
+message ListIdentitiesRequest {}
+
+message ListIdentitiesResponse {
+  repeated UserIdentity identities = 1;
+}
+
+message UserIdentity {
+  string provider = 1;
+  string external_id = 2;
+  optional string display_name = 3;
+  string created_at = 4;
+}
+
+message DeleteIdentityRequest {
+  string provider = 1 [(api.path) = "provider"];
+}
+
+message DeleteIdentityResponse {
+  bool success = 1;
+}

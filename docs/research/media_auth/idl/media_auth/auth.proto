@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package media_auth.auth;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+// Hertz 工具链:
+//   make hz-model     -> hertz_gen/model/media_auth/auth/auth.pb.go            (DTO)
+//   make hz-update    -> media_auth/biz/handler/auth/auth_service.go           (handler 骨架)
+//   make swagger-gen  -> media_auth/swagger/openapi.yaml                        (OpenAPI)
+option go_package = "media_auth/auth";
+
+// AuthService —— 本地账号 + LDAP 双路登录,以及当前用户/会话域。
+//
+// 鉴权通道:
+//   * 登录成功下发 httpOnly cookie `token`(JWT),后续走 Cookie 鉴权
+//   * 内部 RPC 入口:无,所有能力均通过 HTTP 暴露给前端
+//
+// 与 control_plane 的边界(见 docs/media_auth/design.md §4):
+//   * GET /api/auth/me 后续会被 control_plane 网关注销,统一改走 RPC VerifyToken
+//   * 登录接口在本服务内闭环,control_plane 不再承载用户态
+service AuthService {
+  // POST /api/auth/login —— 本地密码 / LDAP 双路登录
+  rpc Login(LoginRequest) returns(LoginResponse) {
+    option (google.api.http) = {
+      post: "/api/auth/login"
+      body: "*"
+    };
+    option (api.post) = "/api/auth/login";
+  }
+
+  // POST /api/auth/logout —— 清除 token cookie
+  rpc Logout(LogoutRequest) returns(LogoutResponse) {
+    option (google.api.http) = { post: "/api/auth/logout" };
+    option (api.post) = "/api/auth/logout";
+  }
+
+  // GET /api/auth/me —— 当前用户完整档案
+  rpc GetMe(GetMeRequest) returns(ApiUser) {
+    option (google.api.http) = { get: "/api/auth/me" };
+    option (api.get) = "/api/auth/me";
+  }
+
+  // PATCH /api/auth/me —— 局部更新本人设置(目前仅 auto_evolution)
+  rpc UpdateMe(UpdateMeRequest) returns(UpdateMeResponse) {
+    option (google.api.http) = {
+      patch: "/api/auth/me"
+      body: "*"
+    };
+    option (api.patch) = "/api/auth/me";
+  }
+
+  // PUT /api/auth/me/password —— 本地密码账号改密(仅 password_hash 非空的用户)
+  rpc ChangePassword(ChangePasswordRequest) returns(ChangePasswordResponse) {
+    option (google.api.http) = {
+      put: "/api/auth/me/password"
+      body: "*"
+    };
+    option (api.put) = "/api/auth/me/password";
+  }
+
+  // PUT /api/auth/me/default-prompt —— 设置新 workspace 的默认 prompt
+  rpc SetDefaultPrompt(SetDefaultPromptRequest) returns(SetDefaultPromptResponse) {
+    option (google.api.http) = {
+      put: "/api/auth/me/default-prompt"
+      body: "*"
+    };
+    option (api.put) = "/api/auth/me/default-prompt";
+  }
+}
+
+// ───────────── 请求 / 响应消息 ─────────────
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  ApiUser user = 1;
+}
+
+message LogoutRequest {}
+
+message LogoutResponse {
+  bool success = 1;
+}
+
+message GetMeRequest {}
+
+// UpdateMeRequest —— 用 proto3 optional 区分"未传"与"显式 false"
+// 只有需要 tri-state 的字段用 optional;其余字段走 presence 即可
+message UpdateMeRequest {
+  optional bool auto_evolution = 1;
+}
+
+message UpdateMeResponse {
+  bool success = 1;
+}
+
+message ChangePasswordRequest {
+  string current_password = 1;
+  string new_password = 2;
+}
+
+message ChangePasswordResponse {
+  bool success = 1;
+}
+
+message SetDefaultPromptRequest {
+  // null = 清除默认 prompt;非空 = 设为该 prompt
+  optional string prompt_id = 1;
+}
+
+message SetDefaultPromptResponse {
+  bool success = 1;
+}
+
+// ───────────── 共享 DTO ─────────────
+
+// ApiUser —— /me、登录响应的统一用户档案 DTO
+//
+// 注意:default_prompt_id 为 opaque id(prompts 表留在 control_plane),
+//      不校验 FK;default_prompt_name 不在此返回,由网关层补,见
+//      docs/adr/0001-media-auth-extraction-and-token-verification.md
+message ApiUser {
+  string id = 1;
+  string username = 2;
+  // user | admin | system
+  string role = 3;
+  // password | ldap | wecom —— 用于前端判断能否改密
+  string auth_source = 4;
+  optional string default_prompt_id = 5;
+  bool auto_evolution = 6;
+}

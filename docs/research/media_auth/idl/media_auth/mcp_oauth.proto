@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package media_auth.mcp_oauth;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+// Hertz 工具链:
+//   make hz-model     -> hertz_gen/model/media_auth/mcp_oauth/mcp_oauth.pb.go
+//   make hz-update    -> media_auth/biz/handler/mcp_oauth/mcp_oauth_service.go
+//   make swagger-gen  -> media_auth/swagger/openapi.yaml
+option go_package = "media_auth/mcp_oauth";
+
+// McpOAuthService —— media_auth 反向作为 OAuth client 去登第三方 MCP server。
+//
+// 浏览器侧 authorize / callback 走 popup + postMessage,handler 返回 HTML 字符串;
+// DB 表:mcp_oauth_clients / mcp_oauth_tokens,详见 services/mcp-oauth.ts。
+//
+// 与 oauth.proto(OAuth Provider AS)角色相反,不要混用类型。
+service McpOAuthService {
+  // POST /api/mcp-oauth/discover —— 给定 MCP server URL,探测是否需要 OAuth
+  // Body: { "url": "https://mcp.example.com" }
+  rpc DiscoverOAuth(DiscoverOAuthRequest) returns(DiscoverOAuthResponse) {
+    option (google.api.http) = {
+      post: "/api/mcp-oauth/discover"
+      body: "*"
+    };
+    option (api.post) = "/api/mcp-oauth/discover";
+  }
+
+  // GET /api/mcp-oauth/status?server_origin=a,b,c —— 批量查询连接状态
+  rpc GetConnectionStatus(GetConnectionStatusRequest) returns(GetConnectionStatusResponse) {
+    option (google.api.http) = { get: "/api/mcp-oauth/status" };
+    option (api.get) = "/api/mcp-oauth/status";
+  }
+
+  // GET /api/mcp-oauth/authorize?server_origin=&workspace_id= —— 浏览器 popup 直接打开
+  // handler 用 c.redirect 重定向到第三方 MCP authorize URL;
+  // proto 上无法表达 302,handler 内部负责
+  rpc StartAuthorization(StartAuthorizationRequest) returns(StartAuthorizationResponse) {
+    option (google.api.http) = { get: "/api/mcp-oauth/authorize" };
+    option (api.get) = "/api/mcp-oauth/authorize";
+  }
+
+  // GET /api/mcp-oauth/callback —— 第三方 MCP OAuth callback
+  // handler 返回 HTML(含 postMessage 给 window.opener 的 JS)
+  rpc HandleCallback(HandleCallbackRequest) returns(HandleCallbackResponse) {
+    option (google.api.http) = { get: "/api/mcp-oauth/callback" };
+    option (api.get) = "/api/mcp-oauth/callback";
+  }
+
+  // DELETE /api/mcp-oauth/:server_origin —— 断开某 MCP 服务器连接
+  rpc Disconnect(DisconnectRequest) returns(DisconnectResponse) {
+    option (google.api.http) = { delete: "/api/mcp-oauth/{server_origin}" };
+    option (api.delete) = "/api/mcp-oauth/:server_origin";
+  }
+}
+
+// ───────────── DiscoverOAuth ─────────────
+
+message DiscoverOAuthRequest {
+  string url = 1;
+}
+
+message DiscoverOAuthResponse {
+  bool oauth_required = 1;
+  optional string server_origin = 2;
+}
+
+// ───────────── GetConnectionStatus ─────────────
+
+message GetConnectionStatusRequest {
+  // 逗号分隔的 server_origin 列表
+  string servers = 1 [(api.query) = "servers"];
+}
+
+message GetConnectionStatusResponse {
+  // key = server_origin
+  map<string, ConnectionStatus> statuses = 1;
+}
+
+message ConnectionStatus {
+  bool connected = 1;
+  optional string expires_at = 2;
+}
+
+// ───────────── StartAuthorization ─────────────
+
+message StartAuthorizationRequest {
+  string server_origin = 1 [(api.query) = "server_origin"];
+  string workspace_id = 2 [(api.query) = "workspace_id"];
+}
+
+// StartAuthorizationResponse —— HTTP 层由 handler 用 c.redirect 直接 302,
+// 本字段保留供内部 RPC caller 使用,实际不消费。
+message StartAuthorizationResponse {
+  string redirect_url = 1;
+}
+
+// ───────────── HandleCallback ─────────────
+
+message HandleCallbackRequest {
+  string code = 1 [(api.query) = "code"];
+  string state = 2 [(api.query) = "state"];
+  optional string error = 3 [(api.query) = "error"];
+}
+
+// HandleCallbackResponse —— handler 返回完整 HTML 字符串(200),HTML 含
+// window.opener.postMessage(...) + window.close()。
+message HandleCallbackResponse {
+  // 完整 HTML,前端无需修改
+  string html = 1;
+  bool success = 2;
+}
+
+// ───────────── Disconnect ─────────────
+
+message DisconnectRequest {
+  string server_origin = 1 [(api.path) = "server_origin"];
+}
+
+message DisconnectResponse {
+  bool success = 1;
+}

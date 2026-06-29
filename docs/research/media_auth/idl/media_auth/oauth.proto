@@ -1,0 +1,150 @@
+syntax = "proto3";
+
+package media_auth.oauth;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+// Hertz 工具链:
+//   make hz-model     -> hertz_gen/model/media_auth/oauth/oauth.pb.go
+//   make hz-update    -> media_auth/biz/handler/oauth/oauth_service.go
+//   make swagger-gen  -> media_auth/swagger/openapi.yaml
+option go_package = "media_auth/oauth";
+
+// OAuthProviderService —— media_auth 作为 OAuth2 Authorization Server,
+//
+// 同时承担三种 grant:
+//   * authorization_code(带 PKCE S256)
+//   * refresh_token
+//   * urn:ietf:params:oauth:grant-type:token-exchange(RFC 8693)
+//
+// 详见 services/oauth-provider.ts;DB 表:oauth_clients / oauth_authorization_codes / oauth_refresh_tokens。
+//
+// /token 接受 application/x-www-form-urlencoded 和 application/json 两种 Content-Type,
+// proto 字段一律声明,handler 层按 Content-Type 分支。
+service OAuthProviderService {
+  // GET /api/oauth/authorize —— 返回 client 元信息给前端 consent 页
+  // query: client_id / redirect_uri / response_type=code / scope
+  rpc GetAuthorizeInfo(GetAuthorizeInfoRequest) returns(GetAuthorizeInfoResponse) {
+    option (google.api.http) = { get: "/api/oauth/authorize" };
+    option (api.get) = "/api/oauth/authorize";
+  }
+
+  // POST /api/oauth/authorize —— 用户授权,签发 authorization_code 并返回拼好 state 的 redirect URL
+  rpc ApproveAuthorization(ApproveAuthorizationRequest) returns(ApproveAuthorizationResponse) {
+    option (google.api.http) = {
+      post: "/api/oauth/authorize"
+      body: "*"
+    };
+    option (api.post) = "/api/oauth/authorize";
+  }
+
+  // POST /api/oauth/token —— 三种 grant 合一入口
+  // grant_type ∈ {authorization_code, refresh_token, urn:ietf:params:oauth:grant-type:token-exchange}
+  //
+  // **Content-Type 必须是 application/x-www-form-urlencoded**(RFC 6749 §3.2 强制要求)。
+  // google.api.http 不写 body,所有字段通过 (api.form) 标签从 form body 绑定;
+  // handler 由 Hertz BindAndValidate 自动解析。
+  //
+  // 控制面现状(/api/oauth/token)同时兼容 form 与 JSON,
+  // 迁到 media_auth 后 IDL 强制 form-urlencoded(RFC 标准),
+  // JSON 兼容路径由 handler 层手动 c.PostForm → fallback 解析,不在 IDL 表达。
+  rpc ExchangeToken(ExchangeTokenRequest) returns(ExchangeTokenResponse) {
+    option (google.api.http) = { post: "/api/oauth/token" };
+    option (api.post) = "/api/oauth/token";
+  }
+
+  // GET /api/oauth/userinfo —— Bearer access_token 解析用户信息
+  rpc GetUserInfo(GetUserInfoRequest) returns(OAuthUserInfo) {
+    option (google.api.http) = { get: "/api/oauth/userinfo" };
+    option (api.get) = "/api/oauth/userinfo";
+  }
+}
+
+// ───────────── GetAuthorizeInfo ─────────────
+
+message GetAuthorizeInfoRequest {
+  string client_id = 1 [(api.query) = "client_id"];
+  string redirect_uri = 2 [(api.query) = "redirect_uri"];
+  string response_type = 3 [(api.query) = "response_type"];
+  string scope = 4 [(api.query) = "scope"];
+}
+
+message GetAuthorizeInfoResponse {
+  string client_name = 1;
+  string scope = 2;
+}
+
+// ───────────── ApproveAuthorization ─────────────
+
+message ApproveAuthorizationRequest {
+  string client_id = 1;
+  string redirect_uri = 2;
+  // 必须是 code
+  string response_type = 3;
+  optional string state = 4;
+  optional string code_challenge = 5;
+  // 仅支持 S256
+  optional string code_challenge_method = 6;
+  string scope = 7;
+}
+
+message ApproveAuthorizationResponse {
+  // 已经把 ?code=&state= 拼到 redirect_uri 上的完整 URL
+  string redirect_uri = 1;
+}
+
+// ───────────── ExchangeToken(三种 grant 共用 body) ─────────────
+
+// ExchangeTokenRequest —— 三种 grant 共用;handler 按 grant_type 字段分发。
+// 字段全部 optional,对应 grant 缺失时由 handler 拒绝。
+//
+// **绑定源:application/x-www-form-urlencoded**(每字段 (api.form) 显式标注)。
+// 关键字段如 grant_type / client_id 是 RFC 6749 §3.2 + §2.3.1 强制 form-urlencoded。
+message ExchangeTokenRequest {
+  // authorization_code | refresh_token | urn:ietf:params:oauth:grant-type:token-exchange
+  string grant_type = 1 [(api.form) = "grant_type"];
+
+  // —— authorization_code ——
+  optional string code = 2 [(api.form) = "code"];
+  optional string redirect_uri = 3 [(api.form) = "redirect_uri"];
+  optional string code_verifier = 4 [(api.form) = "code_verifier"];
+
+  // —— refresh_token ——
+  optional string refresh_token = 5 [(api.form) = "refresh_token"];
+
+  // —— token-exchange (RFC 8693) ——
+  optional string subject_token = 6 [(api.form) = "subject_token"];
+  optional string subject_token_type = 7 [(api.form) = "subject_token_type"];
+  optional string resource = 8 [(api.form) = "resource"];
+  optional string client_secret = 9 [(api.form) = "client_secret"];
+
+  // —— 通用 ——
+  string client_id = 10 [(api.form) = "client_id"];
+}
+
+// ExchangeTokenResponse —— 不同 grant 返回字段有差异,handler 按 grant_type 填充对应字段。
+message ExchangeTokenResponse {
+  optional string access_token = 1;
+  optional string refresh_token = 2;
+  // Bearer
+  string token_type = 3;
+  // access_token 剩余秒数
+  int64 expires_in = 4;
+  // token-exchange 时使用:urn:ietf:params:oauth:token-type:access_token
+  optional string issued_token_type = 5;
+}
+
+// ───────────── GetUserInfo ─────────────
+
+message GetUserInfoRequest {
+  // Authorization: Bearer <access_token>,handler 从 Header 读,本字段仅在内部 RPC 调用时用
+  optional string access_token = 1;
+}
+
+message OAuthUserInfo {
+  string sub = 1;
+  string username = 2;
+  string name = 3;
+  optional string email = 4;
+}
