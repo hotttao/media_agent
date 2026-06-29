@@ -4,11 +4,11 @@
 
 ## 治理能力 e2e
 
-启动被测 server（带治理能力 + 测试端点）：
+启动被测 server（media_example 本身，带治理能力 + 测试端点 `/_test/*`）：
 
 ```bash
-cd media_example && go run ../media-cli serve --conf conf/local.yaml
-# 或指定配置：go run ../media-cli serve --conf <path>
+cd media_example && go run .
+# 测试端点（/test/* handler 实现真实测试行为：echo/slow/error/panic）由 hz 生成、注册到 media_example
 ```
 
 逐项验证服务端 / 客户端治理能力：
@@ -63,7 +63,7 @@ OTEL_ENABLED=true \
 PROMETHEUS_ENABLED=true \
 LOG_ENABLED=true \
 LOG_DIR=/home/tao/code/github/media_agent/media_logs/media_example \
-go run ../media-cli serve --conf conf/local.yaml
+go run .
 ```
 
 > `LOG_DIR` 必须为 `media_logs/<app>` 绝对路径，promtail 才能采集到。

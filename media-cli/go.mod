@@ -26,14 +26,12 @@ require (
 	github.com/cloudwego/gopkg v0.2.0 // indirect
 	github.com/cloudwego/netpoll v0.7.3 // indirect
 	github.com/fatih/color v1.16.0 // indirect
-	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-logr/logr v1.3.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
 	github.com/google/uuid v1.3.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
@@ -44,17 +42,12 @@ require (
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/serf v0.10.1 // indirect
-	github.com/hertz-contrib/cors v0.1.0 // indirect
-	github.com/hertz-contrib/logger/accesslog v0.0.0-20241107070745-e4ce8c54dd97 // indirect
 	github.com/hertz-contrib/logger/zap v1.1.0 // indirect
-	github.com/hertz-contrib/monitor-prometheus v0.1.3 // indirect
 	github.com/hertz-contrib/obs-opentelemetry/logging/zap v0.0.0-20251225110230-6728619a50b0 // indirect
 	github.com/hertz-contrib/obs-opentelemetry/provider v0.3.0 // indirect
 	github.com/hertz-contrib/obs-opentelemetry/tracing v0.4.1 // indirect
 	github.com/hertz-contrib/opensergo v0.0.1 // indirect
-	github.com/hertz-contrib/pprof v0.1.2 // indirect
 	github.com/hertz-contrib/registry/consul v0.0.0-20250319055937-8a220332e808 // indirect
-	github.com/hertz-contrib/requestid v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect

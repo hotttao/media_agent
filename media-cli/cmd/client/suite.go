@@ -44,7 +44,7 @@ func buildClientSuite(timeoutMs, maxAttempts int32, cbEnabled bool) (*clienthert
 			"media_example": {
 				Enabled:     true,
 				ServiceName: "media-example",
-				BaseDomain:  cmd.FlagHost, // 测试目标 server 地址（运行中的 media_example 或 media-cli serve）
+				BaseDomain:  cmd.FlagHost, // 测试目标 server 地址（运行中的 media_example）
 				Timeout: &configpb.TimeoutConfig{
 					Enabled:        true,
 					ReadTimeoutMs:  timeoutMs,
