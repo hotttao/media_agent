@@ -1,0 +1,989 @@
+# Generated with protoc-gen-openapi
+# https://github.com/google/gnostic/tree/master/cmd/protoc-gen-openapi
+
+openapi: 3.0.3
+info:
+    title: ""
+    version: 0.0.1
+paths:
+    /api/auth/identities:
+        get:
+            tags:
+                - IdentityService
+            description: GET /api/auth/identities —— 当前用户全部身份绑定
+            operationId: IdentityService_ListIdentities
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListIdentitiesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/auth/identities/{provider}:
+        delete:
+            tags:
+                - IdentityService
+            description: DELETE /api/auth/identities/:provider —— 解绑某个 provider
+            operationId: IdentityService_DeleteIdentity
+            parameters:
+                - name: provider
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeleteIdentityResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/auth/login:
+        post:
+            tags:
+                - AuthService
+            description: POST /api/auth/login —— 本地密码 / LDAP 双路登录
+            operationId: AuthService_Login
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/LoginRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/LoginResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/auth/logout:
+        post:
+            tags:
+                - AuthService
+            description: POST /api/auth/logout —— 清除 token cookie
+            operationId: AuthService_Logout
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/LogoutResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/auth/me:
+        get:
+            tags:
+                - AuthService
+            description: GET /api/auth/me —— 当前用户完整档案
+            operationId: AuthService_GetMe
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiUser'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        patch:
+            tags:
+                - AuthService
+            description: PATCH /api/auth/me —— 局部更新本人设置(目前仅 auto_evolution)
+            operationId: AuthService_UpdateMe
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateMeRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UpdateMeResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/auth/me/default-prompt:
+        put:
+            tags:
+                - AuthService
+            description: PUT /api/auth/me/default-prompt —— 设置新 workspace 的默认 prompt
+            operationId: AuthService_SetDefaultPrompt
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetDefaultPromptRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SetDefaultPromptResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/auth/me/password:
+        put:
+            tags:
+                - AuthService
+            description: PUT /api/auth/me/password —— 本地密码账号改密(仅 password_hash 非空的用户)
+            operationId: AuthService_ChangePassword
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ChangePasswordRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ChangePasswordResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/auth/wecom/authorize:
+        get:
+            tags:
+                - WeComService
+            description: |-
+                GET /api/auth/wecom/authorize —— 返回企微扫码登录 URL
+                 mode=login 重定向登录流;mode=bind 重定向绑定流(需要在请求头带 token)
+            operationId: WeComService_GetAuthorizeUrl
+            parameters:
+                - name: mode
+                  in: query
+                  description: login | bind,默认 login
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetAuthorizeUrlResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/auth/wecom/callback:
+        get:
+            tags:
+                - WeComService
+            description: |-
+                GET /api/auth/wecom/callback —— 企微 OAuth 回调
+                 state=login → 拿 userid 查绑定 → 签 JWT 下 cookie
+                 state=bind  → 拿 userid 查/创建绑定 → redirect 回首页
+                 返回 302 时的 Location 在 google.api.http 上无法表达,
+                 handler 内部直接 c.redirect;本 IDL 用空响应 + Location 由实现层负责
+            operationId: WeComService_HandleCallback
+            parameters:
+                - name: code
+                  in: query
+                  schema:
+                    type: string
+                - name: state
+                  in: query
+                  description: login | bind
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HandleCallbackResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/auth/wecom/enabled:
+        get:
+            tags:
+                - WeComService
+            description: GET /api/auth/wecom/enabled —— 探测企微登录是否配置
+            operationId: WeComService_GetEnabled
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetEnabledResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/mcp-oauth/authorize:
+        get:
+            tags:
+                - McpOAuthService
+            description: |-
+                GET /api/mcp-oauth/authorize?server_origin=&workspace_id= —— 浏览器 popup 直接打开
+                 handler 用 c.redirect 重定向到第三方 MCP authorize URL;
+                 proto 上无法表达 302,handler 内部负责
+            operationId: McpOAuthService_StartAuthorization
+            parameters:
+                - name: server_origin
+                  in: query
+                  schema:
+                    type: string
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StartAuthorizationResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/mcp-oauth/callback:
+        get:
+            tags:
+                - McpOAuthService
+            description: |-
+                GET /api/mcp-oauth/callback —— 第三方 MCP OAuth callback
+                 handler 返回 HTML(含 postMessage 给 window.opener 的 JS)
+            operationId: McpOAuthService_HandleCallback
+            parameters:
+                - name: code
+                  in: query
+                  schema:
+                    type: string
+                - name: state
+                  in: query
+                  schema:
+                    type: string
+                - name: error
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HandleCallbackResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/mcp-oauth/discover:
+        post:
+            tags:
+                - McpOAuthService
+            description: |-
+                POST /api/mcp-oauth/discover —— 给定 MCP server URL,探测是否需要 OAuth
+                 Body: { "url": "https://mcp.example.com" }
+            operationId: McpOAuthService_DiscoverOAuth
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DiscoverOAuthRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscoverOAuthResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/mcp-oauth/status:
+        get:
+            tags:
+                - McpOAuthService
+            description: GET /api/mcp-oauth/status?server_origin=a,b,c —— 批量查询连接状态
+            operationId: McpOAuthService_GetConnectionStatus
+            parameters:
+                - name: servers
+                  in: query
+                  description: 逗号分隔的 server_origin 列表
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetConnectionStatusResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/mcp-oauth/{server_origin}:
+        delete:
+            tags:
+                - McpOAuthService
+            description: DELETE /api/mcp-oauth/:server_origin —— 断开某 MCP 服务器连接
+            operationId: McpOAuthService_Disconnect
+            parameters:
+                - name: server_origin
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DisconnectResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/oauth/authorize:
+        get:
+            tags:
+                - OAuthProviderService
+            description: |-
+                GET /api/oauth/authorize —— 返回 client 元信息给前端 consent 页
+                 query: client_id / redirect_uri / response_type=code / scope
+            operationId: OAuthProviderService_GetAuthorizeInfo
+            parameters:
+                - name: client_id
+                  in: query
+                  schema:
+                    type: string
+                - name: redirect_uri
+                  in: query
+                  schema:
+                    type: string
+                - name: response_type
+                  in: query
+                  schema:
+                    type: string
+                - name: scope
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetAuthorizeInfoResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - OAuthProviderService
+            description: POST /api/oauth/authorize —— 用户授权,签发 authorization_code 并返回拼好 state 的 redirect URL
+            operationId: OAuthProviderService_ApproveAuthorization
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApproveAuthorizationRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApproveAuthorizationResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/oauth/token:
+        post:
+            tags:
+                - OAuthProviderService
+            description: |-
+                POST /api/oauth/token —— 三种 grant 合一入口
+                 grant_type ∈ {authorization_code, refresh_token, urn:ietf:params:oauth:grant-type:token-exchange}
+
+                 **Content-Type 必须是 application/x-www-form-urlencoded**(RFC 6749 §3.2 强制要求)。
+                 google.api.http 不写 body,所有字段通过 (api.form) 标签从 form body 绑定;
+                 handler 由 Hertz BindAndValidate 自动解析。
+
+                 控制面现状(/api/oauth/token)同时兼容 form 与 JSON,
+                 迁到 media_auth 后 IDL 强制 form-urlencoded(RFC 标准),
+                 JSON 兼容路径由 handler 层手动 c.PostForm → fallback 解析,不在 IDL 表达。
+            operationId: OAuthProviderService_ExchangeToken
+            parameters:
+                - name: grant_type
+                  in: query
+                  description: authorization_code | refresh_token | urn:ietf:params:oauth:grant-type:token-exchange
+                  schema:
+                    type: string
+                - name: code
+                  in: query
+                  description: —— authorization_code ——
+                  schema:
+                    type: string
+                - name: redirect_uri
+                  in: query
+                  schema:
+                    type: string
+                - name: code_verifier
+                  in: query
+                  schema:
+                    type: string
+                - name: refresh_token
+                  in: query
+                  description: —— refresh_token ——
+                  schema:
+                    type: string
+                - name: subject_token
+                  in: query
+                  description: —— token-exchange (RFC 8693) ——
+                  schema:
+                    type: string
+                - name: subject_token_type
+                  in: query
+                  schema:
+                    type: string
+                - name: resource
+                  in: query
+                  schema:
+                    type: string
+                - name: client_secret
+                  in: query
+                  schema:
+                    type: string
+                - name: client_id
+                  in: query
+                  description: —— 通用 ——
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExchangeTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/oauth/userinfo:
+        get:
+            tags:
+                - OAuthProviderService
+            description: GET /api/oauth/userinfo —— Bearer access_token 解析用户信息
+            operationId: OAuthProviderService_GetUserInfo
+            parameters:
+                - name: access_token
+                  in: query
+                  description: 'Authorization: Bearer <access_token>,handler 从 Header 读,本字段仅在内部 RPC 调用时用'
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OAuthUserInfo'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/service-tokens:
+        get:
+            tags:
+                - ServiceTokenService
+            description: GET /api/service-tokens —— 当前用户的有效 token 列表(不含 secret)
+            operationId: ServiceTokenService_ListServiceTokens
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListServiceTokensResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - ServiceTokenService
+            description: POST /api/service-tokens —— 创建 token,响应里 token 字段只此一次
+            operationId: ServiceTokenService_CreateServiceToken
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateServiceTokenRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateServiceTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/service-tokens/{id}:
+        delete:
+            tags:
+                - ServiceTokenService
+            description: DELETE /api/service-tokens/:id —— 撤销自己名下的非 platform token
+            operationId: ServiceTokenService_RevokeServiceToken
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RevokeServiceTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+components:
+    schemas:
+        ApiUser:
+            type: object
+            properties:
+                id:
+                    type: string
+                username:
+                    type: string
+                role:
+                    type: string
+                    description: user | admin | system
+                auth_source:
+                    type: string
+                    description: password | ldap | wecom —— 用于前端判断能否改密
+                default_prompt_id:
+                    type: string
+                auto_evolution:
+                    type: boolean
+            description: |-
+                ApiUser —— /me、登录响应的统一用户档案 DTO
+
+                 注意:default_prompt_id 为 opaque id(prompts 表留在 control_plane),
+                      不校验 FK;default_prompt_name 不在此返回,由网关层补,见
+                      docs/adr/0001-media-auth-extraction-and-token-verification.md
+        ApproveAuthorizationRequest:
+            type: object
+            properties:
+                client_id:
+                    type: string
+                redirect_uri:
+                    type: string
+                response_type:
+                    type: string
+                    description: 必须是 code
+                state:
+                    type: string
+                code_challenge:
+                    type: string
+                code_challenge_method:
+                    type: string
+                    description: 仅支持 S256
+                scope:
+                    type: string
+        ApproveAuthorizationResponse:
+            type: object
+            properties:
+                redirect_uri:
+                    type: string
+                    description: 已经把 ?code=&state= 拼到 redirect_uri 上的完整 URL
+        ChangePasswordRequest:
+            type: object
+            properties:
+                current_password:
+                    type: string
+                new_password:
+                    type: string
+        ChangePasswordResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        ConnectionStatus:
+            type: object
+            properties:
+                connected:
+                    type: boolean
+                expires_at:
+                    type: string
+        CreateServiceTokenRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+        CreateServiceTokenResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                token:
+                    type: string
+                    description: tos_xxx 明文,仅本次响应可见
+                created_at:
+                    type: string
+        DeleteIdentityResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        DisconnectResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        DiscoverOAuthRequest:
+            type: object
+            properties:
+                url:
+                    type: string
+        DiscoverOAuthResponse:
+            type: object
+            properties:
+                oauth_required:
+                    type: boolean
+                server_origin:
+                    type: string
+        ExchangeTokenResponse:
+            type: object
+            properties:
+                access_token:
+                    type: string
+                refresh_token:
+                    type: string
+                token_type:
+                    type: string
+                    description: Bearer
+                expires_in:
+                    type: string
+                    description: access_token 剩余秒数
+                issued_token_type:
+                    type: string
+                    description: token-exchange 时使用:urn:ietf:params:oauth:token-type:access_token
+            description: ExchangeTokenResponse —— 不同 grant 返回字段有差异,handler 按 grant_type 填充对应字段。
+        GetAuthorizeInfoResponse:
+            type: object
+            properties:
+                client_name:
+                    type: string
+                scope:
+                    type: string
+        GetAuthorizeUrlResponse:
+            type: object
+            properties:
+                url:
+                    type: string
+        GetConnectionStatusResponse:
+            type: object
+            properties:
+                statuses:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/ConnectionStatus'
+                    description: key = server_origin
+        GetEnabledResponse:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+        GoogleProtobufAny:
+            type: object
+            properties:
+                '@type':
+                    type: string
+                    description: The type of the serialized message.
+            additionalProperties: true
+            description: Contains an arbitrary serialized message along with a @type that describes the type of the serialized message.
+        HandleCallbackResponse:
+            type: object
+            properties:
+                html:
+                    type: string
+                    description: 完整 HTML,前端无需修改
+                success:
+                    type: boolean
+            description: |-
+                HandleCallbackResponse —— handler 返回完整 HTML 字符串(200),HTML 含
+                 window.opener.postMessage(...) + window.close()。
+        ListIdentitiesResponse:
+            type: object
+            properties:
+                identities:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserIdentity'
+        ListServiceTokensResponse:
+            type: object
+            properties:
+                tokens:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServiceTokenRecord'
+        LoginRequest:
+            type: object
+            properties:
+                username:
+                    type: string
+                password:
+                    type: string
+        LoginResponse:
+            type: object
+            properties:
+                user:
+                    $ref: '#/components/schemas/ApiUser'
+        LogoutResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        OAuthUserInfo:
+            type: object
+            properties:
+                sub:
+                    type: string
+                username:
+                    type: string
+                name:
+                    type: string
+                email:
+                    type: string
+        RevokeServiceTokenResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        ServiceTokenRecord:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                created_by:
+                    type: string
+                created_at:
+                    type: string
+                revoked_at:
+                    type: string
+                is_platform:
+                    type: boolean
+            description: ServiceTokenRecord —— 不含 token_hash / token 明文
+        SetDefaultPromptRequest:
+            type: object
+            properties:
+                prompt_id:
+                    type: string
+                    description: null = 清除默认 prompt;非空 = 设为该 prompt
+        SetDefaultPromptResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        StartAuthorizationResponse:
+            type: object
+            properties:
+                redirect_url:
+                    type: string
+            description: |-
+                StartAuthorizationResponse —— HTTP 层由 handler 用 c.redirect 直接 302,
+                 本字段保留供内部 RPC caller 使用,实际不消费。
+        Status:
+            type: object
+            properties:
+                code:
+                    type: integer
+                    description: The status code, which should be an enum value of [google.rpc.Code][google.rpc.Code].
+                    format: int32
+                message:
+                    type: string
+                    description: A developer-facing error message, which should be in English. Any user-facing error message should be localized and sent in the [google.rpc.Status.details][google.rpc.Status.details] field, or localized by the client.
+                details:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GoogleProtobufAny'
+                    description: A list of messages that carry the error details.  There is a common set of message types for APIs to use.
+            description: 'The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors).'
+        UpdateMeRequest:
+            type: object
+            properties:
+                auto_evolution:
+                    type: boolean
+            description: |-
+                UpdateMeRequest —— 用 proto3 optional 区分"未传"与"显式 false"
+                 只有需要 tri-state 的字段用 optional;其余字段走 presence 即可
+        UpdateMeResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        UserIdentity:
+            type: object
+            properties:
+                provider:
+                    type: string
+                external_id:
+                    type: string
+                display_name:
+                    type: string
+                created_at:
+                    type: string
+tags:
+    - name: AuthService
+      description: |-
+        AuthService —— 本地账号 + LDAP 双路登录,以及当前用户/会话域。
+
+         鉴权通道:
+           * 登录成功下发 httpOnly cookie `token`(JWT),后续走 Cookie 鉴权
+           * 内部 RPC 入口:无,所有能力均通过 HTTP 暴露给前端
+
+         与 control_plane 的边界(见 docs/media_auth/design.md §4):
+           * GET /api/auth/me 后续会被 control_plane 网关注销,统一改走 RPC VerifyToken
+           * 登录接口在本服务内闭环,control_plane 不再承载用户态
+    - name: IdentityService
+      description: |-
+        IdentityService —— 用户外部身份绑定的 generic CRUD。
+
+         控制面原 routes/wecom-auth.ts 把 list/delete 绑死在 /api/auth/wecom/*,
+         media_auth 抽象为按 provider 路由;前端可一次性拿到所有已绑 provider,
+         后续新增 Google/GitHub provider 只需在 wecom.proto 旁加 google.proto。
+    - name: McpOAuthService
+      description: |-
+        McpOAuthService —— media_auth 反向作为 OAuth client 去登第三方 MCP server。
+
+         浏览器侧 authorize / callback 走 popup + postMessage,handler 返回 HTML 字符串;
+         DB 表:mcp_oauth_clients / mcp_oauth_tokens,详见 services/mcp-oauth.ts。
+
+         与 oauth.proto(OAuth Provider AS)角色相反,不要混用类型。
+    - name: OAuthProviderService
+      description: |-
+        OAuthProviderService —— media_auth 作为 OAuth2 Authorization Server,
+
+         同时承担三种 grant:
+           * authorization_code(带 PKCE S256)
+           * refresh_token
+           * urn:ietf:params:oauth:grant-type:token-exchange(RFC 8693)
+
+         详见 services/oauth-provider.ts;DB 表:oauth_clients / oauth_authorization_codes / oauth_refresh_tokens。
+
+         /token 接受 application/x-www-form-urlencoded 和 application/json 两种 Content-Type,
+         proto 字段一律声明,handler 层按 Content-Type 分支。
+    - name: ServiceTokenService
+      description: |-
+        ServiceTokenService —— B2B API token 管理(tos_xxx 形式)。
+
+         安全要点:
+           * POST 创建时 token 明文只返回一次,DB 存 token_hash(SHA-256)
+           * LIST 只返 id/name/created_at/revoked_at/is_platform,绝不返 hash
+           * DELETE 仅能撤销非 platform 的自己 token(is_platform = false 的 DB 约束)
+           * 每用户至多一个 active platform token(DB 唯一部分索引保证)
+    - name: WeComService
+      description: |-
+        WeComService —— 企微 corp OAuth 流程。
+
+         浏览器侧的 authorize / callback 走 HTTP(redirect + cookie);
+         内部逻辑见 services/wecom.ts:getAuthorizeUrl / getUserByCode / getUserInfo。
+         /callback 在 control_plane auth skip list 中短路(无 JWT),
+         media_auth 这里保持同语义,handler 内部不依赖 c.get('user')。

@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package media_auth.wecom;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+// Hertz 工具链:
+//   make hz-model     -> hertz_gen/model/media_auth/wecom/wecom.pb.go
+//   make hz-update    -> media_auth/biz/handler/wecom/wecom_service.go
+//   make swagger-gen  -> media_auth/swagger/openapi.yaml
+option go_package = "media_auth/wecom";
+
+// WeComService —— 企微 corp OAuth 流程。
+//
+// 浏览器侧的 authorize / callback 走 HTTP(redirect + cookie);
+// 内部逻辑见 services/wecom.ts:getAuthorizeUrl / getUserByCode / getUserInfo。
+// /callback 在 control_plane auth skip list 中短路(无 JWT),
+// media_auth 这里保持同语义,handler 内部不依赖 c.get('user')。
+service WeComService {
+  // GET /api/auth/wecom/enabled —— 探测企微登录是否配置
+  rpc GetEnabled(GetEnabledRequest) returns(GetEnabledResponse) {
+    option (google.api.http) = { get: "/api/auth/wecom/enabled" };
+    option (api.get) = "/api/auth/wecom/enabled";
+  }
+
+  // GET /api/auth/wecom/authorize —— 返回企微扫码登录 URL
+  // mode=login 重定向登录流;mode=bind 重定向绑定流(需要在请求头带 token)
+  rpc GetAuthorizeUrl(GetAuthorizeUrlRequest) returns(GetAuthorizeUrlResponse) {
+    option (google.api.http) = { get: "/api/auth/wecom/authorize" };
+    option (api.get) = "/api/auth/wecom/authorize";
+  }
+
+  // GET /api/auth/wecom/callback —— 企微 OAuth 回调
+  // state=login → 拿 userid 查绑定 → 签 JWT 下 cookie
+  // state=bind  → 拿 userid 查/创建绑定 → redirect 回首页
+  // 返回 302 时的 Location 在 google.api.http 上无法表达,
+  // handler 内部直接 c.redirect;本 IDL 用空响应 + Location 由实现层负责
+  rpc HandleCallback(HandleCallbackRequest) returns(HandleCallbackResponse) {
+    option (google.api.http) = { get: "/api/auth/wecom/callback" };
+    option (api.get) = "/api/auth/wecom/callback";
+  }
+}
+
+// ───────────── 消息 ─────────────
+
+message GetEnabledRequest {}
+
+message GetEnabledResponse {
+  bool enabled = 1;
+}
+
+message GetAuthorizeUrlRequest {
+  // login | bind,默认 login
+  string mode = 1 [(api.query) = "mode"];
+}
+
+message GetAuthorizeUrlResponse {
+  string url = 1;
+}
+
+message HandleCallbackRequest {
+  string code = 1 [(api.query) = "code"];
+  // login | bind
+  string state = 2 [(api.query) = "state"];
+}
+
+// HandleCallbackResponse —— 本 RPC 通过 HTTP 302 重定向闭环;
+// 本响应字段在成功路径上不被消费,handler 直接 c.redirect。
+// 保留结构以便未来支持纯 JSON 回调场景(API caller 拿到 redirect_url 自决)。
+message HandleCallbackResponse {
+  // 成功时为相对路径 /;失败时为 /login?error=xxx
+  string redirect_to = 1;
+}

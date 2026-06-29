@@ -4,5 +4,6 @@ use (
 	./harness
 	./hertz_gen
 	./media-cli
+	./media_auth
 	./media_example
 )

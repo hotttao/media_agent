@@ -1,0 +1,163 @@
+# local.yaml — 本地测试配置
+#
+# 语义：env=local = 「本机 + docker-compose 全栈」启动。
+# 预期配套组件已起：PostgreSQL、Consul agent、OTel collector、Prometheus。
+# YAML 是 source of truth，本地 .env 只放 APP_ENV 与少量覆盖变量。
+#
+# 与 dev.yaml 的差别：local 全启用（开发与 e2e 都方便），dev 只开可观测 + 真实基础设施。
+#
+# 字段约定（harness/contributing/config.md）：
+#   - snake_case
+#   - 治理类 message 第一字段统一 bool enabled = 1
+#   - 服务名走 app.name，不用 service.name
+
+app:
+  name: media-auth
+  version: v1
+  env: ${APP_ENV:-local}
+
+server:
+  enabled: true
+  address: ${SERVER_ADDR:-:8888}
+  timeout:
+    enabled: true
+    connect_timeout_ms: 200
+    read_timeout_ms: 10000
+    write_timeout_ms: 10000
+    request_timeout_ms: 15000
+
+# ---- 数据存储（postgres；control-plane 现状 pg） ----
+database:
+  enabled: true
+  driver: postgres
+  dsn: ${MEDIA_AUTH_DB_DSN:-postgres://media_auth:media_auth@127.0.0.1:5432/media_auth?sslmode=disable}
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime_seconds: 3600
+  migrate_on_start: true   # 启动期自动迁移（local 全栈）
+
+# ---- 注册中心 / 服务发现 ----
+consul:
+  enabled: true
+  address: ${CONSUL_ADDR:-127.0.0.1:8500}
+  scheme: http
+  service_address: ${CONSUL_SERVICE_ADDRESS:-127.0.0.1}
+  service_port: ${CONSUL_SERVICE_PORT:-8888}
+  tags: [local]
+  health_check_path: /health
+  health_check_interval_seconds: 5
+  deregister_critical_after_seconds: 30
+
+consul_discovery:
+  enabled: true
+  address: ${CONSUL_DISCOVERY_ADDR:-127.0.0.1:8500}
+  scheme: http
+  refresh_interval_seconds: 5
+
+# ---- 可观测（全开） ----
+otel:
+  enabled: true
+  export_endpoint: ${OTEL_EXPORT_ENDPOINT:-localhost:4317}
+  insecure: true
+  sample_ratio: 1.0
+
+prometheus:
+  enabled: true
+  address: ${PROMETHEUS_ADDR:-:9092}
+  path: /metrics
+
+access_log:
+  enabled: true
+  format: "[${time}] ${status} - ${latency} ${method} ${path}"
+  time_format: "2006-01-02T15:04:05Z"
+
+log:
+  enabled: true
+  level: ${LOG_LEVEL:-debug}
+  dir: ${LOG_DIR:-}
+  filename: app.log
+  max_size_mb: 100
+  max_backups: 10
+  max_age_days: 7
+  compress: true
+  console: true
+
+# ---- 服务端中间件 ----
+recovery:
+  enabled: true
+  print_stack: true
+
+request_id:
+  enabled: true
+  header: "X-Request-ID"
+
+cors:
+  enabled: true
+  allow_origins: ["*"]
+  allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allow_headers: ["*"]
+  allow_credentials: false
+  max_age_seconds: 600
+
+# 限流（sentinel）：local 用低阈值便于观察
+# 业务路径随 §1.4 实现补充；当前仅占位。
+# rate_limit:
+#   - enabled: true
+#     resource: "media-auth:POST:/api/auth/login"
+#     threshold: 50
+#     stat_interval_ms: 1000
+
+# ---- 运维端点 ----
+pprof:
+  enabled: true
+  prefix: "/debug/pprof"
+
+health:
+  enabled: true
+  path: "/health"
+
+# ---- 配置中心（Consul KV） ----
+consul_kv:
+  enabled: ${CONSUL_KV_ENABLED:-true}
+  address: ${CONSUL_KV_ADDR:-127.0.0.1:8500}
+  data_id: ${CONSUL_KV_DATA_ID:-media-auth/config}
+
+# ============================================================================
+# media_auth 业务配置（spec §7）
+# 注：这些自定义块当前不被骨架消费（config.proto 未定义对应 message，DiscardUnknown 丢弃）。
+# §1.4 业务实现时再加 proto message 或 raw map 机制消费。骨架阶段写全供参考。
+# ============================================================================
+
+auth:
+  jwt_secret: ${JWT_SECRET:-dev-shared-secret}   # 与 control_plane 共享（HS256）
+  jwt_expires_in_seconds: 86400                  # session 24h
+  access_token_expires_in_seconds: 3600          # oauth access 1h
+  refresh_token_expires_in_days: 30
+  auth_code_expires_in_minutes: 10
+
+ldap:
+  enabled: ${LDAP_ENABLED:-false}
+  url: ${LDAP_URL:-}
+  bind_dn: ${LDAP_BIND_DN:-}
+  bind_password: ${LDAP_BIND_PASSWORD:-}
+  search_base: ${LDAP_SEARCH_BASE:-}
+  search_filter: ${LDAP_SEARCH_FILTER:-}
+  attr_name: ${LDAP_ATTR_NAME:-}
+  attr_username: ${LDAP_ATTR_USERNAME:-}
+  attr_email: ${LDAP_ATTR_EMAIL:-}
+
+wecom:
+  enabled: ${WECOM_ENABLED:-false}
+  corp_id: ${WECOM_CORP_ID:-}
+  corp_secret: ${WECOM_CORP_SECRET:-}
+  agent_id: ${WECOM_AGENT_ID:-}
+
+mcp_oauth:
+  pending_auth_ttl_seconds: 600
+  default_token_ttl_seconds: 1800
+  refresh_fail_threshold: 3
+  refresh_fail_grace_seconds: 600
+
+token_verify:                            # internal VerifyToken(mTLS) listener
+  enabled: true
+  address: ${INTERNAL_ADDR:-:8889}

@@ -1,0 +1,147 @@
+# prod.yaml — 生产部署配置
+#
+# 语义：prod = 「生产集群，运维管控迁移与注册中心」。
+#   - 迁移不由服务启动期执行（migrate_on_start=false，运维用 `make migrate-up` 单独跑）；
+#   - Consul 服务注册按部署拓扑决定（K8s 内可关，跨集群可开）；
+#   - 可观测全开；pprof 关闭（生产不暴露 profile）。
+#
+# 字段约定（harness/contributing/config.md）：snake_case；治理段首字段 bool enabled。
+
+app:
+  name: media-auth
+  version: ${APP_VERSION:-v1}
+  env: ${APP_ENV:-prod}
+
+server:
+  enabled: true
+  address: ${SERVER_ADDR:-:8888}
+  timeout:
+    enabled: true
+    read_timeout_ms: 10000
+    write_timeout_ms: 10000
+
+# ---- 数据存储 ----
+database:
+  enabled: true
+  driver: postgres
+  dsn: ${MEDIA_AUTH_DB_DSN}
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime_seconds: 3600
+  migrate_on_start: false   # 生产迁移由运维单独跑（make migrate-up），不由服务启动执行
+
+# ---- 注册中心 / 服务发现 ----
+consul:
+  enabled: ${CONSUL_ENABLED:-false}
+  address: ${CONSUL_ADDR}
+  scheme: http
+  service_address: ${CONSUL_SERVICE_ADDRESS}
+  service_port: ${CONSUL_SERVICE_PORT:-8888}
+  tags: [prod]
+  health_check_path: /health
+  health_check_interval_seconds: 10
+  deregister_critical_after_seconds: 30
+
+consul_discovery:
+  enabled: ${CONSUL_DISCOVERY_ENABLED:-false}
+  address: ${CONSUL_DISCOVERY_ADDR}
+  scheme: http
+  refresh_interval_seconds: 10
+
+# ---- 可观测 ----
+otel:
+  enabled: true
+  export_endpoint: ${OTEL_EXPORT_ENDPOINT:-otel-collector:4317}
+  insecure: true
+  sample_ratio: ${OTEL_SAMPLE_RATIO:-0.1}
+
+prometheus:
+  enabled: true
+  address: ${PROMETHEUS_ADDR:-:9092}
+  path: /metrics
+
+access_log:
+  enabled: true
+  format: "[${time}] ${status} - ${latency} ${method} ${path}"
+  time_format: "2006-01-02T15:04:05Z"
+
+log:
+  enabled: true
+  level: ${LOG_LEVEL:-info}
+  dir: ${LOG_DIR}
+  filename: app.log
+  max_size_mb: 100
+  max_backups: 10
+  max_age_days: 30
+  compress: true
+  console: false
+
+# ---- 服务端中间件 ----
+recovery:
+  enabled: true
+  print_stack: false
+
+request_id:
+  enabled: true
+  header: "X-Request-ID"
+
+cors:
+  enabled: true
+  allow_origins: ${CORS_ALLOW_ORIGINS}
+  allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allow_headers: ["*"]
+  allow_credentials: true
+  max_age_seconds: 600
+
+# ---- 运维端点 ----
+pprof:
+  enabled: false           # 生产不暴露 profile
+  prefix: "/debug/pprof"
+
+health:
+  enabled: true
+  path: "/health"
+
+# ---- 配置中心（生产按需，默认关） ----
+consul_kv:
+  enabled: ${CONSUL_KV_ENABLED:-false}
+  address: ${CONSUL_KV_ADDR}
+  data_id: ${CONSUL_KV_DATA_ID:-media-auth/config}
+
+# ============================================================================
+# media_auth 业务配置（spec §7）—— 骨架阶段写全但不消费，§1.4 实现时启用。
+# ============================================================================
+
+auth:
+  jwt_secret: ${JWT_SECRET}   # 生产必须注入，与 control_plane 共享（HS256）
+  jwt_expires_in_seconds: 86400
+  access_token_expires_in_seconds: 3600
+  refresh_token_expires_in_days: 30
+  auth_code_expires_in_minutes: 10
+
+ldap:
+  enabled: ${LDAP_ENABLED:-false}
+  url: ${LDAP_URL}
+  bind_dn: ${LDAP_BIND_DN}
+  bind_password: ${LDAP_BIND_PASSWORD}
+  search_base: ${LDAP_SEARCH_BASE}
+  search_filter: ${LDAP_SEARCH_FILTER}
+  attr_name: ${LDAP_ATTR_NAME}
+  attr_username: ${LDAP_ATTR_USERNAME}
+  attr_email: ${LDAP_ATTR_EMAIL}
+
+wecom:
+  enabled: ${WECOM_ENABLED:-false}
+  corp_id: ${WECOM_CORP_ID}
+  corp_secret: ${WECOM_CORP_SECRET}
+  agent_id: ${WECOM_AGENT_ID}
+
+mcp_oauth:
+  pending_auth_ttl_seconds: 600
+  default_token_ttl_seconds: 1800
+  refresh_fail_threshold: 3
+  refresh_fail_grace_seconds: 600
+
+token_verify:
+  enabled: true
+  address: ${INTERNAL_ADDR:-:8889}
