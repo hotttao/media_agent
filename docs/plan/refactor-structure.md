@@ -1,7 +1,7 @@
 # 结构重构方案：globalhertz + 多资源限流 + IDL e2e
 
 > 状态：待实装
-> 解决 docs/spec/problem.md 的 4 个问题。
+> 解决 docs/research/problem.md 的 4 个问题。
 
 ## 1. 新建 `hertz_infra/globalhertz`，删除 `hertz_infra/observability`
 
