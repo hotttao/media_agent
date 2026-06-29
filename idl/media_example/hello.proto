@@ -6,6 +6,7 @@ package hello;
 option go_package = "media_example/hello";
 
 import "api.proto";
+import "google/api/annotations.proto";
 
 message HelloReq {
    string Name = 1[(api.query)="name"];
@@ -18,5 +19,6 @@ message HelloResp {
 service HelloService {
    rpc Method1(HelloReq) returns(HelloResp) {
       option (api.get) = "/hello";
+      option (google.api.http) = { get: "/hello" };
    }
 }

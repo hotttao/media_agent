@@ -56,6 +56,33 @@ type ServerSuite struct {
 	registrar registry.Registry
 	// 注册元数据：与 registrar 配套
 	registryInfo *registry.Info
+
+	// routeRegistrars 是运维端点路由注册器列表（统一入口）。
+	// 内置端点（health/pprof/metrics）在 NewServerSuite 时自动加入；
+	// app 可经 WithRouteRegistrar 追加自定义端点。RegisterRoutes 遍历执行。
+	routeRegistrars []RouteRegistrar
+}
+
+// RouteRegistrar 在 Hertz server 上注册一组运维路由。
+//
+// 统一入口：所有运维端点（health / pprof / metrics / 自定义）都实现成 RouteRegistrar，
+// 由 NewServerSuite 收集到 suite.routeRegistrars，RegisterRoutes 遍历执行。
+// 新增「无需 app 数据」的端点只需在 NewServerSuite 内 append 一个 registrar，main.go 无需改动；
+// 新增「需 app 数据」的端点（如 swagger，spec 各服务私有）由 app 在自己的 router 层注册，
+// 或经 WithRouteRegistrar 追加。
+type RouteRegistrar func(h *server.Hertz, cfg *configpb.Config)
+
+// Option 是 NewServerSuite 的 functional option。
+type Option func(*ServerSuite)
+
+// WithRouteRegistrar 追加一个自定义运维路由注册器（统一入口的扩展点）。
+// 内置端点（health/pprof/metrics）已自动注册，app 用本 option 增加自定义端点，无需改 suite 源码。
+func WithRouteRegistrar(r RouteRegistrar) Option {
+	return func(s *ServerSuite) {
+		if r != nil {
+			s.routeRegistrars = append(s.routeRegistrars, r)
+		}
+	}
 }
 
 // NewServerSuite 基于 config.Loader 构造一份 ServerSuite。
@@ -64,7 +91,9 @@ type ServerSuite struct {
 //   - 不读 ENV，不做 IO，纯函数；副作用集中到 NewServer / RegisterService。
 //   - loader.Current() 中各能力 segment 的 enabled=false 时，对应 option / middleware 不挂载。
 //   - 可热更新能力组件在此处 loader.Subscribe 自行订阅。
-func NewServerSuite(loader *config.Loader) *ServerSuite {
+//
+// opts 追加自定义运维端点（WithRouteRegistrar）。
+func NewServerSuite(loader *config.Loader, opts ...Option) *ServerSuite {
 	cfg := loader.Current()
 	s := &ServerSuite{loader: loader}
 
@@ -87,6 +116,21 @@ func NewServerSuite(loader *config.Loader) *ServerSuite {
 	loader.Subscribe(func(newCfg *configpb.Config) {
 		_ = loadFlowRules(newCfg.GetRateLimit())
 	})
+
+	// 运维端点统一入口：内置端点自注册到 routeRegistrars，RegisterRoutes 遍历执行。
+	// 新增内置端点在此 append 一个 registrar 即可，main.go 无需改动。
+	// 注意：swagger 不在此列——其 spec 各服务私有，由服务在自己的 router 层注册
+	// （见 media_example/router.go 的 customizedRegister）。
+	s.routeRegistrars = append(s.routeRegistrars,
+		registerHealthRoutes,
+		registerPProfRoutes,
+		registerMetricsRoute,
+	)
+
+	// 应用 app 侧 options（WithRouteRegistrar 等）。
+	for _, opt := range opts {
+		opt(s)
+	}
 
 	return s
 }
@@ -136,16 +180,19 @@ func (s *ServerSuite) NewServer() *server.Hertz {
 	return h
 }
 
-// RegisterRoutes 统一注册运维端点（health / pprof / metrics route），按各段 enabled 门控。
+// RegisterRoutes 统一注册运维端点（统一入口）。
+//
+// 遍历 suite.routeRegistrars（内置 health/pprof/metrics + app 经 WithRouteRegistrar
+// 追加的自定义端点）依次执行，各段按自身 enabled 门控。新增端点只在 NewServerSuite 内 append
+// registrar（或 app 用 WithRouteRegistrar），main.go 无需为每个端点加调用。
 //
 // 必须在业务路由注册之后调用（hertz 路由按注册顺序匹配，运维端点路径不与业务冲突，
-// 顺序无强约束，但约定业务路由先行）。metrics route 当前为 no-op（monitor-prometheus
-// 自管理 :9091，不在 Hertz server 暴露），保留入口以便未来切换后端。
+// 顺序无强约束，但约定业务路由先行）。
 func (s *ServerSuite) RegisterRoutes(h *server.Hertz) {
 	cfg := s.Config()
-	registerHealthRoutes(h, cfg)
-	registerPProfRoutes(h, cfg)
-	registerMetricsRoute(h, cfg)
+	for _, r := range s.routeRegistrars {
+		r(h, cfg)
+	}
 }
 
 // KVSource 根据 loader.Current().consul_kv.enabled 返回一个 config.Source。

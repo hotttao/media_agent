@@ -59,3 +59,34 @@ pb-config:
 	protoc --go_out=. --go_opt=module=media_agent \
 		--proto_path=idl \
 		idl/config/config.proto
+
+.PHONY: swagger-ui-fetch
+# swagger-ui-fetch：拉取 swagger-ui-dist 静态资源到 serverhertz/swaggerui/dist/（go:embed）。
+# 这是公共 UI 资源（所有服务共用），故放根 Makefile；各服务相关的 swagger-gen / skill-gen
+# 见各服务 Makefile（如 media_example/Makefile）。
+# 依赖 npx（node）。dist 目录已 commit，本目标仅在升级 swagger-ui 版本时手动运行。
+# 只拷运行必需文件（排除 .map / es-bundle / log 等），并把 swagger-initializer.js 的
+# spec url 改为 /openapi.yaml（由服务 router 层的 /openapi.yaml 端点提供）。
+SWAGGER_UI_VERSION ?= 5.32.8
+SWAGGER_UI_DIST := hertz_infra/serverhertz/swaggerui/dist
+swagger-ui-fetch:
+	@rm -rf /tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION)
+	@mkdir -p /tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION)
+	cd /tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION) && \
+		npm pack swagger-ui-dist@$(SWAGGER_UI_VERSION) >/dev/null && \
+		tar -xzf swagger-ui-dist-*.tgz
+	@rm -rf $(CURDIR)/$(SWAGGER_UI_DIST)
+	@mkdir -p $(CURDIR)/$(SWAGGER_UI_DIST)
+	@cp /tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION)/package/index.html \
+		/tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION)/package/index.css \
+		/tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION)/package/swagger-ui.css \
+		/tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION)/package/swagger-ui-bundle.js \
+		/tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION)/package/swagger-ui-standalone-preset.js \
+		/tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION)/package/swagger-initializer.js \
+		/tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION)/package/oauth2-redirect.html \
+		/tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION)/package/favicon-16x16.png \
+		/tmp/swagger-ui-dist-$(SWAGGER_UI_VERSION)/package/favicon-32x32.png \
+		$(CURDIR)/$(SWAGGER_UI_DIST)/
+	@sed -i 's#url: "https://petstore.swagger.io/v2/swagger.json"#url: "/openapi.yaml"#' \
+		$(CURDIR)/$(SWAGGER_UI_DIST)/swagger-initializer.js
+	@echo ">> swagger-ui-dist $(SWAGGER_UI_VERSION) -> $(SWAGGER_UI_DIST)/"
