@@ -63,6 +63,7 @@ func loadCircuitBreakerRules(cb *configpb.CircuitBreakerConfig, callerApp, calle
 		StatIntervalMs:   uint32(cb.GetStatIntervalMs()),
 		RetryTimeoutMs:   uint32(cb.GetRetryTimeoutMs()),
 		MinRequestAmount: uint64(cb.GetMinRequestAmount()),
+		MaxAllowedRtMs:   uint64(cb.GetMaxAllowedRtMs()),
 	}
 	_, err := circuitbreaker.LoadRules([]*circuitbreaker.Rule{rule})
 	return err

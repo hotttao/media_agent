@@ -32,18 +32,23 @@ func init() {
 // buildTestClient 构造调本机 media-example 的 typed TestServiceClient，挂 clienthertz 治理。
 //
 // suite 部分（ClientSuite）由 suite.go 的 buildClientSuite 构造；本函数拿到 suite 后
-// 用其 Options() / Middlewares() 注入 typed client（option 给 timeout/retry，
-// middleware 给 tracing/circuitbreaker）。
+// 用 suite.NewClient() 产出一个共享 *hclient.Client（已烘焙 timeout/retry/discovery/
+// tracing/metrics/circuitbreaker），再通过 WithHertzClient 注入 typed client。
+//
+// 同一下游 app 的多个 typed service stub 应共享同一个 NewClient() 产物：连接池、
+// 中间件链、discovery resolver 都按 app 复用，避免每个 service 各起一个 client。
+// 用 WithHertzClient 后不要再传 WithHertzClientOption / WithHertzClientMiddleware
+// （前者会被静默丢弃，后者会在共享 client 上重复 Use）——治理已烘焙进 shared。
 func buildTestClient(timeoutMs, maxAttempts int32, cbEnabled bool) (testclient.Client, error) {
 	suite, err := buildClientSuite(timeoutMs, maxAttempts, cbEnabled)
 	if err != nil {
 		return nil, err
 	}
-	opts := []testclient.Option{
-		testclient.WithHertzClientOption(suite.Options()...),
-		testclient.WithHertzClientMiddleware(suite.Middlewares()...),
+	shared, err := suite.NewClient()
+	if err != nil {
+		return nil, fmt.Errorf("build shared client: %w", err)
 	}
-	cli, err := testclient.NewTestServiceClient(cmd.FlagHost, opts...)
+	cli, err := testclient.NewTestServiceClient(cmd.FlagHost, testclient.WithHertzClient(shared))
 	if err != nil {
 		return nil, fmt.Errorf("create test client: %w", err)
 	}

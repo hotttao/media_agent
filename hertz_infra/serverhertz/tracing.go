@@ -1,7 +1,7 @@
 // tracing.go：服务端 OpenTelemetry 链路追踪。
 //
 // 实现（对齐官方文档 cloudwego.io Hertz OpenTelemetry）：
-//   - 进程级 provider 由 ServerSuite.InitObservability 委托 hertz_infra/observability
+//   - 进程级 provider 由 ServerSuite.InitObservability 委托 hertz_infra/globalhertz
 //     （obs-opentelemetry/provider.NewOpenTelemetryProvider）初始化；
 //   - server tracer 通过 hertztracing.NewServerTracer() 返回 serverconfig.Option，
 //     经 buildTracerOptions 拼入 server options；

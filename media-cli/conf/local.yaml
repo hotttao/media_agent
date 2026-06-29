@@ -57,3 +57,4 @@ client:
       stat_interval_ms: 10000
       retry_timeout_ms: 5000
       min_request_amount: 10
+      # max_allowed_rt_ms: 1000   # 仅 slow_request_ratio 生效：rt 上限(ms)

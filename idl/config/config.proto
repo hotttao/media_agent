@@ -213,6 +213,16 @@ message RateLimitConfig {
   // sentinel: 单位时间窗口内的阈值（QPS）
   double threshold = 3;
   int32 stat_interval_ms = 4;
+  // sentinel token 计算策略：direct / warmup / memory_adaptive（默认 direct）
+  string token_calculate_strategy = 5;
+  // sentinel 控制行为：reject / throttling（默认 reject）
+  string control_behavior = 6;
+  // throttling（匀速排队）最大排队时间；仅 control_behavior=throttling 生效
+  int32 max_queueing_time_ms = 7;
+  // warmup 预热时长（秒）；仅 token_calculate_strategy=warmup 生效，须 >0
+  int32 warm_up_period_sec = 8;
+  // warmup 冷启动因子；须 >1（默认 3）
+  int32 warm_up_cold_factor = 9;
 }
 
 message CircuitBreakerConfig {
@@ -223,6 +233,8 @@ message CircuitBreakerConfig {
   int32 stat_interval_ms = 4;
   int32 retry_timeout_ms = 5;          // 半开状态探测间隔
   int32 min_request_amount = 6;
+  // slow_request_ratio 策略下判定"慢请求"的 RT 上限（ms）；0 表示所有 rt>0 都算慢
+  int32 max_allowed_rt_ms = 7;
 }
 
 // ============================================================================

@@ -117,6 +117,13 @@ rate_limit:
     resource: "media-example:GET:/hello"
     threshold: 50
     stat_interval_ms: 1000
+    # token_calculate_strategy: direct / warmup / memory_adaptive（默认 direct）
+    token_calculate_strategy: direct
+    # control_behavior: reject / throttling（默认 reject）
+    control_behavior: reject
+    # max_queueing_time_ms: 500   # 仅 throttling 生效
+    # warm_up_period_sec: 10      # 仅 warmup 生效，须 >0
+    # warm_up_cold_factor: 3      # 仅 warmup 生效，须 >1
 
 # ---- 运维端点 ----
 pprof:
@@ -156,3 +163,4 @@ consul_kv:
 #       threshold: 0.5
 #       retry_timeout_ms: 5000
 #       min_request_amount: 20
+#       max_allowed_rt_ms: 1000   # 仅 slow_request_ratio 生效：rt 上限(ms)

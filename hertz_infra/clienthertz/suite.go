@@ -23,7 +23,7 @@
 //	shutdown, _ := baseSuite.InitObservability()             // logger + tracing + metrics
 //	defer shutdown(context.Background())
 //
-//	appSuite, _ := baseSuite.ForApp("media_scheduler")       // 派生下游 app 级 suite + 订阅
+//	appSuite, _ := baseSuite.NewAppClientSuite("media_scheduler")       // 派生下游 app 级 suite + 订阅
 //	cli, _    := appSuite.NewClient()                        // NewClient + ApplyDiscovery + ApplyMiddlewares
 package clienthertz
 
@@ -111,15 +111,16 @@ func (s *ClientSuite) InitObservability() (func(context.Context) error, error) {
 	return shutdown, nil
 }
 
-// ForApp 派生下游 app 级 suite：从 current().Client[appName] 取配置，固化 app 级行为 + 订阅热更新。
+// NewAppClientSuite 派生下游 app 级 suite：从 current().Client[appName] 取配置，固化 app 级行为 + 订阅热更新。
 //
 // 下游 app 未配置时返回 error（contributing/client.md §7.2：配置缺失不得静默忽略）。
 //   - timeout/retry/discovery/lb：启动期固化（client.Option，NewClient 后不可变）；
 //   - circuit_breaker：atomic 存当前规则，并 loader.Subscribe 订阅刷新 +
 //     reloadRules() 重载 sentinel 全局熔断规则（contributing/server.md §配置订阅职责切分）。
 //
-// 同一 app 的多个 service 应共享同一份 ForApp 结果——行为是 app 级的。
-func (s *ClientSuite) ForApp(appName string) (*ClientSuite, error) {
+// 同一 app 的多个 service 应共享同一份 NewAppClientSuite 结果 + 同一个 NewClient() 产物——
+// 行为是 app 级的，连接池/中间件链也按 app 复用（见调用方共享 client 模式）。
+func (s *ClientSuite) NewAppClientSuite(appName string) (*ClientSuite, error) {
 	cfg := s.current()
 	if cfg == nil {
 		return nil, fmt.Errorf("clienthertz: base suite not initialized")

@@ -68,5 +68,5 @@ func buildClientSuite(timeoutMs, maxAttempts int32, cbEnabled bool) (*clienthert
 		},
 	}
 	base := clienthertz.NewClientSuiteFromConfig(cfg)
-	return base.ForApp("media_example")
+	return base.NewAppClientSuite("media_example")
 }

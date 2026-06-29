@@ -1,6 +1,9 @@
 # 可观测性（Trace + Metrics + Log）落地计划
 
-> 状态：待评审（已按 `server.md` / `client.md` 更新版 review 对齐）
+> 状态：**已过时**。本计划设想的 `hertz_infra/observability` 包未落地，进程级观测初始化
+> （OTel provider / zap logger / sentinel）改由 `hertz_infra/globalhertz` 收口，client/server
+> 对称复用。详见 `docs/plan/refactor-structure.md`（§1 新建 globalhertz，删除 observability）。
+> 本文件仅保留作历史背景，实现请以 `globalhertz` 与当前代码为准。
 > 范围：`hertz_infra` 实装 OTel Trace / Prometheus Metrics / Zap Log；`docker-compose/` 启动全套观测后端；能力默认继承到 `media_example` 与 `media-cli`；作为 e2e 测试基础环境。
 
 ## 0. 规范依据与口径
@@ -10,7 +13,7 @@
   - `harness/contributing/server.md`：服务端治理收口 `hertz_infra/serverhertz`，`ServerSuite` 装配面，main.go 启动顺序（§8），可观测性规则（§7）。
   - `harness/contributing/client.md`：客户端治理收口 `hertz_infra/clienthertz`，`ClientSuite` 装配面，进程级初始化（§6.2/§7.2）。
   - `harness/contributing/architecture.md`：层边界与 import 规则（冲突时优先）。
-- **观测后端栈**：以 `docs/spec/opentelemetry.md` 拓扑（Zap→Filebeat→Loki / OTel Trace→Collector→Jaeger / Metrics `/metrics`→Prometheus / Grafana）为参考，**不照抄其代码**。
+- **观测后端栈**：以 `docs/research/opentelemetry.md` 拓扑（Zap→Filebeat→Loki / OTel Trace→Collector→Jaeger / Metrics `/metrics`→Prometheus / Grafana）为参考，**不照抄其代码**。
 - **官方文档最佳实践**（实装严格对齐）：
   - OTel：https://www.cloudwego.io/zh/docs/hertz/tutorials/third-party/open-telemetry/
   - Prometheus：https://www.cloudwego.io/zh/docs/hertz/tutorials/third-party/prometheus/

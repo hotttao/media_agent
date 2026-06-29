@@ -3,7 +3,7 @@
 // 按客户端调用指南（contributing/client.md）§7.2：
 //  1. 调用 clienthertz.NewClientSuite(loader) 构造基底（收 loader 不收 cfg，
 //     可热更新能力组件在 suite 内部按需 loader.Subscribe）；
-//  2. 对每个下游 app 调用 baseSuite.ForApp(<app>) + init<App>Clients；
+//  2. 对每个下游 app 调用 baseSuite.NewAppClientSuite(<app>) + init<App>Clients；
 //  3. 下游 app 配置缺失必须返回错误。
 //
 // 当前模板无下游，Init 仅完成 baseSuite 构造，保留入口骨架。
@@ -29,9 +29,12 @@ func Init(loader *config.Loader) (*clienthertz.ClientSuite, error) {
 	baseSuite := clienthertz.NewClientSuite(loader)
 
 	// 此处注册各下游 app 的初始化函数，例：
-	//   if _, err := baseSuite.ForApp("media_scheduler"); err != nil {
+	//   appSuite, err := baseSuite.NewAppClientSuite("media_scheduler")
+	//   if err != nil {
 	//       return nil, fmt.Errorf("client: init media_scheduler: %w", err)
 	//   }
+	//   shared, _ := appSuite.NewClient()                          // 同一 app 多 service 共享一个 client
+	//   _ = shared                                                  // 传给各 typed client: xxx.WithHertzClient(shared)
 
 	return baseSuite, nil
 }

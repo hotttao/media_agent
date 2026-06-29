@@ -104,3 +104,15 @@ services:
     depends_on:
       - loki
     restart: unless-stopped
+
+  # 7. Consul — 服务注册 / 发现 + KV 配置中心（local e2e 用）
+  #    media_example server 启动时把自身注册到此处；media-cli / 其他服务经它发现下游；
+  #    限流 / 熔断规则的运行期热更新也经此 KV 推送（consul_kv.enabled=true 时）。
+  #    dev 环境关闭 consul 注册（conf/dev.yaml），此服务可不启。
+  consul:
+    image: hashicorp/consul:1.18
+    command: agent -dev -client=0.0.0.0
+    ports:
+      - "8500:8500"     # HTTP API + UI（注册 / 发现 / KV）
+      - "8600:8600/udp" # DNS
+    restart: unless-stopped

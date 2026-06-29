@@ -15,6 +15,7 @@ package serverhertz
 
 import (
 	"context"
+	"log"
 
 	"github.com/alibaba/sentinel-golang/core/flow"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -76,17 +77,62 @@ func loadFlowRules(rules []*configpb.RateLimitConfig) error {
 		if resource == "" {
 			continue // 动态资源名场景：不在启动期下发固定规则
 		}
-		flowRules = append(flowRules, &flow.Rule{
+		strategy := parseTokenStrategy(r.GetTokenCalculateStrategy(), resource)
+		behavior := parseControlBehavior(r.GetControlBehavior(), resource)
+		rule := &flow.Rule{
 			Resource:               resource,
 			Threshold:              r.GetThreshold(),
-			TokenCalculateStrategy: flow.Direct,
-			ControlBehavior:        flow.Reject,
+			TokenCalculateStrategy: strategy,
+			ControlBehavior:        behavior,
 			StatIntervalInMs:       uint32(r.GetStatIntervalMs()),
-		})
+			MaxQueueingTimeMs:      uint32(r.GetMaxQueueingTimeMs()),
+		}
+		// warmup 需 WarmUpPeriodSec>0 且 WarmUpColdFactor>1，否则 flow.LoadRules 拒绝整批规则。
+		if strategy == flow.WarmUp {
+			if rule.WarmUpPeriodSec = uint32(r.GetWarmUpPeriodSec()); rule.WarmUpPeriodSec == 0 {
+				rule.WarmUpPeriodSec = 10
+			}
+			if rule.WarmUpColdFactor = uint32(r.GetWarmUpColdFactor()); rule.WarmUpColdFactor <= 1 {
+				rule.WarmUpColdFactor = 3
+			}
+		}
+		flowRules = append(flowRules, rule)
 	}
 	if len(flowRules) == 0 {
 		return nil
 	}
 	_, err := flow.LoadRules(flowRules)
 	return err
+}
+
+// parseTokenStrategy 把配置字符串映射到 sentinel flow.TokenCalculateStrategy。
+// memory_adaptive 缺内存阈值字段（proto 未暴露）无法正确配置，命中时告警并回退 direct。
+// 空/未知串默认 direct（保持历史行为）。
+func parseTokenStrategy(s, resource string) flow.TokenCalculateStrategy {
+	switch s {
+	case "", "direct":
+		return flow.Direct
+	case "warmup":
+		return flow.WarmUp
+	case "memory_adaptive":
+		log.Printf("serverhertz: rate_limit resource %q token_calculate_strategy=memory_adaptive not fully configurable, fallback to direct", resource)
+		return flow.Direct
+	default:
+		log.Printf("serverhertz: rate_limit resource %q unknown token_calculate_strategy %q, fallback to direct", resource, s)
+		return flow.Direct
+	}
+}
+
+// parseControlBehavior 把配置字符串映射到 sentinel flow.ControlBehavior。
+// 空/未知串默认 reject（保持历史行为）。
+func parseControlBehavior(s, resource string) flow.ControlBehavior {
+	switch s {
+	case "", "reject":
+		return flow.Reject
+	case "throttling":
+		return flow.Throttling
+	default:
+		log.Printf("serverhertz: rate_limit resource %q unknown control_behavior %q, fallback to reject", resource, s)
+		return flow.Reject
+	}
 }
