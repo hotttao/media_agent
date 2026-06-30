@@ -1,3 +1,5 @@
+//go:build e2e
+
 // fakes.go：测试替身（fake），用于注入失败等场景。
 //
 // 放 fixtures 包供多个 e2e 测试复用；不进生产代码。

@@ -1,3 +1,5 @@
+//go:build e2e
+
 // migrate.go：迁移 fixture——把 dal.Migrate 封装成测试可用的 helper。
 //
 // 迁移 SQL 不再 embed，运行时从磁盘读（与 main 一致）。e2e 测试的 cwd 是 e2e/ 目录，

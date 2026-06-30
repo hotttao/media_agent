@@ -20,10 +20,10 @@ import (
 	"fmt"
 	"os"
 
-	_ "github.com/go-sql-driver/mysql" // register mysql driver for database/sql
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/mysql"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	_ "github.com/lib/pq" // register postgres driver for database/sql
 
 	configpb "media_agent/hertz_gen/config"
 )
@@ -56,18 +56,18 @@ func Migrate(migrationsDir string, cfg *configpb.DatabaseConfig) error {
 	}
 
 	// 独立 *sql.DB：migrate 用完即关，不波及业务连接。
-	sqlDB, err := sql.Open("mysql", dsn)
+	sqlDB, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return fmt.Errorf("dal: open sql for migrate: %w", err)
 	}
 	defer sqlDB.Close()
 
-	dbDriver, err := mysql.WithInstance(sqlDB, &mysql.Config{})
+	dbDriver, err := postgres.WithInstance(sqlDB, &postgres.Config{})
 	if err != nil {
-		return fmt.Errorf("dal: mysql migrate driver: %w", err)
+		return fmt.Errorf("dal: postgres migrate driver: %w", err)
 	}
 
-	m, err := migrate.NewWithInstance("iofs", src, "mysql", dbDriver)
+	m, err := migrate.NewWithInstance("iofs", src, "postgres", dbDriver)
 	if err != nil {
 		return fmt.Errorf("dal: new migrate: %w", err)
 	}

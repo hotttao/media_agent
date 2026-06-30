@@ -1,3 +1,5 @@
+//go:build e2e
+
 // app.go：应用层 fixture——把真实 repo/service/workflow 装配好供测试用。
 //
 // 测试只声明「我要一个跑在隔离 database 上的 LikeFlow」，不管装配细节。

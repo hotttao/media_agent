@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
@@ -24,18 +24,18 @@ import (
 // NewDB 根据 DatabaseConfig 构造 *gorm.DB。
 //
 // database.enabled=false 时返回 (nil, nil)——调用方可无条件初始化，禁用时不阻断启动。
-// 当前 driver 仅支持 mysql；新增 postgres/sqlite 在此分支扩展。
+// 当前 driver 仅支持 postgres；新增其他 driver 在此分支扩展。
 func NewDB(cfg *configpb.DatabaseConfig) (*gorm.DB, error) {
 	if cfg == nil || !cfg.GetEnabled() {
 		return nil, nil
 	}
 	switch cfg.GetDriver() {
-	case "mysql", "": // 默认 mysql
-		db, err := gorm.Open(mysql.Open(cfg.GetDsn()), &gorm.Config{
+	case "postgres", "": // 默认 postgres
+		db, err := gorm.Open(postgres.Open(cfg.GetDsn()), &gorm.Config{
 			Logger: gormlogger.Default.LogMode(gormlogger.Warn),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("dal: open mysql: %w", err)
+			return nil, fmt.Errorf("dal: open postgres: %w", err)
 		}
 		sqlDB, err := db.DB()
 		if err != nil {

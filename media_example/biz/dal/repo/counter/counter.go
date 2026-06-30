@@ -24,13 +24,16 @@ type repo struct {
 }
 
 // IncrLikes 把指定帖子的点赞数 +1。从 ctx 取连接（上层在事务内则加入事务）。
-// 行不存在时 upsert 插入 likes_count=1；存在时 likes_count +1。
+// 行不存在时 upsert 插入 likes_count=1；存在时 likes_count +1 + updated_at=now。
+// 注意：pg 无 ON UPDATE 自动更新，updated_at 在此显式更新（mysql 时由 DB 自动更新）。
 func (r *repo) IncrLikes(ctx context.Context, postID string) error {
 	db := dal.FromContext(ctx, r.db)
 	row := model.PostCounterRow{PostID: postID, LikesCount: 1}
-	// ON DUPLICATE KEY UPDATE likes_count = likes_count + 1：首赞插入 1，后续 +1。
 	return db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "post_id"}},
-		DoUpdates: clause.Assignments(map[string]any{"likes_count": gorm.Expr("likes_count + 1")}),
+		Columns: []clause.Column{{Name: "post_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"likes_count": gorm.Expr("post_counters.likes_count + 1"),
+			"updated_at":  gorm.Expr("now()"),
+		}),
 	}).Create(&row).Error
 }

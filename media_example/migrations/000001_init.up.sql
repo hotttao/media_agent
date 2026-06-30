@@ -8,10 +8,10 @@
 --   - schema 变更 → 加 migration → 执行 → 重跑 GORM Gen。
 
 CREATE TABLE IF NOT EXISTS greetings (
-    id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    name       VARCHAR(64)     NOT NULL DEFAULT '',
-    body       VARCHAR(255)    NOT NULL DEFAULT '',
-    created_at DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    PRIMARY KEY (id),
-    KEY idx_greetings_name (name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    id         BIGSERIAL    PRIMARY KEY,
+    name       VARCHAR(64)  NOT NULL DEFAULT '',
+    body       VARCHAR(255) NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_greetings_name ON greetings (name);

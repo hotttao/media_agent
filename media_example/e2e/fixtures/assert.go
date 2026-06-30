@@ -1,3 +1,5 @@
+//go:build e2e
+
 // assert.go：e2e 断言辅助（查表/查计数），供多个测试复用。
 package fixtures
 
@@ -7,11 +9,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// TableExists 断言表存在于当前 database。
+// TableExists 断言表存在于当前 database（pg 用 current_schema()）。
 func TableExists(t *testing.T, db *gorm.DB, table string) bool {
 	t.Helper()
 	var cnt int
-	err := db.Raw("SELECT COUNT(1) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?", table).Scan(&cnt).Error
+	err := db.Raw("SELECT COUNT(1) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?", table).Scan(&cnt).Error
 	if err != nil {
 		t.Fatalf("check table %q: %v", table, err)
 	}

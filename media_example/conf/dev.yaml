@@ -18,7 +18,7 @@ app:
 
 server:
   enabled: true
-  address: ${SERVER_ADDR:-:8888}
+  address: ${SERVER_ADDR:-:8000}
   timeout:
     enabled: true
     read_timeout_ms: 10000
@@ -27,12 +27,12 @@ server:
 # ---- 数据存储（dev 必须能连真实数据库） ----
 database:
   enabled: true
-  driver: mysql
-  dsn: ${MYSQL_DSN:-user:pass@tcp(127.0.0.1:3306)/media_example?charset=utf8mb4&parseTime=True&loc=Local}
+  driver: postgres
+  dsn: ${POSTGRES_DSN:-postgres://media_example:media_example@127.0.0.1:5432/media_example?sslmode=disable}
   max_open_conns: 50
   max_idle_conns: 10
   conn_max_lifetime_seconds: 3600
-  migrate_on_start: true   # dev 自动迁移
+  migrate_on_start: true # dev 自动迁移
 
 redis:
   enabled: true
