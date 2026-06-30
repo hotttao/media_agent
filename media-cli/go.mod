@@ -101,3 +101,5 @@ replace media_agent/hertz_gen => ../hertz_gen
 replace media_agent/hertz_infra => ../hertz_infra
 
 replace media_agent/media_example => ../media_example
+
+replace media_agent/media_auth => ../media_auth

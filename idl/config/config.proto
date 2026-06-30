@@ -67,6 +67,19 @@ message Config {
   // 标注的字段运行期覆盖基线；未标注字段保持启动期只读。
   ConsulKVConfig consul_kv = 60;
 
+  // ---- 业务配置（media_auth 专用；其他服务可按需加自己的业务段） ----
+  // media_auth 的认证业务配置：JWT 密钥/有效期、各 token TTL。
+  // JWT_SECRET 与 control_plane 共享（HS256），轮换需双方同步（ADR-0001）。
+  AuthConfig auth = 70;
+  // LDAP 认证配置（auth domain 登录双路之 LDAP）。
+  LdapConfig ldap = 71;
+  // 企微 corp OAuth 配置（wecom domain）。
+  WecomConfig wecom = 72;
+  // MCP OAuth 配置（mcp_oauth domain）。
+  McpOauthConfig mcp_oauth = 73;
+  // internal VerifyToken（mTLS）listener 配置（token internal service）。
+  TokenVerifyConfig token_verify = 74;
+
   // ---- 客户端：调用其他服务 ----
   // key = 下游 app.name；value = 该下游 client 的治理配置。
   // 新增下游 = 在这里加一项；不再调用 = 删一项。
@@ -267,6 +280,53 @@ message ConsulKVConfig {
   string address = 2;
   // Consul KV key，例如 "media-example/config"
   string data_id = 3;
+}
+
+// ============================================================================
+// 业务配置：media_auth 认证（spec §7）
+// ============================================================================
+message AuthConfig {
+  // JWT 签名密钥（HS256），与 control_plane 共享；为空时启动报错。
+  string jwt_secret = 1;
+  // session JWT 有效期（秒），默认 86400（24h）
+  int32 jwt_expires_in_seconds = 2;
+  // oauth access token 有效期（秒），默认 3600（1h）
+  int32 access_token_expires_in_seconds = 3;
+  // oauth refresh token 有效期（天），默认 30
+  int32 refresh_token_expires_in_days = 4;
+  // oauth authorization code 有效期（分钟），默认 10
+  int32 auth_code_expires_in_minutes = 5;
+}
+
+message LdapConfig {
+  bool enabled = 1;
+  string url = 2;                 // ldap://host:port
+  string bind_dn = 3;             // admin bind DN
+  string bind_password = 4;
+  string search_base = 5;
+  string search_filter = 6;       // 如 (objectClass=inetOrgPerson)
+  string attr_name = 7;           // 默认 cn
+  string attr_username = 8;       // 默认 sn
+  string attr_email = 9;          // 默认 mail
+}
+
+message WecomConfig {
+  bool enabled = 1;
+  string corp_id = 2;
+  string corp_secret = 3;
+  string agent_id = 4;
+}
+
+message McpOauthConfig {
+  int32 pending_auth_ttl_seconds = 1;     // 默认 600
+  int32 default_token_ttl_seconds = 2;    // 默认 1800
+  int32 refresh_fail_threshold = 3;       // 默认 3
+  int32 refresh_fail_grace_seconds = 4;   // 默认 600
+}
+
+message TokenVerifyConfig {
+  bool enabled = 1;
+  string address = 2;             // internal mTLS listener，如 :8889
 }
 
 // ============================================================================

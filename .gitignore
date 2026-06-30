@@ -36,4 +36,6 @@ _testmain.go
 .claude/settings.local.json
 dumped_hertz_remote_config.json
 /tmp
-media_logs/
+media_logs/.cookies/
+media_auth/tmp/
+media-cli/.cookies/

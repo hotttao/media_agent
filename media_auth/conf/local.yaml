@@ -18,7 +18,7 @@ app:
 
 server:
   enabled: true
-  address: ${SERVER_ADDR:-:8888}
+  address: ${SERVER_ADDR:-:8001}
   timeout:
     enabled: true
     connect_timeout_ms: 200
@@ -34,11 +34,11 @@ database:
   max_open_conns: 50
   max_idle_conns: 10
   conn_max_lifetime_seconds: 3600
-  migrate_on_start: true   # 启动期自动迁移（local 全栈）
+  migrate_on_start: true # 启动期自动迁移（local 全栈）
 
 # ---- 注册中心 / 服务发现 ----
 consul:
-  enabled: true
+  enabled: ${CONSUL_ENABLED:-true}
   address: ${CONSUL_ADDR:-127.0.0.1:8500}
   scheme: http
   service_address: ${CONSUL_SERVICE_ADDRESS:-127.0.0.1}
@@ -129,9 +129,9 @@ consul_kv:
 # ============================================================================
 
 auth:
-  jwt_secret: ${JWT_SECRET:-dev-shared-secret}   # 与 control_plane 共享（HS256）
-  jwt_expires_in_seconds: 86400                  # session 24h
-  access_token_expires_in_seconds: 3600          # oauth access 1h
+  jwt_secret: ${JWT_SECRET:-dev-shared-secret} # 与 control_plane 共享（HS256）
+  jwt_expires_in_seconds: 86400 # session 24h
+  access_token_expires_in_seconds: 3600 # oauth access 1h
   refresh_token_expires_in_days: 30
   auth_code_expires_in_minutes: 10
 
@@ -158,6 +158,6 @@ mcp_oauth:
   refresh_fail_threshold: 3
   refresh_fail_grace_seconds: 600
 
-token_verify:                            # internal VerifyToken(mTLS) listener
+token_verify: # internal VerifyToken(mTLS) listener
   enabled: true
   address: ${INTERNAL_ADDR:-:8889}

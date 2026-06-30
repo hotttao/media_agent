@@ -51,6 +51,13 @@ hz-update:
 .PHONY: hz-gen
 hz-gen: hz-update
 
+# ---- GORM Gen（schema 变更后重生成 query，🔴 禁改 query/） ----
+# 需连真实 pg（schema 由 migrations 定义）。DSN 从环境变量读。
+# 流程：加 migration → 执行迁移（make migrate-up）→ 更新 tools/gormgen model 列表 → make gorm-gen
+.PHONY: gorm-gen
+gorm-gen:
+	go run tools/gormgen/main.go
+
 .PHONY: swagger-gen
 # swagger-gen：用 protoc-gen-openapi（gnostic）从本服务业务 IDL 生成 OpenAPI v3 文档。
 # 依赖：protoc-gen-openapi（go install github.com/google/gnostic/cmd/protoc-gen-openapi@latest）。

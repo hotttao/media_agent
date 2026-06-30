@@ -13,3 +13,7 @@ var FlagHost string
 // FlagVerbose 详细输出。
 // rootCmd init() 把它绑定到 rootCmd 的 -v / --verbose persistent flag。
 var FlagVerbose bool
+
+// CookiesDir 是持久化 cookie store 的根目录（.cookies/），由 main.go 设置为 media-cli 工作目录。
+// 用于 session-based 接口（如 media_auth auth）跨命令复用 cookie。
+var CookiesDir string

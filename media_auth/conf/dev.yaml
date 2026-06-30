@@ -18,7 +18,7 @@ app:
 
 server:
   enabled: true
-  address: ${SERVER_ADDR:-:8888}
+  address: ${SERVER_ADDR:-:8001}
   timeout:
     enabled: true
     read_timeout_ms: 10000
@@ -32,7 +32,7 @@ database:
   max_open_conns: 50
   max_idle_conns: 10
   conn_max_lifetime_seconds: 3600
-  migrate_on_start: true   # dev 自动迁移
+  migrate_on_start: true # dev 自动迁移
 
 # ---- 注册中心 / 服务发现（dev 不启用：避免污染注册中心） ----
 consul:

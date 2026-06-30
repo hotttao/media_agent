@@ -58,3 +58,16 @@ client:
       retry_timeout_ms: 5000
       min_request_amount: 10
       # max_allowed_rt_ms: 1000   # 仅 slow_request_ratio 生效：rt 上限(ms)
+
+  # media_auth 服务（认证鉴权）。auth 接口 session-based，cookie 由 media-cli cookie middleware 持久化。
+  media_auth:
+    enabled: true
+    service_name: media-auth
+    base_domain: ${MEDIA_AUTH_ADDR:-http://127.0.0.1:8889}
+    use_discovery: false
+    timeout:
+      enabled: true
+      connect_timeout_ms: 200
+      read_timeout_ms: 5000
+      write_timeout_ms: 5000
+      request_timeout_ms: 10000

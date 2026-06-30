@@ -30,11 +30,14 @@ import (
 	// Init(cfg) 由 main 显式调用（不依赖 init()）。
 	_ "media_agent/media_cli/cmd/client"
 	_ "media_agent/media_cli/cmd/infra"
+	_ "media_agent/media_cli/cmd/media_auth"      // media_auth 接口 e2e 一级子命令
+	_ "media_agent/media_cli/cmd/media_auth/auth" // auth 子命令挂到 MediaAuthCmd
 	_ "media_agent/media_cli/cmd/media_example"
 	// hello 是 media_example 的子包（service 二级）；父包 init() 把它挂到 MediaExampleCmd。
 	_ "media_agent/media_cli/cmd/media_example/hello"
 
 	clisub "media_agent/media_cli/cmd/client"
+	authsub "media_agent/media_cli/cmd/media_auth/auth"
 	hellosub "media_agent/media_cli/cmd/media_example/hello"
 )
 
@@ -71,6 +74,15 @@ func main() {
 	// 4. 把 cfg 分发给需要它的子系统。
 	hellosub.Init(cfg) // 共享 HelloService typed client
 	clisub.Init(cfg)   // e2e 测试 clienthertz 治理参数
+
+	// 4.1 cookie store 落盘目录 = media-cli 工作目录（chdir 后已是 media-cli/）。
+	cmd.CookiesDir = "."
+
+	// 4.2 media_auth auth 子命令的 typed client + cookie middleware 装配。
+	//     client.media_auth 未配置时跳过（其他子命令仍可用）。
+	if cfg.GetClient()["media_auth"] != nil {
+		authsub.Init(cfg)
+	}
 
 	// 5. 启动 cobra 命令树。
 	cmd.Execute()

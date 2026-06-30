@@ -6,14 +6,50 @@
 package main
 
 import (
+	"log"
+
+	"github.com/cloudwego/hertz/pkg/app"
 	"gorm.io/gorm"
+
+	configpb "media_agent/hertz_gen/config"
+	dalauth "media_agent/media_auth/biz/dal/repo/auth"
+	authhandler "media_agent/media_auth/biz/handler/auth"
+	"media_agent/media_auth/biz/middleware"
+	authservice "media_agent/media_auth/biz/service/auth"
+	ldapclient "media_agent/media_auth/biz/shared/client/ldap"
+	"media_agent/media_auth/biz/shared/session"
 )
+
+// SessionMiddleware 由 main.go 取用（挂全局 middleware）。
+var SessionMiddleware app.HandlerFunc
 
 // InitDI 完成 media_auth 全部依赖注入。
 //
-// 当前骨架阶段：6 domain/service/workflow 尚未实现（§1.4），仅保留入口签名，
-// db 透传供后续 repo/service 装配。handler 包级变量回填随业务实现逐步补齐。
+// 装配链（architecture.md 依赖方向：dal → domain；service → domain/policy；handler → service）：
+//
+//	db → UserRepo + SessionSigner + LDAPClient → AuthService → 回填 handler.AuthSvc。
+//
 // 必须在 register(h) 之前调用，确保首个请求到达时依赖非 nil。
-func InitDI(db *gorm.DB) {
-	_ = db // TODO(§1.4): db → TxRunner + repos → services → workflow，回填 handler 包级变量
+//
+// db 可能为 nil（database.enabled=false）：此时仅 session signer 可装配，repo/service 不可用。
+func InitDI(db *gorm.DB, cfg *configpb.Config) {
+	// session signer（JWT HS256），middleware 与 service 共用。
+	signer, err := session.NewSigner(cfg.GetAuth())
+	if err != nil {
+		log.Fatalf("init di: session signer: %v", err)
+	}
+	SessionMiddleware = middleware.Session(signer)
+
+	if db == nil {
+		log.Println("init di: database disabled, auth service unavailable")
+		return
+	}
+
+	// LDAP client（enabled=false 时 Authenticate 恒 nil）。
+	ldapCli := ldapclient.New(cfg.GetLdap())
+
+	// repo + service + handler 回填。
+	userRepo := dalauth.NewRepo(db)
+	authSvc := authservice.NewService(userRepo, signer, ldapCli)
+	authhandler.AuthSvc = authSvc
 }

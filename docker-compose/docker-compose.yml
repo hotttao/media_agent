@@ -116,3 +116,20 @@ services:
       - "8500:8500"     # HTTP API + UI（注册 / 发现 / KV）
       - "8600:8600/udp" # DNS
     restart: unless-stopped
+
+  # 8. PostgreSQL — media_auth 数据库（认证鉴权 8 表，media_auth schema）
+  #    media_auth 用 pg（对齐 control-plane 现状）；media_example 仍用 MySQL（各自独立）。
+  #    默认库名 / 用户 / 密码 = media_auth，与 conf/local.yaml 的 MEDIA_AUTH_DB_DSN 默认值一致。
+  #    端口 5432：若 host 已占可改 PG_PORT 环境变量或 compose 端口映射。
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: media_auth
+      POSTGRES_PASSWORD: media_auth
+      POSTGRES_DB: media_auth
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${DATA_ROOT:-/data}/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+
