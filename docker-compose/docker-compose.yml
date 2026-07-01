@@ -20,6 +20,7 @@
 services:
   # 1. OTel Collector — 收敛 trace，转发 jaeger（metrics 走 app 直暴 /metrics，不经 collector）
   otel-collector:
+    profiles: [infra]
     image: otel/opentelemetry-collector-contrib:0.103.0
     command: ["--config=/etc/otelcol/config.yaml"]
     volumes:
@@ -35,6 +36,7 @@ services:
   # 2. Jaeger — 链路存储 + UI（接收 collector OTLP 推送）
   #    无配置文件，行为由环境变量控制（见 jaeger/README.md）。
   jaeger:
+    profiles: [infra]
     image: jaegertracing/all-in-one:1.60
     environment:
       - COLLECTOR_OTLP_ENABLED=true
@@ -51,6 +53,7 @@ services:
 
   # 3. Prometheus — 拉取 app :9091/metrics + collector :8888
   prometheus:
+    profiles: [infra]
     image: prom/prometheus:v2.54.1
     volumes:
       - ./prometheus/config.yml:/etc/prometheus/prometheus.yml:ro
@@ -67,6 +70,7 @@ services:
 
   # 4. Loki — 日志存储（接收 promtail 推送）
   loki:
+    profiles: [infra]
     image: grafana/loki:3.1.2
     volumes:
       - ./loki/config.yaml:/etc/loki/local-config.yaml:ro
@@ -78,6 +82,7 @@ services:
 
   # 5. Grafana — 统一可视化（预置 Prometheus / Loki / Jaeger 数据源）
   grafana:
+    profiles: [infra]
     image: grafana/grafana:11.2.2
     environment:
       - GF_SECURITY_ADMIN_USER=admin
@@ -96,6 +101,7 @@ services:
 
   # 6. Promtail — 采集 ../media_logs/*/*.log 推送 Loki（Loki 官方 agent）
   promtail:
+    profiles: [infra]
     image: grafana/promtail:3.1.2
     volumes:
       - ./promtail/config.yaml:/etc/promtail/config.yaml:ro
@@ -110,6 +116,7 @@ services:
   #    限流 / 熔断规则的运行期热更新也经此 KV 推送（consul_kv.enabled=true 时）。
   #    dev 环境关闭 consul 注册（conf/dev.yaml），此服务可不启。
   consul:
+    profiles: [infra]
     image: hashicorp/consul:1.18
     command: agent -dev -client=0.0.0.0
     ports:

@@ -29,7 +29,6 @@ import (
 	// Blank imports 触发各 subpackage 的 init() 注册子命令到 rootCmd。
 	// Init(cfg) 由 main 显式调用（不依赖 init()）。
 	_ "media_agent/media_cli/cmd/client"
-	_ "media_agent/media_cli/cmd/e2e" // e2e 环境编排（up/down/restart/status）
 	_ "media_agent/media_cli/cmd/infra"
 	_ "media_agent/media_cli/cmd/media_auth"      // media_auth 接口 e2e 一级子命令
 	_ "media_agent/media_cli/cmd/media_auth/auth" // auth 子命令挂到 MediaAuthCmd
