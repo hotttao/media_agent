@@ -1,0 +1,28 @@
+# media_example 独立 docker-compose —— 被测服务。
+#
+# 用法（e2e 编排自动加载，或手动）：
+#   docker compose -f docker-compose/docker-compose.yml -f media_example/docker-compose.yml up media_example
+#
+# 依赖基础环境的 postgres。日志映射到 host ../media_logs/media-example/。
+# 代码改动后重建：docker compose -f media_example/docker-compose.yml build media_example
+services:
+  media_example:
+    build:
+      context: ..
+      dockerfile: media_example/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: local
+      SERVER_ADDR: ":8000"
+      POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_example?sslmode=disable
+      CONSUL_ENABLED: "false"
+      CONSUL_KV_ENABLED: "false"
+      PROMETHEUS_ENABLED: "false"
+      OTEL_ENABLED: "false"
+      LOG_DIR: /media_logs/media-example
+    volumes:
+      - ../media_logs/media-example:/media_logs/media-example
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

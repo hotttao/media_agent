@@ -1,8 +1,125 @@
 # E2E 测试
 
-借助实现的 [cli 工具](../../media-cli/)，完成 e2e 测试。
+## 测试分工
 
-## 治理能力 e2e
+| 测试类型 | 位置 | 驱动方式 | 覆盖 |
+|---------|------|---------|------|
+| 接口测试（需启动服务、打 HTTP） | `media-cli` | testcontainers-go compose 编排被测服务 | 各服务 HTTP 接口全链路 |
+| 接口无关测试（domain 逻辑/算法/迁移） | `<app>/e2e/` | go test + testcontainers | domain 业务逻辑、事务、纯算法 |
+
+## e2e 资源编排框架（media-cli e2e）
+
+**设计原则**：被测服务容器化，基础环境（pg 等）手动起一次常驻，e2e 只管被测服务。每个被测服务独立 docker-compose.yml（不混在一起），按需 build + 起。
+
+### 启动流程
+
+```bash
+# 1. 基础环境起一次常驻（postgres 等）
+docker compose -f docker-compose/docker-compose.yml up -d postgres
+
+# 2. e2e up：build + 起指定被测服务（用 --services 按需选择）
+media-cli e2e up --services media_auth
+
+# 3. 跑测试（直接用 media-cli 子命令 + curl，或 media-cli e2e run 自动 seed+测试套件）
+media-cli media_auth auth login --username alice --password secret123
+# 或一体化：
+media-cli e2e run --services media_auth
+
+# 4. teardown：只停被测服务（不碰基础环境）
+media-cli e2e down --services media_auth
+```
+
+### 核心抽象
+
+```go
+// Resource 接口：tearup（Up）/ teardown（Down）对等出现。
+type Resource interface {
+    Name() string
+    Up(ctx context.Context) error   // 启动 + 探测就绪
+    Down(ctx context.Context) error // 停止 + 清理
+}
+
+// Env 编排器：按序 Up，LIFO 逆序 Down。
+type Env struct { resources []Resource }
+```
+
+资源模块（`media-cli/cmd/e2e/resources/`）：
+- `ComposeStack`：testcontainers-go compose，管理被测服务 compose 栈（不含基础环境）。Up = compose.Up + WaitForService + RunServices（只起被测服务）+ 健康探测；Down = compose.Down（RemoveOrphans，不 RemoveVolumes 避免删基础环境数据）。
+
+编排入口（`media-cli/cmd/e2e/resource.go` NewEnv）清晰展示资源组合：
+```go
+func NewEnv(services []string) *Env {
+    // 加载对应被测服务的 compose 文件（media_auth/docker-compose.yml 等）
+    // services 为空 = 起全部
+    return &Env{resources: []Resource{
+        resources.NewComposeStack(composeFiles, services),
+    }}
+}
+```
+
+### e2e 子命令
+
+| 命令 | 说明 |
+|------|------|
+| `media-cli e2e up [--services <s>]` | tearup：build + 起被测服务 + 健康探测（基础环境需已常驻） |
+| `media-cli e2e down [--services <s>]` | teardown：停被测服务（不碰基础环境） |
+| `media-cli e2e restart <name>` | 单服务重启（Down + Up） |
+| `media-cli e2e status` | 探测各被测服务 /health 状态 |
+| `media-cli e2e run [--dir e2e] [--services <s>]` | tearup + seed + 测试套件（*.sh）+ teardown 一体化 |
+
+### 单服务被测 compose 模板
+
+每个被测服务独立 compose 文件（`media_auth/docker-compose.yml`、`media_example/docker-compose.yml`），通过 `host.docker.internal:host-gateway` 访问基础环境的 host 服务：
+
+```yaml
+services:
+  media_auth:
+    build:
+      context: ..
+      dockerfile: media_auth/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      APP_ENV: local
+      MEDIA_AUTH_DB_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_auth?sslmode=disable
+      LOG_DIR: /media_logs/media-auth
+    volumes:
+      - ../media_logs/media-auth:/media_logs/media-auth
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+### 日志映射（与 go run 一致）
+
+每个被测服务的 `LOG_DIR=/media_logs/<app>` 映射到 host `../media_logs/<app>/`，便于 `grep` debug。`media_logs/<app>/app.log` 内容与 `go run` 时一致。
+
+### 目录组织
+
+```text
+docker-compose/
+  docker-compose.yml              # 只放基础环境（pg + 可选 consul/otel/...）
+media_auth/
+  Dockerfile
+  docker-compose.yml              # media_auth 独立 compose（build + env + depends_on）
+media_example/
+  Dockerfile
+  docker-compose.yml              # 同上
+media-cli/
+  cmd/e2e/
+    cmd.go                          # e2e 子命令（up/down/restart/status/run）
+    resource.go                     # Resource 接口 + Env 编排器
+    suite.go                        # e2e run：seed + 测试套件（外部 *.sh）
+    resources/
+      compose.go                    # ComposeStack（testcontainers-go compose）
+  e2e/                              # 测试套件目录
+    seed.sh                         # 数据准备（如 seed 测试用户）
+    auth_login_me_test.sh           # 测试：login → me
+    auth_unauthorized_test.sh        # 测试：401
+```
+
+---
+
+## 治理能力 e2e（旧流程，逐步迁移到容器化）
 
 启动被测 server（media_example 本身，带治理能力 + 测试端点 `/_test/*`）：
 

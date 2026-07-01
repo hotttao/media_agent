@@ -1,0 +1,30 @@
+# media_auth 独立 docker-compose —— 被测服务（不与基础环境混在一个文件）。
+#
+# 用法（e2e 编排自动加载，或手动）：
+#   docker compose -f docker-compose/docker-compose.yml -f media_auth/docker-compose.yml up media_auth
+#
+# 依赖基础环境的 postgres（跨文件 depends_on + external 网络）。
+# 日志映射到 host ../media_logs/media-auth/（与 go run 一致，便于 grep debug）。
+# 代码改动后重建：docker compose -f media_auth/docker-compose.yml build media_auth
+services:
+  media_auth:
+    build:
+      context: ..
+      dockerfile: media_auth/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      APP_ENV: local
+      SERVER_ADDR: ":8001"
+      JWT_SECRET: e2e-test-secret
+      MEDIA_AUTH_DB_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_auth?sslmode=disable
+      CONSUL_ENABLED: "false"
+      CONSUL_KV_ENABLED: "false"
+      PROMETHEUS_ENABLED: "false"
+      OTEL_ENABLED: "false"
+      LOG_DIR: /media_logs/media-auth
+    volumes:
+      - ../media_logs/media-auth:/media_logs/media-auth
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
