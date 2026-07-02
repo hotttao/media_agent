@@ -1,0 +1,30 @@
+# media_workflow 独立 docker-compose —— 被测服务（不与基础环境混在一个文件）。
+#
+# 用法（直接 docker compose，env_file 共享）：
+#   INFRA=e2e  docker compose -f media_workflow/docker-compose.yml up media_workflow
+#   INFRA=unit docker compose -f media_workflow/docker-compose.yml up media_workflow   # 只起 pg
+# 依赖基础环境的 postgres（跨文件 depends_on + extra_hosts host.docker.internal）。
+# 日志映射到 host ../media_logs/media-workflow/（与 go run 一致，便于 grep debug）。
+# 代码改动后重建：docker compose -f media_workflow/docker-compose.yml build media_workflow
+services:
+  media_workflow:
+    build:
+      context: ..
+      dockerfile: media_workflow/Dockerfile
+    ports:
+      - "8000:8002"
+    # 共享 env_file（与 docker-compose/.env 同一来源），切换 INFRA 自动重选 env_file。
+    #   INFRA=unit  → docker-compose/.env.unit  （只起 pg，无 infra）
+    #   INFRA=e2e   → docker-compose/.env.e2e   （起全部 infra）
+    env_file:
+      - ../docker-compose/.env.${INFRA:-e2e}
+    # 服务特有变量（不随 INFRA 变）。
+    environment:
+      SERVER_ADDR: ":8002"
+      POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_workflow?sslmode=disable
+      LOG_DIR: /media_logs/media-workflow
+    volumes:
+      - ../media_logs/media-workflow:/media_logs/media-workflow
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

@@ -1,0 +1,127 @@
+# dev.yaml — dev / staging / prod-like 部署配置
+#
+# 语义：dev = 「真实基础设施 + 仅本服务的可观测」。常见场景：
+#   - staging 集群：MySQL / Redis 真实接入，Consul 服务注册关闭（避免污染注册中心）；
+#   - 灰度环境：跑业务逻辑 + 观测，不做服务发现；
+#   - 临时演示：直连 DB，保留 trace / metrics / 日志。
+#
+# 与 local.yaml 的差别：
+#   - local  = 全栈（含 Consul 服务注册 / KV 热更新，便于本地 e2e）
+#   - dev    = 业务真实（MySQL/Redis 启）+ 不做服务注册（Consul 关）+ 可观测保留
+#
+# 字段约定（harness/contributing/config.md）：snake_case；治理段首字段 bool enabled。
+
+app:
+  name: media-workflow
+  version: v1
+  env: ${APP_ENV:-dev}
+
+server:
+  enabled: true
+  address: ${SERVER_ADDR:-:8002}
+  timeout:
+    enabled: true
+    read_timeout_ms: 10000
+    write_timeout_ms: 10000
+
+# ---- 数据存储（dev 必须能连真实数据库） ----
+database:
+  enabled: true
+  driver: postgres
+  dsn: ${POSTGRES_DSN:-postgres://media_workflow:media_workflow@127.0.0.1:5432/media_workflow?sslmode=disable}
+  max_open_conns: 50
+  max_idle_conns: 10
+  conn_max_lifetime_seconds: 3600
+  migrate_on_start: true # dev 自动迁移
+
+redis:
+  enabled: true
+  address: ${REDIS_ADDR:-127.0.0.1:6379}
+  password: ${REDIS_PASSWORD:-}
+  db: 0
+  pool_size: 20
+  dial_timeout_ms: 200
+
+# ---- 注册中心 / 服务发现（dev 不启用：避免污染注册中心；本服务直连 DB 即可） ----
+consul:
+  enabled: false
+  address: ${CONSUL_ADDR:-127.0.0.1:8500}
+  scheme: http
+  service_address: ${CONSUL_SERVICE_ADDRESS:-127.0.0.1}
+  service_port: ${CONSUL_SERVICE_PORT:-8888}
+  tags: [dev]
+  health_check_path: /health
+  health_check_interval_seconds: 5
+
+consul_discovery:
+  enabled: false
+  address: ${CONSUL_DISCOVERY_ADDR:-127.0.0.1:8500}
+  scheme: http
+  refresh_interval_seconds: 5
+
+# ---- 可观测（dev 保留） ----
+otel:
+  enabled: true
+  export_endpoint: ${OTEL_EXPORT_ENDPOINT:-otel-collector:4317}
+  insecure: true
+  sample_ratio: 1.0
+
+prometheus:
+  enabled: true
+  address: ${PROMETHEUS_ADDR:-:9091}
+  path: /metrics
+
+access_log:
+  enabled: true
+  format: "[${time}] ${status} - ${latency} ${method} ${path}"
+  time_format: "2006-01-02T15:04:05Z"
+
+log:
+  enabled: true
+  level: ${LOG_LEVEL:-info}
+  dir: ${LOG_DIR:-}
+  filename: app.log
+  max_size_mb: 100
+  max_backups: 10
+  max_age_days: 7
+  compress: true
+  console: true
+
+# ---- 服务端中间件（基础防护保留） ----
+recovery:
+  enabled: true
+  print_stack: true
+
+request_id:
+  enabled: true
+  header: "X-Request-ID"
+
+cors:
+  enabled: true
+  allow_origins: ["*"]
+  allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allow_headers: ["*"]
+  allow_credentials: false
+  max_age_seconds: 600
+
+# 限流：dev 默认不开（staging 通常不限流；想观察限流效果时可手动 enabled=true）。
+rate_limit:
+  - enabled: false
+    resource: "media-workflow:GET:/hello"
+    threshold: 50
+    stat_interval_ms: 1000
+
+# ---- 运维端点（保留） ----
+pprof:
+  enabled: true
+  prefix: "/debug/pprof"
+
+health:
+  enabled: true
+  path: "/health"
+
+# ---- 配置中心（dev 不开） ----
+consul_kv:
+  enabled: false
+  address: ${CONSUL_KV_ADDR:-127.0.0.1:8500}
+  data_id: ${CONSUL_KV_DATA_ID:-media-workflow/config}

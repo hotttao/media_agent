@@ -1,0 +1,16 @@
+# Lefthook 配置：等价于原 harness/pre-commit。
+# 安装：make lefthook-install（会 go install lefthook 并写入 .git/hooks）。
+pre-commit:
+  commands:
+    gofmt:
+      glob: "*.go"
+      # gofmt 格式化暂存的 Go 文件，再重新加入暂存区。
+      run: gofmt -w {staged_files} && git add {staged_files}
+    arch-check:
+      run: go run ../harness/tools/archcheck
+    staticcheck:
+      run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+    dead-check:
+      run: go run ../harness/tools/deadcheck
+    test:
+      run: go test ./...

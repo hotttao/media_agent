@@ -1,6 +1,7 @@
 go 1.26.3
 
 use (
+	./media_workflow
 	./harness
 	./hertz_gen
 	./media-cli

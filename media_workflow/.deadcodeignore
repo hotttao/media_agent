@@ -1,0 +1,16 @@
+# .deadcodeignore
+# Only hertz and gorm generated code is allowed to be ignored.
+# All hand-written code (domain / service / workflow / policy / dal/repo /
+# config / observability / infra / middleware / handler business logic /
+# main.go / wire.go / wire_gen.go) MUST stay in the detection scope.
+#
+# Default patterns already in tools/deadcheck/main.go (loadIgnorePatterns):
+#   /biz/model/                  - hertz IDL model (generated)
+#   /biz/router/                 - hertz route registration (generated)
+#   router_gen\.go:              - hertz router entry (generated)
+#   \.pb\.go:                    - protobuf generated
+#   (?i)code generated           - standard generated marker
+#   (?i)/generated/              - generated directory
+#
+# Paths below include both forward-slash (Unix) and backslash (Windows)
+# variants because deadcode emits native paths.
