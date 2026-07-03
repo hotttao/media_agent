@@ -66,3 +66,22 @@ pprof:
 health:
   enabled: true
   path: "/health"
+
+# media_crawler 抓取编排（subprocess 调 Python 爬虫，见 ADR-0003）
+crawler:
+  enabled: ${CRAWLER_ENABLED:-true}
+  python_path: ${PYTHON_PATH:-/home/tao/code/github/media_crawler/MediaCrawlerPro-Python/.venv/bin/python}
+  runner_path: ${MCP_RUNNER_PATH:-/home/tao/code/github/media_agent/media_crawler/script/mcp_runner.py}
+  work_dir: ${CRAWLER_WORK_DIR:-/home/tao/code/github/media_crawler/MediaCrawlerPro-Python}
+  max_serial: 1
+  log_tail_lines: 100
+  timeout_seconds: 0
+  default_on_busy: queue
+
+# 爬虫 MySQL（只读，跨库查内容数据；独立于自有 PG database 段）
+crawl_data:
+  enabled: ${CRAWL_DATA_ENABLED:-true}
+  dsn: ${CRAWL_DATA_DSN:-root:123456@tcp(127.0.0.1:13306)/media_crawler_pro?charset=utf8mb4}
+  max_open_conns: 10
+  max_idle_conns: 5
+  checkpoint_dir: data/checkpoints

@@ -80,6 +80,12 @@ message Config {
   // internal VerifyToken（mTLS）listener 配置（token internal service）。
   TokenVerifyConfig token_verify = 74;
 
+  // ---- 业务配置（media_crawler 专用）----
+  // 抓取编排配置（python 路径 / 垫片 / 串行数 等）
+  CrawlerConfig crawler = 75;
+  // 内容数据只读查询配置（爬虫 MySQL 只读 DSN）
+  CrawlDataConfig crawl_data = 76;
+
   // ---- 客户端：调用其他服务 ----
   // key = 下游 app.name；value = 该下游 client 的治理配置。
   // 新增下游 = 在这里加一项；不再调用 = 删一项。
@@ -371,4 +377,42 @@ message AppClientConfig {
 
   // 负载均衡策略：weighted_random / round_robin / consistent_hash
   string load_balance = 20;
+}
+
+// ============================================================================
+// 业务配置：media_crawler 抓取编排
+// ============================================================================
+//
+// CrawlerConfig 控制 subprocess 调用 Python 爬虫的行为。爬虫本身是独立模块
+// （MediaCrawlerPro-Python），media_crawler 不改其代码，经 mcp_runner.py 垫片
+// 注入 CLI + env 后 subprocess 启动。详见 ADR-0003（子进程隔离）。
+message CrawlerConfig {
+  bool enabled = 1;
+  // Python 解释器路径，如 "python3" 或 venv 内绝对路径
+  string python_path = 2;
+  // mcp_runner.py 垫片路径（爬虫项目内）
+  string runner_path = 3;
+  // 爬虫项目根目录（subprocess cwd；checkpoint/data 落在此）
+  string work_dir = 4;
+  // 全局串行并发数（默认 1，同时仅一个爬虫子进程，防账号/代理风控）
+  int32 max_serial = 5;
+  // 捕获子进程 stdout/stderr 尾部行数（get_crawl_status 返回）
+  int32 log_tail_lines = 6;
+  // 子进程默认超时秒（0=不限）
+  int32 timeout_seconds = 7;
+  // 默认 on_busy 策略：queue(默认) / reject
+  string default_on_busy = 8;
+}
+
+// CrawlDataConfig —— 跨库只读查爬虫 MySQL 的连接配置。
+// 独立于本服务自有的 database 段（PG）：PG 存 job 元数据，MySQL 存爬虫内容数据。
+// 双库分离不另立 ADR（新服务改库零成本，不满足"难回退"），见 crawl_data domain 双库说明。
+message CrawlDataConfig {
+  bool enabled = 1;
+  // 爬虫 MySQL 只读 DSN（建议只读账号 mc_reader）
+  string dsn = 2;
+  int32 max_open_conns = 3;
+  int32 max_idle_conns = 4;
+  // 爬虫 checkpoint 目录（相对 work_dir 或绝对），用于进度推算/续爬
+  string checkpoint_dir = 5;
 }

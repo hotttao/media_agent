@@ -23,7 +23,9 @@ tidy:
 fmt:
 	gofmt -w .
 
-BIZ_PROTOS := $(shell find ../idl/media_crawler -type f -name '*.proto' | sed 's|^\.\./idl/||')
+# mcp_*.proto 只含 message（无 service/rpc），仅走 hz-model 生成 struct；
+# 不走 hz-update（否则生成空 router，且 mcp_xhs.Register 含子串 xhs.Register 误判重复注册）。
+BIZ_PROTOS := $(shell find ../idl/media_crawler -type f -name '*.proto' ! -name 'mcp_*.proto' | sed 's|^\.\./idl/||')
 
 .PHONY: hz-update
 hz-update:
@@ -39,6 +41,12 @@ hz-gen: hz-update
 swagger-gen:
 	@mkdir -p swagger
 	protoc --proto_path=../idl --openapi_out=swagger --openapi_opt=naming=proto $(BIZ_PROTOS)
+
+.PHONY: gorm-gen
+gorm-gen:
+	@test -n "$$MEDIA_CRAWLER_DB_DSN" || { echo "usage: MEDIA_CRAWLER_DB_DSN=postgres://... CRAWL_DATA_DSN=mysql://... make gorm-gen"; exit 1; }
+	@test -n "$$CRAWL_DATA_DSN" || { echo "CRAWL_DATA_DSN (爬虫 MySQL 只读) required"; exit 1; }
+	go run tools/gormgen/main.go
 
 .PHONY: migrate-new
 migrate-new:

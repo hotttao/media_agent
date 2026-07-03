@@ -39,3 +39,8 @@ dumped_hertz_remote_config.json
 media_logs/.cookies/
 media_auth/tmp/
 media-cli/.cookies/
+# go build 产物（各 app 二进制）
+/media_crawler/media_crawler
+/media_auth/media_auth
+/media_workflow/media_workflow
+/media_example/media_example

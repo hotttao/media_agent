@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package media_crawler.xhs;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+// Hertz 工具链:
+//   make hz-model  -> hertz_gen/model/media_crawler/xhs/xhs.pb.go
+//   make hz-update -> media_crawler/biz/handler/xhs/xhs_service.go
+option go_package = "media_crawler/xhs";
+
+// XhsQueryService —— 小红书（xhs）数据查询 REST 接口（给前端）。
+// 对应 xhs_data domain；DTO 直接对齐 xhs_note / xhs_note_comment 真实字段。
+// 后续平台各加独立 proto（如 dy.proto 的 DyQueryService）。
+service XhsQueryService {
+  // GET /api/xhs/notes — 小红书笔记列表
+  rpc ListXhsNotes(ListXhsNotesRequest) returns (ListXhsNotesResponse) {
+    option (google.api.http) = { get: "/api/xhs/notes" };
+    option (api.get) = "/api/xhs/notes";
+  }
+
+  // GET /api/xhs/notes/:note_id — 小红书笔记详情
+  rpc GetXhsNote(GetXhsNoteRequest) returns (XhsNote) {
+    option (google.api.http) = { get: "/api/xhs/notes/{note_id}" };
+    option (api.get) = "/api/xhs/notes/:note_id";
+  }
+
+  // GET /api/xhs/notes/:note_id/comments — 小红书评论列表
+  rpc ListXhsComments(ListXhsCommentsRequest) returns (ListXhsCommentsResponse) {
+    option (google.api.http) = { get: "/api/xhs/notes/{note_id}/comments" };
+    option (api.get) = "/api/xhs/notes/:note_id/comments";
+  }
+}
+
+// ───────────── Notes ─────────────
+
+message ListXhsNotesRequest {
+  string keywords = 1 [(api.query) = "keywords"];        // 逗号分隔，命中 source_keyword 或 title LIKE
+  string ids = 2 [(api.query) = "ids"];                   // 逗号分隔 note_id
+  string creator_ids = 3 [(api.query) = "creator_ids"];
+  int64 time_start = 4 [(api.query) = "time_start"];      // unix 秒
+  int64 time_end = 5 [(api.query) = "time_end"];
+  string source_keyword = 6 [(api.query) = "source_keyword"];
+  string sort_field = 7 [(api.query) = "sort_field"];     // time|liked_count|comment_count
+  string sort_order = 8 [(api.query) = "sort_order"];      // desc(默认)/asc
+  int32 limit = 9 [(api.query) = "limit"];                 // 默认 50，上限 200
+  int32 offset = 10 [(api.query) = "offset"];
+}
+
+message ListXhsNotesResponse {
+  int32 total = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  bool truncated = 4;
+  repeated XhsNote rows = 5;
+}
+
+message GetXhsNoteRequest {
+  string note_id = 1 [(api.path) = "note_id"];
+}
+
+// XhsNote — 直接对齐 xhs_note 表字段
+message XhsNote {
+  string note_id = 1;
+  string user_id = 2;
+  string nickname = 3;
+  string title = 4;
+  string desc = 5;
+  string type = 6;             // normal|video（MySQL 保留字，SQL 反引号）
+  string liked_count = 7;      // varchar 原样（如 "1.2k"）
+  string comment_count = 8;
+  string collected_count = 9;
+  string share_count = 10;
+  int64 time = 11;             // 发布时间戳
+  int64 last_update_time = 12;
+  string source_keyword = 13;
+  string note_url = 14;
+  string image_list = 15;      // JSON 文本
+  string tag_list = 16;         // JSON 文本
+}
+
+// ───────────── Comments ─────────────
+
+message ListXhsCommentsRequest {
+  string note_id = 1 [(api.path) = "note_id"];
+  int32 limit = 2 [(api.query) = "limit"];
+  int32 offset = 3 [(api.query) = "offset"];
+}
+
+message ListXhsCommentsResponse {
+  int32 total = 1;
+  repeated XhsComment rows = 2;
+}
+
+message XhsComment {
+  string comment_id = 1;
+  string note_id = 2;
+  string user_id = 3;
+  string nickname = 4;
+  string content = 5;
+  string like_count = 6;
+  int64 create_time = 7;
+  string pictures = 8;          // JSON 文本
+  int32 sub_comment_count = 9;
+}

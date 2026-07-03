@@ -1,1 +1,1 @@
-CREATE SCHEMA IF NOT EXISTS media-crawler;
+CREATE SCHEMA IF NOT EXISTS "media-crawler";

@@ -1,0 +1,183 @@
+syntax = "proto3";
+
+package media_crawler.mcp_crawler;
+
+// MCP tool input/output message 定义（平台无关的编排类 tool）。
+//
+// 本 proto 只定义 message，不定义 service/rpc——MCP tool 走 mcp-go 注册
+// （JSON-RPC over Streamable HTTP，挂 /mcp endpoint），不经 hz 生成 HTTP handler。
+// hz-model 仅生成 Go struct，biz/handler/mcp 手写 handler，复用这些 struct，
+// handler 内手动组装 mcp.CallToolResult（不走默认输出）。
+//
+// get_crawl_status 的 response 复用 crawler.proto 的 JobView（Go 代码 import crawler 包，proto 不重复定义）。
+// 平台专属数据查询 tool 见各平台 MCP proto（如 mcp_xhs.proto）。
+option go_package = "media_crawler/mcp_crawler";
+
+// 编排类 tool 清单（平台无关，带 platform 参数）:
+//   1. list_platforms    2. get_config       3. health_check
+//   4. start_crawler     5. get_crawl_status  6. stop_crawler
+//   7. list_checkpoints  8. delete_checkpoint
+
+// ───────────── 1. list_platforms ─────────────
+
+message ListPlatformsRequest {}
+
+message ListPlatformsResponse {
+  repeated PlatformInfo platforms = 1;
+  repeated GlobalParam global_params = 2;
+}
+
+message PlatformInfo {
+  string platform = 1;
+  string label = 2;
+  repeated string crawler_types = 3;
+  map<string, string> data_tables = 4;   // content/comment/creator → 表名
+  string content_id_field = 5;
+  string time_field = 6;
+  bool needs_login = 7;
+}
+
+message GlobalParam {
+  string name = 1;
+  string source = 2;   // cli/shim
+}
+
+// ───────────── 2. get_config ─────────────
+
+message GetConfigRequest {
+  bool include_sensitive = 1;
+}
+
+message GetConfigResponse {
+  string db_type = 1;
+  string mysql_dsn = 2;                 // include_sensitive=false 时脱敏
+  string redis_addr = 3;
+  string sign_srv_addr = 4;
+  string account_pool_save_type = 5;
+  JobQueueInfo job_queue = 6;
+}
+
+message JobQueueInfo {
+  string running = 1;                   // running job_id 或空
+  int32 queued = 2;
+  int32 max_serial = 3;
+}
+
+// ───────────── 3. health_check ─────────────
+
+message HealthCheckRequest {
+  repeated string probe = 1;           // sign/db/redis/accounts，空=全量
+}
+
+message HealthCheckResponse {
+  string overall = 1;                  // ok/degraded/down
+  ProbeResult sign = 2;
+  ProbeResult db = 3;
+  ProbeResult redis = 4;
+  repeated AccountStatus accounts = 5;
+}
+
+message ProbeResult {
+  bool reachable = 1;
+  int32 latency_ms = 2;
+  string error = 3;
+}
+
+message AccountStatus {
+  string platform = 1;
+  int32 available = 2;
+  int32 total = 3;
+  string status = 4;
+}
+
+// ───────────── 4. start_crawler ─────────────
+
+message StartCrawlerRequest {
+  string platform = 1;
+  string crawler_type = 2;             // search/detail/creator/homefeed/hot_search
+  string keywords = 3;                 // search 必填，逗号分隔
+  repeated string urls = 4;            // detail/creator 必填
+  bool enable_comments = 5;
+  bool enable_sub_comments = 6;
+  int32 max_notes_count = 7;           // shim 注入
+  string save_data_option = 8;         // shim: csv/db/json
+  int32 start_page = 9;                // shim
+  bool enable_checkpoint = 10;
+  string checkpoint_id = 11;           // 续爬
+  int32 hot_search_max_items = 12;
+  int32 hot_search_per_item_count = 13;
+  string on_busy = 14;                // queue(默认)/reject
+  bool wait_for_completion = 15;
+  int32 wait_timeout_seconds = 16;
+  string progress_token = 17;          // MCP progress notification token
+}
+
+message StartCrawlerResponse {
+  string job_id = 1;
+  string status = 2;                   // queued/running/rejected
+  string platform = 3;
+  string crawler_type = 4;
+  string checkpoint_id = 5;
+  int64 queued_at = 6;
+  string note = 7;
+  string conflict_with = 8;           // rejected 时为占用的 job_id
+}
+
+// ───────────── 5. get_crawl_status ─────────────
+
+message GetCrawlStatusRequest {
+  string job_id = 1;
+  int32 include_logs_tail = 2;         // 默认 0
+}
+// response 复用 crawler.proto 的 JobView（含 progress/result_summary/error）
+
+// ───────────── 6. stop_crawler ─────────────
+
+message StopCrawlerRequest {
+  string job_id = 1;
+  string signal = 2;                   // term(默认)/kill
+  bool cleanup_checkpoint = 3;
+}
+
+message StopCrawlerResponse {
+  string job_id = 1;
+  string previous_status = 2;
+  string status = 3;                   // cancelled
+  string checkpoint_id = 4;
+  string signal = 5;
+}
+
+// ───────────── 7. list_checkpoints ─────────────
+
+message ListCheckpointsRequest {
+  string platform = 1;
+  string mode = 2;
+  bool include_completed = 3;
+}
+
+message ListCheckpointsResponse {
+  string storage_type = 1;            // file/redis
+  repeated CheckpointInfo checkpoints = 2;
+}
+
+message CheckpointInfo {
+  string checkpoint_id = 1;
+  string platform = 2;
+  string mode = 3;
+  bool is_completed = 4;
+  int64 created_at = 5;
+  int64 last_modify_ts = 6;
+  int32 crawled_count = 7;            // len(crawled_note_list)
+  string current_keyword = 8;         // checkpoint.current_search_keyword
+  int32 current_page = 9;             // checkpoint.current_search_page
+}
+
+// ───────────── 8. delete_checkpoint ─────────────
+
+message DeleteCheckpointRequest {
+  string checkpoint_id = 1;
+}
+
+message DeleteCheckpointResponse {
+  bool deleted = 1;
+}

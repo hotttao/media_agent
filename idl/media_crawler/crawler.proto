@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package media_crawler.crawler;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+// Hertz 工具链:
+//   make hz-model  -> hertz_gen/model/media_crawler/crawler/crawler.pb.go
+//   make hz-update -> media_crawler/biz/handler/crawler/crawler_service.go
+option go_package = "media_crawler/crawler";
+
+// CrawlerQueryService —— 平台无关的 REST 接口（给前端）。
+// 仅含抓取任务（job）查询；job 是 crawl_job domain，带 platform 字段过滤。
+// 各平台数据查询走独立 proto（如 xhs.proto 的 XhsQueryService）。
+service CrawlerQueryService {
+  // GET /api/crawler/jobs — 抓取任务列表
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {
+    option (google.api.http) = { get: "/api/crawler/jobs" };
+    option (api.get) = "/api/crawler/jobs";
+  }
+
+  // GET /api/crawler/jobs/:job_id — 任务详情（含进度）
+  rpc GetJob(GetJobRequest) returns (JobView) {
+    option (google.api.http) = { get: "/api/crawler/jobs/{job_id}" };
+    option (api.get) = "/api/crawler/jobs/:job_id";
+  }
+}
+
+message ListJobsRequest {
+  string platform = 1 [(api.query) = "platform"];
+  string status = 2 [(api.query) = "status"];          // queued/running/completed/failed/cancelled/rejected
+  int32 limit = 3 [(api.query) = "limit"];
+  int32 offset = 4 [(api.query) = "offset"];
+}
+
+message ListJobsResponse {
+  int32 total = 1;
+  repeated JobView rows = 2;
+}
+
+message GetJobRequest {
+  string job_id = 1 [(api.path) = "job_id"];
+}
+
+// JobView — 任务状态（MCP get_crawl_status 复用此结构，见 mcp_crawler.proto）
+message JobView {
+  string job_id = 1;
+  string status = 2;            // queued/running/completed/failed/cancelled/rejected
+  string platform = 3;
+  string crawler_type = 4;
+  int32 pid = 5;
+  string checkpoint_id = 6;
+  int64 queued_at = 7;
+  int64 started_at = 8;
+  int64 finished_at = 9;
+  JobProgress progress = 10;
+  string result_summary = 11;   // CRAWL_SUMMARY JSON 文本
+  string error = 12;
+}
+
+message JobProgress {
+  string current_keyword = 1;
+  int32 current_page = 2;
+  int32 crawled_count = 3;
+  int32 total_target = 4;
+  double percent = 5;
+}

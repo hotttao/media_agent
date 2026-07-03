@@ -9,6 +9,15 @@ import (
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_crawler/biz/dal"
+	"media_agent/media_crawler/biz/dal/query"
+	"media_agent/media_crawler/biz/dal/query_read"
+	crawldb "media_agent/media_crawler/biz/dal/repo/crawl_job"
+	xhsdb "media_agent/media_crawler/biz/dal/repo/xhs_data"
+	crawlerhandler "media_agent/media_crawler/biz/handler/crawler"
+	mcpserver "media_agent/media_crawler/biz/handler/mcp"
+	xhshandler "media_agent/media_crawler/biz/handler/xhs"
+	crawljob "media_agent/media_crawler/biz/service/crawl_job"
+	xhsdata "media_agent/media_crawler/biz/service/xhs_data"
 )
 
 func main() {
@@ -49,9 +58,28 @@ func main() {
 	}
 	_ = db
 
+	// 爬虫 MySQL（只读，跨库查内容数据）
+	crawlDataDB, err := dal.NewCrawlDataDB(cfg.GetCrawlData())
+	if err != nil {
+		log.Fatalf("init crawl data db: %v", err)
+	}
+	query.SetDefault(db)
+	query_read.SetDefault(crawlDataDB)
+
+	// service 装配（repo → service → handler 注入）
+	jobRepo := crawldb.NewJobRepo(db)
+	txRunner := dal.NewTxRunner(db)
+	crawlSvc := crawljob.NewService(jobRepo, txRunner, cfg.GetCrawler())
+	xhsRepo := xhsdb.NewXhsRepo(crawlDataDB)
+	xhsSvc := xhsdata.NewService(xhsRepo)
+
+	crawlerhandler.Svc = crawlSvc
+	xhshandler.Svc = xhsSvc
+
 	h := suite.NewServer()
 	register(h)
 	suite.RegisterRoutes(h)
+	mcpserver.Register(h, crawlSvc, xhsSvc)
 
 	if err := suite.RegisterService(); err != nil {
 		log.Fatalf("register service: %v", err)

@@ -46,6 +46,7 @@ client:
       write_timeout_ms: 5000
       request_timeout_ms: 10000
 
+  media_auth:
     enabled: true
     service_name: media-auth
     base_domain: ${MEDIA_AUTH_ADDR:-http://127.0.0.1:8889}

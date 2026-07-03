@@ -9,8 +9,8 @@ option go_package = "media_crawler/health";
 
 service HealthService {
   rpc Health(HealthRequest) returns (HealthResponse) {
-    option (api.get) = "/health";
-    option (google.api.http) = { get: "/health" };
+    option (api.get) = "/api/health";
+    option (google.api.http) = { get: "/api/health" };
   }
 }
 

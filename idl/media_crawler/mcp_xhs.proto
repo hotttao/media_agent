@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package media_crawler.mcp_xhs;
+
+import "media_crawler/xhs.proto";
+
+// MCP tool input/output message 定义（小红书数据查询类 tool）。
+//
+// 本 proto 只定义 message，不定义 service/rpc——MCP tool 走 mcp-go 注册。
+// 与 xhs.proto（REST）共享 XhsNote / XhsComment。
+// 各平台数据查询 tool 各放独立 MCP proto（如 mcp_dy.proto）。
+option go_package = "media_crawler/mcp_xhs";
+
+// tool 清单（v1 仅 xhs 数据查询）:
+//   1. query_xhs_notes     2. query_xhs_comments
+
+// ───────────── 1. query_xhs_notes ─────────────
+
+message QueryXhsNotesRequest {
+  repeated string keywords = 1;
+  repeated string ids = 2;             // note_id
+  repeated string creator_ids = 3;
+  int64 time_start = 4;
+  int64 time_end = 5;
+  string source_keyword = 6;
+  string sort_field = 7;              // time|liked_count|comment_count
+  string sort_order = 8;              // desc/asc
+  int32 limit = 9;                    // 默认 50，上限 200
+  int32 offset = 10;
+}
+
+message QueryXhsNotesResponse {
+  int32 total = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  bool truncated = 4;
+  repeated xhs.XhsNote rows = 5;          // 复用 xhs.proto
+}
+
+// ───────────── 2. query_xhs_comments ─────────────
+
+message QueryXhsCommentsRequest {
+  string note_id = 1;
+  repeated string ids = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message QueryXhsCommentsResponse {
+  int32 total = 1;
+  repeated xhs.XhsComment rows = 2;        // 复用 xhs.proto
+}

@@ -36,6 +36,12 @@ import (
 	// hello 是 media_example 的子包（service 二级）；父包 init() 把它挂到 MediaExampleCmd。
 	_ "media_agent/media_cli/cmd/media_example/hello"
 
+	// media_crawler 子命令（REST crawler/xhs + MCP tool）
+	_ "media_agent/media_cli/cmd/media_crawler"
+	_ "media_agent/media_cli/cmd/media_crawler/crawler"
+	_ "media_agent/media_cli/cmd/media_crawler/mcp"
+	_ "media_agent/media_cli/cmd/media_crawler/xhs"
+
 	clisub "media_agent/media_cli/cmd/client"
 	authsub "media_agent/media_cli/cmd/media_auth/auth"
 	hellosub "media_agent/media_cli/cmd/media_example/hello"
@@ -72,8 +78,10 @@ func main() {
 	}()
 
 	// 4. 把 cfg 分发给需要它的子系统。
-	hellosub.Init(cfg) // 共享 HelloService typed client
-	clisub.Init(cfg)   // e2e 测试 clienthertz 治理参数
+	if cfg.GetClient()["media_example"] != nil {
+		hellosub.Init(cfg) // 共享 HelloService typed client
+	}
+	clisub.Init(cfg) // e2e 测试 clienthertz 治理参数
 
 	// 4.1 cookie store 落盘目录 = media-cli 工作目录（chdir 后已是 media-cli/）。
 	cmd.CookiesDir = "."
