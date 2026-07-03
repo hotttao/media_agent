@@ -12,11 +12,10 @@ Follow the unit testing guide: [unit-test.md](../harness/contributing/unit-test.
 
 Follow the E2E guide: [e2e.md](../harness/contributing/e2e.md)
 
-## Config 
+## Config
 
 Follow the config guide: [config.md](../harness/contributing/config.md)
 
-
-## IDL 
+## IDL
 
 Follow the idl guide: [idl.md](../harness/contributing/idl.md)

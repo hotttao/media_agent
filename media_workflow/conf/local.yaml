@@ -1,16 +1,3 @@
-# local.yaml — 本地测试配置
-#
-# 语义：env=local = 「本机 + docker-compose 全栈」启动。
-# 预期配套组件已起：MySQL、Redis、Consul agent、OTel collector、Prometheus。
-# YAML 是 source of truth，本地 .env 只放 APP_ENV 与少量覆盖变量。
-#
-# 与 dev.yaml 的差别：local 全启用（开发与 e2e 都方便），dev 只开可观测。
-#
-# 字段约定（harness/contributing/config.md）：
-#   - snake_case
-#   - 治理类 message 第一字段统一 bool enabled = 1
-#   - 服务名走 app.name，不用 service.name
-
 app:
   name: media-workflow
   version: v1
@@ -19,70 +6,32 @@ app:
 server:
   enabled: true
   address: ${SERVER_ADDR:-:8002}
-  timeout:
-    enabled: true
-    connect_timeout_ms: 200
-    read_timeout_ms: 10000
-    write_timeout_ms: 10000
-    request_timeout_ms: 15000
 
-# ---- 数据存储 ----
 database:
   enabled: true
   driver: postgres
-  dsn: ${POSTGRES_DSN:-postgres://media_workflow:media_workflow@127.0.0.1:5432/media_workflow?sslmode=disable}
+  dsn: ${POSTGRES_DSN:-postgres://media_auth:media_auth@127.0.0.1:5432/media_workflow?sslmode=disable}
   max_open_conns: 50
   max_idle_conns: 10
-  conn_max_lifetime_seconds: 3600
-  migrate_on_start: true # 启动期自动迁移（local 全栈）
+  migrate_on_start: true
 
-redis:
-  enabled: true
-  address: ${REDIS_ADDR:-127.0.0.1:6379}
-  password: ${REDIS_PASSWORD:-}
-  db: 0
-  pool_size: 20
-  dial_timeout_ms: 200
-
-# ---- 注册中心 / 服务发现 ----
-# consul：服务端注册（本服务把自己注册进去）
 consul:
-  enabled: true
-  address: ${CONSUL_ADDR:-127.0.0.1:8500}
-  scheme: http
-  service_address: ${CONSUL_SERVICE_ADDRESS:-127.0.0.1}
-  service_port: ${CONSUL_SERVICE_PORT:-8888}
-  tags: [local]
-  health_check_path: /health
-  health_check_interval_seconds: 5
-  deregister_critical_after_seconds: 30
+  enabled: ${CONSUL_ENABLED:-false}
 
-# consul_discovery：客户端发现（本服务调下游时拿地址）
-consul_discovery:
-  enabled: true
-  address: ${CONSUL_DISCOVERY_ADDR:-127.0.0.1:8500}
-  scheme: http
-  refresh_interval_seconds: 5
+consul_kv:
+  enabled: ${CONSUL_KV_ENABLED:-false}
 
-# ---- 可观测（全开） ----
 otel:
-  enabled: true
-  export_endpoint: ${OTEL_EXPORT_ENDPOINT:-localhost:4317}
-  insecure: true
-  sample_ratio: 1.0
+  enabled: ${OTEL_ENABLED:-false}
 
 prometheus:
-  enabled: true
-  address: ${PROMETHEUS_ADDR:-:9091}
-  path: /metrics
+  enabled: ${PROMETHEUS_ENABLED:-false}
 
 access_log:
   enabled: true
   format: "[${time}] ${status} - ${latency} ${method} ${path}"
   time_format: "2006-01-02T15:04:05Z"
 
-# 结构化应用日志（zap + lumberjack 落盘 + zapotel 注入 trace_id/span_id）
-# dir 为空时仅写 stdout；e2e 时通过 LOG_DIR 指向 media_logs/<app> 绝对路径供 filebeat 采集。
 log:
   enabled: true
   level: ${LOG_LEVEL:-debug}
@@ -94,7 +43,6 @@ log:
   compress: true
   console: true
 
-# ---- 服务端中间件 ----
 recovery:
   enabled: true
   print_stack: true
@@ -111,22 +59,6 @@ cors:
   allow_credentials: false
   max_age_seconds: 600
 
-# 限流（sentinel）：本地用低阈值便于观察效果
-# resource 为 "<app>:<method>:<path>" 形式；空=不下发固定规则（middleware 仍按动态资源名提取）。
-rate_limit:
-  - enabled: true
-    resource: "media-workflow:GET:/hello"
-    threshold: 50
-    stat_interval_ms: 1000
-    # token_calculate_strategy: direct / warmup / memory_adaptive（默认 direct）
-    token_calculate_strategy: direct
-    # control_behavior: reject / throttling（默认 reject）
-    control_behavior: reject
-    # max_queueing_time_ms: 500   # 仅 throttling 生效
-    # warm_up_period_sec: 10      # 仅 warmup 生效，须 >0
-    # warm_up_cold_factor: 3      # 仅 warmup 生效，须 >1
-
-# ---- 运维端点 ----
 pprof:
   enabled: true
   prefix: "/debug/pprof"
@@ -134,34 +66,3 @@ pprof:
 health:
   enabled: true
   path: "/health"
-
-# ---- 配置中心（Consul KV） ----
-# 本地启用：便于手动验证「改 KV → reload → 订阅者回调」链路
-consul_kv:
-  enabled: ${CONSUL_KV_ENABLED:-true}
-  address: ${CONSUL_KV_ADDR:-127.0.0.1:8500}
-  data_id: ${CONSUL_KV_DATA_ID:-media-workflow/config}
-
-# ---- 下游 client（按需添加） ----
-# client:
-#   media_scheduler:
-#     enabled: true
-#     service_name: "media-scheduler"
-#     base_domain: "discovery://media-scheduler"
-#     use_discovery: true
-#     timeout:
-#       enabled: true
-#       connect_timeout_ms: 200
-#       read_timeout_ms: 1000
-#     retry:
-#       enabled: true
-#       max_attempt_times: 3
-#       initial_delay_ms: 50
-#       max_delay_ms: 2000
-#     circuit_breaker:
-#       enabled: true
-#       strategy: "error_ratio"
-#       threshold: 0.5
-#       retry_timeout_ms: 5000
-#       min_request_amount: 20
-#       max_allowed_rt_ms: 1000   # 仅 slow_request_ratio 生效：rt 上限(ms)

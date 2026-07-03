@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package health;
+
+import "api.proto";
+
+option go_package = "media_agent/<MODULE>/biz/health";
+
+service Health {
+  rpc Health(HealthRequest) returns (HealthResponse) {
+    option (api.get) = "/health";
+  }
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+}
