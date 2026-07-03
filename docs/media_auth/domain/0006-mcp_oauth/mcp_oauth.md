@@ -133,7 +133,7 @@ mcp_oauth 负责 media_auth 反向作为 OAuth client 连接第三方 MCP 服务
 - [auth](../0001-auth/auth.md) — 复用 session.sub 作为 user_id
 
 ### 参与的 workflow
-- [mcp_oauth_connect](../0003-mcp-oauth-connect/mcp_oauth_connect.md) — 作为 OAuth client 主驱动
+- [mcp_oauth_connect](../../workflow/0003-mcp-oauth-connect/mcp_oauth_connect.md) — 作为 OAuth client 主驱动
 
 ### 关联术语
-[MCP OAuth Client](../CONTEXT.md)、[MCP OAuth Token](../CONTEXT.md)、[Refresh Failure Grace](../CONTEXT.md)
+[MCP OAuth Client](../../CONTEXT.md)、[MCP OAuth Token](../../CONTEXT.md)、[Refresh Failure Grace](../../CONTEXT.md)

@@ -2,8 +2,8 @@
 
 > 本文是 media_auth 微服务的**自包含**实现规格：研发只看本文即可完成实现。
 > 依据 `harness/contributing`（idl / architecture / server / config）+ DDD + agent-platform `control-plane` 认证实现编写。
-> 详细领域语义见领域模型 [`docs/media_auth/`](../media_auth/)（CONTEXT / 6 domain / 4 workflow）；架构决策见 [ADR-0001](../adr/0001-media-auth-extraction-and-token-verification.md)、[ADR-0002](../adr/0002-platform-token-plaintext-column.md)。
-> 落地计划见 [plan/media_auth.md](../plan/media_auth.md)。
+> 详细领域语义见领域模型 [`docs/media_auth/`](../../media_auth/)（CONTEXT / 6 domain / 4 workflow）；架构决策见 [ADR-0001](../../adr/0001-media-auth-extraction-and-token-verification.md)、[ADR-0002](../../adr/0002-platform-token-plaintext-column.md)。
+> 落地计划见 [plan/media_auth/rollout.md](../../plan/media_auth/rollout.md)。
 
 ---
 
@@ -694,7 +694,7 @@ token_verify:                            # internal VerifyToken(mTLS) listener
 |---|---|---|---|
 | 4 前缀反代 | browser → media_auth | control_plane 网关反代 `/api/auth` `/api/oauth` `/api/service-tokens` `/api/mcp-oauth` | ADR-0001 |
 | cookie/session 鉴权 | media_auth 自闭环 | media_auth 签+验 cookie JWT | wecom_login_bind |
-| VerifyToken | control_plane → media_auth | mTLS internal RPC，opaque service_token→Subject | [service_token_verification](../workflow/0001-service-token-verification.md) |
+| VerifyToken | control_plane → media_auth | mTLS internal RPC，opaque service_token→Subject | [service_token_verification](../../workflow/0001-service-token-verification.md) |
 | JWT 本地验 | control_plane 自闭环 | HS256 共享密钥验 cookie/bearer JWT | ADR-0001 |
 | notifyAgentReload | media_auth → control_plane | MCP OAuth 回调成功后通知 workspace reload config | mcp_oauth_connect |
 | getPlatformToken | control_plane → media_auth | 内部接口取 agent 回调用 platform token 明文 | service_token domain |

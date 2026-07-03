@@ -1,7 +1,7 @@
 # media_auth 落地计划 (plan)
 
 > 状态：待实装（P1）
-> 范围：按 [spec/media_auth.md](../spec/media_auth.md) 把 control-plane 认证鉴权能力抽成独立 media_auth Go/Hertz 微服务。
+> 范围：按 [spec/media_auth/impl.md](../../spec/media_auth/impl.md) 把 control-plane 认证鉴权能力抽成独立 media_auth Go/Hertz 微服务。
 > 规范依据（裁决优先级）：`harness/contributing/architecture.md`（层边界/import，冲突时优先）> `server.md`（服务端治理收口）> `idl.md`（IDL 约束）> `config.md`（配置 schema）。
 > 领域模型：`docs/media_auth/`（CONTEXT / 6 domain / 4 workflow）；架构决策：`docs/adr/0001`、`docs/adr/0002`。
 
@@ -12,9 +12,9 @@
 - [x] 领域模型：`docs/media_auth/`（CONTEXT + 6 domain + change + 3 service workflow）
 - [x] 跨服务 workflow：`docs/workflow/0001-service-token-verification.md`
 - [x] ADR：`docs/adr/0001`（token 校验契约）、`docs/adr/0002`（platform token 明文列）
-- [x] spec：`docs/spec/media_auth.md`（自包含）
+- [x] spec：`docs/spec/media_auth/impl.md`（自包含）
 
-> 注：上述 IDL/SQL 仍位于 `docs/research/media_auth/`（个人前期调研稿，非正式）。P1 第 1 步将其落到代码规范位置 `idl/media_auth/` 与 `media_auth/migrations/`，正式内容以 `docs/spec/media_auth.md` 为准，research 稿保留作历史。
+> 注：上述 IDL/SQL 仍位于 `docs/research/media_auth/`（个人前期调研稿，非正式）。P1 第 1 步将其落到代码规范位置 `idl/media_auth/` 与 `media_auth/migrations/`，正式内容以 `docs/spec/media_auth/impl.md` 为准，research 稿保留作历史。
 
 ## 1. P1 — media_auth 独立 Go service 骨架与实现
 

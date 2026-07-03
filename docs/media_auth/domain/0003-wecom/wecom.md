@@ -95,7 +95,7 @@ wecom 负责企微 corp OAuth 流程（corp 凭证获取、扫码 URL、callback
 - [auth](../0001-auth/auth.md) — 登录成功签 session + ensurePlatformToken
 
 ### 参与的 workflow
-- [wecom_login_bind](../0001-wecom-login-bind/wecom_login_bind.md) — 作为登录通道主驱动
+- [wecom_login_bind](../../workflow/0001-wecom-login-bind/wecom_login_bind.md) — 作为登录通道主驱动
 
 ### 关联术语
-[WeCom Login Channel](../CONTEXT.md)、[Provider](../CONTEXT.md)、[Session](../CONTEXT.md)
+[WeCom Login Channel](../../CONTEXT.md)、[Provider](../../CONTEXT.md)、[Session](../../CONTEXT.md)

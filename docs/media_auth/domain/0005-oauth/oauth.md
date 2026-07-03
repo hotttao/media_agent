@@ -140,7 +140,7 @@ grant_type=urn:ietf:params:oauth:grant-type:token-exchange:
 - [auth](../0001-auth/auth.md) — 复用 users 读取 + JWT 签名密钥/算法
 
 ### 参与的 workflow
-- [oauth_authorize_code_flow](../0002-oauth-authorize-code-flow/oauth_authorize_code_flow.md) — 作为 AS 主驱动
+- [oauth_authorize_code_flow](../../workflow/0002-oauth-authorize-code-flow/oauth_authorize_code_flow.md) — 作为 AS 主驱动
 
 ### 关联术语
-[OAuth Client](../CONTEXT.md)、[Authorization Code](../CONTEXT.md)、[Refresh Token](../CONTEXT.md)、[Access Token](../CONTEXT.md)、[Token Exchange](../CONTEXT.md)
+[OAuth Client](../../CONTEXT.md)、[Authorization Code](../../CONTEXT.md)、[Refresh Token](../../CONTEXT.md)、[Access Token](../../CONTEXT.md)、[Token Exchange](../../CONTEXT.md)

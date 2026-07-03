@@ -132,7 +132,7 @@ verifySession(cookie):
 - [oauth](../0005-oauth/oauth.md) — access/refresh token 的 user 解析复用 users 读取
 
 ### 参与的 workflow
-- [wecom_login_bind](../0001-wecom-login-bind/wecom_login_bind.md) — 在 workflow 中作为 session 签发方参与
+- [wecom_login_bind](../../workflow/0001-wecom-login-bind/wecom_login_bind.md) — 在 workflow 中作为 session 签发方参与
 
 ### 关联术语
-[Session](../CONTEXT.md)、[User](../CONTEXT.md)、[Auth Source](../CONTEXT.md)、[Platform Token](../CONTEXT.md)
+[Session](../../CONTEXT.md)、[User](../../CONTEXT.md)、[Auth Source](../../CONTEXT.md)、[Platform Token](../../CONTEXT.md)

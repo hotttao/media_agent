@@ -89,7 +89,7 @@ identity 负责用户外部身份绑定（`(provider, external_id) → user_id`�
 - [wecom](../0003-wecom/wecom.md) — 登录解析 user_id、绑定写入
 
 ### 参与的 workflow
-- [wecom_login_bind](../0001-wecom-login-bind/wecom_login_bind.md) — 作为身份映射层参与
+- [wecom_login_bind](../../workflow/0001-wecom-login-bind/wecom_login_bind.md) — 作为身份映射层参与
 
 ### 关联术语
-[Identity](../CONTEXT.md)、[Provider](../CONTEXT.md)、[WeCom Login Channel](../CONTEXT.md)
+[Identity](../../CONTEXT.md)、[Provider](../../CONTEXT.md)、[WeCom Login Channel](../../CONTEXT.md)

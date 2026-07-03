@@ -109,4 +109,4 @@ service_token 负责 B2B API 调用凭证 `tos_xxx` 的创建、列表、撤销�
 - [service_token_verification](../../../workflow/0001-service-token-verification.md) — 作为主体解析方参与跨服务校验
 
 ### 关联术语
-[Service Token](../CONTEXT.md)、[Platform Token](../CONTEXT.md)、[VerifyToken](../CONTEXT.md)、[Subject](../CONTEXT.md)
+[Service Token](../../CONTEXT.md)、[Platform Token](../../CONTEXT.md)、[VerifyToken](../../CONTEXT.md)、[Subject](../../CONTEXT.md)

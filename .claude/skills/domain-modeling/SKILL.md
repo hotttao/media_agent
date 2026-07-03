@@ -14,21 +14,31 @@ description: 搭建并完善项目领域模型。适用于用户需要明确领�
 /
 ├── CONTEXT-MAP.md                                  # 全局业务术语路由表，标注每个业务域的存放路径
 ├── docs/
-│   └── adr/                                    # 全局系统级架构决策记录
-│   └── workflow/                               # 全系统跨服务工作流
-│       ├── 0001-event-sourced-orders.md 
-│       └── 0002-postgres-for-write-model.md
-│   └── <service>                                # 服务层文档
-│       ├── CONTEXT.md                           # 服务层业务术语
-│       ├── 0001-<domain>                             
-│       |   ├── <domain>.md                      # 服务层领域文档
-│       |   ├── change.md                        # 服务层领域变更记录
-│       ├── 0001-<workflow>                      
-│       |   ├── <workflow>.md                    # 服务层工作流文档
-│       |   ├── change.md                        # 服务层工作流变更记录
-│   └── plan/                                    
-│   └── spec/ 
+│   ├── adr/                                        # 全局系统级架构决策记录
+│   ├── workflow/                                   # 全系统跨服务工作流
+│   │   ├── 0001-event-sourced-orders.md 
+│   │   └── 0002-postgres-for-write-model.md
+│   ├── <service>/                                  # 服务层文档
+│   │   ├── CONTEXT.md                              # 服务层业务术语
+│   │   ├── domain/                                 # 服务层领域文档归档，0001- 仅在 domain 内编号
+│   │   │   └── 0001-<domain>/
+│   │   │       ├── <domain>.md                     # 服务层领域文档
+│   │   │       └── change.md                       # 服务层领域变更记录
+│   │   └── workflow/                               # 服务层工作流文档归档，0001- 仅在 workflow 内编号
+│   │       └── 0001-<workflow>/
+│   │           ├── <workflow>.md                   # 服务层工作流文档
+│   │           └── change.md                      # 服务层工作流变更记录
+│   ├── plan/                                       # 落地计划：跨服务放顶层，服务级按 <service>/ 分目录
+│   │   ├── <topic>.md                              # 跨服务计划（顶层，单文件）
+│   │   └── <service>/                              # 服务级计划（一服务一目录）
+│   │       └── <milestone>.md                      # 按里程碑/主题拆分
+│   └── spec/                                       # 实现规格：跨服务放顶层，服务级按 <service>/ 分目录
+│       ├── <topic>.md                              # 跨服务规格（顶层，单文件）
+│       └── <service>/                              # 服务级规格（一服务一目录）
+│           └── <milestone>.md                      # 按里程碑/主题拆分
 ```
+
+> `<service>/` 下通过 `domain/` 与 `workflow/` 两个子目录区分领域与工作流：`0001-` 数字编号仅在各自子目录内计数，互不干扰。这样 `0001-auth`（domain）与 `0001-wecom-login-bind`（workflow）分属不同目录，无需打开文件即可辨别类型。
 
 文件采用懒创建机制：仅在有内容需要记录时新建文件。
 - 若无 `CONTEXT.md`，敲定第一个业务术语后再创建；
@@ -67,6 +77,24 @@ description: 搭建并完善项目领域模型。适用于用户需要明确领�
 3. **经过多方权衡取舍**：当初存在多种可行方案，基于明确理由选定当前方案。
 
 任意一条不满足，则无需编写ADR；ADR文档格式遵循同目录 `ADR-FORMAT.md`。
+
+### plan 与 spec 文档规范
+
+`plan` 与 `spec` 是从设计文档落地到工程实现的两类文档，遵循**与领域文档一致的服务分层**：服务级与跨服务分开放置。
+
+**目录分层规则**：
+- **服务级**（只涉及单个服务的代码/数据）：放在 `docs/plan/<service>/` 与 `docs/spec/<service>/` 下，**一个服务一个目录**。目录内可放单份主文档，也可按里程碑/主题拆成多份（如 `0001-rollout.md`、`0002-migration.md`）。
+- **跨服务**（涉及多个服务或全系统基础设施，如可观测性、目录结构重构）：直接放在顶层 `docs/plan/<topic>.md` 与 `docs/spec/<topic>.md`，单文件。
+
+判定标准：若文档的全部落地项都落在同一个 service 的代码/迁移内，属服务级；若横跨 ≥2 个 service 或属于 workspace 级基础设施，属跨服务。
+
+**spec（实现规格）**：自包含的技术实现规格——研发只看本文即可完成实现，不必再翻阅领域文档拼凑细节。基于 `<workflow>.md`、`<domain>.md`、`change.md` 与 `Harness 架构规范` 生成，内容通常包括：概述与边界、目录结构、数据模型（表/字段）、接口契约（IDL/路由）、关键能力实现、配置项等。spec 记录"实现成什么样"，不记录"为什么这么设计"（那是 ADR），也不记录"怎么排期落地"（那是 plan）。
+
+**plan（落地计划）**：基于 spec 的工程化拆解——把 spec 的实现内容切成可执行的阶段（P1/P2/...）与带勾选的 checklist，并标注阶段间依赖、风险与对策、验收标准。plan 只描述"怎么把 spec 落地"，不重复 spec 的设计内容。
+
+**与文档更新流程的关系**：spec 先于 plan（流程 step 6→7）。spec 定稿后才有 plan；plan 变更若触及设计，须先回改 spec 与领域文档，再同步 plan。
+
+文件采用懒创建机制：仅在 spec/plan 真正需要撰写时创建对应目录与文件。
 
 ### Harness 架构规范
 通常每一个 service 都会有自己的 Harness 架构规范文档，架构规范文档里会详细记录 domain 和 workflow 在代码中的位置。在对齐设计文档与实现时，需要详细参考 Harness 文档的规范，建立设计与代码的映射视图。
