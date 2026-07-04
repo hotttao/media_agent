@@ -1,0 +1,40 @@
+# template domain 变更记录
+
+## 2026-07-03 · 初始建模（media_agent v1）
+由 `media_ai` 的 `prompt_template` 设计迁入并扩展：
+
+- 旧 prompt_template 用 `input_schema.variables[]`（从 `text/template` 解析）与 `output_type`（单值字符串）；本版改为 inputs[]/outputs[] 显式声明型 slot（`Template Slot`），同时放弃 Go `text/template` 强语义，改成 `{slot_name}` 占位符。
+- Template 表新增 `scope` 字段，强约束 1:1 且不可改；同步引入 `template_slots` 表把 inputs/outputs 落到关系表里。
+- `status` 由旧版 draft/published/archived 一致沿用；update 自增 version；旧 version 不可改。
+
+## 修改记录
+
+### 2026-07-03 · 第二轮反馈：允许 const 满足 required input
+- 影响：Render 接口的 ResolvedSlot 增加 `SlotSource = asset|const` 字段。`asset` 由 `media_workflow.workflow_execution` 解析 binding 后通过 `AssetRead` 填充；`const` 由 step binding.const_value 直接填入。
+- 渲染规则：source 分两路，prompt_body 中 `{name}` 都能被替换；`{name.key}` 在 source=const 时不支持。
+
+### 2026-07-03 · 第三轮反馈：template 作为资源级 ACL 实体
+- 加 `visibility ∈ {private, team, public}` 与 `template_grants (template_id, team_id, permission)`，与 skill / virtual_ip / workflow 同模型。
+- 加 GrantTemplate / RevokeTemplate / ChangeVisibility 三个 endpoint；Delete 限 owner。
+- 校验时机：每次 service 方法入口先 `LoadMyPermission(user, template)`，不足 403。
+
+### 2026-07-03 · Review 反馈：output 改回单一（反转第一轮多输出决策）
+- 第一轮 Q&A 曾定 `outputs[]` 为多输出列表；用户 review 时纠正"Template outputs 是单一输出，不会有多个输出"，本节反转该决策。
+- 改动：`outputs []Slot` → 单一 `output_resource_type` 字段（提升到 `templates` 表）；`template_slots` 表去掉 `kind` 列并更名为 `template_inputs`（只存输入槽位）；Render 返回 `OutputType string`（原 `OutputTypes []string`）；StepRun 产物 `output_asset_ids` → `output_asset_id`（单值）。
+- 连带：`source=step_output` 的 StepBinding **不需要**指定前驱 step 的哪个 output（曾因此考虑加 `ref_step_output_name`，现已废弃）——前驱 step 恒定产出单一 asset，`ref_step_key` 足够。
+
+### 2026-07-03 · Review 反馈：全面对齐 media_ai 的 asset_kind 模型
+- input slot 改为单一 `kind` 字段（asset_kind name），去掉 `resource_type` + `asset_kind` 两字段；media_type / resource_type / 落表均由 kind 推导。
+- output 改为 `output_asset_kind`（asset_kind name，resource_type=ASSET），取代 `output_resource_type`。修正 P0-4（产物 asset_kind 由 template 定义时设置）。
+- Template 新增 `platform` / `gen_way` / `gen_type` 生成路由字段，供 workflow_execution 分发下游生成器。
+- Render 返回 `OutputAssetKind` + `OutputMediaType`（从 asset_kind.media_type 推导），取代 `OutputType`。
+- 校验：input slot.kind 与 output_asset_kind 必须在 asset_kind 注册表已注册且未停用（调 `BatchGetAssetKind`）。
+
+## 来自业务规则的强约束
+1. `Scope` 不可变（不允许 update 时跨 scope）。原因：跨 scope 引用会让旧 version 失效，破坏可重现性。
+2. `Inputs` 内部 `Name` 唯一。
+3. `Required` 仅 input 槽位生效。
+4. Template 是 owner-creator 制（不是 team-owned）。一个 user 可拥有多个 Template，团队共享走 grants 路径。
+5. `visibility=public` 也受 `scope` 业务线隔离——任何 user 跨 scope 看到 public template 不会被拒（read 不拒），但若把 public template 绑到另一 scope 的 workflow，则 workflow_validation 拒 `SCOPE_MISMATCH`。
+6. **单一 output**：一个 Template 恒定产出**一个** generated_asset，类别由 `output_asset_kind` 决定；不支持多输出。
+7. input slot.kind / output_asset_kind 引用全局 asset_kind 注册表（无 scope）；kind 决定 media_type / resource_type / 落表。

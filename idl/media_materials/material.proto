@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package media_materials.material;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_materials/material";
+
+// MaterialService —— curated 原料 CRUD + material_bindings（material ↔ virtual_ip / product）。
+service MaterialService {
+  rpc CreateMaterial(CreateMaterialReq) returns (Material) {
+    option (google.api.http) = { post: "/api/v1/materials" body: "*" };
+    option (api.post) = "/api/v1/materials";
+  }
+  rpc GetMaterial(GetMaterialReq) returns (Material) {
+    option (google.api.http) = { get: "/api/v1/materials/{id}" };
+    option (api.get) = "/api/v1/materials/:id";
+  }
+  rpc ListMaterials(ListMaterialsReq) returns (ListMaterialsResp) {
+    option (google.api.http) = { get: "/api/v1/materials" };
+    option (api.get) = "/api/v1/materials";
+  }
+  // ListMaterialsByOwner —— 给编排层组装 bundle 用：按 virtual_ip / product 列出绑定的 material。
+  rpc ListMaterialsByOwner(ListMaterialsByOwnerReq) returns (ListMaterialsByOwnerResp) {
+    option (google.api.http) = { get: "/api/v1/materials/by-owner" };
+    option (api.get) = "/api/v1/materials/by-owner";
+  }
+  rpc UpdateMaterial(UpdateMaterialReq) returns (Material) {
+    option (google.api.http) = { put: "/api/v1/materials/{id}" body: "*" };
+    option (api.put) = "/api/v1/materials/:id";
+  }
+  rpc DeleteMaterial(GetMaterialReq) returns (Material) {
+    option (google.api.http) = { delete: "/api/v1/materials/{id}" };
+    option (api.delete) = "/api/v1/materials/:id";
+  }
+  rpc AddMaterialBinding(AddMaterialBindingReq) returns (Material) {
+    option (google.api.http) = { post: "/api/v1/materials/{material_id}/bindings" body: "*" };
+    option (api.post) = "/api/v1/materials/:material_id/bindings";
+  }
+  rpc RemoveMaterialBinding(RemoveMaterialBindingReq) returns (Material) {
+    option (google.api.http) = { delete: "/api/v1/materials/{material_id}/bindings/{owner_kind}/{owner_id}" };
+    option (api.delete) = "/api/v1/materials/:material_id/bindings/:owner_kind/:owner_id";
+  }
+}
+
+message Material {
+  string id = 1;
+  string scope = 2;
+  string name = 3;
+  string asset_kind = 4;       // → asset_kinds.name (resource_type=MATERIAL)
+  string url = 5;              // IMAGE/VIDEO
+  string content = 6;          // TEXT
+  string owner_user_id = 7;
+  string visibility = 8;       // private/team/public
+  string team_id = 9;
+  int64 created_at = 10;
+  int64 updated_at = 11;
+}
+
+message CreateMaterialReq {
+  string scope = 1 [(api.query) = "scope"];
+  string name = 2 [(api.body) = "name"];
+  string asset_kind = 3 [(api.body) = "asset_kind"];
+  string url = 4 [(api.body) = "url"];
+  string content = 5 [(api.body) = "content"];
+  string owner_user_id = 6 [(api.query) = "owner_user_id"];
+  string visibility = 7 [(api.body) = "visibility"];
+  string team_id = 8 [(api.body) = "team_id"];
+}
+
+message GetMaterialReq {
+  string id = 1 [(api.path) = "id"];
+}
+
+message ListMaterialsReq {
+  string scope = 1 [(api.query) = "scope"];
+  string asset_kind = 2 [(api.query) = "asset_kind"];
+  string owner = 3 [(api.query) = "owner"];
+  string visibility = 4 [(api.query) = "visibility"];
+  int32 page = 5 [(api.query) = "page"];
+  int32 page_size = 6 [(api.query) = "page_size"];
+}
+
+message ListMaterialsResp {
+  repeated Material items = 1;
+  int32 total = 2;
+}
+
+message ListMaterialsByOwnerReq {
+  string owner_kind = 1 [(api.query) = "owner_kind"];   // virtual_ip / product
+  string owner_id = 2 [(api.query) = "owner_id"];
+}
+
+message ListMaterialsByOwnerResp {
+  repeated Material items = 1;
+}
+
+message UpdateMaterialReq {
+  string id = 1 [(api.path) = "id"];
+  string name = 2 [(api.body) = "name"];
+  string url = 3 [(api.body) = "url"];
+  string content = 4 [(api.body) = "content"];
+  string visibility = 5 [(api.body) = "visibility"];
+  string team_id = 6 [(api.body) = "team_id"];
+}
+
+message AddMaterialBindingReq {
+  string material_id = 1 [(api.path) = "material_id"];
+  string owner_kind = 2 [(api.body) = "owner_kind"];    // virtual_ip / product
+  string owner_id = 3 [(api.body) = "owner_id"];
+  string bound_by = 4 [(api.query) = "bound_by"];
+}
+
+message RemoveMaterialBindingReq {
+  string material_id = 1 [(api.path) = "material_id"];
+  string owner_kind = 2 [(api.path) = "owner_kind"];
+  string owner_id = 3 [(api.path) = "owner_id"];
+}

@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package media_materials.generated_asset;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_materials/generated_asset";
+
+// GeneratedAssetService —— workflow 产物。
+// 创建由 media_workflow 调 UpsertGeneratedAsset（内部 RPC）；前端只读 + 删。
+service GeneratedAssetService {
+  rpc GetGeneratedAsset(GetGeneratedAssetReq) returns (GeneratedAsset) {
+    option (google.api.http) = { get: "/api/v1/generated-assets/{id}" };
+    option (api.get) = "/api/v1/generated-assets/:id";
+  }
+  rpc ListGeneratedAssets(ListGeneratedAssetsReq) returns (ListGeneratedAssetsResp) {
+    option (google.api.http) = { get: "/api/v1/generated-assets" };
+    option (api.get) = "/api/v1/generated-assets";
+  }
+  // ListGeneratedAssetsBySource —— 给编排层组装 bundle 用：按 source virtual_ip / product 列出产物。
+  rpc ListGeneratedAssetsBySource(ListGeneratedAssetsBySourceReq) returns (ListGeneratedAssetsBySourceResp) {
+    option (google.api.http) = { get: "/api/v1/generated-assets/by-source" };
+    option (api.get) = "/api/v1/generated-assets/by-source";
+  }
+  rpc DeleteGeneratedAsset(GetGeneratedAssetReq) returns (GeneratedAsset) {
+    option (google.api.http) = { delete: "/api/v1/generated-assets/{id}" };
+    option (api.delete) = "/api/v1/generated-assets/:id";
+  }
+  // UpsertGeneratedAsset —— 内部 RPC（被 media_workflow execution 期调用），不暴露给前端。
+  rpc UpsertGeneratedAsset(UpsertGeneratedAssetReq) returns (UpsertGeneratedAssetResp) {
+    option (google.api.http) = { post: "/api/internal/v1/generated-assets:upsert" body: "*" };
+    option (api.post) = "/api/internal/v1/generated-assets:upsert";
+  }
+}
+
+message GeneratedAsset {
+  string id = 1;
+  string scope = 2;
+  string name = 3;
+  string asset_kind = 4;                  // resource_type=ASSET
+  string url = 5;
+  string content = 6;                     // TEXT 产物
+  string owner_user_id = 7;               // = job.submitted_by
+  string visibility = 8;
+  string team_id = 9;
+  string job_id = 10;                     // → media_workflow.jobs.id
+  string step_run_id = 11;                // → media_workflow.step_runs.id
+  string template_id = 12;
+  int32 template_version = 13;
+  string source_virtual_ip_id = 14;
+  string source_product_id = 15;
+  int64 created_at = 16;
+}
+
+message GetGeneratedAssetReq {
+  string id = 1 [(api.path) = "id"];
+}
+
+message ListGeneratedAssetsReq {
+  string scope = 1 [(api.query) = "scope"];
+  string asset_kind = 2 [(api.query) = "asset_kind"];
+  string owner = 3 [(api.query) = "owner"];
+  string job_id = 4 [(api.query) = "job_id"];
+  string source_virtual_ip_id = 5 [(api.query) = "source_virtual_ip_id"];
+  string source_product_id = 6 [(api.query) = "source_product_id"];
+  int32 page = 7 [(api.query) = "page"];
+  int32 page_size = 8 [(api.query) = "page_size"];
+}
+
+message ListGeneratedAssetsResp {
+  repeated GeneratedAsset items = 1;
+  int32 total = 2;
+}
+
+message ListGeneratedAssetsBySourceReq {
+  string source_kind = 1 [(api.query) = "source_kind"];   // virtual_ip / product
+  string source_id = 2 [(api.query) = "source_id"];
+}
+
+message ListGeneratedAssetsBySourceResp {
+  repeated GeneratedAsset items = 1;
+}
+
+message UpsertGeneratedAssetReq {
+  string scope = 1;
+  string asset_kind = 2;                  // = template.output_asset_kind
+  string name = 3;
+  string url = 4;
+  string content = 5;
+  string owner_user_id = 6;               // = job.submitted_by
+  string visibility = 7;                  // 默认 private
+  string team_id = 8;
+  string job_id = 9;
+  string step_run_id = 10;
+  string template_id = 11;
+  int32 template_version = 12;
+  string source_virtual_ip_id = 13;
+  string source_product_id = 14;
+}
+
+message UpsertGeneratedAssetResp {
+  string id = 1;
+}

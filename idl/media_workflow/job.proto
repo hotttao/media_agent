@@ -1,0 +1,193 @@
+syntax = "proto3";
+
+package media_workflow.job;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_workflow/job";
+
+// JobService —— job 提交 + 查询 + cancel + retry + 用户确认 + worker pull。
+service JobService {
+  // —— 用户 / 前端 ——
+  rpc SubmitJob(SubmitJobReq) returns (SubmitJobResp) {
+    option (google.api.http) = { post: "/api/v1/jobs" body: "*" };
+    option (api.post) = "/api/v1/jobs";
+  }
+  rpc GetJob(GetJobReq) returns (GetJobResp) {
+    option (google.api.http) = { get: "/api/v1/jobs/{id}" };
+    option (api.get) = "/api/v1/jobs/:id";
+  }
+  rpc ListJobs(ListJobsReq) returns (ListJobsResp) {
+    option (google.api.http) = { get: "/api/v1/jobs" };
+    option (api.get) = "/api/v1/jobs";
+  }
+  rpc CancelJob(GetJobReq) returns (Job) {
+    option (google.api.http) = { post: "/api/v1/jobs/{id}/cancel" };
+    option (api.post) = "/api/v1/jobs/:id/cancel";
+  }
+  rpc RetryJob(RetryJobReq) returns (Job) {
+    option (google.api.http) = { post: "/api/v1/jobs/{id}/retry" body: "*" };
+    option (api.post) = "/api/v1/jobs/:id/retry";
+  }
+  rpc ConfirmStepRun(ConfirmStepRunReq) returns (StepRun) {
+    option (google.api.http) = { post: "/api/v1/step-runs/{step_run_id}/confirm" body: "*" };
+    option (api.post) = "/api/v1/step-runs/:step_run_id/confirm";
+  }
+  rpc RegenerateStepRun(RegenerateStepRunReq) returns (StepRun) {
+    option (google.api.http) = { post: "/api/v1/step-runs/{step_run_id}/regenerate" };
+    option (api.post) = "/api/v1/step-runs/:step_run_id/regenerate";
+  }
+
+  // —— worker ——
+  rpc ClaimStepRun(ClaimStepRunReq) returns (ClaimStepRunResp) {
+    option (google.api.http) = { post: "/api/v1/step-runs/claim" body: "*" };
+    option (api.post) = "/api/v1/step-runs/claim";
+  }
+  rpc CompleteStepRun(CompleteStepRunReq) returns (StepRun) {
+    option (google.api.http) = { post: "/api/v1/step-runs/{step_run_id}/complete" body: "*" };
+    option (api.post) = "/api/v1/step-runs/:step_run_id/complete";
+  }
+  rpc FailStepRun(FailStepRunReq) returns (StepRun) {
+    option (google.api.http) = { post: "/api/v1/step-runs/{step_run_id}/fail" body: "*" };
+    option (api.post) = "/api/v1/step-runs/:step_run_id/fail";
+  }
+}
+
+// —— JobInput bundle（自包含）——
+message MaterialData { string name = 1; string url = 2; string content = 3; }
+message AssetData { string name = 1; string url = 2; string content = 3; }
+message ProductData {
+  string id = 1; string name = 2; string target_audience = 3;
+  string product_details = 4; string display_actions = 5;
+}
+message VirtualIpData {
+  string id = 1; string name = 2; string avatar_url = 3;
+  string full_body_url = 4; string three_view_url = 5; string nine_view_url = 6;
+}
+message JobInput {
+  ProductData product = 1;
+  VirtualIpData virtual_ip = 2;
+  repeated AssetData asset = 3;
+  repeated MaterialData material = 4;
+}
+
+enum JobStatus {
+  JOB_STATUS_UNSPECIFIED = 0; PENDING = 1; RUNNING = 2; NEED_CONFIRM = 3;
+  SUCCEEDED = 4; FAILED = 5; CANCELLED = 6;
+}
+enum StepRunStatus {
+  SR_UNSPECIFIED = 0; SR_BLOCKED = 1; SR_PENDING = 2; SR_CLAIMED = 3;
+  SR_NEED_CONFIRM = 4; SR_SUCCEEDED = 5; SR_FAILED = 6; SR_SKIPPED = 7;
+}
+
+message Candidate {
+  int32 index = 1;
+  string url = 2;
+  string content = 3;
+  bool is_primary = 4;
+}
+
+message StepRun {
+  string id = 1;
+  string job_id = 2;
+  string step_key = 3;
+  int32 step_order = 4;
+  string template_id = 5;
+  int32 template_version = 6;
+  StepRunStatus status = 7;
+  int32 retry_count = 8;
+  string resolved_inputs = 9;          // jsonb
+  string rendered_prompt = 10;
+  repeated Candidate candidates = 11;
+  int32 selected_index = 12;
+  string output_asset_id = 13;
+  string failure_reason = 14;
+  string claimed_by = 15;
+  int64 claimed_at = 16;
+  int64 started_at = 17;
+  int64 finished_at = 18;
+}
+
+message Job {
+  string id = 1;
+  string scope = 2;
+  string workflow_id = 3;
+  int32 workflow_version = 4;
+  JobInput input = 5;
+  JobStatus status = 6;
+  int32 retry_count = 7;
+  string retry_history = 8;            // jsonb
+  string submitted_by = 9;
+  int64 submitted_at = 10;
+  int64 started_at = 11;
+  int64 finished_at = 12;
+  string failure_reason = 13;
+}
+
+// —— SubmitJob ——
+message SubmitJobReq {
+  string workflow_id = 1 [(api.query) = "workflow_id"];
+  int32 workflow_version = 2 [(api.body) = "workflow_version"];
+  JobInput input = 3 [(api.body) = "input"];
+  string submitted_by = 4 [(api.query) = "submitted_by"];
+}
+message SubmitJobResp { string job_id = 1; JobStatus status = 2; }
+
+message GetJobReq { string id = 1 [(api.path) = "id"]; }
+message GetJobResp { Job job = 1; repeated StepRun step_runs = 2; }
+
+message ListJobsReq {
+  string scope = 1 [(api.query) = "scope"];
+  string workflow_id = 2 [(api.query) = "workflow_id"];
+  string status = 3 [(api.query) = "status"];
+  int32 page = 4 [(api.query) = "page"];
+  int32 page_size = 5 [(api.query) = "page_size"];
+}
+message ListJobsResp { repeated Job items = 1; int32 total = 2; }
+
+// —— worker ——
+message ClaimStepRunReq {
+  string platform = 1 [(api.body) = "platform"];
+  string gen_way = 2 [(api.body) = "gen_way"];
+  string gen_type = 3 [(api.body) = "gen_type"];
+  string worker_id = 4 [(api.body) = "worker_id"];
+}
+message ClaimAsset { string label = 1; string url = 2; string content = 3; }
+message ClaimStepRunResp {
+  string step_run_id = 1;
+  string job_id = 2;
+  string rendered_prompt = 3;
+  repeated ClaimAsset input_assets = 4;
+  string platform = 5;
+  string gen_way = 6;
+  string gen_type = 7;
+  string asset_kind = 8;
+  int32 candidate_count = 9;
+}
+
+message CompleteStepRunReq {
+  string step_run_id = 1 [(api.path) = "step_run_id"];
+  repeated Candidate candidates = 2 [(api.body) = "candidates"];
+}
+
+message FailStepRunReq {
+  string step_run_id = 1 [(api.path) = "step_run_id"];
+  string reason = 2 [(api.body) = "reason"];
+}
+
+// —— 用户确认 ——
+message ConfirmStepRunReq {
+  string step_run_id = 1 [(api.path) = "step_run_id"];
+  int32 selected_index = 2 [(api.body) = "selected_index"];
+}
+message RegenerateStepRunReq {
+  string step_run_id = 1 [(api.path) = "step_run_id"];
+}
+
+// —— retry ——
+message RetryJobReq {
+  string id = 1 [(api.path) = "id"];
+  string reason = 2 [(api.body) = "reason"];
+  JobInput input_override = 3 [(api.body) = "input_override"];
+}

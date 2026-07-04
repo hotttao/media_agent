@@ -1,0 +1,29 @@
+package material
+
+import "context"
+
+// Repo material domain 仓库接口（由 dal/repo 实现）。
+type Repo interface {
+	Save(ctx context.Context, m *Material) error
+	Get(ctx context.Context, id string) (*Material, error)
+	List(ctx context.Context, q ListQuery) ([]*Material, int, error)
+	Update(ctx context.Context, m *Material) error
+	Delete(ctx context.Context, id string) error
+}
+
+// BindingRepo material_bindings 仓库接口。
+type BindingRepo interface {
+	AddBinding(ctx context.Context, b *Binding) error
+	RemoveBinding(ctx context.Context, materialID string, ownerKind BindingOwnerKind, ownerID string) error
+	ListByOwner(ctx context.Context, ownerKind BindingOwnerKind, ownerID string) ([]*Material, error)
+}
+
+// ListQuery 列表过滤。
+type ListQuery struct {
+	Scope      string
+	AssetKind  string
+	Owner      string
+	Visibility string
+	Limit      int
+	Offset     int
+}

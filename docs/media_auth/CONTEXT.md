@@ -84,3 +84,52 @@ MCP OAuth Token refresh 持续失败时的保留策略：`refresh_fail_count ≥
 **WeCom Login Channel（企微登录通道）**:
 基于企微 corp OAuth 的登录/绑定流程；`wecom` domain 承载 corp 凭证获取、扫码 URL、callback，编排 `auth`(session) 与 `identity`(绑定)。归 `wecom` domain。
 _禁用替代词_：wecom sso、wxwork auth
+
+### 业务划分与归属
+
+**Scope（业务范围）**:
+标识一个业务线的字符串标签，例如 `ai_clothing` / `ai_guoxue`。
+- 为什么需要：同一套服务要支撑多条互不相干的业务线。"AI 服装"的模板不能拿"AI 国学"的素材做合成——一旦允许，业务边界就糊了。scope 就是给每个业务线贴标签，运行期跨 scope 引用一律拒绝。
+- **scope 是资源属性，不是 user 属性**：user **不直接持 scope**。user 通过拥有的 [Virtual IP](#virtual-ip虚拟形象) 间接关联 scope——virtual_ip 带 scope，一个 user 可拥有多个不同 scope 的 virtual_ip，从而跨业务线。
+- **创建不限 scope**：当前版本不限制 user 能在哪些 scope 下创建 virtual_ip / template / workflow / asset（暂不限制）；scope 仅作为资源属性盖章，用于引用一致性校验。后续若要收口"谁能创建哪个 scope"，再加 user↔scope 授权。
+- 规则：所有贴 scope 的实体（virtual_ip、product、template、workflow、asset_kind、asset）只能有 1 个 scope；scope 不可改；scope 字符串必须在 `config.SupportedScopes` 闭集合内（部署期固化，不开放用户/ops 写）。
+- 跨 service 共享的术语；具体取值在本仓库 `media_materials/biz/policy/scope` 与 `media_workflow/biz/policy/scope` 同步引用同一份常量。
+_禁用替代词_：tenant（保留给多租户隔离）、business（保留给 umbrella 业务名）、area。
+
+**Product（业务产品）**:
+一个可被视频带货的产品。`product` 归属于某个 scope，**没有 user 归属**；product 在 `media_materials` 服务落库。
+_禁用替代词_：goods（保留给 SKU 层）、SKU、item。
+
+**Virtual IP（虚拟形象）**:
+一个 AI 形象（模特 / IP），归属于某个 scope，归属 user；一个 user 可拥有多个 VirtualIp，可见性规则遵循 [资源权限模型 §资源级 ACL](#资源级-acl-所有媒体资源通用)。在 `media_materials` 服务落库。
+_禁用替代词_：character、avatar、figure。
+
+### 资源级 ACL（所有媒体资源通用）
+
+适用于所有"需要被引用 / 共享"的可写媒体资源：`Template`、`Workflow`、`VirtualIp`。Asset 因只读元数据，沿用 `visibility ∈ {private, team, public}` + 单值 `team_id`，不开放 grants 表。
+
+**Resource Visibility（资源可见性）**:
+资源自身的可见度档位 `private | team | public`：
+- `private`：仅 owner（含 creator）可见。
+- `team`：owner + 通过 [Resource Grant](#resource-grant资源共享授权) 显式授权的团队成员可见。
+- `public`：所有人可见；scope 仍限制业务线归属，但 read 不被拒。
+_禁用替代词_：ACL、access level。
+
+**Resource Grant（资源共享授权）**:
+`(resource_id, team_id) → permission ∈ {viewer, editor}` 的显式授权；不在 grant 内的团队对 `visibility=team` 资源不可见。owner 始终拥有全部权限，不需 grant。
+_禁用替代词_：share、ACL。
+
+**My Permission（资源访问权限）**:
+当前 user 对某资源的有效权限，推导：
+```
+1. user == resource.owner_user_id                → 'owner'
+2. user ∈ granted_teams(resource) 中 max(permission) → 'editor' or 'viewer'
+3. resource.visibility == 'public'               → 'public' (read-only)
+4. else                                            → no access
+```
+`owner` 含全部操作（编辑、归档、删除、改 visibility / grant、提交执行）；`editor` 含编辑、提交执行、改 visibility / grant 之外的子集操作；`viewer` 仅读 + 提交执行；`public` 仅读。
+_禁用替代词_：role、claim。
+
+**Team（团队）**:
+media_auth 内 `teams` 记录的 text id；`team_members (team_id, user_id)` 维护 user ↔ team 多对多。本术语仅登记，team CRUD 与成员管理由 `media_auth` 后续单独建模。
+_禁用替代词_：group、org。

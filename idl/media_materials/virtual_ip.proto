@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package media_materials.virtual_ip;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_materials/virtual_ip";
+
+// VirtualIpService —— 虚拟形象（资源级 ACL：visibility + grants）。
+service VirtualIpService {
+  rpc CreateVirtualIp(CreateVirtualIpReq) returns (VirtualIp) {
+    option (google.api.http) = { post: "/api/v1/virtual-ips" body: "*" };
+    option (api.post) = "/api/v1/virtual-ips";
+  }
+  rpc GetVirtualIp(GetVirtualIpReq) returns (VirtualIp) {
+    option (google.api.http) = { get: "/api/v1/virtual-ips/{id}" };
+    option (api.get) = "/api/v1/virtual-ips/:id";
+  }
+  rpc ListVirtualIps(ListVirtualIpsReq) returns (ListVirtualIpsResp) {
+    option (google.api.http) = { get: "/api/v1/virtual-ips" };
+    option (api.get) = "/api/v1/virtual-ips";
+  }
+  rpc UpdateVirtualIp(UpdateVirtualIpReq) returns (VirtualIp) {
+    option (google.api.http) = { put: "/api/v1/virtual-ips/{id}" body: "*" };
+    option (api.put) = "/api/v1/virtual-ips/:id";
+  }
+  rpc ArchiveVirtualIp(GetVirtualIpReq) returns (VirtualIp) {
+    option (google.api.http) = { post: "/api/v1/virtual-ips/{id}/archive" };
+    option (api.post) = "/api/v1/virtual-ips/:id/archive";
+  }
+  rpc DeleteVirtualIp(GetVirtualIpReq) returns (VirtualIp) {
+    option (google.api.http) = { delete: "/api/v1/virtual-ips/{id}" };
+    option (api.delete) = "/api/v1/virtual-ips/:id";
+  }
+  rpc GrantVirtualIp(GrantReq) returns (VirtualIp) {
+    option (google.api.http) = { post: "/api/v1/virtual-ips/{id}/grants" body: "*" };
+    option (api.post) = "/api/v1/virtual-ips/:id/grants";
+  }
+  rpc RevokeVirtualIp(RevokeReq) returns (VirtualIp) {
+    option (google.api.http) = { delete: "/api/v1/virtual-ips/{id}/grants/{team_id}" };
+    option (api.delete) = "/api/v1/virtual-ips/:id/grants/:team_id";
+  }
+  rpc ChangeVirtualIpVisibility(ChangeVisibilityReq) returns (VirtualIp) {
+    option (google.api.http) = { post: "/api/v1/virtual-ips/{id}/visibility" body: "*" };
+    option (api.post) = "/api/v1/virtual-ips/:id/visibility";
+  }
+}
+
+message VirtualIp {
+  string id = 1;
+  string scope = 2;
+  string name = 3;
+  string description = 4;
+  string avatar_url = 5;
+  string full_body_url = 6;
+  string three_view_url = 7;
+  string nine_view_url = 8;
+  string status = 9;              // active/archived
+  string visibility = 10;        // private/team/public
+  string owner_user_id = 11;
+  int64 created_at = 12;
+  int64 updated_at = 13;
+}
+
+message CreateVirtualIpReq {
+  string scope = 1 [(api.query) = "scope"];
+  string name = 2 [(api.body) = "name"];
+  string description = 3 [(api.body) = "description"];
+  string avatar_url = 4 [(api.body) = "avatar_url"];
+  string full_body_url = 5 [(api.body) = "full_body_url"];
+  string three_view_url = 6 [(api.body) = "three_view_url"];
+  string nine_view_url = 7 [(api.body) = "nine_view_url"];
+  string owner_user_id = 8 [(api.query) = "owner_user_id"];
+  string visibility = 9 [(api.body) = "visibility"];
+}
+
+message GetVirtualIpReq {
+  string id = 1 [(api.path) = "id"];
+}
+
+message ListVirtualIpsReq {
+  string scope = 1 [(api.query) = "scope"];
+  string name = 2 [(api.query) = "name"];
+  string status = 3 [(api.query) = "status"];
+  string visibility = 4 [(api.query) = "visibility"];
+  int32 page = 5 [(api.query) = "page"];
+  int32 page_size = 6 [(api.query) = "page_size"];
+}
+
+message ListVirtualIpsResp {
+  repeated VirtualIp items = 1;
+  int32 total = 2;
+}
+
+message UpdateVirtualIpReq {
+  string id = 1 [(api.path) = "id"];
+  string name = 2 [(api.body) = "name"];
+  string description = 3 [(api.body) = "description"];
+  string avatar_url = 4 [(api.body) = "avatar_url"];
+  string full_body_url = 5 [(api.body) = "full_body_url"];
+  string three_view_url = 6 [(api.body) = "three_view_url"];
+  string nine_view_url = 7 [(api.body) = "nine_view_url"];
+}
+
+message GrantReq {
+  string id = 1 [(api.path) = "id"];
+  string team_id = 2 [(api.body) = "team_id"];
+  string permission = 3 [(api.body) = "permission"];   // viewer/editor
+  string granted_by = 4 [(api.query) = "granted_by"];
+}
+
+message RevokeReq {
+  string id = 1 [(api.path) = "id"];
+  string team_id = 2 [(api.path) = "team_id"];
+}
+
+message ChangeVisibilityReq {
+  string id = 1 [(api.path) = "id"];
+  string visibility = 2 [(api.body) = "visibility"];
+}

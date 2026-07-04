@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package media_materials.asset_kind;
+
+import "api.proto";
+import "google/api/annotations.proto";
+import "common/media_type.proto";
+
+// Hertz 工具链:
+//   make hz-model  -> hertz_gen/model/media_materials/asset_kind/asset_kind.pb.go
+//   make hz-update -> media_materials/biz/handler/asset_kind/asset_kind_service.go
+option go_package = "media_materials/asset_kind";
+
+// AssetKindService —— 资源类别注册表（全局，无 scope）。
+// SYSTEM 预置不可删；ENABLED 可 CRUD；DISABLED 仍列出但拒绝被新 template 引用。
+service AssetKindService {
+  rpc RegisterAssetKind(RegisterAssetKindReq) returns (AssetKind) {
+    option (google.api.http) = { post: "/api/v1/asset-kinds" body: "*" };
+    option (api.post) = "/api/v1/asset-kinds";
+  }
+  rpc GetAssetKind(GetAssetKindReq) returns (AssetKind) {
+    option (google.api.http) = { get: "/api/v1/asset-kinds/{name}" };
+    option (api.get) = "/api/v1/asset-kinds/:name";
+  }
+  rpc ListAssetKinds(ListAssetKindsReq) returns (ListAssetKindsResp) {
+    option (google.api.http) = { get: "/api/v1/asset-kinds" };
+    option (api.get) = "/api/v1/asset-kinds";
+  }
+  rpc UpdateAssetKind(UpdateAssetKindReq) returns (AssetKind) {
+    option (google.api.http) = { put: "/api/v1/asset-kinds/{name}" body: "*" };
+    option (api.put) = "/api/v1/asset-kinds/:name";
+  }
+  rpc DeleteAssetKind(GetAssetKindReq) returns (AssetKind) {
+    option (google.api.http) = { delete: "/api/v1/asset-kinds/{name}" };
+    option (api.delete) = "/api/v1/asset-kinds/:name";
+  }
+  // BatchGetAssetKind —— 内部 RPC（被 media_workflow 校验期调用），不暴露给前端。
+  rpc BatchGetAssetKind(BatchGetAssetKindReq) returns (BatchGetAssetKindResp) {
+    option (google.api.http) = { post: "/api/internal/v1/asset-kinds:batchGet" body: "*" };
+    option (api.post) = "/api/internal/v1/asset-kinds:batchGet";
+  }
+}
+
+enum ResourceType {
+  RESOURCE_TYPE_UNSPECIFIED = 0;
+  MATERIAL = 1;
+  ASSET = 2;
+  PRODUCT = 3;
+  VIRTUAL_IP = 4;
+  TEXT = 5;
+}
+
+// MediaType 见 common/media_type.proto（避免与 ResourceType.TEXT 撞名）。
+
+enum AssetKindStatus {
+  ASSET_KIND_STATUS_UNSPECIFIED = 0;
+  SYSTEM = 1;
+  ENABLED = 2;
+  DISABLED = 3;
+}
+
+message AssetKind {
+  string name = 1;
+  ResourceType resource_type = 2;
+  common.media_type.MediaType media_type = 3;
+  string source_table = 4;
+  string description = 5;
+  AssetKindStatus status = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
+}
+
+message RegisterAssetKindReq {
+  string name = 1 [(api.body) = "name"];
+  ResourceType resource_type = 2 [(api.body) = "resource_type"];
+  common.media_type.MediaType media_type = 3 [(api.body) = "media_type"];
+  string source_table = 4 [(api.body) = "source_table"];
+  string description = 5 [(api.body) = "description"];
+}
+
+message GetAssetKindReq {
+  string name = 1 [(api.path) = "name"];
+}
+
+message ListAssetKindsReq {
+  string resource_type = 1 [(api.query) = "resource_type"];
+  string media_type = 2 [(api.query) = "media_type"];
+  string status = 3 [(api.query) = "status"];
+  int32 page = 4 [(api.query) = "page"];
+  int32 page_size = 5 [(api.query) = "page_size"];
+}
+
+message ListAssetKindsResp {
+  repeated AssetKind items = 1;
+  int32 total = 2;
+}
+
+message UpdateAssetKindReq {
+  string name = 1 [(api.path) = "name"];
+  string description = 2 [(api.body) = "description"];
+  string status = 3 [(api.body) = "status"];
+}
+
+message BatchGetAssetKindReq {
+  repeated string names = 1;
+}
+
+message BatchGetAssetKindResp {
+  repeated AssetKind kinds = 1;
+  repeated string not_found = 2;  // 未注册的 name
+}

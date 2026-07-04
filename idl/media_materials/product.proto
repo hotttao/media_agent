@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package media_materials.product;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_materials/product";
+
+// ProductService —— 业务产品（无 user 概念，scope 级共享，无 visibility/grants）。
+// 任意已认证 user 可 CRUD；created_by / updated_by 仅审计。
+// product ↔ material 绑定复用 MaterialService.AddMaterialBinding（owner_kind=product）。
+service ProductService {
+  rpc CreateProduct(CreateProductReq) returns (Product) {
+    option (google.api.http) = { post: "/api/v1/products" body: "*" };
+    option (api.post) = "/api/v1/products";
+  }
+  rpc GetProduct(GetProductReq) returns (Product) {
+    option (google.api.http) = { get: "/api/v1/products/{id}" };
+    option (api.get) = "/api/v1/products/:id";
+  }
+  rpc ListProducts(ListProductsReq) returns (ListProductsResp) {
+    option (google.api.http) = { get: "/api/v1/products" };
+    option (api.get) = "/api/v1/products";
+  }
+  rpc UpdateProduct(UpdateProductReq) returns (Product) {
+    option (google.api.http) = { put: "/api/v1/products/{id}" body: "*" };
+    option (api.put) = "/api/v1/products/:id";
+  }
+  rpc ArchiveProduct(GetProductReq) returns (Product) {
+    option (google.api.http) = { post: "/api/v1/products/{id}/archive" };
+    option (api.post) = "/api/v1/products/:id/archive";
+  }
+  rpc DeleteProduct(GetProductReq) returns (Product) {
+    option (google.api.http) = { delete: "/api/v1/products/{id}" };
+    option (api.delete) = "/api/v1/products/:id";
+  }
+}
+
+message Product {
+  string id = 1;
+  string scope = 2;
+  string name = 3;
+  string description = 4;
+  string target_audience = 5;
+  string product_details = 6;
+  string display_actions = 7;
+  string status = 8;              // active/archived
+  string created_by = 9;
+  string updated_by = 10;
+  int64 created_at = 11;
+  int64 updated_at = 12;
+}
+
+message CreateProductReq {
+  string scope = 1 [(api.query) = "scope"];
+  string name = 2 [(api.body) = "name"];
+  string description = 3 [(api.body) = "description"];
+  string target_audience = 4 [(api.body) = "target_audience"];
+  string product_details = 5 [(api.body) = "product_details"];
+  string display_actions = 6 [(api.body) = "display_actions"];
+  string created_by = 7 [(api.query) = "created_by"];
+}
+
+message GetProductReq {
+  string id = 1 [(api.path) = "id"];
+}
+
+message ListProductsReq {
+  string scope = 1 [(api.query) = "scope"];
+  string name = 2 [(api.query) = "name"];
+  string status = 3 [(api.query) = "status"];
+  int32 page = 4 [(api.query) = "page"];
+  int32 page_size = 5 [(api.query) = "page_size"];
+}
+
+message ListProductsResp {
+  repeated Product items = 1;
+  int32 total = 2;
+}
+
+message UpdateProductReq {
+  string id = 1 [(api.path) = "id"];
+  string name = 2 [(api.body) = "name"];
+  string description = 3 [(api.body) = "description"];
+  string target_audience = 4 [(api.body) = "target_audience"];
+  string product_details = 5 [(api.body) = "product_details"];
+  string display_actions = 6 [(api.body) = "display_actions"];
+  string updated_by = 7 [(api.query) = "updated_by"];
+}

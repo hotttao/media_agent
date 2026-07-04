@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package common.media_type;
+
+option go_package = "common/media_type";
+
+// MediaType —— 媒体形态枚举。
+// 单独成包：避免与 ResourceType.TEXT 撞名（proto3 enum value 共享 C++ scope）。
+// 跨模块共享（asset_kind / workflow / job 都可能引用）。
+enum MediaType {
+  MEDIA_TYPE_UNSPECIFIED = 0;
+  IMAGE = 1;
+  TEXT = 2;
+  VIDEO = 3;
+}

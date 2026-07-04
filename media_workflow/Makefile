@@ -23,6 +23,11 @@ tidy:
 fmt:
 	gofmt -w .
 
+.PHONY: gorm-gen
+gorm-gen:
+	@test -n "$$MEDIA_WORKFLOW_DB_DSN" || { echo "usage: MEDIA_WORKFLOW_DB_DSN=postgres://media_auth:media_auth@127.0.0.1:5432/media_workflow?sslmode=disable make gorm-gen"; exit 1; }
+	go run tools/gormgen/main.go
+
 BIZ_PROTOS := $(shell find ../idl/media_workflow -type f -name '*.proto' | sed 's|^\.\./idl/||')
 
 .PHONY: hz-update

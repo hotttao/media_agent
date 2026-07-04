@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package media_workflow.template;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+// Hertz 工具链:
+//   make hz-model  -> hertz_gen/model/media_workflow/template/template.pb.go
+//   make hz-update -> media_workflow/biz/handler/template/template_service.go
+option go_package = "media_workflow/template";
+
+// TemplateService —— 提示词模板 CRUD + 资源 ACL（visibility + grants）。
+service TemplateService {
+  rpc CreateTemplate(CreateTemplateReq) returns (CreateTemplateResp) {
+    option (google.api.http) = { post: "/api/v1/templates" body: "*" };
+    option (api.post) = "/api/v1/templates";
+  }
+  rpc UpdateTemplate(UpdateTemplateReq) returns (UpdateTemplateResp) {
+    option (google.api.http) = { put: "/api/v1/templates/{id}" body: "*" };
+    option (api.put) = "/api/v1/templates/:id";
+  }
+  rpc GetTemplate(GetTemplateReq) returns (Template) {
+    option (google.api.http) = { get: "/api/v1/templates/{id}" };
+    option (api.get) = "/api/v1/templates/:id";
+  }
+  rpc GetTemplateVersion(GetTemplateVersionReq) returns (Template) {
+    option (google.api.http) = { get: "/api/v1/templates/{id}/versions/{version}" };
+    option (api.get) = "/api/v1/templates/:id/versions/:version";
+  }
+  rpc ListTemplates(ListTemplatesReq) returns (ListTemplatesResp) {
+    option (google.api.http) = { get: "/api/v1/templates" };
+    option (api.get) = "/api/v1/templates";
+  }
+  rpc ArchiveTemplate(GetTemplateReq) returns (Template) {
+    option (google.api.http) = { post: "/api/v1/templates/{id}/archive" };
+    option (api.post) = "/api/v1/templates/:id/archive";
+  }
+  rpc GrantTemplate(GrantReq) returns (Template) {
+    option (google.api.http) = { post: "/api/v1/templates/{id}/grants" body: "*" };
+    option (api.post) = "/api/v1/templates/:id/grants";
+  }
+  rpc RevokeTemplate(RevokeReq) returns (Template) {
+    option (google.api.http) = { delete: "/api/v1/templates/{id}/grants/{team_id}" };
+    option (api.delete) = "/api/v1/templates/:id/grants/:team_id";
+  }
+  rpc ChangeTemplateVisibility(ChangeVisibilityReq) returns (Template) {
+    option (google.api.http) = { post: "/api/v1/templates/{id}/visibility" body: "*" };
+    option (api.post) = "/api/v1/templates/:id/visibility";
+  }
+}
+
+enum TemplateStatus {
+  TEMPLATE_STATUS_UNSPECIFIED = 0;
+  DRAFT = 1;
+  PUBLISHED = 2;
+  ARCHIVED = 3;
+}
+
+// TemplateInputSlot 模板输入槽位。
+// name: prompt_body 占位符；MATERIAL/ASSET 时 = asset_kind（类型）
+// resource_type: MATERIAL/ASSET/PRODUCT/VIRTUAL_IP/TEXT（string，避免跨 service enum import）
+message TemplateInputSlot {
+  string name = 1;
+  string resource_type = 2;
+  bool required = 3;
+  int32 display_order = 4;
+}
+
+message Template {
+  string id = 1;
+  string scope = 2;
+  string name = 3;
+  string description = 4;
+  string prompt_body = 5;
+  repeated TemplateInputSlot inputs = 6;
+  string output_asset_kind = 7;     // → asset_kinds.name，resource_type=ASSET
+  string platform = 8;
+  string gen_way = 9;
+  string gen_type = 10;
+  TemplateStatus status = 11;
+  string visibility = 12;           // private/team/public
+  int32 version = 13;
+  string created_by = 14;
+  int64 created_at = 15;
+  int64 updated_at = 16;
+  bool needs_confirm = 17;
+  int32 candidate_count = 18;
+}
+
+message CreateTemplateReq {
+  string scope = 1 [(api.query) = "scope"];
+  string name = 2 [(api.body) = "name"];
+  string description = 3 [(api.body) = "description"];
+  string prompt_body = 4 [(api.body) = "prompt_body"];
+  repeated TemplateInputSlot inputs = 5 [(api.body) = "inputs"];
+  string output_asset_kind = 6 [(api.body) = "output_asset_kind"];
+  string platform = 7 [(api.body) = "platform"];
+  string gen_way = 8 [(api.body) = "gen_way"];
+  string gen_type = 9 [(api.body) = "gen_type"];
+  bool needs_confirm = 10 [(api.body) = "needs_confirm"];
+  int32 candidate_count = 11 [(api.body) = "candidate_count"];
+  string created_by = 12 [(api.query) = "created_by"];
+}
+message CreateTemplateResp { string id = 1; int32 version = 2; }
+
+message UpdateTemplateReq {
+  string id = 1 [(api.path) = "id"];
+  string name = 2 [(api.body) = "name"];
+  string description = 3 [(api.body) = "description"];
+  string prompt_body = 4 [(api.body) = "prompt_body"];
+  repeated TemplateInputSlot inputs = 5 [(api.body) = "inputs"];
+  string output_asset_kind = 6 [(api.body) = "output_asset_kind"];
+  string platform = 7 [(api.body) = "platform"];
+  string gen_way = 8 [(api.body) = "gen_way"];
+  string gen_type = 9 [(api.body) = "gen_type"];
+  bool needs_confirm = 10 [(api.body) = "needs_confirm"];
+  int32 candidate_count = 11 [(api.body) = "candidate_count"];
+}
+message UpdateTemplateResp { int32 version = 1; }
+
+message GetTemplateReq { string id = 1 [(api.path) = "id"]; }
+message GetTemplateVersionReq { string id = 1 [(api.path) = "id"]; int32 version = 2 [(api.path) = "version"]; }
+
+message ListTemplatesReq {
+  string scope = 1 [(api.query) = "scope"];
+  string name = 2 [(api.query) = "name"];
+  string visibility = 3 [(api.query) = "visibility"];
+  int32 page = 4 [(api.query) = "page"];
+  int32 page_size = 5 [(api.query) = "page_size"];
+}
+message ListTemplatesResp { repeated Template items = 1; int32 total = 2; }
+
+message GrantReq {
+  string id = 1 [(api.path) = "id"];
+  string team_id = 2 [(api.body) = "team_id"];
+  string permission = 3 [(api.body) = "permission"];
+  string granted_by = 4 [(api.query) = "granted_by"];
+}
+message RevokeReq {
+  string id = 1 [(api.path) = "id"];
+  string team_id = 2 [(api.path) = "team_id"];
+}
+message ChangeVisibilityReq {
+  string id = 1 [(api.path) = "id"];
+  string visibility = 2 [(api.body) = "visibility"];
+}

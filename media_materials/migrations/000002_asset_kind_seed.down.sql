@@ -1,0 +1,2 @@
+-- seed 是 SYSTEM 预置，不可回滚（down 为空）。
+-- 若需重置，删整个 schema 重新 migrate。

@@ -1,0 +1,122 @@
+package client
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
+
+	"media_agent/media_workflow/biz/shared"
+)
+
+// MaterialsClient 调 media_materials 的内部 RPC（HTTP）。
+// 实现 domain.AssetKindLookup 端口。main.go 注入。
+type MaterialsClient struct {
+	baseURL string
+	http    *http.Client
+}
+
+func NewMaterialsClient(baseURL string) *MaterialsClient {
+	return &MaterialsClient{
+		baseURL: baseURL,
+		http:    &http.Client{Timeout: 10 * time.Second},
+	}
+}
+
+type batchGetReq struct {
+	Names []string `json:"names"`
+}
+
+type assetKindDTO struct {
+	Name         string `json:"name"`
+	ResourceType string `json:"resource_type"`
+	MediaType    string `json:"media_type"`
+	Status       string `json:"status"`
+}
+
+type batchGetResp struct {
+	Kinds    []assetKindDTO `json:"kinds"`
+	NotFound []string       `json:"not_found"`
+}
+
+// BatchGet 实现 AssetKindLookup。返回 (name→info, not_found, err)。
+func (c *MaterialsClient) BatchGet(ctx context.Context, names []string) (map[string]*shared.AssetKindInfo, []string, error) {
+	if len(names) == 0 {
+		return map[string]*shared.AssetKindInfo{}, nil, nil
+	}
+	body, err := json.Marshal(batchGetReq{Names: names})
+	if err != nil {
+		return nil, nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/internal/v1/asset-kinds:batchGet", bytes.NewReader(body))
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("call materials BatchGetAssetKind: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("materials BatchGetAssetKind: status %d", resp.StatusCode)
+	}
+	var out batchGetResp
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, nil, fmt.Errorf("decode BatchGetAssetKind resp: %w", err)
+	}
+	m := make(map[string]*shared.AssetKindInfo, len(out.Kinds))
+	for _, k := range out.Kinds {
+		m[k.Name] = &shared.AssetKindInfo{
+			Name: k.Name, ResourceType: k.ResourceType, MediaType: k.MediaType, Status: k.Status,
+		}
+	}
+	return m, out.NotFound, nil
+}
+
+// UpsertGenAssetReq 落产物请求。
+type UpsertGenAssetReq struct {
+	Scope             string `json:"scope"`
+	AssetKind         string `json:"asset_kind"`
+	Name              string `json:"name"`
+	URL               string `json:"url"`
+	Content           string `json:"content"`
+	OwnerUserID       string `json:"owner_user_id"`
+	Visibility        string `json:"visibility"`
+	JobID             string `json:"job_id"`
+	StepRunID         string `json:"step_run_id"`
+	TemplateID        string `json:"template_id"`
+	TemplateVersion   int    `json:"template_version"`
+	SourceVirtualIPID string `json:"source_virtual_ip_id"`
+	SourceProductID   string `json:"source_product_id"`
+}
+
+// UpsertGeneratedAsset 调 media_materials 落生成产物。返回 generated_asset id。
+func (c *MaterialsClient) UpsertGeneratedAsset(ctx context.Context, req *UpsertGenAssetReq) (string, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/internal/v1/generated-assets:upsert", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("call materials UpsertGeneratedAsset: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("materials UpsertGeneratedAsset: status %d", resp.StatusCode)
+	}
+	var out struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("decode UpsertGeneratedAsset resp: %w", err)
+	}
+	return out.ID, nil
+}

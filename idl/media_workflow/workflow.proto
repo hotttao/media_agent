@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package media_workflow.workflow;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_workflow/workflow";
+
+// WorkflowService —— 工作流 DAG CRUD + 资源 ACL + ValidateWorkflow（闸 1）。
+service WorkflowService {
+  rpc CreateWorkflow(CreateWorkflowReq) returns (CreateWorkflowResp) {
+    option (google.api.http) = { post: "/api/v1/workflows" body: "*" };
+    option (api.post) = "/api/v1/workflows";
+  }
+  rpc UpdateWorkflow(UpdateWorkflowReq) returns (UpdateWorkflowResp) {
+    option (google.api.http) = { put: "/api/v1/workflows/{id}" body: "*" };
+    option (api.put) = "/api/v1/workflows/:id";
+  }
+  rpc GetWorkflow(GetWorkflowReq) returns (Workflow) {
+    option (google.api.http) = { get: "/api/v1/workflows/{id}" };
+    option (api.get) = "/api/v1/workflows/:id";
+  }
+  rpc ListWorkflows(ListWorkflowsReq) returns (ListWorkflowsResp) {
+    option (google.api.http) = { get: "/api/v1/workflows" };
+    option (api.get) = "/api/v1/workflows";
+  }
+  rpc ArchiveWorkflow(GetWorkflowReq) returns (Workflow) {
+    option (google.api.http) = { post: "/api/v1/workflows/{id}/archive" };
+    option (api.post) = "/api/v1/workflows/:id/archive";
+  }
+  rpc ValidateWorkflow(ValidateWorkflowReq) returns (ValidationResult) {
+    option (google.api.http) = { post: "/api/v1/workflows/validate" body: "*" };
+    option (api.post) = "/api/v1/workflows/validate";
+  }
+  rpc GrantWorkflow(GrantReq) returns (Workflow) {
+    option (google.api.http) = { post: "/api/v1/workflows/{id}/grants" body: "*" };
+    option (api.post) = "/api/v1/workflows/:id/grants";
+  }
+  rpc RevokeWorkflow(RevokeReq) returns (Workflow) {
+    option (google.api.http) = { delete: "/api/v1/workflows/{id}/grants/{team_id}" };
+    option (api.delete) = "/api/v1/workflows/:id/grants/:team_id";
+  }
+  rpc ChangeWorkflowVisibility(ChangeVisibilityReq) returns (Workflow) {
+    option (google.api.http) = { post: "/api/v1/workflows/{id}/visibility" body: "*" };
+    option (api.post) = "/api/v1/workflows/:id/visibility";
+  }
+}
+
+enum WorkflowStatus {
+  WORKFLOW_STATUS_UNSPECIFIED = 0;
+  WF_DRAFT = 1;
+  WF_PUBLISHED = 2;
+  WF_ARCHIVED = 3;
+}
+
+enum WorkflowInputSource {
+  WIS_UNSPECIFIED = 0;
+  WORKFLOW_INPUT = 1;
+  STEP_OUTPUT = 2;
+  CONST = 3;
+}
+
+message WorkflowInputBinding {
+  WorkflowInputSource source = 1;
+  string ref = 2;           // STEP_OUTPUT → step.key；其余空
+  string const_value = 3;   // CONST 字面值
+}
+
+message WorkflowStep {
+  string key = 1;
+  string name = 2;
+  int32 step_order = 3;
+  string template_id = 4;
+  int32 template_version = 5;
+  map<string, WorkflowInputBinding> input_bindings = 6;  // key = slot.name
+}
+
+message InputSchemaEntry {
+  string name = 1;
+  string resource_type = 2;
+  bool required = 3;
+}
+message WorkflowInputSchema { repeated InputSchemaEntry entries = 1; }
+
+message Workflow {
+  string id = 1;
+  string scope = 2;
+  string name = 3;
+  string description = 4;
+  string output_step_key = 5;
+  repeated WorkflowStep steps = 6;
+  WorkflowStatus status = 7;
+  string visibility = 8;
+  int32 version = 9;
+  WorkflowInputSchema input_schema = 10;  // 派生快照
+  string created_by = 11;
+  int64 created_at = 12;
+  int64 updated_at = 13;
+}
+
+message CreateWorkflowReq {
+  string scope = 1 [(api.query) = "scope"];
+  string name = 2 [(api.body) = "name"];
+  string description = 3 [(api.body) = "description"];
+  string output_step_key = 4 [(api.body) = "output_step_key"];
+  repeated WorkflowStep steps = 5 [(api.body) = "steps"];
+  string created_by = 6 [(api.query) = "created_by"];
+}
+message CreateWorkflowResp { string id = 1; int32 version = 2; }
+
+message UpdateWorkflowReq {
+  string id = 1 [(api.path) = "id"];
+  string name = 2 [(api.body) = "name"];
+  string description = 3 [(api.body) = "description"];
+  string output_step_key = 4 [(api.body) = "output_step_key"];
+  repeated WorkflowStep steps = 5 [(api.body) = "steps"];
+}
+message UpdateWorkflowResp { int32 version = 1; }
+
+message GetWorkflowReq { string id = 1 [(api.path) = "id"]; }
+
+message ListWorkflowsReq {
+  string scope = 1 [(api.query) = "scope"];
+  string name = 2 [(api.query) = "name"];
+  string status = 3 [(api.query) = "status"];
+  string visibility = 4 [(api.query) = "visibility"];
+  int32 page = 5 [(api.query) = "page"];
+  int32 page_size = 6 [(api.query) = "page_size"];
+}
+message ListWorkflowsResp { repeated Workflow items = 1; int32 total = 2; }
+
+// —— ValidateWorkflow（闸 1，不写库）——
+message ValidateWorkflowReq {
+  string scope = 1 [(api.body) = "scope"];
+  string output_step_key = 2 [(api.body) = "output_step_key"];
+  repeated WorkflowStep steps = 3 [(api.body) = "steps"];
+}
+message DerivedEdge { string from = 1; string to = 2; string to_input = 3; }
+message RejectReason { string code = 1; string message = 2; string subject = 3; }
+message ValidationResult {
+  bool valid = 1;
+  repeated string roots = 2;
+  string output_step_key = 3;
+  repeated DerivedEdge derived_edges = 4;
+  WorkflowInputSchema input_schema = 5;
+  repeated RejectReason reject_reasons = 6;
+}
+
+message GrantReq {
+  string id = 1 [(api.path) = "id"];
+  string team_id = 2 [(api.body) = "team_id"];
+  string permission = 3 [(api.body) = "permission"];
+  string granted_by = 4 [(api.query) = "granted_by"];
+}
+message RevokeReq {
+  string id = 1 [(api.path) = "id"];
+  string team_id = 2 [(api.path) = "team_id"];
+}
+message ChangeVisibilityReq {
+  string id = 1 [(api.path) = "id"];
+  string visibility = 2 [(api.body) = "visibility"];
+}
