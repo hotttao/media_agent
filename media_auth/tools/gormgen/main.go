@@ -44,6 +44,16 @@ func main() {
 	// 新增表 → 加 model + 在此 ApplyBasic → 重跑。
 	g.ApplyBasic(
 		model.User{},
+		model.UserIdentity{},
+		model.ServiceToken{},
+		model.OAuthClient{},
+		model.OAuthAuthorizationCode{},
+		model.OAuthRefreshToken{},
+		model.McpOAuthClient{},
+		model.McpOAuthToken{},
+		model.Team{},
+		model.TeamMember{},
+		model.TeamInvite{},
 	)
 	g.Execute()
 }

@@ -32,6 +32,7 @@ import (
 	_ "media_agent/media_cli/cmd/infra"
 	_ "media_agent/media_cli/cmd/media_auth"      // media_auth 接口 e2e 一级子命令
 	_ "media_agent/media_cli/cmd/media_auth/auth" // auth 子命令挂到 MediaAuthCmd
+	_ "media_agent/media_cli/cmd/media_auth/team" // team 子命令挂到 MediaAuthCmd
 	_ "media_agent/media_cli/cmd/media_example"
 	// hello 是 media_example 的子包（service 二级）；父包 init() 把它挂到 MediaExampleCmd。
 	_ "media_agent/media_cli/cmd/media_example/hello"
@@ -44,6 +45,7 @@ import (
 
 	clisub "media_agent/media_cli/cmd/client"
 	authsub "media_agent/media_cli/cmd/media_auth/auth"
+	teamsub "media_agent/media_cli/cmd/media_auth/team"
 	hellosub "media_agent/media_cli/cmd/media_example/hello"
 )
 
@@ -90,6 +92,7 @@ func main() {
 	//     client.media_auth 未配置时跳过（其他子命令仍可用）。
 	if cfg.GetClient()["media_auth"] != nil {
 		authsub.Init(cfg)
+		teamsub.Init(cfg) // team 共享同一 cookie store，login 后 team 子命令自动带 cookie
 	}
 
 	// 5. 启动 cobra 命令树。

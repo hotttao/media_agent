@@ -34,7 +34,8 @@ func NewDB(cfg *configpb.DatabaseConfig) (*gorm.DB, error) {
 	switch cfg.GetDriver() {
 	case "postgres", "": // 默认 postgres
 		db, err := gorm.Open(postgres.Open(cfg.GetDsn()), &gorm.Config{
-			Logger: gormlogger.Default.LogMode(gormlogger.Warn),
+			Logger:         gormlogger.Default.LogMode(gormlogger.Warn),
+			TranslateError: true, // 把底层唯一/外键冲突翻译为 gorm.ErrDuplicatedKey/ErrForeignKeyViolation，便于 repo 用 errors.Is 判定
 		})
 		if err != nil {
 			return nil, fmt.Errorf("dal: open postgres: %w", err)

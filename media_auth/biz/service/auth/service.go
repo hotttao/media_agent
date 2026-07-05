@@ -26,6 +26,9 @@ type Service struct {
 	// authSourceResolver 推导无密码账号的 wecom/ldap 来源（identity domain 实现）。
 	// 当前 nil（identity 未实现），wecom 分支回退 ldap。
 	resolver domainauth.AuthSourceResolver
+	// platformTokenEnsurer 登录成功后 ensure platform service token（service_token domain 实现）。
+	// nil 时跳过（service_token 未实现）。
+	platformTokenEnsurer domainauth.PlatformTokenEnsurer
 }
 
 // LdapAuthenticator 是 LDAP 认证接口（*ldapclient.Client 实现它）。
@@ -41,6 +44,11 @@ func NewService(repo domainauth.UserRepo, signer domainauth.SessionSigner, ldap 
 
 // SetAuthSourceResolver 注入 identity 提供的 auth_source 解析器（identity domain 完成后调用）。
 func (s *Service) SetAuthSourceResolver(r domainauth.AuthSourceResolver) { s.resolver = r }
+
+// SetPlatformTokenEnsurer 注入 service_token 提供的 platform token ensurer（service_token domain 完成后调用）。
+func (s *Service) SetPlatformTokenEnsurer(e domainauth.PlatformTokenEnsurer) {
+	s.platformTokenEnsurer = e
+}
 
 // ApiUser 是 service 层返回的用户档案（与 ApiUser DTO 对齐，不含 default_prompt_name，由网关补）。
 type ApiUser struct {
@@ -130,9 +138,14 @@ func (s *Service) Login(ctx context.Context, cmd LoginCommand) (ApiUser, string,
 		return ApiUser{}, "", err
 	}
 
-	// 6. ensurePlatformToken（service_token domain 未实现，留占位）。
-	// TODO(service_token): go s.ensurePlatformToken(ctx, u.ID)
-	log.Printf("auth: TODO ensurePlatformToken for user %s (service_token domain pending)", u.ID)
+	// 6. ensurePlatformToken（fire-and-forget，失败仅日志，不影响登录）。
+	if s.platformTokenEnsurer != nil {
+		if err := s.platformTokenEnsurer.EnsurePlatformToken(ctx, u.ID); err != nil {
+			log.Printf("auth: ensurePlatformToken for user %s: %v", u.ID, err)
+		}
+	} else {
+		log.Printf("auth: platformTokenEnsurer not wired, skip ensurePlatformToken for %s", u.ID)
+	}
 
 	return toApiUser(u, s.resolver), token, nil
 }

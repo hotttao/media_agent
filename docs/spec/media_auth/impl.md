@@ -9,7 +9,7 @@
 
 ## 1. 概述与边界
 
-media_auth 接管 control-plane 全部认证鉴权能力，6 个业务 service / 6 个 domain（1:1）+ 1 个 internal token service。
+media_auth 接管 control-plane 全部认证鉴权能力，7 个业务 service / 7 个 domain（1:1）+ 1 个 internal token service。
 
 | service (proto) | domain | 职责 | 来源 (control-plane) |
 |---|---|---|---|
@@ -17,6 +17,7 @@ media_auth 接管 control-plane 全部认证鉴权能力，6 个业务 service /
 | `identity` | identity | 外部身份绑定 list/unbind（generic，按 provider） | routes/wecom-auth.ts(identity 段) + user_identities |
 | `wecom` | wecom | 企微 corp OAuth 登录/绑定通道 | routes/wecom-auth.ts + services/wecom.ts |
 | `service_token` | service_token | tos_xxx 创建/列表/撤销 + platform token | routes/service-tokens.ts + lib/service-token.ts |
+| `team` | team | team CRUD + 成员管理 + 邀请签发/预览/接受 | routes/teams.ts + routes/invites.ts + services/db/teams.ts + services/db/team-invites.ts |
 | `oauth` | oauth | OAuth2 AS：code/refresh/token-exchange + userinfo | routes/oauth-provider.ts + services/oauth-provider.ts |
 | `mcp_oauth` | mcp_oauth | 反向 OAuth client 连 MCP server | routes/mcp-oauth.ts + services/mcp-oauth.ts |
 | `token` (internal) | (service_token) | VerifyToken RPC，供 control_plane 验 Bearer service token | 新增（control-plane 顶层中间件迁出）|
@@ -34,7 +35,7 @@ media_agent/                                  # workspace 根 (go.work)
 ├── idl/
 │   └── media_auth/                           # 本服务 IDL（§3 全文）
 │       ├── auth.proto / identity.proto / wecom.proto
-│       ├── service_token.proto / oauth.proto / mcp_oauth.proto
+│       ├── service_token.proto / team.proto / oauth.proto / mcp_oauth.proto
 │       └── token.proto                       # internal VerifyToken（mTLS，不挂网关）
 ├── hertz_gen/                                # 🔴 共享生成根（独立 module，禁改）
 │   ├── model/media_auth/<service>/*.pb.go    # API DTO
@@ -72,6 +73,7 @@ media_agent/                                  # workspace 根 (go.work)
 | identity | `handler/identity/` | `service/identity/` | — | `domain/identity/`(Identity 值对象,双唯一不变量) | `dal/repo/identity/` | — |
 | wecom | `handler/wecom/` | `service/wecom/` | `workflow/wecom_login_bind.go` | `domain/wecom/`(corp token 缓存,authorize URL) | — | — |
 | service_token | `handler/service_token/` | `service/service_token/` | — | `domain/service_token/`(Token 聚合,platform 唯一不变量) | `dal/repo/service_token/` | `policy/service_token/`(撤销权限) |
+| team | `handler/team/` | `service/team/` | `workflow/team_invite_accept.go` | `domain/team/`(Team 聚合 + TeamMembership + TeamInvite,末位 admin 保护) | `dal/repo/team/` | `policy/team/`(末位 admin 校验,invite 过期判定) |
 | oauth | `handler/oauth/` | `service/oauth/` | `workflow/oauth_authorize_code.go` | `domain/oauth/`(Client/AuthCode/RefreshToken,PKCE,轮转) | `dal/repo/oauth/` | `policy/oauth/`(redirect_uri/secret/PKCE/grant 校验) |
 | mcp_oauth | `handler/mcp_oauth/` | `service/mcp_oauth/` | `workflow/mcp_oauth_connect.go` | `domain/mcp_oauth/`(McpClient/McpToken,宽限算法) | `dal/repo/mcp_oauth/` | `policy/mcp_oauth/`(宽限判定) |
 
@@ -267,7 +269,135 @@ message RevokeServiceTokenRequest  { string id = 1 [(api.path) = "id"]; }
 message RevokeServiceTokenResponse { bool success = 1; }
 ```
 
-### 3.5 oauth.proto
+### 3.5 team.proto
+
+```proto
+syntax = "proto3";
+package media_auth.team;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_auth/team";
+
+// Team CRUD + 成员管理 + 邀请签发与撤销。创建者自动成为首任 admin。
+// 末位 admin 保护:UpdateMemberRole / RemoveMember 拒绝把唯一 admin 降级或移除。
+// 鉴权:每个 handler 内部 getMembership(teamID, session.sub) → 0/403/admin。
+service TeamService {
+  rpc ListMyTeams(ListMyTeamsRequest) returns(ListMyTeamsResponse) {
+    option (google.api.http) = { get: "/api/teams" };
+    option (api.get) = "/api/teams";
+  }
+  rpc CreateTeam(CreateTeamRequest) returns(ApiTeam) {
+    option (google.api.http) = { post: "/api/teams" body: "*" };
+    option (api.post) = "/api/teams";
+  }
+  rpc GetTeam(GetTeamRequest) returns(ApiTeam) {
+    option (google.api.http) = { get: "/api/teams/{id}" };
+    option (api.get) = "/api/teams/:id";
+  }
+  rpc UpdateTeam(UpdateTeamRequest) returns(ApiTeam) {
+    option (google.api.http) = { patch: "/api/teams/{id}" body: "*" };
+    option (api.patch) = "/api/teams/:id";
+  }
+  rpc DeleteTeam(DeleteTeamRequest) returns(DeleteTeamResponse) {
+    option (google.api.http) = { delete: "/api/teams/{id}" };
+    option (api.delete) = "/api/teams/:id";
+  }
+  rpc ListMembers(ListMembersRequest) returns(ListMembersResponse) {
+    option (google.api.http) = { get: "/api/teams/{id}/members" };
+    option (api.get) = "/api/teams/:id/members";
+  }
+  rpc AddMember(AddMemberRequest) returns(ApiTeamMember) {
+    option (google.api.http) = { post: "/api/teams/{id}/members" body: "*" };
+    option (api.post) = "/api/teams/:id/members";
+  }
+  rpc UpdateMemberRole(UpdateMemberRoleRequest) returns(UpdateMemberRoleResponse) {
+    option (google.api.http) = { patch: "/api/teams/{id}/members/{userId}" body: "*" };
+    option (api.patch) = "/api/teams/:id/members/:userId";
+  }
+  rpc RemoveMember(RemoveMemberRequest) returns(RemoveMemberResponse) {
+    option (google.api.http) = { delete: "/api/teams/{id}/members/{userId}" };
+    option (api.delete) = "/api/teams/:id/members/:userId";
+  }
+  rpc ListInvites(ListInvitesRequest) returns(ListInvitesResponse) {
+    option (google.api.http) = { get: "/api/teams/{id}/invites" };
+    option (api.get) = "/api/teams/:id/invites";
+  }
+  rpc CreateInvite(CreateInviteRequest) returns(ApiTeamInvite) {
+    option (google.api.http) = { post: "/api/teams/{id}/invites" body: "*" };
+    option (api.post) = "/api/teams/:id/invites";
+  }
+  rpc RevokeInvite(RevokeInviteRequest) returns(RevokeInviteResponse) {
+    option (google.api.http) = { delete: "/api/teams/{id}/invites/{token}" };
+    option (api.delete) = "/api/teams/:id/invites/:token";
+  }
+  // 邀请预览与接受 —— 走 /api/invites/* 前缀,鉴权主体是"持 token 的任意已登录 user",非 team admin。
+  rpc PreviewInvite(PreviewInviteRequest) returns(ApiTeamInvitePreview) {
+    option (google.api.http) = { get: "/api/invites/{token}" };
+    option (api.get) = "/api/invites/:token";
+  }
+  rpc AcceptInvite(AcceptInviteRequest) returns(AcceptInviteResponse) {
+    option (google.api.http) = { post: "/api/invites/{token}/accept" };
+    option (api.post) = "/api/invites/:token/accept";
+  }
+}
+
+message ListMyTeamsRequest  {}
+message ListMyTeamsResponse { repeated ApiTeam teams = 1; }
+message CreateTeamRequest  { string name = 1; optional string description = 2; }
+message GetTeamRequest     { string id = 1 [(api.path) = "id"]; }
+message UpdateTeamRequest  { string id = 1 [(api.path) = "id"]; optional string name = 2; optional string description = 3; }
+message DeleteTeamRequest  { string id = 1 [(api.path) = "id"]; }
+message DeleteTeamResponse { bool success = 1; }
+message ListMembersRequest { string id = 1 [(api.path) = "id"]; }
+message ListMembersResponse{ repeated ApiTeamMember members = 1; }
+message AddMemberRequest   { string id = 1 [(api.path) = "id"]; string user_id = 2; optional string role = 3; } // 默认 member
+message UpdateMemberRoleRequest  { string id = 1 [(api.path) = "id"]; string user_id = 2 [(api.path) = "userId"]; string role = 3; }
+message UpdateMemberRoleResponse { bool success = 1; }
+message RemoveMemberRequest  { string id = 1 [(api.path) = "id"]; string user_id = 2 [(api.path) = "userId"]; }
+message RemoveMemberResponse { bool success = 1; }
+message ListInvitesRequest   { string id = 1 [(api.path) = "id"]; }
+message ListInvitesResponse  { repeated ApiTeamInvite invites = 1; }
+message CreateInviteRequest  { string id = 1 [(api.path) = "id"]; optional int32 expires_in_days = 2; } // 默认 7
+message RevokeInviteRequest  { string id = 1 [(api.path) = "id"]; string token = 2 [(api.path) = "token"]; }
+message RevokeInviteResponse { bool success = 1; }
+message PreviewInviteRequest { string token = 1 [(api.path) = "token"]; }
+message AcceptInviteRequest  { string token = 1 [(api.path) = "token"]; }
+message AcceptInviteResponse { string team_id = 1; bool already_member = 2; }
+
+message ApiTeam {
+  string id = 1;
+  string name = 2;
+  optional string description = 3;
+  string created_by = 4;
+  string created_at = 5;
+  string updated_at = 6;
+  string my_role = 7;       // admin | member
+  int32 member_count = 8;
+}
+message ApiTeamMember {
+  string user_id = 1;
+  string user_name = 2;     // JOIN users.display_name
+  string role = 3;          // admin | member
+  string joined_at = 4;
+}
+message ApiTeamInvite {
+  string token = 1;         // 明文,仅本次响应可见(CREATE)
+  string team_id = 2;
+  string created_by = 3;
+  string created_by_name = 4;
+  optional string expires_at = 5;
+  string created_at = 6;
+}
+message ApiTeamInvitePreview {
+  string team_id = 1;
+  string team_name = 2;
+  string inviter_name = 3;
+  optional string expires_at = 4;
+  bool already_member = 5;
+}
+```
+
+### 3.6 oauth.proto
 
 ```proto
 syntax = "proto3";
@@ -345,7 +475,7 @@ message OAuthUserInfo {
 }
 ```
 
-### 3.6 mcp_oauth.proto
+### 3.7 mcp_oauth.proto
 
 ```proto
 syntax = "proto3";
@@ -398,7 +528,7 @@ message DisconnectRequest  { string server_origin = 1 [(api.path) = "server_orig
 message DisconnectResponse { bool success = 1; }
 ```
 
-### 3.7 token.proto（internal，mTLS）
+### 3.8 token.proto（internal，mTLS）
 
 ```proto
 syntax = "proto3";
@@ -427,7 +557,7 @@ message VerifyTokenResponse {
 }
 ```
 
-### 3.8 鉴权 skip list（media_auth 内部中间件）
+### 3.9 鉴权 skip list（media_auth 内部中间件）
 
 media_auth 对 4 前缀做 cookie/session 鉴权，以下端点短路（无 JWT）：
 - `POST /api/auth/login`、`GET /api/auth/wecom/enabled`、`GET /api/auth/wecom/authorize`、`GET /api/auth/wecom/callback`
@@ -555,6 +685,8 @@ CREATE INDEX IF NOT EXISTS mcp_oauth_tokens_user_idx ON media_auth.mcp_oauth_tok
 COMMIT;
 ```
 
+> 团队相关 3 张表（`teams` / `team_members` / `team_invites`）由 `team` domain 接管，从 control_plane 主迁移链迁出，下一批迁移 `0002_teams.sql` 追加，本节未列出。
+
 GORM Gen：`biz/dal/query/` 🔴 禁改，schema 变更重新生成；`biz/dal/repo/` 把行模型转 domain 对象，禁止 GORM 行模型泄漏上层。
 
 ---
@@ -595,7 +727,20 @@ GORM Gen：`biz/dal/query/` 🔴 禁改，schema 变更重新生成；`biz/dal/r
 - **内部 getPlatformToken(userID)**：供 control_plane agent 回调取明文。
 - 不变量：每用户至多一个 active platform token（部分唯一索引）；明文 `token` 列仅 platform 非 NULL（ADR-0002）。
 
-### 5.5 oauth（Access Token 不落库，HS256 JWT 自包含）
+### 5.5 team
+- **CreateTeam**：事务内 INSERT `teams` + INSERT `team_members`(role='admin')，创建者自动升任首任 admin。
+- **GetTeam / ListMyTeams / ListMembers**：鉴权点都是 `getMembership(teamID, session.sub)`，缺失统一返 404（不向非成员暴露 team 是否存在）。
+- **UpdateTeam / DeleteTeam**：要求 `membership.role=='admin'`，否则 403；delete 级联清 team_members + team_invites。
+- **AddMember**：admin only；目标 user 必须存在（按 users.id 查，由 auth 提供）；`INSERT ... ON CONFLICT (team_id,user_id) DO NOTHING` 幂等。
+- **UpdateMemberRole**：admin only；目标 role 非 admin 且现存 admin 仅 1 名且为该 user → 409（"Cannot demote the last admin"）。
+- **RemoveMember**：admin 可移任何人；非 admin 仅可 self-remove；目标 role=admin 且现存 admin 仅 1 名 → 409（"Cannot remove the last admin; delete the team instead"）。
+- **CreateInvite**：admin only；`token="tinv_"+base64url(randomBytes(24))`；INSERT `(team_id, created_by, expires_at=now+7d)`；明文 token 仅本次响应可见。
+- **ListInvites**：admin only；`WHERE expires_at IS NULL OR expires_at > now()`。
+- **RevokeInvite**：admin only；DELETE by token。
+- **PreviewInvite / AcceptInvite**：任意已登录 user；token 不存在 → 404，过期 → 410，team 已被删 → 404；AcceptInvite 已入团 → 幂等返 `{team_id, already_member:true}`；新加入固定 role='member'，不接受 invite 直升 admin。
+- 不变量：team 必须始终至少一名 admin（Last Admin Protection）；invite token 全局唯一（PK）；team 删除级联清 team_members + team_invites。
+
+### 5.6 oauth（Access Token 不落库，HS256 JWT 自包含）
 - **GetAuthorizeInfo**：`response_type!=code` → 400；client 不存在 → 400 `invalid_client`；`redirect_uri` 不在白名单 → 400。返回 client_name/scope。
 - **ApproveAuthorization**：同上校验 + `code_challenge_method` 仅 S256（否则 400）；`code=hex(32)` INSERT（`user_id=session.sub, expires_at=now+10min`）；返回 `{redirect_uri}?code=&state=`。
 - **ExchangeToken**（form-urlencoded，按 `grant_type` 分发）：
@@ -607,7 +752,7 @@ GORM Gen：`biz/dal/query/` 🔴 禁改，schema 变更重新生成；`biz/dal/r
 - **清理**：每小时删过期 authorization_code / refresh_token。
 - 不变量：auth_code 一次性；refresh_token 轮转；redirect_uri 精确匹配；PKCE 仅 S256。
 
-### 5.6 mcp_oauth（access/refresh token 明文存，对 media_auth 不透明）
+### 5.7 mcp_oauth（access/refresh token 明文存，对 media_auth 不透明）
 - **DiscoverOAuth**：缺 url → 400；`GET {origin}/.well-known/oauth-authorization-server`（header `MCP-Protocol-Version: 2025-03-26`，5s）；缺 authorize+token endpoint → `{oauth_required:false}`；有 → upsert `mcp_oauth_clients`，`{true,server_origin}`；不可达 → 502。
 - **GetConnectionStatus**：`servers` 逗号分隔，逐个查 `(user_id=sub,server_origin)`；connected=存在且未过宽限；返回 map。
 - **StartAuthorization**：缺参 → 400；未 discover → 400；`code_verifier=rand(32),code_challenge=S256,state=rand(16)`；`pendingAuths[state]={user_id,server_origin,code_verifier,workspace_id,created_at=now}`（内存 10min TTL，一次性）；`c.Redirect` 到 authorize_endpoint。
@@ -693,6 +838,7 @@ token_verify:                            # internal VerifyToken(mTLS) listener
 | 交互 | 方向 | 机制 | 文档 |
 |---|---|---|---|
 | 4 前缀反代 | browser → media_auth | control_plane 网关反代 `/api/auth` `/api/oauth` `/api/service-tokens` `/api/mcp-oauth` | ADR-0001 |
+| team/invites 反代 | browser → media_auth | control_plane 网关反代 `/api/teams` `/api/invites` | team domain（与 4 前缀同批次纳入 P2）|
 | cookie/session 鉴权 | media_auth 自闭环 | media_auth 签+验 cookie JWT | wecom_login_bind |
 | VerifyToken | control_plane → media_auth | mTLS internal RPC，opaque service_token→Subject | [service_token_verification](../../workflow/0001-service-token-verification.md) |
 | JWT 本地验 | control_plane 自闭环 | HS256 共享密钥验 cookie/bearer JWT | ADR-0001 |
@@ -708,7 +854,7 @@ token_verify:                            # internal VerifyToken(mTLS) listener
 | 阶段 | 动作 | 状态 |
 |---|---|---|
 | 本批次 | IDL(含 token.proto) + SQL + 领域模型 + spec 落盘；control_plane 不动 | ✅ 完成 |
-| P1 | media_auth 独立 Go service：`hz update` 生成 6 service handler/router 骨架 + token service；实现 domain/service/workflow/dal；e2e | 待启动 |
+| P1 | media_auth 独立 Go service：`hz update` 生成 6 service handler/router 骨架 + token service；实现 domain/service/workflow/dal；e2e | ✅ 完成（7 domain + token internal 全部实现；build + arch-check + gofmt + go vet + 关键路径 e2e 冒烟通过；规范 e2e 待统一补）|
 | P2 | control_plane 网关反代 4 前缀到 media_auth；前端适配 identity 路径变更；control_plane 中间件接 VerifyToken RPC | 待启动 |
 | P3 | media_auth 接管 8 表，control_plane 删除认证相关 migration；DB 物理独立/同库不同 schema | 待启动 |
 | P4 | （远期）JWT 迁非对称签名，消除 JWT_SECRET 共享（ADR-0001 备选）| 评估 |

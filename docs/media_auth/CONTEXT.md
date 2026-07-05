@@ -116,7 +116,7 @@ _禁用替代词_：character、avatar、figure。
 _禁用替代词_：ACL、access level。
 
 **Resource Grant（资源共享授权）**:
-`(resource_id, team_id) → permission ∈ {viewer, editor}` 的显式授权；不在 grant 内的团队对 `visibility=team` 资源不可见。owner 始终拥有全部权限，不需 grant。
+`(resource_id, team_id) → permission ∈ {viewer, editor}` 的显式授权；不在 grant 内的团队对 `visibility=team` 资源不可见。owner 始终拥有全部权限，不需 grant。team 实体的 CRUD 与成员关系归 [team](domain/0007-team/team.md) domain。
 _禁用替代词_：share、ACL。
 
 **My Permission（资源访问权限）**:
@@ -131,5 +131,21 @@ _禁用替代词_：share、ACL。
 _禁用替代词_：role、claim。
 
 **Team（团队）**:
-media_auth 内 `teams` 记录的 text id；`team_members (team_id, user_id)` 维护 user ↔ team 多对多。本术语仅登记，team CRUD 与成员管理由 `media_auth` 后续单独建模。
-_禁用替代词_：group、org。
+一组 user 的命名集合，用于 [Resource Grant](#resource-grant资源共享授权) 范围内的资源共享；team 不是多租户隔离边界，也不是 billing 单位。归 `team` domain。
+_禁用替代词_：group、org、tenant。
+
+**Team Membership（团队成员关系）**:
+`(team_id, user_id) → role` 的多对多关系记录；role 决定该 user 在该 team 内的管理能力。
+_禁用替代词_：membership row、team user。
+
+**Team Member Role（团队成员角色）**:
+team 内的角色档位 `admin | member`：admin 可改 team / 增删成员 / 创建与撤销邀请；member 仅可查看与主动退团。归 `team` domain。
+_禁用替代词_：permission、level、position。
+
+**Team Invite（团队邀请）**:
+由 team admin 签发的可分享链接（`tinv_` 前缀 + 随机串），持有者在有效期内可一键加入 team；链接与 team 绑定，到期或撤销后失效。归 `team` domain。
+_禁用替代词_：invitation、share link。
+
+**Last Admin Protection（末位管理员保护）**:
+team 必须始终至少保留一名 admin 的不变量——降级 / 移除 / 退团最后一任 admin 一律拒绝（须删 team 或先提拔他人），由 `team` domain 在写前校验。
+_禁用替代词_：single admin lock、final admin guard。

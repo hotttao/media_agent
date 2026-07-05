@@ -6,18 +6,46 @@
 package main
 
 import (
+	"context"
 	"log"
+	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"gorm.io/gorm"
 
 	configpb "media_agent/hertz_gen/config"
+	"media_agent/media_auth/biz/dal"
 	dalauth "media_agent/media_auth/biz/dal/repo/auth"
+	dalidentity "media_agent/media_auth/biz/dal/repo/identity"
+	dalmcpoauth "media_agent/media_auth/biz/dal/repo/mcp_oauth"
+	daloauth "media_agent/media_auth/biz/dal/repo/oauth"
+	dalservicetoken "media_agent/media_auth/biz/dal/repo/service_token"
+	dalteam "media_agent/media_auth/biz/dal/repo/team"
+	domainwecom "media_agent/media_auth/biz/domain/wecom"
 	authhandler "media_agent/media_auth/biz/handler/auth"
+	identityhandler "media_agent/media_auth/biz/handler/identity"
+	mcpoauthhandler "media_agent/media_auth/biz/handler/mcp_oauth"
+	oauthhandler "media_agent/media_auth/biz/handler/oauth"
+	servicetokenhandler "media_agent/media_auth/biz/handler/service_token"
+	teamhandler "media_agent/media_auth/biz/handler/team"
+	tokenhandler "media_agent/media_auth/biz/handler/token"
+	wecomhandler "media_agent/media_auth/biz/handler/wecom"
 	"media_agent/media_auth/biz/middleware"
 	authservice "media_agent/media_auth/biz/service/auth"
+	identityservice "media_agent/media_auth/biz/service/identity"
+	mcpoauthservice "media_agent/media_auth/biz/service/mcp_oauth"
+	oauthservice "media_agent/media_auth/biz/service/oauth"
+	servicetokenservice "media_agent/media_auth/biz/service/service_token"
+	teamservice "media_agent/media_auth/biz/service/team"
+	tokenservice "media_agent/media_auth/biz/service/token"
+	wecomservice "media_agent/media_auth/biz/service/wecom"
+	"media_agent/media_auth/biz/shared/client/introspect"
 	ldapclient "media_agent/media_auth/biz/shared/client/ldap"
+	mcpclient "media_agent/media_auth/biz/shared/client/mcp"
+	wecomclient "media_agent/media_auth/biz/shared/client/wecom"
+	"media_agent/media_auth/biz/shared/pendingauth"
 	"media_agent/media_auth/biz/shared/session"
+	"media_agent/media_auth/biz/workflow"
 )
 
 // SessionMiddleware 由 main.go 取用（挂全局 middleware）。
@@ -48,8 +76,77 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	// LDAP client（enabled=false 时 Authenticate 恒 nil）。
 	ldapCli := ldapclient.New(cfg.GetLdap())
 
+	// TxRunner：跨 domain / 多语句用例的事务抽象（team.CreateTeam 等用）。
+	txRunner := dal.NewTxRunner(db)
+
 	// repo + service + handler 回填。
 	userRepo := dalauth.NewRepo(db)
 	authSvc := authservice.NewService(userRepo, signer, ldapCli)
 	authhandler.AuthSvc = authSvc
+
+	// identity domain：repo + service + handler 回填；service 同时作 AuthSourceResolver 注入 auth。
+	identityRepo := dalidentity.NewRepo(db)
+	identitySvc := identityservice.NewService(identityRepo)
+	identityhandler.IdentitySvc = identitySvc
+	authSvc.SetAuthSourceResolver(identitySvc)
+
+	// service_token domain：repo + service + handler 回填；service 同时作 PlatformTokenEnsurer 注入 auth。
+	stRepo := dalservicetoken.NewRepo(db)
+	stSvc := servicetokenservice.NewService(stRepo)
+	servicetokenhandler.ServiceTokenSvc = stSvc
+	authSvc.SetPlatformTokenEnsurer(stSvc)
+
+	// team domain：repo + service（持 TxRunner）+ handler 回填。
+	teamRepo := dalteam.NewRepo(db)
+	teamSvc := teamservice.NewService(teamRepo, txRunner)
+	teamhandler.TeamSvc = teamSvc
+
+	// internal token service：复用 service_token TokenRepo + auth UserRepo（不新建 domain）。
+	tokenSvc := tokenservice.NewService(stRepo, userRepo)
+	tokenhandler.TokenSvc = tokenSvc
+
+	// oauth domain：repo + service（持 signer + introspect client + TTL）+ handler 回填。
+	oauthRepo := daloauth.NewRepo(db)
+	authCfg := cfg.GetAuth()
+	refreshTTL := time.Duration(authCfg.GetRefreshTokenExpiresInDays()) * 24 * time.Hour
+	authCodeTTL := time.Duration(authCfg.GetAuthCodeExpiresInMinutes()) * time.Minute
+	introspectCli := introspect.NewClient(nil)
+	oauthSvc := oauthservice.NewService(oauthRepo, signer, introspectCli, refreshTTL, authCodeTTL)
+	oauthhandler.OAuthSvc = oauthSvc
+	// 每小时清理过期 auth_code / refresh_token。
+	go startOAuthCleanup(oauthSvc)
+
+	// wecom domain：config + client + service + workflow（编排 identity+auth+service_token）。
+	wecomCfg := cfg.GetWecom()
+	wecomDomainCfg := domainwecom.Config{
+		CorpID:     wecomCfg.GetCorpId(),
+		CorpSecret: wecomCfg.GetCorpSecret(),
+		AgentID:    wecomCfg.GetAgentId(),
+	}
+	wecomCli := wecomclient.NewClient(wecomDomainCfg, nil)
+	wecomSvc := wecomservice.NewService(wecomDomainCfg)
+	wecomhandler.WecomSvc = wecomSvc
+	wecomFlow := workflow.NewWecomLoginBind(wecomCli, identitySvc, userRepo, signer, stSvc)
+	wecomhandler.WecomFlow = wecomFlow
+
+	// mcp_oauth domain：repo + MCP server client + pendingauth store + service + workflow + handler。
+	mcpRepo := dalmcpoauth.NewRepo(db)
+	mcpCli := mcpclient.NewClient(nil)
+	pendingStore := pendingauth.NewStore()
+	mcpSvc := mcpoauthservice.NewService(mcpRepo, mcpCli, pendingStore)
+	mcpoauthhandler.McpOAuthSvc = mcpSvc
+	mcpFlow := workflow.NewMcpOAuthConnect(mcpSvc, nil) // WorkspaceNotifier no-op（control_plane 集成 P2）
+	mcpoauthhandler.McpOAuthFlow = mcpFlow
+}
+
+// startOAuthCleanup 每小时删过期 oauth authorization_code / refresh_token（对齐 control-plane setInterval）。
+// 错误仅日志，不中断循环。
+func startOAuthCleanup(svc *oauthservice.Service) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for range ticker.C {
+		if err := svc.CleanupExpired(context.Background()); err != nil {
+			log.Printf("oauth: cleanup expired: %v", err)
+		}
+	}
 }

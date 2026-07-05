@@ -16,26 +16,66 @@ import (
 )
 
 var (
-	Q    = new(Query)
-	User *user
+	Q                      = new(Query)
+	McpOAuthClient         *mcpOAuthClient
+	McpOAuthToken          *mcpOAuthToken
+	OAuthAuthorizationCode *oAuthAuthorizationCode
+	OAuthClient            *oAuthClient
+	OAuthRefreshToken      *oAuthRefreshToken
+	ServiceToken           *serviceToken
+	Team                   *team
+	TeamInvite             *teamInvite
+	TeamMember             *teamMember
+	User                   *user
+	UserIdentity           *userIdentity
 )
 
 func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	*Q = *Use(db, opts...)
+	McpOAuthClient = &Q.McpOAuthClient
+	McpOAuthToken = &Q.McpOAuthToken
+	OAuthAuthorizationCode = &Q.OAuthAuthorizationCode
+	OAuthClient = &Q.OAuthClient
+	OAuthRefreshToken = &Q.OAuthRefreshToken
+	ServiceToken = &Q.ServiceToken
+	Team = &Q.Team
+	TeamInvite = &Q.TeamInvite
+	TeamMember = &Q.TeamMember
 	User = &Q.User
+	UserIdentity = &Q.UserIdentity
 }
 
 func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 	return &Query{
-		db:   db,
-		User: newUser(db, opts...),
+		db:                     db,
+		McpOAuthClient:         newMcpOAuthClient(db, opts...),
+		McpOAuthToken:          newMcpOAuthToken(db, opts...),
+		OAuthAuthorizationCode: newOAuthAuthorizationCode(db, opts...),
+		OAuthClient:            newOAuthClient(db, opts...),
+		OAuthRefreshToken:      newOAuthRefreshToken(db, opts...),
+		ServiceToken:           newServiceToken(db, opts...),
+		Team:                   newTeam(db, opts...),
+		TeamInvite:             newTeamInvite(db, opts...),
+		TeamMember:             newTeamMember(db, opts...),
+		User:                   newUser(db, opts...),
+		UserIdentity:           newUserIdentity(db, opts...),
 	}
 }
 
 type Query struct {
 	db *gorm.DB
 
-	User user
+	McpOAuthClient         mcpOAuthClient
+	McpOAuthToken          mcpOAuthToken
+	OAuthAuthorizationCode oAuthAuthorizationCode
+	OAuthClient            oAuthClient
+	OAuthRefreshToken      oAuthRefreshToken
+	ServiceToken           serviceToken
+	Team                   team
+	TeamInvite             teamInvite
+	TeamMember             teamMember
+	User                   user
+	UserIdentity           userIdentity
 }
 
 func (q *Query) Available() bool { return q.db != nil }
@@ -44,8 +84,18 @@ func (q *Query) UnderlyingDB() *gorm.DB { return q.db }
 
 func (q *Query) clone(db *gorm.DB) *Query {
 	return &Query{
-		db:   db,
-		User: q.User.clone(db),
+		db:                     db,
+		McpOAuthClient:         q.McpOAuthClient.clone(db),
+		McpOAuthToken:          q.McpOAuthToken.clone(db),
+		OAuthAuthorizationCode: q.OAuthAuthorizationCode.clone(db),
+		OAuthClient:            q.OAuthClient.clone(db),
+		OAuthRefreshToken:      q.OAuthRefreshToken.clone(db),
+		ServiceToken:           q.ServiceToken.clone(db),
+		Team:                   q.Team.clone(db),
+		TeamInvite:             q.TeamInvite.clone(db),
+		TeamMember:             q.TeamMember.clone(db),
+		User:                   q.User.clone(db),
+		UserIdentity:           q.UserIdentity.clone(db),
 	}
 }
 
@@ -59,18 +109,48 @@ func (q *Query) WriteDB() *Query {
 
 func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 	return &Query{
-		db:   db,
-		User: q.User.replaceDB(db),
+		db:                     db,
+		McpOAuthClient:         q.McpOAuthClient.replaceDB(db),
+		McpOAuthToken:          q.McpOAuthToken.replaceDB(db),
+		OAuthAuthorizationCode: q.OAuthAuthorizationCode.replaceDB(db),
+		OAuthClient:            q.OAuthClient.replaceDB(db),
+		OAuthRefreshToken:      q.OAuthRefreshToken.replaceDB(db),
+		ServiceToken:           q.ServiceToken.replaceDB(db),
+		Team:                   q.Team.replaceDB(db),
+		TeamInvite:             q.TeamInvite.replaceDB(db),
+		TeamMember:             q.TeamMember.replaceDB(db),
+		User:                   q.User.replaceDB(db),
+		UserIdentity:           q.UserIdentity.replaceDB(db),
 	}
 }
 
 type queryCtx struct {
-	User IUserDo
+	McpOAuthClient         IMcpOAuthClientDo
+	McpOAuthToken          IMcpOAuthTokenDo
+	OAuthAuthorizationCode IOAuthAuthorizationCodeDo
+	OAuthClient            IOAuthClientDo
+	OAuthRefreshToken      IOAuthRefreshTokenDo
+	ServiceToken           IServiceTokenDo
+	Team                   ITeamDo
+	TeamInvite             ITeamInviteDo
+	TeamMember             ITeamMemberDo
+	User                   IUserDo
+	UserIdentity           IUserIdentityDo
 }
 
 func (q *Query) WithContext(ctx context.Context) *queryCtx {
 	return &queryCtx{
-		User: q.User.WithContext(ctx),
+		McpOAuthClient:         q.McpOAuthClient.WithContext(ctx),
+		McpOAuthToken:          q.McpOAuthToken.WithContext(ctx),
+		OAuthAuthorizationCode: q.OAuthAuthorizationCode.WithContext(ctx),
+		OAuthClient:            q.OAuthClient.WithContext(ctx),
+		OAuthRefreshToken:      q.OAuthRefreshToken.WithContext(ctx),
+		ServiceToken:           q.ServiceToken.WithContext(ctx),
+		Team:                   q.Team.WithContext(ctx),
+		TeamInvite:             q.TeamInvite.WithContext(ctx),
+		TeamMember:             q.TeamMember.WithContext(ctx),
+		User:                   q.User.WithContext(ctx),
+		UserIdentity:           q.UserIdentity.WithContext(ctx),
 	}
 }
 

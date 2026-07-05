@@ -50,6 +50,16 @@ type AuthSourceResolver interface {
 	ResolveByUserID(ctx context.Context, userID string) string
 }
 
+// PlatformTokenEnsurer 确保 user 拥有一个 active platform service token（不存在则建）。
+//
+// 由 service_token domain 实现并注入（service 层装配），auth domain 不 import service_token domain。
+// auth.Login 成功后 fire-and-forget 调用，为 agent 回调 control_plane 预备明文 platform token。
+// 详见 spec §5.4 / ADR-0002。
+type PlatformTokenEnsurer interface {
+	// EnsurePlatformToken 确保 user 的 active platform token 存在；仅副作用，不返回明文。
+	EnsurePlatformToken(ctx context.Context, userID string) error
+}
+
 // UserRepo 是 auth 领域的仓储接口（由 dal/repo/auth 实现）。
 //
 // 仓储方法收 context.Context：上层在事务内时 ctx 携带 tx（见 dal.FromContext），

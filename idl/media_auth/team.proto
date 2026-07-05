@@ -1,0 +1,123 @@
+syntax = "proto3";
+package media_auth.team;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_auth/team";
+
+// Team CRUD + 成员管理 + 邀请签发与撤销。创建者自动成为首任 admin。
+// 末位 admin 保护:UpdateMemberRole / RemoveMember 拒绝把唯一 admin 降级或移除。
+// 鉴权:每个 handler 内部 getMembership(teamID, session.sub) → 0/403/admin。
+service TeamService {
+  rpc ListMyTeams(ListMyTeamsRequest) returns(ListMyTeamsResponse) {
+    option (google.api.http) = { get: "/api/teams" };
+    option (api.get) = "/api/teams";
+  }
+  rpc CreateTeam(CreateTeamRequest) returns(ApiTeam) {
+    option (google.api.http) = { post: "/api/teams" body: "*" };
+    option (api.post) = "/api/teams";
+  }
+  rpc GetTeam(GetTeamRequest) returns(ApiTeam) {
+    option (google.api.http) = { get: "/api/teams/{id}" };
+    option (api.get) = "/api/teams/:id";
+  }
+  rpc UpdateTeam(UpdateTeamRequest) returns(ApiTeam) {
+    option (google.api.http) = { patch: "/api/teams/{id}" body: "*" };
+    option (api.patch) = "/api/teams/:id";
+  }
+  rpc DeleteTeam(DeleteTeamRequest) returns(DeleteTeamResponse) {
+    option (google.api.http) = { delete: "/api/teams/{id}" };
+    option (api.delete) = "/api/teams/:id";
+  }
+  rpc ListMembers(ListMembersRequest) returns(ListMembersResponse) {
+    option (google.api.http) = { get: "/api/teams/{id}/members" };
+    option (api.get) = "/api/teams/:id/members";
+  }
+  rpc AddMember(AddMemberRequest) returns(ApiTeamMember) {
+    option (google.api.http) = { post: "/api/teams/{id}/members" body: "*" };
+    option (api.post) = "/api/teams/:id/members";
+  }
+  rpc UpdateMemberRole(UpdateMemberRoleRequest) returns(UpdateMemberRoleResponse) {
+    option (google.api.http) = { patch: "/api/teams/{id}/members/{userId}" body: "*" };
+    option (api.patch) = "/api/teams/:id/members/:userId";
+  }
+  rpc RemoveMember(RemoveMemberRequest) returns(RemoveMemberResponse) {
+    option (google.api.http) = { delete: "/api/teams/{id}/members/{userId}" };
+    option (api.delete) = "/api/teams/:id/members/:userId";
+  }
+  rpc ListInvites(ListInvitesRequest) returns(ListInvitesResponse) {
+    option (google.api.http) = { get: "/api/teams/{id}/invites" };
+    option (api.get) = "/api/teams/:id/invites";
+  }
+  rpc CreateInvite(CreateInviteRequest) returns(ApiTeamInvite) {
+    option (google.api.http) = { post: "/api/teams/{id}/invites" body: "*" };
+    option (api.post) = "/api/teams/:id/invites";
+  }
+  rpc RevokeInvite(RevokeInviteRequest) returns(RevokeInviteResponse) {
+    option (google.api.http) = { delete: "/api/teams/{id}/invites/{token}" };
+    option (api.delete) = "/api/teams/:id/invites/:token";
+  }
+  // 邀请预览与接受 —— 走 /api/invites/* 前缀,鉴权主体是"持 token 的任意已登录 user",非 team admin。
+  rpc PreviewInvite(PreviewInviteRequest) returns(ApiTeamInvitePreview) {
+    option (google.api.http) = { get: "/api/invites/{token}" };
+    option (api.get) = "/api/invites/:token";
+  }
+  rpc AcceptInvite(AcceptInviteRequest) returns(AcceptInviteResponse) {
+    option (google.api.http) = { post: "/api/invites/{token}/accept" };
+    option (api.post) = "/api/invites/:token/accept";
+  }
+}
+
+message ListMyTeamsRequest  {}
+message ListMyTeamsResponse { repeated ApiTeam teams = 1; }
+message CreateTeamRequest  { string name = 1; optional string description = 2; }
+message GetTeamRequest     { string id = 1 [(api.path) = "id"]; }
+message UpdateTeamRequest  { string id = 1 [(api.path) = "id"]; optional string name = 2; optional string description = 3; }
+message DeleteTeamRequest  { string id = 1 [(api.path) = "id"]; }
+message DeleteTeamResponse { bool success = 1; }
+message ListMembersRequest { string id = 1 [(api.path) = "id"]; }
+message ListMembersResponse{ repeated ApiTeamMember members = 1; }
+message AddMemberRequest   { string id = 1 [(api.path) = "id"]; string user_id = 2; optional string role = 3; } // 默认 member
+message UpdateMemberRoleRequest  { string id = 1 [(api.path) = "id"]; string user_id = 2 [(api.path) = "userId"]; string role = 3; }
+message UpdateMemberRoleResponse { bool success = 1; }
+message RemoveMemberRequest  { string id = 1 [(api.path) = "id"]; string user_id = 2 [(api.path) = "userId"]; }
+message RemoveMemberResponse { bool success = 1; }
+message ListInvitesRequest   { string id = 1 [(api.path) = "id"]; }
+message ListInvitesResponse  { repeated ApiTeamInvite invites = 1; }
+message CreateInviteRequest  { string id = 1 [(api.path) = "id"]; optional int32 expires_in_days = 2; } // 默认 7
+message RevokeInviteRequest  { string id = 1 [(api.path) = "id"]; string token = 2 [(api.path) = "token"]; }
+message RevokeInviteResponse { bool success = 1; }
+message PreviewInviteRequest { string token = 1 [(api.path) = "token"]; }
+message AcceptInviteRequest  { string token = 1 [(api.path) = "token"]; }
+message AcceptInviteResponse { string team_id = 1; bool already_member = 2; }
+
+message ApiTeam {
+  string id = 1;
+  string name = 2;
+  optional string description = 3;
+  string created_by = 4;
+  string created_at = 5;
+  string updated_at = 6;
+  string my_role = 7;       // admin | member
+  int32 member_count = 8;
+}
+message ApiTeamMember {
+  string user_id = 1;
+  string user_name = 2;     // JOIN users.display_name
+  string role = 3;          // admin | member
+  string joined_at = 4;
+}
+message ApiTeamInvite {
+  string token = 1;         // 明文,仅本次响应可见(CREATE)
+  string team_id = 2;
+  string created_by = 3;
+  string created_by_name = 4;
+  optional string expires_at = 5;
+  string created_at = 6;
+}
+message ApiTeamInvitePreview {
+  string team_id = 1;
+  string team_name = 2;
+  string inviter_name = 3;
+  optional string expires_at = 4;
+  bool already_member = 5;
+}
