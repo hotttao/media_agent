@@ -1,0 +1,49 @@
+syntax = "proto3";
+package media_auth.oauth_client;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_auth/oauth_client";
+
+// OAuth2 client 管理（oauth_clients 表的 CRUD）。admin 鉴权（session + role==admin）。
+// CreateClient 生成 client_secret（明文仅本次返回，DB 存 SHA-256 hash）。
+// RevokeClient 硬删 client（FK ON DELETE CASCADE 清 auth_codes + refresh_tokens）。
+service OAuthClientService {
+  rpc CreateClient(CreateClientRequest) returns(CreateClientResponse) {
+    option (google.api.http) = { post: "/api/oauth/clients" body: "*" };
+    option (api.post) = "/api/oauth/clients";
+  }
+  rpc ListClients(ListClientsRequest) returns(ListClientsResponse) {
+    option (google.api.http) = { get: "/api/oauth/clients" };
+    option (api.get) = "/api/oauth/clients";
+  }
+  rpc RevokeClient(RevokeClientRequest) returns(RevokeClientResponse) {
+    option (google.api.http) = { delete: "/api/oauth/clients/{id}" };
+    option (api.delete) = "/api/oauth/clients/:id";
+  }
+}
+
+message CreateClientRequest {
+  string name = 1;
+  repeated string redirect_uris = 2;
+  optional string homepage_url = 3;
+  optional string description = 4;
+}
+message CreateClientResponse {
+  ApiOAuthClient client = 1;
+  string client_secret = 2;          // 明文，仅本次响应可见；DB 存 SHA-256 hash
+}
+message ListClientsRequest  {}
+message ListClientsResponse { repeated ApiOAuthClient clients = 1; }
+message RevokeClientRequest  { string id = 1 [(api.path) = "id"]; }
+message RevokeClientResponse { bool success = 1; }
+
+message ApiOAuthClient {
+  string id = 1;
+  string name = 2;
+  repeated string redirect_uris = 3;
+  optional string homepage_url = 4;
+  optional string description = 5;
+  string created_by = 6;
+  string created_at = 7;
+  string updated_at = 8;
+}

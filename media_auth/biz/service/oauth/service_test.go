@@ -54,6 +54,30 @@ func (r *fakeRepo) GetClient(_ context.Context, id string) (domainoauth.Client, 
 	}
 	return c, nil
 }
+func (r *fakeRepo) CreateClient(_ context.Context, c domainoauth.Client) (domainoauth.Client, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.clients[c.ID] = c
+	return c, nil
+}
+func (r *fakeRepo) ListClients(_ context.Context) ([]domainoauth.Client, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]domainoauth.Client, 0, len(r.clients))
+	for _, c := range r.clients {
+		out = append(out, c)
+	}
+	return out, nil
+}
+func (r *fakeRepo) DeleteClient(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.clients[id]; !ok {
+		return domainoauth.ErrClientNotFound
+	}
+	delete(r.clients, id)
+	return nil
+}
 func (r *fakeRepo) CreateAuthCode(_ context.Context, ac domainoauth.AuthCode) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -388,4 +412,89 @@ func oauthErrIs(err error, code string) bool {
 		return false
 	}
 	return oe.Code == code
+}
+
+// ── OAuth client 管理 ────────────────────────────────────────────────
+
+func TestCreateClient_AdminOnly(t *testing.T) {
+	repo := newFakeRepo()
+	svc := newSvc(t, repo)
+	_, err := svc.CreateClient(context.Background(), "u1", "user", CreateClientCommand{
+		Name: "C", RedirectURIs: []string{"https://app/cb"},
+	})
+	if !oauthErrIs(err, "invalid_request") {
+		t.Errorf("non-admin: want invalid_request, got %v", err)
+	}
+}
+
+func TestCreateClient_GeneratesSecretAndHash(t *testing.T) {
+	repo := newFakeRepo()
+	svc := newSvc(t, repo)
+	res, err := svc.CreateClient(context.Background(), "u1", "admin", CreateClientCommand{
+		Name: "C", RedirectURIs: []string{"https://app/cb"},
+	})
+	if err != nil {
+		t.Fatalf("CreateClient: %v", err)
+	}
+	// 明文 secret 非空 + tos_ 前缀。
+	if res.ClientSecret == "" || !strings.HasPrefix(res.ClientSecret, "tos_") {
+		t.Errorf("client_secret: got %q", res.ClientSecret)
+	}
+	// client id 非空。
+	if res.Client.ID == "" {
+		t.Errorf("client id empty")
+	}
+	// DB 中存的 secret_hash = sha256(明文)。
+	stored := repo.clients[res.Client.ID]
+	if stored.SecretHash != token.HashToken(res.ClientSecret) {
+		t.Errorf("stored secret_hash mismatch: want %q, got %q",
+			token.HashToken(res.ClientSecret), stored.SecretHash)
+	}
+	if stored.CreatedBy != "u1" {
+		t.Errorf("created_by: want u1, got %q", stored.CreatedBy)
+	}
+}
+
+func TestCreateClient_Validation(t *testing.T) {
+	svc := newSvc(t, newFakeRepo())
+	// 缺 name。
+	_, err := svc.CreateClient(context.Background(), "u1", "admin", CreateClientCommand{
+		RedirectURIs: []string{"https://app/cb"},
+	})
+	if !oauthErrIs(err, "invalid_request") {
+		t.Errorf("missing name: want invalid_request, got %v", err)
+	}
+	// 缺 redirect_uris。
+	_, err = svc.CreateClient(context.Background(), "u1", "admin", CreateClientCommand{Name: "C"})
+	if !oauthErrIs(err, "invalid_request") {
+		t.Errorf("missing redirect_uris: want invalid_request, got %v", err)
+	}
+}
+
+func TestListClients_AdminOnly(t *testing.T) {
+	svc := newSvc(t, newFakeRepo())
+	_, err := svc.ListClients(context.Background(), "user")
+	if !oauthErrIs(err, "invalid_request") {
+		t.Errorf("non-admin list: want invalid_request, got %v", err)
+	}
+}
+
+func TestRevokeClient_AdminOnlyAndNotFound(t *testing.T) {
+	repo := newFakeRepo()
+	svc := newSvc(t, repo)
+	// 非 admin → 403。
+	err := svc.RevokeClient(context.Background(), "user", "c1")
+	if !oauthErrIs(err, "invalid_request") {
+		t.Errorf("non-admin revoke: want invalid_request, got %v", err)
+	}
+	// admin 删不存在的 → ErrClientNotFound。
+	err = svc.RevokeClient(context.Background(), "admin", "nope")
+	if !errors.Is(err, ErrClientNotFound) {
+		t.Errorf("revoke missing: want ErrClientNotFound, got %v", err)
+	}
+	// admin 删存在的 → ok。
+	repo.clients["c1"] = domainoauth.Client{ID: "c1", Name: "C"}
+	if err := svc.RevokeClient(context.Background(), "admin", "c1"); err != nil {
+		t.Errorf("revoke existing: %v", err)
+	}
 }

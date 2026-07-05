@@ -18,6 +18,8 @@ type Client struct {
 	Name         string
 	SecretHash   string   // 空串 = 公开 client（无 secret）
 	RedirectURIs []string // 逐元素精确匹配
+	HomepageURL  string   // 空串 = NULL
+	Description  string   // 空串 = NULL
 	CreatedBy    string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
@@ -66,6 +68,13 @@ type User struct {
 type OAuthRepo interface {
 	// GetClient 按 id 查 client。不存在返回 ErrClientNotFound。
 	GetClient(ctx context.Context, id string) (Client, error)
+	// CreateClient 新建 client（id/secret_hash 由 service 生成）。返回落库后的 Client。
+	CreateClient(ctx context.Context, c Client) (Client, error)
+	// ListClients 列全部 client（按 created_at DESC）。
+	ListClients(ctx context.Context) ([]Client, error)
+	// DeleteClient 按 id 删 client（FK CASCADE 清 auth_codes + refresh_tokens）。
+	// 不存在返回 ErrClientNotFound。
+	DeleteClient(ctx context.Context, id string) error
 	// CreateAuthCode 插入授权码（code/scope/expires_at 由 service 生成）。
 	CreateAuthCode(ctx context.Context, ac AuthCode) error
 	// ConsumeAuthCode 消费授权码：DELETE WHERE code AND expires_at>now RETURNING。

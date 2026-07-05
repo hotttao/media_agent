@@ -1,30 +1,33 @@
 # media_auth 实现规格 (spec)
 
 > 本文是 media_auth 微服务的**自包含**实现规格：研发只看本文即可完成实现。
-> 依据 `harness/contributing`（idl / architecture / server / config）+ DDD + agent-platform `control-plane` 认证实现编写。
-> 详细领域语义见领域模型 [`docs/media_auth/`](../../media_auth/)（CONTEXT / 6 domain / 4 workflow）；架构决策见 [ADR-0001](../../adr/0001-media-auth-extraction-and-token-verification.md)、[ADR-0002](../../adr/0002-platform-token-plaintext-column.md)。
+> 依据 `harness/contributing`（idl / architecture / server / config）+ DDD 编写。
+> 详细领域语义见领域模型 [`docs/media_auth/`](../../media_auth/)（CONTEXT / 7 domain / 4 workflow）；架构决策见 [ADR-0001](../../adr/0001-media-auth-extraction-and-token-verification.md)、[ADR-0002](../../adr/0002-platform-token-plaintext-column.md)。
 > 落地计划见 [plan/media_auth/rollout.md](../../plan/media_auth/rollout.md)。
 
 ---
 
 ## 1. 概述与边界
 
-media_auth 接管 control-plane 全部认证鉴权能力，7 个业务 service / 7 个 domain（1:1）+ 1 个 internal token service。
+media_auth 是 media_agent 平台的统一认证鉴权微服务，对外以 Hertz + Protobuf IDL 暴露，自治数据库。8 个业务 service / 7 个 domain（oauth domain 含 provider + client 两个 service）+ 1 个 internal token service。
 
-| service (proto) | domain | 职责 | 来源 (control-plane) |
-|---|---|---|---|
-| `auth` | auth | 本地/LDAP 登录、session(JWT cookie)、me、改密、偏好 | routes/auth.ts + services/auth.ts + users |
-| `identity` | identity | 外部身份绑定 list/unbind（generic，按 provider） | routes/wecom-auth.ts(identity 段) + user_identities |
-| `wecom` | wecom | 企微 corp OAuth 登录/绑定通道 | routes/wecom-auth.ts + services/wecom.ts |
-| `service_token` | service_token | tos_xxx 创建/列表/撤销 + platform token | routes/service-tokens.ts + lib/service-token.ts |
-| `team` | team | team CRUD + 成员管理 + 邀请签发/预览/接受 | routes/teams.ts + routes/invites.ts + services/db/teams.ts + services/db/team-invites.ts |
-| `oauth` | oauth | OAuth2 AS：code/refresh/token-exchange + userinfo | routes/oauth-provider.ts + services/oauth-provider.ts |
-| `mcp_oauth` | mcp_oauth | 反向 OAuth client 连 MCP server | routes/mcp-oauth.ts + services/mcp-oauth.ts |
-| `token` (internal) | (service_token) | VerifyToken RPC，供 control_plane 验 Bearer service token | 新增（control-plane 顶层中间件迁出）|
+| service (proto) | domain | 职责 |
+|---|---|---|
+| `auth` | auth | 本地/LDAP 登录、session(JWT cookie)、me、改密、偏好 |
+| `identity` | identity | 外部身份绑定 list/unbind（generic，按 provider） |
+| `wecom` | wecom | 企微 corp OAuth 登录/绑定通道 |
+| `service_token` | service_token | tos_xxx 创建/列表/撤销 + platform token |
+| `team` | team | team CRUD + 成员管理 + 邀请签发/预览/接受 |
+| `oauth` | oauth | OAuth2 AS：code/refresh/token-exchange + userinfo |
+| `oauth_client` | oauth | OAuth2 client 管理（create/list/revoke，admin） |
+| `mcp_oauth` | mcp_oauth | 反向 OAuth client 连 MCP server |
+| `token` (internal) | (service_token) | VerifyToken HTTP 接口，供下游服务验 Bearer service token |
 
-**留在 control_plane（不迁）**：HTTP 入口鉴权中间件（验 cookie/bearer JWT + 调 VerifyToken）、plugin-admin 旁路、`/health` `/metrics` `/api/version` 静态资源、`files.*` host 短路。见 ADR-0001。
+**media_auth 边界**：
+- **做什么**：账号 / 会话 / 凭证 / 团队 / 外部身份绑定 / OAuth（作 AS 与 client）。
+- **不做什么**：不承载业务逻辑（业务在 media_materials / media_workflow 等）；不管理 workspace / agent / plugin / mcp-proxy（属其他服务）；不做 HTTP 入口网关（反代 / 路由聚合由部署层或网关服务决定）。
 
-**鉴权解析顺序（control_plane 中间件）**：plugin-admin 旁路 → Bearer(service_token 经 VerifyToken RPC) → Bearer(JWT 本地 HS256 验) → Cookie(JWT 本地验 + 滑动续期)。
+**鉴权链（media_auth 内部中间件）**：受保护路由经 cookie/bearer JWT 本地 HS256 验（+ 滑动续期）→ 注入 Session；公开端点（login / oauth-token / wecom-callback 等）走 skip list（§3.9）。service token 不在 media_auth 自身鉴权链——下游服务经 internal VerifyToken RPC 验。
 
 ---
 
@@ -36,10 +39,10 @@ media_agent/                                  # workspace 根 (go.work)
 │   └── media_auth/                           # 本服务 IDL（§3 全文）
 │       ├── auth.proto / identity.proto / wecom.proto
 │       ├── service_token.proto / team.proto / oauth.proto / mcp_oauth.proto
-│       └── token.proto                       # internal VerifyToken（mTLS，不挂网关）
+│       └── token.proto                       # internal VerifyToken（不挂网关；部署层隔离）
 ├── hertz_gen/                                # 🔴 共享生成根（独立 module，禁改）
 │   ├── model/media_auth/<service>/*.pb.go    # API DTO
-│   └── media_auth/                           # 下游 client stub（供 control_plane 调 VerifyToken）
+│   └── media_auth/                           # 下游 client stub（供下游服务调 VerifyToken）
 ├── hertz_infra/                              # 共享治理 + 配置加载（独立 module）
 └── media_auth/                               # 🆕 本微服务 module: media_agent/media_auth
     ├── main.go                               # 🟡 启动编排（轻薄）
@@ -75,6 +78,7 @@ media_agent/                                  # workspace 根 (go.work)
 | service_token | `handler/service_token/` | `service/service_token/` | — | `domain/service_token/`(Token 聚合,platform 唯一不变量) | `dal/repo/service_token/` | `policy/service_token/`(撤销权限) |
 | team | `handler/team/` | `service/team/` | `workflow/team_invite_accept.go` | `domain/team/`(Team 聚合 + TeamMembership + TeamInvite,末位 admin 保护) | `dal/repo/team/` | `policy/team/`(末位 admin 校验,invite 过期判定) |
 | oauth | `handler/oauth/` | `service/oauth/` | `workflow/oauth_authorize_code.go` | `domain/oauth/`(Client/AuthCode/RefreshToken,PKCE,轮转) | `dal/repo/oauth/` | `policy/oauth/`(redirect_uri/secret/PKCE/grant 校验) |
+| oauth（client 管理） | `handler/oauth_client/` | `service/oauth/`（同 domain） | — | 同 oauth domain | 同 `dal/repo/oauth/` | 同 `policy/oauth/` |
 | mcp_oauth | `handler/mcp_oauth/` | `service/mcp_oauth/` | `workflow/mcp_oauth_connect.go` | `domain/mcp_oauth/`(McpClient/McpToken,宽限算法) | `dal/repo/mcp_oauth/` | `policy/mcp_oauth/`(宽限判定) |
 
 ### 2.2 同层隔离与跨 domain 编排（architecture.md 强约束）
@@ -143,7 +147,7 @@ message SetDefaultPromptRequest  { optional string prompt_id = 1; }  // null=清
 message SetDefaultPromptResponse { bool success = 1; }
 
 // ApiUser —— /me、登录响应统一用户档案。
-// default_prompt_id 为 opaque id(prompts 表留 control_plane),不校验 FK;
+// default_prompt_id 为 opaque id（prompts 表不在 media_auth，由其他服务持有）,不校验 FK;
 // default_prompt_name 不返回,由网关层补。
 message ApiUser {
   string id = 1;
@@ -528,7 +532,7 @@ message DisconnectRequest  { string server_origin = 1 [(api.path) = "server_orig
 message DisconnectResponse { bool success = 1; }
 ```
 
-### 3.8 token.proto（internal，mTLS）
+### 3.8 token.proto（internal）
 
 ```proto
 syntax = "proto3";
@@ -536,8 +540,8 @@ package media_auth.token;
 import "api.proto";
 option go_package = "media_auth/token";
 
-// internal service —— 仅 mTLS / 内网暴露,不挂网关路由,不出 OpenAPI。
-// 仅供 control_plane 验 opaque Bearer service token;cookie/bearer JWT 由 control_plane 本地 HS256 验。
+// internal service —— 不挂网关路由,不出 OpenAPI；网络隔离/mTLS 由部署层负责。
+// 供下游服务验 opaque Bearer service token（sha256 后查表,明文不出 media_auth 边界）。
 service TokenService {
   rpc VerifyToken(VerifyTokenRequest) returns(VerifyTokenResponse) {
     option (api.post) = "/internal/token/verify";
@@ -557,19 +561,74 @@ message VerifyTokenResponse {
 }
 ```
 
-### 3.9 鉴权 skip list（media_auth 内部中间件）
+### 3.9 oauth_client.proto
+
+```proto
+syntax = "proto3";
+package media_auth.oauth_client;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_auth/oauth_client";
+
+// OAuth2 client 管理（oauth_clients 表的 CRUD）。admin 鉴权（session + role==admin）。
+// CreateClient 生成 client_secret（明文仅本次返回，DB 存 SHA-256 hash）。
+// RevokeClient 硬删 client（FK ON DELETE CASCADE 清 auth_codes + refresh_tokens）。
+service OAuthClientService {
+  rpc CreateClient(CreateClientRequest) returns(CreateClientResponse) {
+    option (google.api.http) = { post: "/api/oauth/clients" body: "*" };
+    option (api.post) = "/api/oauth/clients";
+  }
+  rpc ListClients(ListClientsRequest) returns(ListClientsResponse) {
+    option (google.api.http) = { get: "/api/oauth/clients" };
+    option (api.get) = "/api/oauth/clients";
+  }
+  rpc RevokeClient(RevokeClientRequest) returns(RevokeClientResponse) {
+    option (google.api.http) = { delete: "/api/oauth/clients/{id}" };
+    option (api.delete) = "/api/oauth/clients/:id";
+  }
+}
+
+message CreateClientRequest {
+  string name = 1;
+  repeated string redirect_uris = 2;
+  optional string homepage_url = 3;
+  optional string description = 4;
+}
+message CreateClientResponse {
+  ApiOAuthClient client = 1;
+  string client_secret = 2;          // 明文，仅本次响应可见；DB 存 SHA-256 hash
+}
+message ListClientsRequest  {}
+message ListClientsResponse { repeated ApiOAuthClient clients = 1; }
+message RevokeClientRequest  { string id = 1 [(api.path) = "id"]; }
+message RevokeClientResponse { bool success = 1; }
+
+message ApiOAuthClient {
+  string id = 1;
+  string name = 2;
+  repeated string redirect_uris = 3;
+  optional string homepage_url = 4;
+  optional string description = 5;
+  string created_by = 6;
+  string created_at = 7;
+  string updated_at = 8;
+}
+```
+
+### 3.10 鉴权 skip list（media_auth 内部中间件）
 
 media_auth 对 4 前缀做 cookie/session 鉴权，以下端点短路（无 JWT）：
 - `POST /api/auth/login`、`GET /api/auth/wecom/enabled`、`GET /api/auth/wecom/authorize`、`GET /api/auth/wecom/callback`
 - `GET /api/oauth/authorize`、`POST /api/oauth/token`、`GET /api/oauth/userinfo`
+- `/api/oauth/clients/*` 需 session + admin（不在 skip list）。
 - wecom/mcp 的 callback 在 skip list 内由 handler 手动验 cookie（bind 态）。
-- `VerifyToken` 走 mTLS 通道，不经 HTTP 鉴权中间件。
+- `VerifyToken` 不经 cookie/session 鉴权（在 skip list）；网络隔离 / mTLS 由部署层负责。
 
 ---
 
 ## 4. 数据库 schema
 
-SQL 落到 `media_auth/migrations/0001_init.sql`（schema 唯一源；后续 `0002_xxx.sql` 追加，不再耦合 control_plane 主迁移链）。8 张表，全部在 `media_auth` schema 下。`users.id` / `service_tokens.id` 沿用应用层 `generateId()` 短随机串（兼容存量）。
+SQL 落到 `media_auth/migrations/0001_init.sql`（schema 唯一源；后续 `0002_xxx.sql` 追加，media_auth 独立维护迁移链）。8 张表，全部在 `media_auth` schema 下。`users.id` / `service_tokens.id` 沿用应用层 `generateId()` 短随机串。
 
 ```sql
 BEGIN;
@@ -582,7 +641,7 @@ CREATE TABLE IF NOT EXISTS media_auth.users (
     email               text,
     password_hash       text,                 -- argon2;空=LDAP/企微派生,不可改密
     role                text NOT NULL DEFAULT 'user',   -- user|admin|system(system 禁登录)
-    default_prompt_id   text,                 -- opaque,不校验 FK(prompts 表留 control_plane)
+    default_prompt_id   text,                 -- opaque,不校验 FK(prompts 表不在 media_auth)
     auto_evolution      boolean NOT NULL DEFAULT false,
     created_at          timestamptz DEFAULT now(),
     last_login_at       timestamptz           -- 仅本地登录更新
@@ -685,7 +744,7 @@ CREATE INDEX IF NOT EXISTS mcp_oauth_tokens_user_idx ON media_auth.mcp_oauth_tok
 COMMIT;
 ```
 
-> 团队相关 3 张表（`teams` / `team_members` / `team_invites`）由 `team` domain 接管，从 control_plane 主迁移链迁出，下一批迁移 `0002_teams.sql` 追加，本节未列出。
+> 团队相关 3 张表（`teams` / `team_members` / `team_invites`）由 `team` domain 接管，迁移 `0002_teams.sql` 追加，本节未列出。
 
 GORM Gen：`biz/dal/query/` 🔴 禁改，schema 变更重新生成；`biz/dal/repo/` 把行模型转 domain 对象，禁止 GORM 行模型泄漏上层。
 
@@ -695,16 +754,16 @@ GORM Gen：`biz/dal/query/` 🔴 禁改，schema 变更重新生成；`biz/dal/r
 
 ### 5.1 auth（session 归此 domain）
 - **Login**：先本地（`argon2.Verify(password, password_hash)`，`password_hash` 非空时），失败再 LDAP（bind+search，命中则 upsert：已存在更新 `last_login_at`，不存在则创建 `password_hash` 留空）。两者皆失败 → 401。`role=='system'` → 403。成功签 session（HS256 JWT，`sub/username/name/email?/role/exp=now+86400`，下 httpOnly cookie `token`，`sameSite=Lax,maxAge=86400,path=/`），fire-and-forget `ensurePlatformToken`。返回 ApiUser。
-- **auth_source 推导**：`password_hash` 非空 → `password`；否则有 wecom identity → `wecom`；否则 `ldap`。（只读 identity 查询。修正 control-plane 对企微账号误报 `ldap`。）
+- **auth_source 推导**：`password_hash` 非空 → `password`；否则有 wecom identity → `wecom`；否则 `ldap`。（只读 identity 查询；推导 `wecom` 而非 `ldap`，正确反映企微派生账号来源。）
 - **ChangePassword**：仅 `password_hash` 非空（否则 400）；`argon2.Verify(current)` 失败 → 401；`len(new)<6` → 400；`new==current` → 400；更新 argon2 hash。
 - **GetMe**：按 `session.sub` 查 users，推导 auth_source，返回 ApiUser（仅 `default_prompt_id`，无 name）。
 - **SetDefaultPrompt / UpdateMe**：用 `optional` 表达 tri-state / 显式 false；`prompt_id` opaque 不校验存在性。
 - **session 续期**：`verifySession` 剩余 <12h 重签 24h 替换 cookie（滑动）。
-- JWT 密钥 `JWT_SECRET` 与 control_plane 共享（ADR-0001）。
+- JWT 密钥 `JWT_SECRET`（HS256，见 §7；ADR-0001）。
 
 ### 5.2 identity
 - **ListIdentities**：按 `session.sub` 查全部绑定，返回 provider/external_id/display_name/created_at。
-- **DeleteIdentity**：`DELETE WHERE user_id=sub AND provider=?`，0 行 → 404。（泛化自 control-plane 写死 wecom 的 `DELETE /api/auth/wecom/identity`，是 P2 前端破坏性变更。）
+- **DeleteIdentity**：`DELETE WHERE user_id=sub AND provider=?`，0 行 → 404。（generic：按 provider 删，不写死 wecom。）
 - **内部 findUserIdentity(provider, external_id)**：供 wecom login 解析 user_id；无 → not_bound。
 - **内部 bindIdentity(...)**：供 wecom bind；先查 `(provider,external_id)` 是否已绑别人 → already_bound；`ON CONFLICT (user_id,provider) DO UPDATE`。
 - 不变量：`(provider,external_id)` 全局唯一；`(user_id,provider)` 每用户每 provider 至多一条。
@@ -724,8 +783,8 @@ GORM Gen：`biz/dal/query/` 🔴 禁改，schema 变更重新生成；`biz/dal/r
 - **RevokeServiceToken**：`UPDATE revoked_at=now() WHERE id=? AND created_by=sub AND is_platform=false`，0 行 → 404。
 - **内部 ensurePlatformToken(userID)**：已有 active platform token 则返回；否则 INSERT（`name='__platform__',is_platform=true,token=明文`），唯一索引并发冲突重读。fire-and-forget。
 - **内部 getServiceTokenByHash(hash)**：`WHERE token_hash=? AND revoked_at IS NULL`，供 VerifyToken。
-- **内部 getPlatformToken(userID)**：供 control_plane agent 回调取明文。
-- 不变量：每用户至多一个 active platform token（部分唯一索引）；明文 `token` 列仅 platform 非 NULL（ADR-0002）。
+- **内部 getPlatformToken(userID)**：取 user 的 active platform token 明文（media_auth 内部 ensure 用；明文不出边界，下游经 VerifyToken 验）。
+- 不变量：每用户至多一个 active platform token（部分唯一索引）；明文 `token` 列仅 platform 非 NULL（ADR-0002；存留待复核，见 §11）。
 
 ### 5.5 team
 - **CreateTeam**：事务内 INSERT `teams` + INSERT `team_members`(role='admin')，创建者自动升任首任 admin。
@@ -756,8 +815,8 @@ GORM Gen：`biz/dal/query/` 🔴 禁改，schema 变更重新生成；`biz/dal/r
 - **DiscoverOAuth**：缺 url → 400；`GET {origin}/.well-known/oauth-authorization-server`（header `MCP-Protocol-Version: 2025-03-26`，5s）；缺 authorize+token endpoint → `{oauth_required:false}`；有 → upsert `mcp_oauth_clients`，`{true,server_origin}`；不可达 → 502。
 - **GetConnectionStatus**：`servers` 逗号分隔，逐个查 `(user_id=sub,server_origin)`；connected=存在且未过宽限；返回 map。
 - **StartAuthorization**：缺参 → 400；未 discover → 400；`code_verifier=rand(32),code_challenge=S256,state=rand(16)`；`pendingAuths[state]={user_id,server_origin,code_verifier,workspace_id,created_at=now}`（内存 10min TTL，一次性）；`c.Redirect` 到 authorize_endpoint。
-- **HandleCallback**：缺 code/state → 400；`pendingAuths[state]` 不存在/过期 → 400；`pending.user_id!=session.sub` → 403；`POST token_endpoint`(code,code_verifier,redirect_uri) 换 token；`upsertToken`（`ON CONFLICT DO UPDATE`，重置 `refresh_fail_count=0/refresh_fail_first_at=NULL`，`expires_at=now+expires_in`，无则 +1800s）；`notifyAgentReload(workspace_id,['config'])`（跨服务通知 control_plane）；返回 HTML（`postMessage+close`）。
-- **getValidAccessToken(userID, serverOrigin, forceRefresh?)**（内部，供 control_plane mcp-proxy）：取 token 行，`expires_at` 空回退 `updated_at+1800s`；未过期且非 force → 返回 access；否则 refresh：成功 → upsert（重置计数）→ 返回新 access；失败（`invalid_grant/invalid_client/unauthorized_client`）→ `refresh_fail_count++`，首次记 `refresh_fail_first_at`；`count>=3 且 first>=600s` → 删 token + 抛 `McpOAuthReauthRequired`；否则返回 nil（暂态）。
+- **HandleCallback**：缺 code/state → 400；`pendingAuths[state]` 不存在/过期 → 400；`pending.user_id!=session.sub` → 403；`POST token_endpoint`(code,code_verifier,redirect_uri) 换 token；`upsertToken`（`ON CONFLICT DO UPDATE`，重置 `refresh_fail_count=0/refresh_fail_first_at=NULL`，`expires_at=now+expires_in`，无则 +1800s）；返回 HTML（`postMessage+close`）。MCP 连接变更后的下游 reload 不由 media_auth 主动通知——消费方轮询连接状态或订阅事件（见 §8）。
+- **getValidAccessToken(userID, serverOrigin, forceRefresh?)**（内部方法；暴露为 RPC 供下游 MCP proxy 见 §11）：取 token 行，`expires_at` 空回退 `updated_at+1800s`；未过期且非 force → 返回 access；否则 refresh：成功 → upsert（重置计数）→ 返回新 access；失败（`invalid_grant/invalid_client/unauthorized_client`）→ `refresh_fail_count++`，首次记 `refresh_fail_first_at`；`count>=3 且 first>=600s` → 删 token + 抛 `McpOAuthReauthRequired`；否则返回 nil（暂态）。
 - **Disconnect**：`DELETE WHERE user_id=sub AND server_origin=?`，返回 success。
 - 不变量：pendingAuths 一次性；`(user_id,server_origin)` upsert 幂等；宽限算法见上。
 
@@ -792,14 +851,14 @@ server:
 
 database:
   enabled: true
-  driver: postgres                # media_auth 用 postgres(control-plane 现状 pg)
+  driver: postgres                # media_auth 用 postgres
   dsn: ${MEDIA_AUTH_DB_DSN:-postgres://...}
   max_open_conns: 50
   max_idle_conns: 10
 
 # media_auth 业务配置(自定义顶级块,业务层 loader.Subscribe)
 auth:
-  jwt_secret: ${JWT_SECRET:-}             # 与 control_plane 共享(HS256)
+  jwt_secret: ${JWT_SECRET:-}             # JWT 签名密钥（HS256）
   jwt_expires_in_seconds: 86400           # session 24h
   access_token_expires_in_seconds: 3600   # oauth access 1h
   refresh_token_expires_in_days: 30
@@ -824,28 +883,27 @@ mcp_oauth:
   default_token_ttl_seconds: 1800
   refresh_fail_threshold: 3
   refresh_fail_grace_seconds: 600
-token_verify:                            # internal VerifyToken(mTLS) listener
-  enabled: true
-  address: ${INTERNAL_ADDR:-:8889}
 ```
 
-> `JWT_SECRET` 跨服务共享，轮换需 media_auth 与 control_plane 同步（ADR-0001）。
+> `/internal/token/verify` 挂在主 HTTP 端口（与业务 API 共端口），不经 cookie/session 鉴权（在 skip list）。网络隔离 / mTLS 由部署层负责（反代 / service mesh / 网络策略），不在 app 范围。
+> `JWT_SECRET` 为 media_auth 自有；若多服务需本地验 cookie JWT（密钥共享问题），见 §11 开放问题。
 
 ---
 
-## 8. 与 control_plane 的交互（跨服务，见 workflow）
+## 8. 对外契约
 
-| 交互 | 方向 | 机制 | 文档 |
+media_auth 对外暴露两类接口：
+
+| 类型 | 通道 | 消费方 | 说明 |
 |---|---|---|---|
-| 4 前缀反代 | browser → media_auth | control_plane 网关反代 `/api/auth` `/api/oauth` `/api/service-tokens` `/api/mcp-oauth` | ADR-0001 |
-| team/invites 反代 | browser → media_auth | control_plane 网关反代 `/api/teams` `/api/invites` | team domain（与 4 前缀同批次纳入 P2）|
-| cookie/session 鉴权 | media_auth 自闭环 | media_auth 签+验 cookie JWT | wecom_login_bind |
-| VerifyToken | control_plane → media_auth | mTLS internal RPC，opaque service_token→Subject | [service_token_verification](../../workflow/0001-service-token-verification.md) |
-| JWT 本地验 | control_plane 自闭环 | HS256 共享密钥验 cookie/bearer JWT | ADR-0001 |
-| notifyAgentReload | media_auth → control_plane | MCP OAuth 回调成功后通知 workspace reload config | mcp_oauth_connect |
-| getPlatformToken | control_plane → media_auth | 内部接口取 agent 回调用 platform token 明文 | service_token domain |
+| 业务 HTTP API（§3.1-3.7） | HTTP（`/api/auth` `/api/oauth` `/api/service-tokens` `/api/mcp-oauth` `/api/teams` `/api/invites`） | 浏览器 / 前端 | cookie session 鉴权 |
+| VerifyToken HTTP 接口（§3.8） | HTTP（`/internal/token/verify`，不挂网关） | 下游服务 | 把 opaque service token 解析为 Subject；网络隔离由部署层负责 |
 
-**VerifyToken 实现**：`service_token.getServiceTokenByHash(sha256(token))` → 命中且 `revoked_at IS NULL` → `{active:true, sub=created_by, username=svc:{name}, name, role=user, token_type=service_token}`；否则 `{active:false}`。明文 token 永不出 media_auth 边界。
+**VerifyToken 实现**：`service_token.GetServiceTokenByHash(sha256(token))` → 命中且 `revoked_at IS NULL` → `{active:true, sub=created_by, username=svc:{name}, name, role=user, token_type=service_token}`；否则 `{active:false}`。明文 token 永不出 media_auth 边界。
+
+**明确不在 media_auth 范围**：
+- **workspace / agent reload 通知**：MCP OAuth 连接成功后是否需通知下游 reload，由消费方自行决定（轮询 media_auth 连接状态，或订阅事件）；media_auth 不主动调用外部服务的 reload 接口。
+- **platform token 明文消费**：`service_tokens.token` 明文列（ADR-0002）仅供 media_auth 内部 ensure；下游需鉴权时统一经 VerifyToken，明文不出边界。该明文列的存留见 §11 开放问题。
 
 ---
 
@@ -853,11 +911,12 @@ token_verify:                            # internal VerifyToken(mTLS) listener
 
 | 阶段 | 动作 | 状态 |
 |---|---|---|
-| 本批次 | IDL(含 token.proto) + SQL + 领域模型 + spec 落盘；control_plane 不动 | ✅ 完成 |
-| P1 | media_auth 独立 Go service：`hz update` 生成 6 service handler/router 骨架 + token service；实现 domain/service/workflow/dal；e2e | ✅ 完成（7 domain + token internal 全部实现；build + arch-check + gofmt + go vet + 关键路径 e2e 冒烟通过；规范 e2e 待统一补）|
-| P2 | control_plane 网关反代 4 前缀到 media_auth；前端适配 identity 路径变更；control_plane 中间件接 VerifyToken RPC | 待启动 |
-| P3 | media_auth 接管 8 表，control_plane 删除认证相关 migration；DB 物理独立/同库不同 schema | 待启动 |
-| P4 | （远期）JWT 迁非对称签名，消除 JWT_SECRET 共享（ADR-0001 备选）| 评估 |
+| P0 | IDL(含 token.proto) + SQL + 领域模型 + spec 落盘 | ✅ 完成 |
+| P1 | media_auth 独立 Go service：7 domain + token internal 实现 + 单元/集成/e2e 测试 | ✅ 完成 |
+| P2 | 部署 media_auth；下游服务按需接入 VerifyToken RPC | 待启动 |
+| 远期 | 开放问题（§11）评估 | 评估 |
+
+> media_auth 的实现与测试以本 spec 的契约为准。下游服务（如 MCP proxy、网关）如何接入 VerifyToken、如何迁入 media_auth 鉴权，属各下游服务自身的演进计划，不在本 spec 范围。
 
 ---
 
@@ -867,4 +926,19 @@ token_verify:                            # internal VerifyToken(mTLS) listener
 - `go test ./...`
 - `make arch-check`（垂直层边界 + 同层 domain 隔离 + 框架 import 限制；`--strict-idl` 校验 `go_package` 末段==service）
 - `make hz-model` / `make hz-client` / `make -C media_auth hz-update` / `make swagger-gen` 流程可跑通
-- e2e（参考 control-plane `e2e/auth.test.ts` / `service-tokens.test.ts` / `oauth-provider` / `mcp-oauth` 用例）：6 service 关键路径 + VerifyToken RPC + 宽限算法
+- e2e：`media_auth/e2e/`（testcontainers，repo 集成）+ `media-cli/e2e/`（HTTP e2e）+ 各 service 单元测试；覆盖 7 service 关键路径 + VerifyToken RPC + 刷新失败宽限算法
+
+---
+
+## 11. 开放问题（standalone 下待定）
+
+以下设计决策已定（2026-07-05）：
+
+- **OAuth client 管理 RPC**：✅ 新增 `OAuthClientService`（§3.9）——create / list / revoke `oauth_clients`，admin 鉴权。运行时自助注册 client。
+- **MCP OAuth `getValidAccessToken`**：⏸ 暂不暴露为 HTTP 接口，留 service 内部方法。等 MCP proxy 服务落地后再加 internal 端点。
+- **platform token 明文列（ADR-0002）**：✅ 保留现状。明文列 + `getPlatformToken` 保留，供未来 agent 回调场景；明文不出 media_auth 边界。
+- **wecom 真连验证**：⏸ 推迟。实现已对齐 + build/arch-check 通过，等企微 corp 配置可用时再跑登录/绑定 callback 全流程。
+
+仍开放（远期）：
+
+- **JWT 多服务本地验**：当前仅 media_auth 验 cookie JWT。若后续多服务需本地验（避免每请求 RPC），密钥共享问题凸显，可迁非对称签名（公钥验签 / 私钥签发）。

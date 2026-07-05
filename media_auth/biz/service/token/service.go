@@ -1,7 +1,7 @@
 // Package token 是 internal token 用例服务（VerifyToken RPC 的业务实现）。
 //
 // 不新建 domain：复用 service_token domain 的 TokenRepo.GetByHash + auth domain 的 UserRepo.FindByID
-// （spec §2.2）。仅供 control_plane 验 opaque Bearer service token；明文 token 不出 media_auth 边界
+// （spec §2.2）。供下游服务验 opaque Bearer service token；明文 token 不出 media_auth 边界
 // （service 内部 sha256 后查表）。
 //
 // 禁止 import Hertz / hertz_gen / biz/dal / 其它 service 包（同层隔离）。

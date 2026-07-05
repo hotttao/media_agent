@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 
 	"media_agent/media_auth/biz/dal"
@@ -44,6 +45,53 @@ func (r *repo) GetClient(ctx context.Context, id string) (domainoauth.Client, er
 		return domainoauth.Client{}, err
 	}
 	return rowToClient(row), nil
+}
+
+// CreateClient 新建 client（id/secret_hash 由 service 生成）。
+func (r *repo) CreateClient(ctx context.Context, c domainoauth.Client) (domainoauth.Client, error) {
+	q := r.q(ctx)
+	row := model.OAuthClient{
+		ID:           c.ID,
+		Name:         c.Name,
+		SecretHash:   strPtr(c.SecretHash),
+		RedirectURIs: pq.StringArray(c.RedirectURIs),
+		HomepageURL:  strPtr(c.HomepageURL),
+		Description:  strPtr(c.Description),
+		CreatedBy:    c.CreatedBy,
+	}
+	if err := q.OAuthClient.WithContext(ctx).
+		Omit(q.OAuthClient.CreatedAt, q.OAuthClient.UpdatedAt).Create(&row); err != nil {
+		return domainoauth.Client{}, err
+	}
+	// 回读 DB 默认字段（created_at/updated_at）。
+	return r.GetClient(ctx, c.ID)
+}
+
+// ListClients 列全部 client（按 created_at DESC）。
+func (r *repo) ListClients(ctx context.Context) ([]domainoauth.Client, error) {
+	q := r.q(ctx)
+	rows, err := q.OAuthClient.WithContext(ctx).Order(q.OAuthClient.CreatedAt.Desc()).Find()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domainoauth.Client, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, rowToClient(row))
+	}
+	return out, nil
+}
+
+// DeleteClient 按 id 删 client（FK CASCADE 清 auth_codes + refresh_tokens）。
+func (r *repo) DeleteClient(ctx context.Context, id string) error {
+	q := r.q(ctx)
+	res, err := q.OAuthClient.WithContext(ctx).Where(q.OAuthClient.ID.Eq(id)).Delete()
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected == 0 {
+		return domainoauth.ErrClientNotFound
+	}
+	return nil
 }
 
 // CreateAuthCode 插入授权码（code/scope/expires_at 由 service 生成）。
@@ -162,6 +210,12 @@ func rowToClient(c *model.OAuthClient) domainoauth.Client {
 	}
 	if c.SecretHash != nil {
 		d.SecretHash = *c.SecretHash
+	}
+	if c.HomepageURL != nil {
+		d.HomepageURL = *c.HomepageURL
+	}
+	if c.Description != nil {
+		d.Description = *c.Description
 	}
 	return d
 }

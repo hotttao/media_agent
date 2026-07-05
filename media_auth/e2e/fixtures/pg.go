@@ -89,7 +89,7 @@ func NewDatabase(t *testing.T) *Database {
 	})
 
 	dsn := withDBName(sharedPG.RootDSN, name)
-	db, err := gorm.Open(gmysql.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(gmysql.Open(dsn), &gorm.Config{TranslateError: true})
 	if err != nil {
 		t.Fatalf("open gorm: %v", err)
 	}

@@ -47,16 +47,16 @@ func VerifyToken(token string) (*auth.Session, error) {
 	return &sess, nil
 }
 
-// skipAllPaths 是无 JWT 鉴权的公开端点（所有方法都跳过；spec §3.8 + 运维端点 + internal mTLS）。
+// skipAllPaths 是无 JWT 鉴权的公开端点（所有方法都跳过；spec §3.10 + 运维端点 + internal VerifyToken）。
 var skipAllPaths = map[string]bool{
-	// spec §3.8 公开业务端点
+	// spec §3.10 公开业务端点
 	"/api/auth/login":           true,
 	"/api/auth/wecom/enabled":   true,
 	"/api/auth/wecom/authorize": true,
 	"/api/auth/wecom/callback":  true,
 	"/api/oauth/token":          true,
 	"/api/oauth/userinfo":       true,
-	// internal VerifyToken 走 mTLS 通道，不经 cookie/session 中间件（spec §3.9）。
+	// internal VerifyToken 不经 cookie/session（网络隔离/mTLS 由部署层负责）。
 	"/internal/token/verify": true,
 	// 运维端点（health/pprof/metrics/swagger/openapi/ping）不走 session 鉴权
 	"/health":       true,

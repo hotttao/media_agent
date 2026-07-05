@@ -1,6 +1,6 @@
 # media_auth 认证鉴权上下文
 
-media 平台统一的认证 / 鉴权微服务，承接原 agent-platform `control-plane` 中所有身份认证、会话、凭证签发与校验能力，对外以 Hertz + Protobuf IDL 暴露，自治数据库。
+media 平台统一的认证 / 鉴权微服务，承担所有身份认证、会话、凭证签发与校验能力，对外以 Hertz + Protobuf IDL 暴露，自治数据库。
 
 ## 业务术语词典
 
@@ -33,15 +33,15 @@ B2B API 调用凭证，`tos_` 前缀 + 32 随机字节；DB 仅存 SHA-256 `toke
 _禁用替代词_：API key、access key、bearer token（bearer 是传输方式不是凭证类型）
 
 **Platform Token（平台令牌）**:
-特殊 Service Token，`is_platform=true`、`name='__platform__'`，登录后自动 ensure，每用户至多一个 active；为供 agent 回调 control_plane，**单独落明文 `token` 列**。归 `service_token` domain。
+特殊 Service Token，`is_platform=true`、`name='__platform__'`，登录后自动 ensure，每用户至多一个 active；**单独落明文 `token` 列**（ADR-0002；存留待复核）。归 `service_token` domain。
 _禁用替代词_：agent token、internal token
 
 **VerifyToken（令牌校验）**:
-media_auth 暴露给 control_plane 的 mTLS 内部 RPC，把 opaque Service Token 解析为 Subject；control_plane 据此完成自有路由鉴权，不再直读 media_auth 库。
+media_auth 暴露给下游服务的 mTLS 内部 RPC，把 opaque Service Token 解析为 Subject；下游服务据此完成自有路由鉴权，不直读 media_auth 库。
 _禁用替代词_：introspect（introspect 是 OAuth2 RFC 7662 标准端点，语义不同）
 
 **Subject（鉴权主体）**:
-token 校验后得到的鉴权身份快照（sub/username/name/role 等），由 control_plane 中间件注入请求上下文。
+token 校验后得到的鉴权身份快照（sub/username/name/role 等），由调用方（下游服务中间件）注入请求上下文。
 _禁用替代词_：principal（保留给 OAuth2 RFC 8693 token-exchange 语义）、claim
 
 ### OAuth Provider（media_auth 作为 Authorization Server）

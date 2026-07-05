@@ -59,6 +59,11 @@ func oauthErr(code, desc string, status int) *OAuthError {
 	return &OAuthError{Code: code, Description: desc, Status: status}
 }
 
+// NewOAuthError 公开构造器（供 handler 单测构造特定错误用）。
+func NewOAuthError(code, desc string, status int) *OAuthError {
+	return oauthErr(code, desc, status)
+}
+
 // ── 入参 / 出参 ──────────────────────────────────────────────────────
 
 // AuthorizeInfoResult 是 GetAuthorizeInfo 返回。
@@ -354,6 +359,115 @@ func (s *Service) GetUserInfo(ctx context.Context, accessToken string) (UserInfo
 // CleanupExpired 删过期 auth_code + refresh_token（每小时调一次，由 main 起 goroutine）。
 func (s *Service) CleanupExpired(ctx context.Context) error {
 	return s.repo.CleanupExpired(ctx)
+}
+
+// ── OAuth client 管理（admin） ────────────────────────────────────────
+
+// ClientView 是 service 层返回的 client（与 DTO 对齐，不含 secret_hash）。
+type ClientView struct {
+	ID           string
+	Name         string
+	RedirectURIs []string
+	HomepageURL  string
+	Description  string
+	CreatedBy    string
+	CreatedAt    string // RFC3339
+	UpdatedAt    string // RFC3339
+}
+
+// CreateClientResult 是 CreateClient 返回（含明文 secret，仅本次可见）。
+type CreateClientResult struct {
+	Client       ClientView
+	ClientSecret string // 明文，仅本次响应可见；DB 存 SHA-256 hash
+}
+
+// client 管理错误。
+var (
+	ErrAdminOnly      = oauthErr("invalid_request", "admin only", 403)
+	ErrClientNameReq  = oauthErr("invalid_request", "name is required", 400)
+	ErrRedirectURIReq = oauthErr("invalid_request", "redirect_uris is required", 400)
+	ErrClientNotFound = domainoauth.ErrClientNotFound // 供 handler 映射 404
+)
+
+// CreateClient 新建 OAuth client（admin only）。生成 client_secret（明文仅本次返回）。
+func (s *Service) CreateClient(ctx context.Context, userID, role string, cmd CreateClientCommand) (CreateClientResult, error) {
+	if role != "admin" {
+		return CreateClientResult{}, ErrAdminOnly
+	}
+	if cmd.Name == "" {
+		return CreateClientResult{}, ErrClientNameReq
+	}
+	if len(cmd.RedirectURIs) == 0 {
+		return CreateClientResult{}, ErrRedirectURIReq
+	}
+	// 生成 client id + secret（明文 + hash）。
+	clientID, _, err := token.GenerateOpaqueTokenAndHash()
+	if err != nil {
+		return CreateClientResult{}, err
+	}
+	plaintext, hash, err := token.GenerateTokenAndHash()
+	if err != nil {
+		return CreateClientResult{}, err
+	}
+	c, err := s.repo.CreateClient(ctx, domainoauth.Client{
+		ID:           clientID,
+		Name:         cmd.Name,
+		SecretHash:   hash,
+		RedirectURIs: cmd.RedirectURIs,
+		HomepageURL:  cmd.HomepageURL,
+		Description:  cmd.Description,
+		CreatedBy:    userID,
+	})
+	if err != nil {
+		return CreateClientResult{}, err
+	}
+	return CreateClientResult{Client: toClientView(c), ClientSecret: plaintext}, nil
+}
+
+// ListClients 列全部 client（admin only）。
+func (s *Service) ListClients(ctx context.Context, role string) ([]ClientView, error) {
+	if role != "admin" {
+		return nil, ErrAdminOnly
+	}
+	rows, err := s.repo.ListClients(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ClientView, 0, len(rows))
+	for _, c := range rows {
+		out = append(out, toClientView(c))
+	}
+	return out, nil
+}
+
+// RevokeClient 删 client（admin only；FK CASCADE 清 auth_codes + refresh_tokens）。
+func (s *Service) RevokeClient(ctx context.Context, role, id string) error {
+	if role != "admin" {
+		return ErrAdminOnly
+	}
+	return s.repo.DeleteClient(ctx, id)
+}
+
+// CreateClientCommand 是 CreateClient 用例入参。
+type CreateClientCommand struct {
+	Name         string
+	RedirectURIs []string
+	HomepageURL  string
+	Description  string
+}
+
+// toClientView 把 domain Client 转 service ClientView。
+func toClientView(c domainoauth.Client) ClientView {
+	return ClientView{
+		ID:           c.ID,
+		Name:         c.Name,
+		RedirectURIs: c.RedirectURIs,
+		HomepageURL:  c.HomepageURL,
+		Description:  c.Description,
+		CreatedBy:    c.CreatedBy,
+		CreatedAt:    c.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:    c.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
 }
 
 // ── helpers ──────────────────────────────────────────────────────────

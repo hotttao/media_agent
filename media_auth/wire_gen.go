@@ -26,6 +26,7 @@ import (
 	identityhandler "media_agent/media_auth/biz/handler/identity"
 	mcpoauthhandler "media_agent/media_auth/biz/handler/mcp_oauth"
 	oauthhandler "media_agent/media_auth/biz/handler/oauth"
+	oauthclienthandler "media_agent/media_auth/biz/handler/oauth_client"
 	servicetokenhandler "media_agent/media_auth/biz/handler/service_token"
 	teamhandler "media_agent/media_auth/biz/handler/team"
 	tokenhandler "media_agent/media_auth/biz/handler/token"
@@ -113,6 +114,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	introspectCli := introspect.NewClient(nil)
 	oauthSvc := oauthservice.NewService(oauthRepo, signer, introspectCli, refreshTTL, authCodeTTL)
 	oauthhandler.OAuthSvc = oauthSvc
+	oauthclienthandler.OAuthClientSvc = oauthSvc // client 管理复用同一 service（同 domain）
 	// 每小时清理过期 auth_code / refresh_token。
 	go startOAuthCleanup(oauthSvc)
 
@@ -135,7 +137,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	pendingStore := pendingauth.NewStore()
 	mcpSvc := mcpoauthservice.NewService(mcpRepo, mcpCli, pendingStore)
 	mcpoauthhandler.McpOAuthSvc = mcpSvc
-	mcpFlow := workflow.NewMcpOAuthConnect(mcpSvc, nil) // WorkspaceNotifier no-op（control_plane 集成 P2）
+	mcpFlow := workflow.NewMcpOAuthConnect(mcpSvc)
 	mcpoauthhandler.McpOAuthFlow = mcpFlow
 }
 

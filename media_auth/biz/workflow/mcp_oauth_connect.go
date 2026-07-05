@@ -1,8 +1,7 @@
 // Package workflow — mcp_oauth_connect：MCP OAuth 回调编排。
 //
 // 消费 pendingAuth → 校验 user → 取/注册 client → code 换 token → upsert token →
-// 通知 control_plane reload workspace config → 返回 popup HTML（postMessage + close）。
-// 对齐 control-plane routes/mcp-oauth.ts callback。
+// 返回 popup HTML（postMessage + close）。media_auth 不主动通知下游 reload（spec §8）。
 package workflow
 
 import (
@@ -11,29 +10,29 @@ import (
 	"html"
 	"log"
 
+	domainmcp "media_agent/media_auth/biz/domain/mcp_oauth"
 	mcpoauthservice "media_agent/media_auth/biz/service/mcp_oauth"
+	"media_agent/media_auth/biz/shared/pendingauth"
 )
+
+// McpOAuthService 是 workflow 依赖的 mcp_oauth service 接缝（*mcpoauthservice.Service 实现）。
+// 抽接口便于单测注入 fake，不依赖真实 MCP server / DB。
+type McpOAuthService interface {
+	ConsumePendingAuth(state string) (pendingauth.PendingAuth, bool)
+	EnsureClient(ctx context.Context, serverOrigin, callbackURL string) (domainmcp.McpClient, error)
+	ExchangeCode(ctx context.Context, client domainmcp.McpClient, code, codeVerifier, callbackURL string) (domainmcp.TokenResponse, error)
+	UpsertToken(ctx context.Context, userID, serverOrigin string, resp domainmcp.TokenResponse) error
+}
 
 // McpOAuthConnect 编排 MCP OAuth 回调。
 type McpOAuthConnect struct {
-	svc      *mcpoauthservice.Service
-	notifier WorkspaceNotifier
+	svc McpOAuthService
 }
 
-// WorkspaceNotifier 通知 control_plane reload workspace config（MCP OAuth 回调成功后）。
-//
-// P1 默认 no-op（control_plane 集成在 P2，spec §8）；P2 注入真实 HTTP notifier。
-type WorkspaceNotifier interface {
-	// NotifyAgentReload 通知 workspace 重新加载指定配置项；best-effort，失败不阻断。
-	NotifyAgentReload(ctx context.Context, workspaceID string, configKeys []string)
-}
-
-// NewMcpOAuthConnect 构造 MCP OAuth 回调 workflow。notifier 为 nil 时用 no-op。
-func NewMcpOAuthConnect(svc *mcpoauthservice.Service, notifier WorkspaceNotifier) *McpOAuthConnect {
-	if notifier == nil {
-		notifier = noopNotifier{}
-	}
-	return &McpOAuthConnect{svc: svc, notifier: notifier}
+// NewMcpOAuthConnect 构造 MCP OAuth 回调 workflow。
+// media_auth 不主动通知下游 reload（spec §8）；MCP 连接变更由消费方轮询/订阅。
+func NewMcpOAuthConnect(svc *mcpoauthservice.Service) *McpOAuthConnect {
+	return &McpOAuthConnect{svc: svc}
 }
 
 // McpCallbackResult 是 HandleCallback 返回。HTML 给 popup 页面渲染；HTTPStatus 由 handler 写。
@@ -79,7 +78,7 @@ func (w *McpOAuthConnect) HandleCallback(ctx context.Context, userID, code, stat
 		return McpCallbackResult{HTML: errorPage("Failed to store token"), HTTPStatus: 500}
 	}
 	// 通知 workspace agent reload config（best-effort）。
-	w.notifier.NotifyAgentReload(context.Background(), pending.WorkspaceID, []string{"config"})
+	// MCP 连接变更后的下游 reload 不由 media_auth 主动通知——消费方轮询连接状态或订阅事件（spec §8）。
 	return McpCallbackResult{HTML: successPage(pending.ServerOrigin), HTTPStatus: 200}
 }
 
@@ -106,11 +105,4 @@ func errorPage(message string) string {
 <p>%s</p>
 <p><button onclick="window.close()">Close</button></p>
 </body></html>`, html.EscapeString(message))
-}
-
-// noopNotifier 是 P1 默认的 WorkspaceNotifier（control_plane 集成在 P2）。
-type noopNotifier struct{}
-
-func (noopNotifier) NotifyAgentReload(ctx context.Context, workspaceID string, configKeys []string) {
-	log.Printf("mcp-oauth: noop notifyAgentReload(workspace=%s, keys=%v) — control_plane integration pending P2", workspaceID, configKeys)
 }

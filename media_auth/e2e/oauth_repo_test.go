@@ -112,3 +112,74 @@ func TestOAuthRepo_CleanupExpired(t *testing.T) {
 		t.Errorf("after cleanup: want ErrAuthCodeNotFound, got %v", err)
 	}
 }
+
+// ── OAuth client 管理 ────────────────────────────────────────────────
+
+func TestOAuthRepo_CreateListDeleteClient(t *testing.T) {
+	repo := newOAuthRepo(t)
+	c, err := repo.CreateClient(context.Background(), domainoauth.Client{
+		ID: "cid-new", Name: "New Client", SecretHash: "hash", RedirectURIs: []string{"https://app/cb"}, CreatedBy: "u1",
+	})
+	if err != nil {
+		t.Fatalf("CreateClient: %v", err)
+	}
+	if c.ID != "cid-new" || c.Name != "New Client" {
+		t.Errorf("got c=%+v", c)
+	}
+	// 回读（created_at 由 DB 默认）。
+	got, err := repo.GetClient(context.Background(), "cid-new")
+	if err != nil || got.CreatedAt.IsZero() {
+		t.Errorf("GetClient after create: got=%+v err=%v (created_at should be set by DB)", got, err)
+	}
+	// ListClients 含新 client。
+	clients, err := repo.ListClients(context.Background())
+	if err != nil {
+		t.Fatalf("ListClients: %v", err)
+	}
+	found := false
+	for _, cl := range clients {
+		if cl.ID == "cid-new" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("ListClients missing new client")
+	}
+	// DeleteClient。
+	if err := repo.DeleteClient(context.Background(), "cid-new"); err != nil {
+		t.Errorf("DeleteClient: %v", err)
+	}
+	// 再删 → ErrClientNotFound。
+	if err := repo.DeleteClient(context.Background(), "cid-new"); !errors.Is(err, domainoauth.ErrClientNotFound) {
+		t.Errorf("re-delete: want ErrClientNotFound, got %v", err)
+	}
+}
+
+func TestOAuthRepo_DeleteClient_Cascades(t *testing.T) {
+	repo := newOAuthRepo(t)
+	// 建 client + 关联 auth_code + refresh_token。
+	repo.CreateClient(context.Background(), domainoauth.Client{
+		ID: "cid-cascade", Name: "C", RedirectURIs: []string{"https://app/cb"}, CreatedBy: "u1",
+	})
+	future := time.Now().Add(10 * time.Minute)
+	repo.CreateAuthCode(context.Background(), domainoauth.AuthCode{
+		Code: "code-x", ClientID: "cid-cascade", UserID: "u1", RedirectURI: "https://app/cb", ExpiresAt: future,
+	})
+	hash := token.HashToken("rt-x")
+	repo.CreateRefreshToken(context.Background(), domainoauth.RefreshToken{
+		TokenHash: hash, ClientID: "cid-cascade", UserID: "u1", ExpiresAt: future,
+	})
+	// 删 client → auth_code + refresh_token 应级联清。
+	if err := repo.DeleteClient(context.Background(), "cid-cascade"); err != nil {
+		t.Fatalf("DeleteClient: %v", err)
+	}
+	_, err := repo.ConsumeAuthCode(context.Background(), "code-x")
+	if !errors.Is(err, domainoauth.ErrAuthCodeNotFound) {
+		t.Errorf("cascade: auth_code should be gone, got err=%v", err)
+	}
+	_, err = repo.ConsumeRefreshToken(context.Background(), hash)
+	if !errors.Is(err, domainoauth.ErrRefreshTokenNotFound) {
+		t.Errorf("cascade: refresh_token should be gone, got err=%v", err)
+	}
+}

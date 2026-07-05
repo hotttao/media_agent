@@ -10,6 +10,7 @@ package wecom
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol"
@@ -70,10 +71,20 @@ func HandleCallback(ctx context.Context, c *app.RequestContext) {
 	c.Redirect(consts.StatusFound, []byte(res.RedirectURL))
 }
 
-// originFromReferer 从 Referer/Origin 头取 origin（scheme://host）；都缺则空。
+// originFromReferer 从 Origin / Referer 头取 origin（scheme://host，去掉 path）。
+//
+// Origin 头本身就是 origin（无 path）；Referer 含 path，需用 net/url 解析取 origin。
+// 都缺则空（wecom 未配置时 service 报错；配置时 redirect_uri 拼接需 origin）。
 func originFromReferer(referer, origin string) string {
 	if origin != "" {
+		// Origin 头可能含 path（罕见），统一解析取 scheme://host。
+		if u, err := url.Parse(origin); err == nil && u.Scheme != "" && u.Host != "" {
+			return u.Scheme + "://" + u.Host
+		}
 		return origin
 	}
-	return referer
+	if u, err := url.Parse(referer); err == nil && u.Scheme != "" && u.Host != "" {
+		return u.Scheme + "://" + u.Host
+	}
+	return ""
 }
