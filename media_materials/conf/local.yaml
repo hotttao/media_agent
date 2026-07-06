@@ -72,3 +72,11 @@ health:
 auth:
   jwt_secret: ${MW_JWT_SECRET:-mw-shared-secret-change-me}
   jwt_expires_in_seconds: 604800
+
+# 下游 client
+client:
+  media_auth:
+    enabled: true
+    service_name: "media-auth"
+    base_domain: ${MEDIA_AUTH_URL:-http://127.0.0.1:8001}
+    use_discovery: false

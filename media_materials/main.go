@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
@@ -88,13 +89,22 @@ func main() {
 	viphandler.Svc = vipSvc
 
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
+	mediaAuthURL := "http://127.0.0.1:8001"
+	if c, ok := cfg.GetClient()["media_auth"]; ok && c.GetBaseDomain() != "" {
+		mediaAuthURL = c.GetBaseDomain()
+	}
+	addr := cfg.GetServer().GetAddress()
+	if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
+	}
+	serviceURL := "http://" + addr
 	authCfg := &auth.Config{
 		JWTSecret:     cfg.GetAuth().GetJwtSecret(),
-		CookieName:    getenv("MW_COOKIE_NAME", "mw_token"),
+		CookieName:    "mw_token",
 		JWTExpiresSec: int(cfg.GetAuth().GetJwtExpiresInSeconds()),
-		MediaAuthURL:  getenv("MEDIA_AUTH_URL", "http://127.0.0.1:8001"),
-		ServiceURL:    getenv("SERVICE_URL", "http://127.0.0.1:8003"),
-		OAuthClientID: getenv("OAUTH_CLIENT_ID", "media_materials"),
+		MediaAuthURL:  mediaAuthURL,
+		ServiceURL:    serviceURL,
+		OAuthClientID: cfg.GetApp().GetName(),
 	}
 	authMw := auth.New(authCfg)
 
@@ -136,11 +146,4 @@ func resolveDefaultLogDir(appName string) string {
 		}
 		dir = parent
 	}
-}
-
-func getenv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }

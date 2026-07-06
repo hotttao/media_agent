@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
@@ -88,8 +89,11 @@ func main() {
 	}
 	txRunner := dal.NewTxRunner(db)
 
-	// materials client（调 media_materials.BatchGetAssetKind）
-	materialsBaseURL := "http://127.0.0.1:8003" // TODO: 从配置/Consul 发现
+	// materials client（调 media_materials.BatchGetAssetKind + UpsertGeneratedAsset）
+	materialsBaseURL := "http://127.0.0.1:8003"
+	if c, ok := cfg.GetClient()["media_materials"]; ok && c.GetBaseDomain() != "" {
+		materialsBaseURL = c.GetBaseDomain()
+	}
 	materialsClient := client.NewMaterialsClient(materialsBaseURL)
 
 	// template 装配
@@ -117,13 +121,21 @@ func main() {
 	go jobSvc.StartClaimTimeoutScanner(scannerCtx)
 
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
+	mediaAuthURL := "http://127.0.0.1:8001"
+	if c, ok := cfg.GetClient()["media_auth"]; ok && c.GetBaseDomain() != "" {
+		mediaAuthURL = c.GetBaseDomain()
+	}
+	wfAddr := cfg.GetServer().GetAddress()
+	if strings.HasPrefix(wfAddr, ":") {
+		wfAddr = "127.0.0.1" + wfAddr
+	}
 	authCfg := &auth.Config{
 		JWTSecret:     cfg.GetAuth().GetJwtSecret(),
-		CookieName:    getenv("MW_COOKIE_NAME", "mw_token"),
+		CookieName:    "mw_token",
 		JWTExpiresSec: int(cfg.GetAuth().GetJwtExpiresInSeconds()),
-		MediaAuthURL:  getenv("MEDIA_AUTH_URL", "http://127.0.0.1:8001"),
-		ServiceURL:    getenv("SERVICE_URL", "http://127.0.0.1:8002"),
-		OAuthClientID: getenv("OAUTH_CLIENT_ID", "media_workflow"),
+		MediaAuthURL:  mediaAuthURL,
+		ServiceURL:    "http://" + wfAddr,
+		OAuthClientID: cfg.GetApp().GetName(),
 	}
 	authMw := auth.New(authCfg)
 
@@ -172,10 +184,3 @@ var _ wfdomain.TemplateLookup = (*templateLookupAdapter)(nil)
 var _ shared.AssetKindLookup = (*client.MaterialsClient)(nil)
 
 // job 装配（P3）
-
-func getenv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
