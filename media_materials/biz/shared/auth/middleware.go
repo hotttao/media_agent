@@ -41,14 +41,15 @@ type User struct {
 
 // Config auth 中间件配置。
 type Config struct {
-	JWTSecret     string // materials/workflow 共享的 JWT secret（与 media_auth 不同）
-	CookieName    string // cookie 名（默认 "mw_token"）
-	JWTExpiresSec int    // session JWT 有效期（默认 7 天）
-	MediaAuthURL  string // media_auth base URL（OAuth + service token 验证）
-	ServiceURL    string // 本服务 base URL（OAuth callback redirect_uri）
-	OAuthClientID string // 在 media_auth 注册的 OAuth client_id
-	SkipPaths     map[string]bool
-	SkipPrefixes  []string
+	JWTSecret         string // materials/workflow 共享的 JWT secret（与 media_auth 不同）
+	CookieName        string // cookie 名（默认 "mw_token"）
+	JWTExpiresSec     int    // session JWT 有效期（默认 7 天）
+	MediaAuthURL      string // media_auth base URL（OAuth + service token 验证）
+	ServiceURL        string // 本服务 base URL（OAuth callback redirect_uri）
+	OAuthClientID     string // 在 media_auth 注册的 OAuth client_id
+	OAuthClientSecret string // OAuth client_secret（机密 client 必填）
+	SkipPaths         map[string]bool
+	SkipPrefixes      []string
 }
 
 type callerKey struct{}
@@ -408,6 +409,7 @@ func (m *Middleware) exchangeCode(ctx context.Context, code, verifier string) (*
 		"code":          {code},
 		"redirect_uri":  {m.cfg.ServiceURL + "/api/auth/callback"},
 		"client_id":     {m.cfg.OAuthClientID},
+		"client_secret": {m.cfg.OAuthClientSecret},
 		"code_verifier": {verifier},
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.cfg.MediaAuthURL+"/api/oauth/token", strings.NewReader(form.Encode()))

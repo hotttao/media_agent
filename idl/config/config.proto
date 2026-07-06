@@ -302,6 +302,8 @@ message AuthConfig {
   int32 refresh_token_expires_in_days = 4;
   // oauth authorization code 有效期（分钟），默认 10
   int32 auth_code_expires_in_minutes = 5;
+  // OAuth client_secret（下游服务作为机密 client 时的 secret）
+  string oauth_client_secret = 6;
 }
 
 message LdapConfig {

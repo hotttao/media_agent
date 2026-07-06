@@ -130,12 +130,13 @@ func main() {
 		wfAddr = "127.0.0.1" + wfAddr
 	}
 	authCfg := &auth.Config{
-		JWTSecret:     cfg.GetAuth().GetJwtSecret(),
-		CookieName:    "mw_token",
-		JWTExpiresSec: int(cfg.GetAuth().GetJwtExpiresInSeconds()),
-		MediaAuthURL:  mediaAuthURL,
-		ServiceURL:    "http://" + wfAddr,
-		OAuthClientID: cfg.GetApp().GetName(),
+		JWTSecret:         cfg.GetAuth().GetJwtSecret(),
+		CookieName:        "mw_token",
+		JWTExpiresSec:     int(cfg.GetAuth().GetJwtExpiresInSeconds()),
+		MediaAuthURL:      mediaAuthURL,
+		ServiceURL:        "http://" + wfAddr,
+		OAuthClientID:     cfg.GetApp().GetName(),
+		OAuthClientSecret: cfg.GetAuth().GetOauthClientSecret(),
 	}
 	authMw := auth.New(authCfg)
 

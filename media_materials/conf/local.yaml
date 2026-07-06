@@ -72,6 +72,7 @@ health:
 auth:
   jwt_secret: ${MW_JWT_SECRET:-mw-shared-secret-change-me}
   jwt_expires_in_seconds: 604800
+  oauth_client_secret: ${MW_OAUTH_CLIENT_SECRET:-mw_materials_secret_dev}
 
 # 下游 client
 client:

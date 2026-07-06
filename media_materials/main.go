@@ -99,12 +99,13 @@ func main() {
 	}
 	serviceURL := "http://" + addr
 	authCfg := &auth.Config{
-		JWTSecret:     cfg.GetAuth().GetJwtSecret(),
-		CookieName:    "mw_token",
-		JWTExpiresSec: int(cfg.GetAuth().GetJwtExpiresInSeconds()),
-		MediaAuthURL:  mediaAuthURL,
-		ServiceURL:    serviceURL,
-		OAuthClientID: cfg.GetApp().GetName(),
+		JWTSecret:         cfg.GetAuth().GetJwtSecret(),
+		CookieName:        "mw_token",
+		JWTExpiresSec:     int(cfg.GetAuth().GetJwtExpiresInSeconds()),
+		MediaAuthURL:      mediaAuthURL,
+		ServiceURL:        serviceURL,
+		OAuthClientID:     cfg.GetApp().GetName(),
+		OAuthClientSecret: cfg.GetAuth().GetOauthClientSecret(),
 	}
 	authMw := auth.New(authCfg)
 
