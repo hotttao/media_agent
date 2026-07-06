@@ -106,6 +106,9 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	tokenSvc := tokenservice.NewService(stRepo, userRepo)
 	tokenhandler.TokenSvc = tokenSvc
 
+	// 重新装配 session middleware（支持 cookie JWT + Bearer service token）。
+	SessionMiddleware = middleware.SessionWithToken(signer, tokenSvc)
+
 	// oauth domain：repo + service（持 signer + introspect client + TTL）+ handler 回填。
 	oauthRepo := daloauth.NewRepo(db)
 	authCfg := cfg.GetAuth()

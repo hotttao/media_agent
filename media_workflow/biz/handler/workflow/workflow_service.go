@@ -13,12 +13,10 @@ import (
 	pb "media_agent/hertz_gen/model/media_workflow/workflow"
 	domain "media_agent/media_workflow/biz/domain/workflow"
 	wfsvc "media_agent/media_workflow/biz/service/workflow"
-	"media_agent/media_workflow/biz/shared"
+	"media_agent/media_workflow/biz/shared/auth"
 )
 
 var Svc *wfsvc.Service
-
-func caller(ctx context.Context) string { return shared.CallerFromContext(ctx) }
 
 func CreateWorkflow(ctx context.Context, c *app.RequestContext) {
 	var req pb.CreateWorkflowReq
@@ -146,7 +144,7 @@ func RevokeWorkflow(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	w, err := Svc.Revoke(ctx, req.GetId(), req.GetTeamId(), caller(ctx))
+	w, err := Svc.Revoke(ctx, req.GetId(), req.GetTeamId(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
 		return

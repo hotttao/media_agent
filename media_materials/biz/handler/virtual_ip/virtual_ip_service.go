@@ -11,12 +11,10 @@ import (
 	pb "media_agent/hertz_gen/model/media_materials/virtual_ip"
 	domain "media_agent/media_materials/biz/domain/virtual_ip"
 	vipsvc "media_agent/media_materials/biz/service/virtual_ip"
-	"media_agent/media_materials/biz/shared"
+	"media_agent/media_materials/biz/shared/auth"
 )
 
 var Svc *vipsvc.Service
-
-func caller(ctx context.Context) string { return shared.CallerFromContext(ctx) }
 
 // CreateVirtualIp .
 // @router /api/v1/virtual-ips [POST]
@@ -28,7 +26,7 @@ func CreateVirtualIp(ctx context.Context, c *app.RequestContext) {
 	}
 	ownerID := req.GetOwnerUserId()
 	if ownerID == "" {
-		ownerID = caller(ctx)
+		ownerID = auth.CallerID(ctx)
 	}
 	v, err := Svc.Create(ctx, vipsvc.CreateCommand{
 		Scope: req.GetScope(), Name: req.GetName(), Description: req.GetDescription(),
@@ -51,7 +49,7 @@ func GetVirtualIp(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	v, err := Svc.Get(ctx, req.GetId(), caller(ctx))
+	v, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusNotFound, err.Error())
 		return
@@ -78,7 +76,7 @@ func ListVirtualIps(ctx context.Context, c *app.RequestContext) {
 	items, total, err := Svc.List(ctx, vipsvc.ListQuery{
 		Scope: req.GetScope(), Name: req.GetName(), Status: req.GetStatus(), Visibility: req.GetVisibility(),
 		Limit: pageSize, Offset: (page - 1) * pageSize,
-	}, caller(ctx))
+	}, auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusInternalServerError, err.Error())
 		return
@@ -102,7 +100,7 @@ func UpdateVirtualIp(ctx context.Context, c *app.RequestContext) {
 		ID: req.GetId(), Name: req.GetName(), Description: req.GetDescription(),
 		AvatarURL: req.GetAvatarUrl(), FullBodyURL: req.GetFullBodyUrl(),
 		ThreeViewURL: req.GetThreeViewUrl(), NineViewURL: req.GetNineViewUrl(),
-		CallerID: caller(ctx),
+		CallerID: auth.CallerID(ctx),
 	})
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
@@ -135,7 +133,7 @@ func DeleteVirtualIp(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	v, err := Svc.Delete(ctx, req.GetId(), caller(ctx))
+	v, err := Svc.Delete(ctx, req.GetId(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
@@ -153,7 +151,7 @@ func GrantVirtualIp(ctx context.Context, c *app.RequestContext) {
 	}
 	grantedBy := req.GetGrantedBy()
 	if grantedBy == "" {
-		grantedBy = caller(ctx)
+		grantedBy = auth.CallerID(ctx)
 	}
 	v, err := Svc.Grant(ctx, vipsvc.GrantCommand{
 		ID: req.GetId(), TeamID: req.GetTeamId(), Permission: req.GetPermission(), GrantedBy: grantedBy,
@@ -173,7 +171,7 @@ func RevokeVirtualIp(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	v, err := Svc.Revoke(ctx, req.GetId(), req.GetTeamId(), caller(ctx))
+	v, err := Svc.Revoke(ctx, req.GetId(), req.GetTeamId(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
@@ -189,7 +187,7 @@ func ChangeVirtualIpVisibility(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	v, err := Svc.ChangeVisibility(ctx, req.GetId(), req.GetVisibility(), caller(ctx))
+	v, err := Svc.ChangeVisibility(ctx, req.GetId(), req.GetVisibility(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
 		return

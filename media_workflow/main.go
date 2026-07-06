@@ -21,6 +21,7 @@ import (
 	tplsvc "media_agent/media_workflow/biz/service/template"
 	wfsvc "media_agent/media_workflow/biz/service/workflow"
 	"media_agent/media_workflow/biz/shared"
+	"media_agent/media_workflow/biz/shared/auth"
 	"media_agent/media_workflow/biz/shared/client"
 )
 
@@ -115,7 +116,26 @@ func main() {
 	defer scannerCancel()
 	go jobSvc.StartClaimTimeoutScanner(scannerCtx)
 
+	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
+	authCfg := &auth.Config{
+		JWTSecret:     cfg.GetAuth().GetJwtSecret(),
+		CookieName:    "mw_token",
+		JWTExpiresSec: 7 * 24 * 3600,
+		MediaAuthURL:  "http://127.0.0.1:8001",
+		ServiceURL:    "http://127.0.0.1:8002",
+		OAuthClientID: "media_workflow",
+	}
+	authMw := auth.New(authCfg)
+
 	h := suite.NewServer()
+	// auth 路由（不经 auth 中间件）
+	h.GET("/api/auth/login", authMw.LoginHandler)
+	h.GET("/api/auth/callback", authMw.CallbackHandler)
+	h.POST("/api/auth/logout", authMw.LogoutHandler)
+	// 受保护路由挂 auth 中间件
+	h.Use(authMw.Handler())
+	h.GET("/api/auth/me", authMw.MeHandler)
+
 	register(h)
 	suite.RegisterRoutes(h)
 

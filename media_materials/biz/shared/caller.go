@@ -2,15 +2,14 @@ package shared
 
 import "context"
 
-// callerKey context key for caller user_id（由 auth 中间件注入）。
+// callerKey 保留向后兼容（旧代码可能直接用 shared.CallerFromContext）。
 type callerKey struct{}
 
-// WithCaller 把 caller user_id 注入 context。
 func WithCaller(ctx context.Context, userID string) context.Context {
 	return context.WithValue(ctx, callerKey{}, userID)
 }
 
-// CallerFromContext 取 caller user_id；未注入返回 ""。
+// CallerFromContext 从 ctx 取 caller user_id（向后兼容；新代码用 auth.CallerID）。
 func CallerFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(callerKey{}).(string)
 	return v

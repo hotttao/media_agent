@@ -11,13 +11,11 @@ import (
 	pb "media_agent/hertz_gen/model/media_materials/material"
 	domain "media_agent/media_materials/biz/domain/material"
 	materialsvc "media_agent/media_materials/biz/service/material"
-	"media_agent/media_materials/biz/shared"
+	"media_agent/media_materials/biz/shared/auth"
 )
 
 // Svc 由 main.go 注入。
 var Svc *materialsvc.Service
-
-func caller(ctx context.Context) string { return shared.CallerFromContext(ctx) }
 
 // CreateMaterial .
 // @router /api/v1/materials [POST]
@@ -29,7 +27,7 @@ func CreateMaterial(ctx context.Context, c *app.RequestContext) {
 	}
 	ownerID := req.GetOwnerUserId()
 	if ownerID == "" {
-		ownerID = caller(ctx)
+		ownerID = auth.CallerID(ctx)
 	}
 	m, err := Svc.Create(ctx, materialsvc.CreateCommand{
 		Scope: req.GetScope(), Name: req.GetName(), AssetKind: req.GetAssetKind(),
@@ -51,7 +49,7 @@ func GetMaterial(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	m, err := Svc.Get(ctx, req.GetId(), caller(ctx))
+	m, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusNotFound, err.Error())
 		return
@@ -79,7 +77,7 @@ func ListMaterials(ctx context.Context, c *app.RequestContext) {
 		Scope: req.GetScope(), AssetKind: req.GetAssetKind(),
 		Owner: req.GetOwner(), Visibility: req.GetVisibility(),
 		Limit: pageSize, Offset: (page - 1) * pageSize,
-	}, caller(ctx))
+	}, auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusInternalServerError, err.Error())
 		return
@@ -121,7 +119,7 @@ func UpdateMaterial(ctx context.Context, c *app.RequestContext) {
 	}
 	m, err := Svc.Update(ctx, materialsvc.UpdateCommand{
 		ID: req.GetId(), Name: req.GetName(), URL: req.GetUrl(), Content: req.GetContent(),
-		Visibility: req.GetVisibility(), TeamID: req.GetTeamId(), CallerID: caller(ctx),
+		Visibility: req.GetVisibility(), TeamID: req.GetTeamId(), CallerID: auth.CallerID(ctx),
 	})
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
@@ -138,7 +136,7 @@ func DeleteMaterial(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	m, err := Svc.Delete(ctx, req.GetId(), caller(ctx))
+	m, err := Svc.Delete(ctx, req.GetId(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
@@ -156,7 +154,7 @@ func AddMaterialBinding(ctx context.Context, c *app.RequestContext) {
 	}
 	boundBy := req.GetBoundBy()
 	if boundBy == "" {
-		boundBy = caller(ctx)
+		boundBy = auth.CallerID(ctx)
 	}
 	m, err := Svc.AddBinding(ctx, materialsvc.AddBindingCommand{
 		MaterialID: req.GetMaterialId(), OwnerKind: req.GetOwnerKind(),

@@ -11,12 +11,10 @@ import (
 	pb "media_agent/hertz_gen/model/media_workflow/template"
 	domain "media_agent/media_workflow/biz/domain/template"
 	tplsvc "media_agent/media_workflow/biz/service/template"
-	"media_agent/media_workflow/biz/shared"
+	"media_agent/media_workflow/biz/shared/auth"
 )
 
 var Svc *tplsvc.Service
-
-func caller(ctx context.Context) string { return shared.CallerFromContext(ctx) }
 
 func CreateTemplate(ctx context.Context, c *app.RequestContext) {
 	var req pb.CreateTemplateReq
@@ -150,7 +148,7 @@ func RevokeTemplate(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	t, err := Svc.Revoke(ctx, req.GetId(), req.GetTeamId(), caller(ctx))
+	t, err := Svc.Revoke(ctx, req.GetId(), req.GetTeamId(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
@@ -164,7 +162,7 @@ func ChangeTemplateVisibility(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	t, err := Svc.ChangeVisibility(ctx, req.GetId(), req.GetVisibility(), caller(ctx))
+	t, err := Svc.ChangeVisibility(ctx, req.GetId(), req.GetVisibility(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
 		return

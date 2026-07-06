@@ -24,6 +24,7 @@ import (
 	materialsvc "media_agent/media_materials/biz/service/material"
 	productsvc "media_agent/media_materials/biz/service/product"
 	vipsvc "media_agent/media_materials/biz/service/virtual_ip"
+	"media_agent/media_materials/biz/shared/auth"
 )
 
 func main() {
@@ -86,7 +87,26 @@ func main() {
 	vipSvc := vipsvc.NewService(vipRepo, vipGrantRepo)
 	viphandler.Svc = vipSvc
 
+	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
+	authCfg := &auth.Config{
+		JWTSecret:     cfg.GetAuth().GetJwtSecret(),
+		CookieName:    "mw_token",
+		JWTExpiresSec: 7 * 24 * 3600,
+		MediaAuthURL:  "http://127.0.0.1:8001",
+		ServiceURL:    "http://127.0.0.1:8003",
+		OAuthClientID: "media_materials",
+	}
+	authMw := auth.New(authCfg)
+
 	h := suite.NewServer()
+	// auth 路由（不经 auth 中间件）
+	h.GET("/api/auth/login", authMw.LoginHandler)
+	h.GET("/api/auth/callback", authMw.CallbackHandler)
+	h.POST("/api/auth/logout", authMw.LogoutHandler)
+	// 受保护路由挂 auth 中间件
+	h.Use(authMw.Handler())
+	h.GET("/api/auth/me", authMw.MeHandler)
+
 	register(h)
 	suite.RegisterRoutes(h)
 

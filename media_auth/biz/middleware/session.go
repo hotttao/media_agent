@@ -1,11 +1,11 @@
-// session.go：session 鉴权中间件（cookie JWT 验签 + 注入 ctx + 滑动续期 + skip list）。
+// session.go：session 鉴权中间件（cookie JWT 验签 + Bearer service token + 注入 ctx + 滑动续期 + skip list）。
 //
-// 对齐 control-plane src/index.ts 的认证中间件（cookie 段）：读 cookie `token` →
-// SessionSigner.Verify → 注入 Session 到 context.Context → 滑动续期（ShouldRenew→Renew 回写 cookie）。
-// spec §3.8 skip list 短路（login/oauth-token 等公开端点不验）。
+// 对齐 agent-platform browser-service/src/index.ts 的 auth 中间件：
+//  1. Bearer service token（tos_xxx）→ 调 token.Service.VerifyToken → 注入 Session
+//  2. Cookie JWT（httpOnly cookie `token`）→ 本地 HS256 验签 → 注入 Session + 滑动续期
 //
 // 归 middleware 层（基础设施）：验签独立于 auth 业务逻辑，所有 domain 的受保护路由共用。
-// Session 经 ctx 向下传递，service/handler 用 FromContext(ctx) 取。
+// Session 经 ctx 向下传递，service/handler 用 SessionFromContext(ctx) 取。
 package middleware
 
 import (
@@ -18,6 +18,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 
 	"media_agent/media_auth/biz/domain/auth"
+	tokenservice "media_agent/media_auth/biz/service/token"
 	"media_agent/media_auth/biz/shared/session"
 )
 
@@ -27,6 +28,9 @@ type sessionCtxKey struct{}
 // globalSigner 供 callback handler（skip list 内）手动验 cookie 取 Session。
 // 由 Session(signer) 在装配时设置。
 var globalSigner *session.Signer
+
+// globalTokenSvc 供 Bearer service token 验证。由 SessionWithToken 在装配时设置。
+var globalTokenSvc *tokenservice.Service
 
 // SessionFromContext 从 ctx 取 Session（middleware 注入）；无返回 nil。
 func SessionFromContext(ctx context.Context) *auth.Session {
@@ -47,7 +51,7 @@ func VerifyToken(token string) (*auth.Session, error) {
 	return &sess, nil
 }
 
-// skipAllPaths 是无 JWT 鉴权的公开端点（所有方法都跳过；spec §3.10 + 运维端点 + internal VerifyToken）。
+// skipAllPaths 是无鉴权的公开端点（所有方法都跳过；spec §3.10 + 运维端点 + internal VerifyToken）。
 var skipAllPaths = map[string]bool{
 	// spec §3.10 公开业务端点
 	"/api/auth/login":           true,
@@ -66,9 +70,6 @@ var skipAllPaths = map[string]bool{
 }
 
 // skipMethodPaths 是按方法跳过的端点（path → 大写 method set）。
-//
-// /api/oauth/authorize：GET 公开（authorize 页取 client 信息），POST 需 session（用户批准）。
-// control-plane 现状：GET /authorize 无鉴权，POST /authorize 用 c.get('user')。
 var skipMethodPaths = map[string]map[string]bool{
 	"/api/oauth/authorize": {"GET": true},
 }
@@ -76,12 +77,22 @@ var skipMethodPaths = map[string]map[string]bool{
 // skipPrefixes 是无鉴权的前缀（swagger 资源 / pprof 子路径）。
 var skipPrefixes = []string{"/swagger/", "/debug/pprof/"}
 
-// Session 返回 session 鉴权中间件。
-//
-// 流程：skip list 短路 → 读 cookie token → Verify → 注入 ctx → 滑动续期回写 cookie。
-// 无 cookie / 验签失败：API 请求 401；后续可扩展页面 302 → /login（media_auth 仅 API，统一 401）。
+// Session 返回 session 鉴权中间件（仅 cookie JWT）。
+// 保留向后兼容；新代码用 SessionWithToken。
 func Session(signer *session.Signer) app.HandlerFunc {
 	globalSigner = signer
+	return sessionMiddleware(signer, nil)
+}
+
+// SessionWithToken 返回 session 鉴权中间件（cookie JWT + Bearer service token）。
+// signer 用于 cookie JWT 验签；tokenSvc 用于 Bearer service token 验证。
+func SessionWithToken(signer *session.Signer, tokenSvc *tokenservice.Service) app.HandlerFunc {
+	globalSigner = signer
+	globalTokenSvc = tokenSvc
+	return sessionMiddleware(signer, tokenSvc)
+}
+
+func sessionMiddleware(signer *session.Signer, tokenSvc *tokenservice.Service) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		path := string(c.Request.Path())
 		method := string(c.Request.Method())
@@ -100,6 +111,29 @@ func Session(signer *session.Signer) app.HandlerFunc {
 			}
 		}
 
+		// 1. Bearer service token（tos_xxx）— 对齐 agent-platform verifyServiceToken
+		if tokenSvc != nil {
+			authHeader := string(c.Request.Header.Peek("Authorization"))
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				bearer := strings.TrimPrefix(authHeader, "Bearer ")
+				result, err := tokenSvc.VerifyToken(ctx, bearer)
+				if err != nil || !result.Active {
+					abortUnauthorized(c, "invalid service token")
+					return
+				}
+				sess := &auth.Session{
+					Sub:      result.Sub,
+					Username: result.Username,
+					Name:     result.Name,
+					Role:     result.Role,
+				}
+				ctx = context.WithValue(ctx, sessionCtxKey{}, sess)
+				c.Next(ctx)
+				return
+			}
+		}
+
+		// 2. Cookie JWT（httpOnly cookie `token`）— 本地 HS256 验签
 		token := string(c.Cookie("token"))
 		if token == "" {
 			abortUnauthorized(c, "missing session")
@@ -108,7 +142,6 @@ func Session(signer *session.Signer) app.HandlerFunc {
 
 		sess, err := signer.Verify(token)
 		if err != nil {
-			// 验签失败：清 cookie + 401。
 			clearSessionCookie(c)
 			abortUnauthorized(c, "invalid session")
 			return
@@ -121,7 +154,6 @@ func Session(signer *session.Signer) app.HandlerFunc {
 			}
 		}
 
-		// 注入 Session 到 ctx，供下游 service/handler 取。
 		ctx = context.WithValue(ctx, sessionCtxKey{}, &sess)
 		c.Next(ctx)
 	}
