@@ -12,23 +12,27 @@ import (
 	"gorm.io/gorm"
 
 	"media_agent/media_workflow/biz/dal"
-	wfrepo "media_agent/media_workflow/biz/dal/repo/workflow"
 	domain "media_agent/media_workflow/biz/domain/job"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
 	"media_agent/media_workflow/biz/shared/client"
 )
+
+// GeneratedAssetSaver 落产物端口（由 client.MaterialsClient 实现，main.go 注入）。
+type GeneratedAssetSaver interface {
+	UpsertGeneratedAsset(ctx context.Context, req *client.UpsertGenAssetReq) (string, error)
+}
 
 // Service job 用例编排（pull 模式 + NEED_CONFIRM）。
 type Service struct {
 	jobRepo     domain.JobRepo
 	stepRunRepo domain.StepRunRepo
 	tx          dal.TxRunner
-	wfRepo      *wfrepo.Repo // 加载 workflow（steps + input_schema）
+	wfRepo      domain.WorkflowLookup // 加载 workflow（steps + input_schema）
 	tplLookup   wfdomain.TemplateLookup
-	materials   *client.MaterialsClient
+	materials   GeneratedAssetSaver
 }
 
-func NewService(jr domain.JobRepo, sr domain.StepRunRepo, tx dal.TxRunner, wfRepo *wfrepo.Repo, tl wfdomain.TemplateLookup, mc *client.MaterialsClient) *Service {
+func NewService(jr domain.JobRepo, sr domain.StepRunRepo, tx dal.TxRunner, wfRepo domain.WorkflowLookup, tl wfdomain.TemplateLookup, mc GeneratedAssetSaver) *Service {
 	return &Service{jobRepo: jr, stepRunRepo: sr, tx: tx, wfRepo: wfRepo, tplLookup: tl, materials: mc}
 }
 
@@ -411,7 +415,7 @@ func (s *Service) finalizeStepRun(ctx context.Context, sr *domain.StepRun, selec
 	}
 	assetID, err := s.materials.UpsertGeneratedAsset(ctx, &client.UpsertGenAssetReq{
 		Scope: job.Scope, AssetKind: sr.AssetKind,
-		Name: fmt.Sprintf("%s_%s", sr.StepKey, sr.ID[:8]),
+		Name: safeName(sr.StepKey, sr.ID),
 		URL:  selected.URL, Content: selected.Content,
 		OwnerUserID: job.SubmittedBy, Visibility: "private",
 		JobID: sr.JobID, StepRunID: sr.ID, TemplateID: sr.TemplateID, TemplateVersion: sr.TemplateVersion,
@@ -506,6 +510,14 @@ func (s *Service) checkJobCompletion(ctx context.Context, jobID string) {
 	if allDone {
 		_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobSucceeded, "")
 	}
+}
+
+// safeName 生成 asset 名（取 ID 前 8 字符，不足取全部）。
+func safeName(stepKey, id string) string {
+	if len(id) > 8 {
+		return fmt.Sprintf("%s_%s", stepKey, id[:8])
+	}
+	return fmt.Sprintf("%s_%s", stepKey, id)
 }
 
 var _ = strings.TrimSpace
