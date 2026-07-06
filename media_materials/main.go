@@ -90,11 +90,11 @@ func main() {
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
 	authCfg := &auth.Config{
 		JWTSecret:     cfg.GetAuth().GetJwtSecret(),
-		CookieName:    "mw_token",
-		JWTExpiresSec: 7 * 24 * 3600,
-		MediaAuthURL:  "http://127.0.0.1:8001",
-		ServiceURL:    "http://127.0.0.1:8003",
-		OAuthClientID: "media_materials",
+		CookieName:    getenv("MW_COOKIE_NAME", "mw_token"),
+		JWTExpiresSec: int(cfg.GetAuth().GetJwtExpiresInSeconds()),
+		MediaAuthURL:  getenv("MEDIA_AUTH_URL", "http://127.0.0.1:8001"),
+		ServiceURL:    getenv("SERVICE_URL", "http://127.0.0.1:8003"),
+		OAuthClientID: getenv("OAUTH_CLIENT_ID", "media_materials"),
 	}
 	authMw := auth.New(authCfg)
 
@@ -136,4 +136,11 @@ func resolveDefaultLogDir(appName string) string {
 		}
 		dir = parent
 	}
+}
+
+func getenv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }

@@ -66,3 +66,9 @@ pprof:
 health:
   enabled: true
   path: "/health"
+
+
+# auth 中间件配置（jwt_secret/jwt_expires 走 AuthConfig；其余走环境变量）
+auth:
+  jwt_secret: ${MW_JWT_SECRET:-mw-shared-secret-change-me}
+  jwt_expires_in_seconds: 604800

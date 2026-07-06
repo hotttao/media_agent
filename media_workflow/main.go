@@ -119,11 +119,11 @@ func main() {
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
 	authCfg := &auth.Config{
 		JWTSecret:     cfg.GetAuth().GetJwtSecret(),
-		CookieName:    "mw_token",
-		JWTExpiresSec: 7 * 24 * 3600,
-		MediaAuthURL:  "http://127.0.0.1:8001",
-		ServiceURL:    "http://127.0.0.1:8002",
-		OAuthClientID: "media_workflow",
+		CookieName:    getenv("MW_COOKIE_NAME", "mw_token"),
+		JWTExpiresSec: int(cfg.GetAuth().GetJwtExpiresInSeconds()),
+		MediaAuthURL:  getenv("MEDIA_AUTH_URL", "http://127.0.0.1:8001"),
+		ServiceURL:    getenv("SERVICE_URL", "http://127.0.0.1:8002"),
+		OAuthClientID: getenv("OAUTH_CLIENT_ID", "media_workflow"),
 	}
 	authMw := auth.New(authCfg)
 
@@ -172,3 +172,10 @@ var _ wfdomain.TemplateLookup = (*templateLookupAdapter)(nil)
 var _ shared.AssetKindLookup = (*client.MaterialsClient)(nil)
 
 // job 装配（P3）
+
+func getenv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
