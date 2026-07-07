@@ -1,0 +1,7 @@
+# Default E2E profile — minimal stub.
+# Add project-specific sections here as the API surface grows (storage backends,
+# model registries, etc.) and read them from `e2e/config.ts` typed config.
+
+auth:
+  email: "admin@example.com"
+  password: "admin"

@@ -1,0 +1,53 @@
+# Logs
+
+logs
+_.log
+npm-debug.log_
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+stats.html
+\*.local
+*.tsbuildinfo
+tmp
+coverage
+
+# Locale files (except English, which is the default)
+src/locales/*
+!src/locales/en-US.json
+
+# Editor directories and files
+
+.vscode/_
+!.vscode/extensions.json
+.vscode/settings.json
+.idea
+.DS_Store
+_.suo
+_.ntvs_
+_.njsproj
+_.sln
+\*.sw?
+
+# Playwright
+e2e/.env
+e2e/auth/storage-state.json
+e2e/test-results/
+e2e/playwright-report/
+playwright-report/
+test-results/
+
+# E2E profiles (except default and examples)
+e2e/profiles/*
+!e2e/profiles/default.yaml
+!e2e/profiles/*.example
+
+# local agents
+.agents/
+.claude/
+.mcp.json
+skills-lock.json
