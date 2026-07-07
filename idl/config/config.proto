@@ -71,6 +71,8 @@ message Config {
   // media_auth 的认证业务配置：JWT 密钥/有效期、各 token TTL。
   // JWT_SECRET 与 control_plane 共享（HS256），轮换需双方同步（ADR-0001）。
   AuthConfig auth = 70;
+  // media_workflow job 配置（max_retries / claim_timeout）
+  JobConfig job = 77;
   // LDAP 认证配置（auth domain 登录双路之 LDAP）。
   LdapConfig ldap = 71;
   // 企微 corp OAuth 配置（wecom domain）。
@@ -417,4 +419,11 @@ message CrawlDataConfig {
   int32 max_idle_conns = 4;
   // 爬虫 checkpoint 目录（相对 work_dir 或绝对），用于进度推算/续爬
   string checkpoint_dir = 5;
+}
+
+message JobConfig {
+  // 最大重试次数，默认 3
+  int32 max_retries = 1;
+  // CLAIMED 超时秒数（worker 崩溃保护），默认 600
+  int32 claim_timeout_seconds = 2;
 }

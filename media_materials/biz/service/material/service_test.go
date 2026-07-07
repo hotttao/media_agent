@@ -84,7 +84,7 @@ func (m *mockAssetKindLookup) Lookup(_ context.Context, name string) (string, st
 }
 
 func newTestService() *Service {
-	return NewService(&mockRepo{items: map[string]*domain.Material{}}, &mockBindingRepo{bindings: map[string]*domain.Binding{}}, &mockAssetKindLookup{})
+	return NewService(&mockRepo{items: map[string]*domain.Material{}}, &mockBindingRepo{bindings: map[string]*domain.Binding{}}, &mockAssetKindLookup{}, nil)
 }
 
 // —— tests ——
@@ -164,7 +164,7 @@ func TestGet_OwnerCanRead(t *testing.T) {
 		Scope: "ai_clothing", Name: "test", AssetKind: "scene",
 		URL: "https://x.png", OwnerUserID: "u1",
 	})
-	got, err := s.Get(context.Background(), mat.ID, "u1")
+	got, err := s.Get(context.Background(), mat.ID, "u1", nil)
 	if err != nil {
 		t.Fatalf("owner should read: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestGet_NonOwnerPrivateDenied(t *testing.T) {
 		Scope: "ai_clothing", Name: "test", AssetKind: "scene",
 		URL: "https://x.png", OwnerUserID: "u1", Visibility: "private",
 	})
-	_, err := s.Get(context.Background(), mat.ID, "u2")
+	_, err := s.Get(context.Background(), mat.ID, "u2", nil)
 	if err == nil {
 		t.Fatal("non-owner should not read private material")
 	}
@@ -191,7 +191,7 @@ func TestGet_PublicReadableByAnyone(t *testing.T) {
 		Scope: "ai_clothing", Name: "test", AssetKind: "scene",
 		URL: "https://x.png", OwnerUserID: "u1", Visibility: "public",
 	})
-	_, err := s.Get(context.Background(), mat.ID, "u2")
+	_, err := s.Get(context.Background(), mat.ID, "u2", nil)
 	if err != nil {
 		t.Fatalf("public material should be readable by anyone: %v", err)
 	}

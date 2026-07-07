@@ -190,7 +190,7 @@ func newTestService(needsConfirm bool) (*Service, *mockJobRepo, *mockStepRunRepo
 		InputSchema: []wfdomain.InputSchemaEntry{{Name: "scene", ResourceType: "MATERIAL", Required: true}},
 	}}
 	tplLookup := &mockTplConfirm{needsConfirm: needsConfirm}
-	svc := NewService(jobRepo, srRepo, nil, wfLookup, tplLookup, &mockMaterialsClient{})
+	svc := NewService(jobRepo, srRepo, nil, wfLookup, tplLookup, &mockMaterialsClient{}, nil)
 	return svc, jobRepo, srRepo
 }
 

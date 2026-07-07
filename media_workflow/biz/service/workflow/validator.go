@@ -14,10 +14,11 @@ type validator struct {
 	steps          []domain.Step
 	outputStepKey  string
 	templateLookup domain.TemplateLookup
+	tplSnapshots   map[string]*domain.TemplateSnapshot // template_id → snapshot（validateTemplates 填充）
 }
 
 func newValidator(scope string, steps []domain.Step, outputStepKey string, tl domain.TemplateLookup) *validator {
-	return &validator{scope: scope, steps: steps, outputStepKey: outputStepKey, templateLookup: tl}
+	return &validator{scope: scope, steps: steps, outputStepKey: outputStepKey, templateLookup: tl, tplSnapshots: map[string]*domain.TemplateSnapshot{}}
 }
 
 func (v *validator) validate(ctx context.Context) (*domain.ValidationResult, error) {
@@ -148,20 +149,34 @@ func (v *validator) validateTemplates(ctx context.Context, res *domain.Validatio
 			res.RejectReasons = append(res.RejectReasons, domain.RejectReason{Code: "SCOPE_MISMATCH", Message: fmt.Sprintf("template scope %q != workflow scope %q", snap.Scope, v.scope), Subject: s.TemplateID})
 			return fmt.Errorf("scope mismatch for template %s", s.TemplateID)
 		}
+		// 缓存 snapshot 供 validateBindings + deriveInputSchema 用
+		v.tplSnapshots[s.TemplateID] = snap
 	}
 	return nil
 }
 
 // B. slot/binding 合法性
 func (v *validator) validateBindings(res *domain.ValidationResult) error {
-	// 加载所有 template slots（已 validateTemplates 通过，再查一次）
-	// 为简化：每个 step 的 binding to_input 必须在 template inputs 里；source 互斥已在 DB CHECK 保证
-	// 这里做 to_input 存在性 + resource_type 自洽检查
+	// 用 validateTemplates 阶段加载的 snapshots 校验 to_input 存在性
 	for _, s := range v.steps {
-		// to_input 校验需要 template slots；validator 没有 ctx 之外的缓存。
-		// 简化：binding 三选一互斥已由 DB CHECK 保证；to_input 存在性在 execution 时兜底。
-		// TODO: P3 补充 to_input → template slot 的校验（需缓存 template snapshots）。
+		snap := v.tplSnapshots[s.TemplateID]
+		if snap == nil {
+			continue // validateTemplates 已报错
+		}
+		// 构 slot name set
+		slotNames := make(map[string]bool, len(snap.Inputs))
+		for _, in := range snap.Inputs {
+			slotNames[in.Name] = true
+		}
 		for _, b := range s.Bindings {
+			// to_input 必须在 template inputs 里
+			if !slotNames[b.ToInput] {
+				res.RejectReasons = append(res.RejectReasons, domain.RejectReason{
+					Code: "BINDING_INVALID", Message: "to_input not in template inputs",
+					Subject: fmt.Sprintf("step=%s to_input=%s", s.Key, b.ToInput),
+				})
+				return fmt.Errorf("to_input %s not in template %s inputs", b.ToInput, s.TemplateID)
+			}
 			switch b.Source {
 			case domain.SourceWorkflowInput:
 				if b.Ref != "" {
@@ -188,23 +203,35 @@ func (v *validator) validateBindings(res *domain.ValidationResult) error {
 }
 
 // C. input_schema 派生：从所有 WORKFLOW_INPUT bindings 取 slot.name + resource_type + required。
-// 需 template slots（resource_type/required 在 template 上，不在 binding 上）。
-// 简化：本期 input_schema 仅从 binding 推 name + required（resource_type 需查 template，P3 补全）。
+// resource_type 从 template snapshot 的 inputs 里按 slot.name 查。
 func (v *validator) deriveInputSchema() []domain.InputSchemaEntry {
 	seen := make(map[string]*domain.InputSchemaEntry)
 	for _, s := range v.steps {
+		snap := v.tplSnapshots[s.TemplateID]
+		if snap == nil {
+			continue
+		}
+		// 构 slot name → resource_type + required 映射
+		slotInfo := make(map[string]domain.SlotSnapshot, len(snap.Inputs))
+		for _, in := range snap.Inputs {
+			slotInfo[in.Name] = in
+		}
 		for _, b := range s.Bindings {
 			if b.Source != domain.SourceWorkflowInput {
 				continue
 			}
-			// to_input = slot.name = workflow_input name
 			e, ok := seen[b.ToInput]
 			if !ok {
 				e = &domain.InputSchemaEntry{Name: b.ToInput, Required: true}
 				seen[b.ToInput] = e
 			}
-			// resource_type 需从 template slot 查（P3 补全）；暂留空
-			_ = s
+			// 从 template slot 填 resource_type
+			if info, found := slotInfo[b.ToInput]; found {
+				e.ResourceType = info.ResourceType
+				if !info.Required {
+					e.Required = false
+				}
+			}
 		}
 	}
 	out := make([]domain.InputSchemaEntry, 0, len(seen))

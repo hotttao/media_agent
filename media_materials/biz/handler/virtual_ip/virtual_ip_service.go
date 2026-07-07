@@ -49,7 +49,7 @@ func GetVirtualIp(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	v, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx))
+	v, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx), auth.TeamsFromContext(ctx))
 	if err != nil {
 		c.String(consts.StatusNotFound, err.Error())
 		return
@@ -76,7 +76,7 @@ func ListVirtualIps(ctx context.Context, c *app.RequestContext) {
 	items, total, err := Svc.List(ctx, vipsvc.ListQuery{
 		Scope: req.GetScope(), Name: req.GetName(), Status: req.GetStatus(), Visibility: req.GetVisibility(),
 		Limit: pageSize, Offset: (page - 1) * pageSize,
-	}, auth.CallerID(ctx))
+	}, auth.CallerID(ctx), auth.TeamsFromContext(ctx))
 	if err != nil {
 		c.String(consts.StatusInternalServerError, err.Error())
 		return

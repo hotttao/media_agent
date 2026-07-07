@@ -59,7 +59,7 @@ func GetWorkflow(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	w, err := Svc.Get(ctx, req.GetId())
+	w, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusNotFound, err.Error())
 		return
@@ -84,7 +84,7 @@ func ListWorkflows(ctx context.Context, c *app.RequestContext) {
 	items, total, err := Svc.List(ctx, domain.ListQuery{
 		Scope: req.GetScope(), Name: req.GetName(), Status: req.GetStatus(), Visibility: req.GetVisibility(),
 		Limit: pageSize, Offset: (page - 1) * pageSize,
-	})
+	}, auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusInternalServerError, err.Error())
 		return
@@ -158,8 +158,12 @@ func ChangeWorkflowVisibility(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	// TODO: Svc.ChangeVisibility（本期简化）
-	c.JSON(consts.StatusOK, &pb.Workflow{Id: req.GetId(), Visibility: req.GetVisibility()})
+	w, err := Svc.ChangeVisibility(ctx, req.GetId(), req.GetVisibility(), auth.CallerID(ctx))
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	c.JSON(consts.StatusOK, toView(w))
 }
 
 // —— 映射 ——

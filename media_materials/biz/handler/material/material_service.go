@@ -49,7 +49,7 @@ func GetMaterial(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	m, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx))
+	m, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx), auth.TeamsFromContext(ctx))
 	if err != nil {
 		c.String(consts.StatusNotFound, err.Error())
 		return
@@ -77,7 +77,7 @@ func ListMaterials(ctx context.Context, c *app.RequestContext) {
 		Scope: req.GetScope(), AssetKind: req.GetAssetKind(),
 		Owner: req.GetOwner(), Visibility: req.GetVisibility(),
 		Limit: pageSize, Offset: (page - 1) * pageSize,
-	}, auth.CallerID(ctx))
+	}, auth.CallerID(ctx), auth.TeamsFromContext(ctx))
 	if err != nil {
 		c.String(consts.StatusInternalServerError, err.Error())
 		return

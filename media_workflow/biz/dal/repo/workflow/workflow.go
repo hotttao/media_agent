@@ -128,6 +128,14 @@ func (r *Repo) UpdateStatus(ctx context.Context, id string, status domain.Status
 	return err
 }
 
+func (r *Repo) UpdateVisibility(ctx context.Context, id string, visibility domain.Visibility) error {
+	Q := query.Use(dal.FromContext(ctx, r.db))
+	_, err := Q.Workflow.WithContext(ctx).
+		Where(Q.Workflow.ID.Eq(id), Q.Workflow.DeletedAt.IsNull()).
+		Updates(map[string]any{"visibility": string(visibility), "updated_at": time.Now()})
+	return err
+}
+
 func (r *Repo) Delete(ctx context.Context, id string) error {
 	Q := query.Use(dal.FromContext(ctx, r.db))
 	res, err := Q.Workflow.WithContext(ctx).

@@ -63,7 +63,7 @@ func GetTemplate(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	t, err := Svc.Get(ctx, req.GetId())
+	t, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusNotFound, err.Error())
 		return
@@ -102,7 +102,7 @@ func ListTemplates(ctx context.Context, c *app.RequestContext) {
 	items, total, err := Svc.List(ctx, domain.ListQuery{
 		Scope: req.GetScope(), Name: req.GetName(), Visibility: req.GetVisibility(),
 		Limit: pageSize, Offset: (page - 1) * pageSize,
-	})
+	}, auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusInternalServerError, err.Error())
 		return

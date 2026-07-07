@@ -25,6 +25,7 @@ import (
 	materialsvc "media_agent/media_materials/biz/service/material"
 	productsvc "media_agent/media_materials/biz/service/product"
 	vipsvc "media_agent/media_materials/biz/service/virtual_ip"
+	"media_agent/media_materials/biz/shared"
 	"media_agent/media_materials/biz/shared/auth"
 )
 
@@ -70,23 +71,24 @@ func main() {
 	assetKindSvc := assetkindsvc.NewService(assetKindRepo)
 	assetkindhandler.Svc = assetKindSvc
 
-	materialRepo := materialrepo.NewRepo(db)
-	materialBindingRepo := materialrepo.NewBindingRepo(db)
-	materialSvc := materialsvc.NewService(materialRepo, materialBindingRepo, assetKindSvc)
-	materialhandler.Svc = materialSvc
-
 	productRepo := productrepo.NewRepo(db)
 	productSvc := productsvc.NewService(productRepo)
 	producthandler.Svc = productSvc
-
-	genAssetRepo := genassetrepo.NewRepo(db)
-	genAssetSvc := genassetsvc.NewService(genAssetRepo)
-	genassethandler.Svc = genAssetSvc
 
 	vipRepo := viprepo.NewRepo(db)
 	vipGrantRepo := viprepo.NewGrantRepo(db)
 	vipSvc := vipsvc.NewService(vipRepo, vipGrantRepo)
 	viphandler.Svc = vipSvc
+
+	ownerScopeLookup := shared.NewOwnerScopeLookup(vipSvc.GetOwnerScope, productSvc.GetOwnerScope)
+	materialRepo := materialrepo.NewRepo(db)
+	materialBindingRepo := materialrepo.NewBindingRepo(db)
+	materialSvc := materialsvc.NewService(materialRepo, materialBindingRepo, assetKindSvc, ownerScopeLookup)
+	materialhandler.Svc = materialSvc
+
+	genAssetRepo := genassetrepo.NewRepo(db)
+	genAssetSvc := genassetsvc.NewService(genAssetRepo)
+	genassethandler.Svc = genAssetSvc
 
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
 	mediaAuthURL := "http://127.0.0.1:8001"

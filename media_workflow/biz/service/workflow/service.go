@@ -65,19 +65,74 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Workfl
 	return s.repo.Get(ctx, w.ID)
 }
 
-func (s *Service) Get(ctx context.Context, id string) (*domain.Workflow, error) {
+// canRead 可见性：owner ∨ public ∨ team（team 待接入）。
+func (s *Service) canRead(w *domain.Workflow, callerID string) bool {
+	if w.CreatedBy == callerID {
+		return true
+	}
+	if w.Visibility == domain.VisibilityPublic {
+		return true
+	}
+	return false
+}
+
+func (s *Service) canReadSummary(w *domain.WorkflowSummary, callerID string) bool {
+	if w.CreatedBy == callerID {
+		return true
+	}
+	if w.Visibility == domain.VisibilityPublic {
+		return true
+	}
+	return false
+}
+
+// ChangeVisibility 改可见性。仅 owner。
+func (s *Service) ChangeVisibility(ctx context.Context, id, visibility, callerID string) (*domain.Workflow, error) {
+	w, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if w.CreatedBy != callerID {
+		return nil, errors.New("only owner can change visibility")
+	}
+	vis := domain.Visibility(visibility)
+	switch vis {
+	case domain.VisibilityPrivate, domain.VisibilityTeam, domain.VisibilityPublic:
+	default:
+		return nil, fmt.Errorf("invalid visibility %q", visibility)
+	}
+	if err := s.repo.UpdateVisibility(ctx, id, vis); err != nil {
+		return nil, fmt.Errorf("update visibility: %w", err)
+	}
+	return s.repo.Get(ctx, id)
+}
+
+func (s *Service) Get(ctx context.Context, id, callerID string) (*domain.Workflow, error) {
 	w, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("workflow %q: %w", id, err)
 	}
+	if !s.canRead(w, callerID) {
+		return nil, fmt.Errorf("workflow %q not accessible", id)
+	}
 	return w, nil
 }
 
-func (s *Service) List(ctx context.Context, q domain.ListQuery) ([]*domain.WorkflowSummary, int, error) {
+func (s *Service) List(ctx context.Context, q domain.ListQuery, callerID string) ([]*domain.WorkflowSummary, int, error) {
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
-	return s.repo.List(ctx, q)
+	items, total, err := s.repo.List(ctx, q)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := items[:0]
+	for _, w := range items {
+		if s.canReadSummary(w, callerID) {
+			out = append(out, w)
+		}
+	}
+	return out, total, nil
 }
 
 func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Workflow, error) {

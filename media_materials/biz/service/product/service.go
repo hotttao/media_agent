@@ -93,3 +93,15 @@ func (s *Service) Delete(ctx context.Context, id string) (*domain.Product, error
 	}
 	return p, nil
 }
+
+// GetOwnerScope 实现 material.OwnerScopeLookup 端口。
+func (s *Service) GetOwnerScope(ctx context.Context, ownerKind, ownerID string) (string, error) {
+	if ownerKind != "product" {
+		return "", fmt.Errorf("owner_kind %q not handled by product service", ownerKind)
+	}
+	p, err := s.repo.Get(ctx, ownerID)
+	if err != nil {
+		return "", err
+	}
+	return p.Scope, nil
+}

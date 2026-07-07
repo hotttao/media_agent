@@ -16,6 +16,8 @@ type Repo interface {
 	Update(ctx context.Context, t *Template, snapshot *TemplateVersion) error
 	// UpdateStatus 改 status（archive/publish）。
 	UpdateStatus(ctx context.Context, id string, status Status) error
+	// UpdateVisibility 改 visibility。
+	UpdateVisibility(ctx context.Context, id string, visibility Visibility) error
 	// Delete 软删。
 	Delete(ctx context.Context, id string) error
 }

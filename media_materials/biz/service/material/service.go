@@ -11,17 +11,16 @@ import (
 	domain "media_agent/media_materials/biz/domain/material"
 )
 
-// Service material 用例编排。持有 Repo + BindingRepo + AssetKindLookup。
-// visibility ACL：private=owner；public=任意；team 暂按 owner 处理（team 成员来源待 media_auth 接入）。
+// Service material 用例编排。持有 Repo + BindingRepo + AssetKindLookup + OwnerScopeLookup。
 type Service struct {
 	repo       domain.Repo
 	bindings   domain.BindingRepo
 	kindLookup domain.AssetKindLookup
-	// ownerScopeLookup 取 virtual_ip/product 的 scope（同 scope 校验）。后续注入。
+	ownerScope domain.OwnerScopeLookup
 }
 
-func NewService(repo domain.Repo, bindings domain.BindingRepo, lookup domain.AssetKindLookup) *Service {
-	return &Service{repo: repo, bindings: bindings, kindLookup: lookup}
+func NewService(repo domain.Repo, bindings domain.BindingRepo, lookup domain.AssetKindLookup, ownerScope domain.OwnerScopeLookup) *Service {
+	return &Service{repo: repo, bindings: bindings, kindLookup: lookup, ownerScope: ownerScope}
 }
 
 // Create 创建 material。
@@ -69,19 +68,19 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Materi
 }
 
 // Get 取（含可见性校验：caller 非 owner 且非 public → 拒）。
-func (s *Service) Get(ctx context.Context, id, callerID string) (*domain.Material, error) {
+func (s *Service) Get(ctx context.Context, id, callerID string, callerTeams []string) (*domain.Material, error) {
 	m, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if !s.canRead(m, callerID) {
+	if !s.canRead(m, callerID, callerTeams) {
 		return nil, fmt.Errorf("material %q not accessible", id)
 	}
 	return m, nil
 }
 
 // List 分页（仅返回 caller 可见的：自己的 / public；team 待接入）。
-func (s *Service) List(ctx context.Context, q ListQuery, callerID string) ([]*domain.Material, int, error) {
+func (s *Service) List(ctx context.Context, q ListQuery, callerID string, callerTeams []string) ([]*domain.Material, int, error) {
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
@@ -91,7 +90,7 @@ func (s *Service) List(ctx context.Context, q ListQuery, callerID string) ([]*do
 	}
 	out := items[:0]
 	for _, m := range items {
-		if s.canRead(m, callerID) {
+		if s.canRead(m, callerID, callerTeams) {
 			out = append(out, m)
 		}
 	}
@@ -141,14 +140,27 @@ func (s *Service) Delete(ctx context.Context, id, callerID string) (*domain.Mate
 	return m, nil
 }
 
-// AddBinding material ↔ owner。同 scope 校验（owner = virtual_ip / product，同 service 内查）。
-// 注：owner scope 校验需要 owner 仓库；本期先放行，TODO 接入 virtual_ip/product repo 后补 IsSameScope。
+// AddBinding material ↔ owner。同 scope 校验。
 func (s *Service) AddBinding(ctx context.Context, cmd AddBindingCommand) (*domain.Material, error) {
 	ownerKind := domain.BindingOwnerKind(cmd.OwnerKind)
 	switch ownerKind {
 	case domain.OwnerVirtualIP, domain.OwnerProduct:
 	default:
 		return nil, fmt.Errorf("invalid owner_kind %q", cmd.OwnerKind)
+	}
+	// 同 scope 校验
+	mat, err := s.repo.Get(ctx, cmd.MaterialID)
+	if err != nil {
+		return nil, fmt.Errorf("material %q: %w", cmd.MaterialID, err)
+	}
+	if s.ownerScope != nil {
+		ownerScope, err := s.ownerScope.GetOwnerScope(ctx, cmd.OwnerKind, cmd.OwnerID)
+		if err != nil {
+			return nil, fmt.Errorf("get owner scope: %w", err)
+		}
+		if mat.Scope != ownerScope {
+			return nil, fmt.Errorf("scope mismatch: material %q != owner %q", mat.Scope, ownerScope)
+		}
 	}
 	b := &domain.Binding{
 		MaterialID: cmd.MaterialID,
@@ -178,15 +190,23 @@ func (s *Service) ListByOwner(ctx context.Context, ownerKind, ownerID string) ([
 
 // —— helpers ——
 
-// canRead 可见性：owner ∨ public ∨ team（team 待接入，暂按 owner）。
-func (s *Service) canRead(m *domain.Material, callerID string) bool {
+// canRead 可见性：owner ∨ public ∨ team（caller teams 在 ctx 中，由 auth 中间件注入）。
+// team 分支需 service 持有 BindingRepo 以查 grants —— material 无 grants 表，team 可见性靠 material_bindings 的 owner team。
+// 简化：material 的 team 可见性 = caller 在 material.team_id 这个 team 里。
+func (s *Service) canRead(m *domain.Material, callerID string, callerTeams []string) bool {
 	if m.OwnerUserID == callerID {
 		return true
 	}
 	if m.Visibility == domain.VisibilityPublic {
 		return true
 	}
-	// team：待 media_auth team 成员接入后补
+	if m.Visibility == domain.VisibilityTeam && m.TeamID != "" {
+		for _, t := range callerTeams {
+			if t == m.TeamID {
+				return true
+			}
+		}
+	}
 	return false
 }
 

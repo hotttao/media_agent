@@ -39,7 +39,7 @@ func (a *templateLookupAdapter) GetVersion(ctx context.Context, id string, versi
 		slots[i] = wfdomain.SlotSnapshot{Name: in.Name, ResourceType: in.ResourceType, Required: in.Required}
 	}
 	// status 需从当前 template 取（version 快照无 status；查当前）
-	t, err := a.svc.Get(ctx, id)
+	t, err := a.svc.Get(ctx, id, "") // internal lookup, no caller check
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func main() {
 	// job 装配（P3）
 	jobRepo := jobrepo.NewJobRepo(db)
 	stepRunRepo := jobrepo.NewStepRunRepo(db)
-	jobSvc := jobsvc.NewService(jobRepo, stepRunRepo, txRunner, wfRepo, tplLookup, materialsClient)
+	jobSvc := jobsvc.NewService(jobRepo, stepRunRepo, txRunner, wfRepo, tplLookup, materialsClient, cfg.GetJob())
 	jobhandler.Svc = jobSvc
 
 	// claim 超时扫描（后台 goroutine）

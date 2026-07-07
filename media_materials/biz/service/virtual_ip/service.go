@@ -50,18 +50,18 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Virtua
 	return s.repo.Get(ctx, v.ID)
 }
 
-func (s *Service) Get(ctx context.Context, id, callerID string) (*domain.VirtualIp, error) {
+func (s *Service) Get(ctx context.Context, id, callerID string, callerTeams []string) (*domain.VirtualIp, error) {
 	v, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("virtual_ip %q: %w", id, err)
 	}
-	if !s.canRead(v, callerID) {
+	if !s.canRead(ctx, v, callerID, callerTeams) {
 		return nil, fmt.Errorf("virtual_ip %q not accessible", id)
 	}
 	return v, nil
 }
 
-func (s *Service) List(ctx context.Context, q ListQuery, callerID string) ([]*domain.VirtualIp, int, error) {
+func (s *Service) List(ctx context.Context, q ListQuery, callerID string, callerTeams []string) ([]*domain.VirtualIp, int, error) {
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
@@ -71,7 +71,7 @@ func (s *Service) List(ctx context.Context, q ListQuery, callerID string) ([]*do
 	}
 	out := items[:0]
 	for _, v := range items {
-		if s.canRead(v, callerID) {
+		if s.canRead(ctx, v, callerID, callerTeams) {
 			out = append(out, v)
 		}
 	}
@@ -185,14 +185,28 @@ func (s *Service) ChangeVisibility(ctx context.Context, id, visibility, callerID
 
 // —— helpers ——
 
-func (s *Service) canRead(v *domain.VirtualIp, callerID string) bool {
+func (s *Service) canRead(ctx context.Context, v *domain.VirtualIp, callerID string, callerTeams []string) bool {
 	if v.OwnerUserID == callerID {
 		return true
 	}
 	if v.Visibility == domain.VisibilityPublic {
 		return true
 	}
-	// team：待 media_auth team 成员接入后补（需 grants + caller teams 交集）
+	if v.Visibility == domain.VisibilityTeam && len(callerTeams) > 0 {
+		// 查 grants：caller 的某个 team 有 grant on this vip
+		grants, err := s.grants.ListGrants(ctx, v.ID)
+		if err == nil {
+			grantTeams := make(map[string]bool, len(grants))
+			for _, g := range grants {
+				grantTeams[g.TeamID] = true
+			}
+			for _, t := range callerTeams {
+				if grantTeams[t] {
+					return true
+				}
+			}
+		}
+	}
 	return false
 }
 
@@ -202,4 +216,16 @@ func validVisibility(v domain.Visibility) error {
 		return nil
 	}
 	return fmt.Errorf("invalid visibility %q", v)
+}
+
+// GetOwnerScope 实现 material.OwnerScopeLookup 端口。
+func (s *Service) GetOwnerScope(ctx context.Context, ownerKind, ownerID string) (string, error) {
+	if ownerKind != "virtual_ip" {
+		return "", fmt.Errorf("owner_kind %q not handled by virtual_ip service", ownerKind)
+	}
+	v, err := s.repo.Get(ctx, ownerID)
+	if err != nil {
+		return "", err
+	}
+	return v.Scope, nil
 }

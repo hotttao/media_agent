@@ -138,3 +138,13 @@ func toDomain(m *model.AssetKind) *domain.AssetKind {
 
 // ErrNotFound 资源不存在。
 var ErrNotFound = errors.New("asset_kind not found")
+
+func (r *Repo) CountMaterialsByAssetKind(ctx context.Context, name string) (int64, error) {
+	Q := query.Use(dal.FromContext(ctx, r.db))
+	return Q.Material.WithContext(ctx).Where(Q.Material.AssetKind.Eq(name)).Count()
+}
+
+func (r *Repo) CountGeneratedAssetsByAssetKind(ctx context.Context, name string) (int64, error) {
+	Q := query.Use(dal.FromContext(ctx, r.db))
+	return Q.GeneratedAsset.WithContext(ctx).Where(Q.GeneratedAsset.AssetKind.Eq(name)).Count()
+}

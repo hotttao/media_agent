@@ -73,10 +73,13 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Templa
 	return s.repo.Get(ctx, t.ID)
 }
 
-func (s *Service) Get(ctx context.Context, id string) (*domain.Template, error) {
+func (s *Service) Get(ctx context.Context, id, callerID string) (*domain.Template, error) {
 	t, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("template %q: %w", id, err)
+	}
+	if !s.canRead(t, callerID) {
+		return nil, fmt.Errorf("template %q not accessible", id)
 	}
 	return t, nil
 }
@@ -85,11 +88,21 @@ func (s *Service) GetVersion(ctx context.Context, id string, version int) (*doma
 	return s.repo.GetVersion(ctx, id, version)
 }
 
-func (s *Service) List(ctx context.Context, q domain.ListQuery) ([]*domain.Template, int, error) {
+func (s *Service) List(ctx context.Context, q domain.ListQuery, callerID string) ([]*domain.Template, int, error) {
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
-	return s.repo.List(ctx, q)
+	items, total, err := s.repo.List(ctx, q)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := items[:0]
+	for _, t := range items {
+		if s.canRead(t, callerID) {
+			out = append(out, t)
+		}
+	}
+	return out, total, nil
 }
 
 func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Template, error) {
@@ -205,7 +218,22 @@ func (s *Service) ChangeVisibility(ctx context.Context, id, visibility, callerID
 	}
 	// 直接更新 visibility（repo.Update 会触发 version+1，不合适；用专门方法）
 	// TODO: repo 加 UpdateVisibility 方法；暂复用 UpdateStatus 的模式
-	return t, nil // 简化：本期 visibility 改动暂不持久化（P2 范围控制）
+	if err := s.repo.UpdateVisibility(ctx, id, vis); err != nil {
+		return nil, fmt.Errorf("update visibility: %w", err)
+	}
+	return s.repo.Get(ctx, id)
+}
+
+// canRead 可见性：owner ∨ public ∨ team（team 待接入）。
+func (s *Service) canRead(t *domain.Template, callerID string) bool {
+	if t.CreatedBy == callerID {
+		return true
+	}
+	if t.Visibility == domain.VisibilityPublic {
+		return true
+	}
+	// team：待 team 成员查询接入后补
+	return false
 }
 
 // —— 校验 ——

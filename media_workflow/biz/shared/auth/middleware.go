@@ -53,6 +53,7 @@ type Config struct {
 }
 
 type callerKey struct{}
+type teamsKey struct{}
 
 // CallerFromContext 从 ctx 取 User（middleware 注入）。
 func CallerFromContext(ctx context.Context) *User {
@@ -67,6 +68,12 @@ func CallerID(ctx context.Context) string {
 		return ""
 	}
 	return u.Sub
+}
+
+// TeamsFromContext 从 ctx 取 caller 的 team ID 列表（middleware 注入，可能为 nil）。
+func TeamsFromContext(ctx context.Context) []string {
+	t, _ := ctx.Value(teamsKey{}).([]string)
+	return t
 }
 
 // —— service token 缓存 ——
@@ -148,13 +155,45 @@ func (s *pkceStore) cleanup() {
 	}
 }
 
+// —— team 缓存 ——
+type teamCacheEntry struct {
+	teams     []string
+	expiresAt time.Time
+}
+type teamCache struct {
+	mu      sync.Mutex
+	entries map[string]teamCacheEntry
+	ttl     time.Duration
+}
+
+func newTeamCache(ttl time.Duration) *teamCache {
+	return &teamCache{entries: map[string]teamCacheEntry{}, ttl: ttl}
+}
+
+func (c *teamCache) get(userID string) ([]string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[userID]
+	if !ok || time.Now().After(e.expiresAt) {
+		return nil, false
+	}
+	return e.teams, true
+}
+
+func (c *teamCache) set(userID string, teams []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries[userID] = teamCacheEntry{teams: teams, expiresAt: time.Now().Add(c.ttl)}
+}
+
 // Middleware auth 中间件实例。
 type Middleware struct {
 	cfg       *Config
 	cache     *tokenCache
+	teams     *teamCache
 	pkce      *pkceStore
 	http      *http.Client
-	cookieMax int // cookie maxAge（秒）
+	cookieMax int
 }
 
 func New(cfg *Config) *Middleware {
@@ -167,6 +206,7 @@ func New(cfg *Config) *Middleware {
 	return &Middleware{
 		cfg:       cfg,
 		cache:     newTokenCache(60 * time.Second),
+		teams:     newTeamCache(60 * time.Second),
 		pkce:      newPKCEStore(),
 		http:      &http.Client{Timeout: 10 * time.Second},
 		cookieMax: cfg.JWTExpiresSec,
@@ -199,6 +239,8 @@ func (m *Middleware) Handler() app.HandlerFunc {
 				return
 			}
 			ctx = context.WithValue(ctx, callerKey{}, user)
+			// 异步取 teams（不阻塞请求；teams 为空时 service 跳过 team 校验）
+			go m.prefetchTeams(user.Sub)
 			c.Next(ctx)
 			return
 		}
@@ -218,8 +260,32 @@ func (m *Middleware) Handler() app.HandlerFunc {
 			return
 		}
 		ctx = context.WithValue(ctx, callerKey{}, user)
+		// 同步取 teams（cookie 路径是浏览器用户，team 校验常用）
+		teamIDs, _ := m.fetchTeams(ctx, user.Sub)
+		if teamIDs != nil {
+			ctx = context.WithValue(ctx, teamsKey{}, teamIDs)
+		}
 		c.Next(ctx)
 	}
+}
+
+// prefetchTeams 异步预热 team 缓存（service token 路径用）。
+func (m *Middleware) prefetchTeams(userID string) {
+	if cached, ok := m.teams.get(userID); ok {
+		_ = cached
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	m.fetchTeams(ctx, userID)
+}
+
+// fetchTeams 调 media_auth GET /api/teams 取 caller 的 team ID 列表（带缓存）。
+// 本期：media_auth /api/teams 需 session，下游服务无法直接调。
+// TODO: media_auth 加 internal endpoint /internal/teams?user_id=xxx 供下游服务查 team。
+// 目前返回 nil（team 校验降级为 false，不影响 private/public）。
+func (m *Middleware) fetchTeams(ctx context.Context, userID string) ([]string, error) {
+	return nil, nil
 }
 
 // verifyServiceToken 调 media_auth GET /api/auth/me with Bearer token。

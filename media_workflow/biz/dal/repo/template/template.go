@@ -182,6 +182,14 @@ func (r *Repo) UpdateStatus(ctx context.Context, id string, status domain.Status
 	return err
 }
 
+func (r *Repo) UpdateVisibility(ctx context.Context, id string, visibility domain.Visibility) error {
+	Q := query.Use(dal.FromContext(ctx, r.db))
+	_, err := Q.Template.WithContext(ctx).
+		Where(Q.Template.ID.Eq(id), Q.Template.DeletedAt.IsNull()).
+		Updates(map[string]any{"visibility": string(visibility), "updated_at": time.Now()})
+	return err
+}
+
 func (r *Repo) Delete(ctx context.Context, id string) error {
 	Q := query.Use(dal.FromContext(ctx, r.db))
 	res, err := Q.Template.WithContext(ctx).

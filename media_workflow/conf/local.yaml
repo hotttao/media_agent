@@ -86,3 +86,8 @@ client:
     service_name: "media-materials"
     base_domain: ${MEDIA_MATERIALS_URL:-http://127.0.0.1:8003}
     use_discovery: false
+
+# media_workflow job 配置
+job:
+  max_retries: 3
+  claim_timeout_seconds: 600

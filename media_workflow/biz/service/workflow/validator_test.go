@@ -24,8 +24,8 @@ func (m *mockTemplateLookup) GetVersion(_ context.Context, id string, version in
 func newMockLookup() *mockTemplateLookup {
 	return &mockTemplateLookup{
 		templates: map[string]*domain.TemplateSnapshot{
-			"tpl_a": {ID: "tpl_a", Scope: "ai_clothing", Status: "draft", OutputAssetKind: "first_frame", Platform: "gpt", GenWay: "i2i", Inputs: []domain.SlotSnapshot{{Name: "scene", ResourceType: "MATERIAL", Required: true}}},
-			"tpl_b": {ID: "tpl_b", Scope: "ai_clothing", Status: "draft", OutputAssetKind: "ai_video", Platform: "jimeng", GenWay: "i2v", Inputs: []domain.SlotSnapshot{{Name: "first_frame", ResourceType: "ASSET", Required: true}}},
+			"tpl_a": {ID: "tpl_a", Scope: "ai_clothing", Status: "draft", OutputAssetKind: "first_frame", Platform: "gpt", GenWay: "i2i", Inputs: []domain.SlotSnapshot{{Name: "scene", ResourceType: "MATERIAL", Required: true}, {Name: "style", ResourceType: "TEXT", Required: false}}},
+			"tpl_b": {ID: "tpl_b", Scope: "ai_clothing", Status: "draft", OutputAssetKind: "ai_video", Platform: "jimeng", GenWay: "i2v", Inputs: []domain.SlotSnapshot{{Name: "first_frame", ResourceType: "ASSET", Required: true}, {Name: "scene", ResourceType: "MATERIAL", Required: true}}},
 		},
 	}
 }
@@ -184,7 +184,7 @@ func TestDeriveInputSchema(t *testing.T) {
 		{Key: "b", Order: 2, TemplateID: "tpl_b", TemplateVersion: 1,
 			Bindings: []domain.Binding{
 				{ToInput: "scene", Source: domain.SourceWorkflowInput}, // 同名 input，去重
-				{ToInput: "ff", Source: domain.SourceStepOutput, Ref: "a"},
+				{ToInput: "first_frame", Source: domain.SourceStepOutput, Ref: "a"},
 			}},
 	}, "b", newMockLookup())
 	res, _ := v.validate(context.Background())

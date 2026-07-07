@@ -17,6 +17,10 @@ type Repo interface {
 	Delete(ctx context.Context, name string) error
 	// BatchGet 批量取（给 media_workflow 校验期用）；未命中的不返回，调用方比对 not_found。
 	BatchGet(ctx context.Context, names []string) ([]*AssetKind, error)
+	// CountByAssetKind 查引用了某 asset_kind 的 material 数量（in-use 校验用）。
+	CountMaterialsByAssetKind(ctx context.Context, name string) (int64, error)
+	// CountGeneratedAssetsByAssetKind 查引用了某 asset_kind 的 generated_asset 数量。
+	CountGeneratedAssetsByAssetKind(ctx context.Context, name string) (int64, error)
 }
 
 // ListQuery 列表过滤。

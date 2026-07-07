@@ -118,8 +118,7 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.AssetK
 	return s.repo.Get(ctx, cmd.Name)
 }
 
-// Delete 删除。SYSTEM 拒绝；ENABLED 可删。
-// 注：in-use 校验（被 material/template 引用）本期暂不做，后续加跨表检查。
+// Delete 删除。SYSTEM 拒绝；ENABLED 可删；in-use 校验。
 func (s *Service) Delete(ctx context.Context, name string) (*domain.AssetKind, error) {
 	ak, err := s.Get(ctx, name)
 	if err != nil {
@@ -127,6 +126,18 @@ func (s *Service) Delete(ctx context.Context, name string) (*domain.AssetKind, e
 	}
 	if ak.Status == domain.StatusSystem {
 		return nil, fmt.Errorf("asset_kind %q is SYSTEM, cannot delete", name)
+	}
+	// in-use 校验
+	matCount, err := s.repo.CountMaterialsByAssetKind(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("check material references: %w", err)
+	}
+	genCount, err := s.repo.CountGeneratedAssetsByAssetKind(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("check generated_asset references: %w", err)
+	}
+	if matCount > 0 || genCount > 0 {
+		return nil, fmt.Errorf("asset_kind %q is in use (%d materials, %d generated_assets)", name, matCount, genCount)
 	}
 	if err := s.repo.Delete(ctx, name); err != nil {
 		return nil, fmt.Errorf("delete asset_kind: %w", err)

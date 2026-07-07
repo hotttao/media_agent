@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	configpb "media_agent/hertz_gen/config"
 	"media_agent/media_workflow/biz/dal"
 	domain "media_agent/media_workflow/biz/domain/job"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
@@ -27,13 +28,14 @@ type Service struct {
 	jobRepo     domain.JobRepo
 	stepRunRepo domain.StepRunRepo
 	tx          dal.TxRunner
-	wfRepo      domain.WorkflowLookup // 加载 workflow（steps + input_schema）
+	wfRepo      domain.WorkflowLookup
 	tplLookup   wfdomain.TemplateLookup
 	materials   GeneratedAssetSaver
+	jobCfg      *configpb.JobConfig
 }
 
-func NewService(jr domain.JobRepo, sr domain.StepRunRepo, tx dal.TxRunner, wfRepo domain.WorkflowLookup, tl wfdomain.TemplateLookup, mc GeneratedAssetSaver) *Service {
-	return &Service{jobRepo: jr, stepRunRepo: sr, tx: tx, wfRepo: wfRepo, tplLookup: tl, materials: mc}
+func NewService(jr domain.JobRepo, sr domain.StepRunRepo, tx dal.TxRunner, wfRepo domain.WorkflowLookup, tl wfdomain.TemplateLookup, mc GeneratedAssetSaver, jobCfg *configpb.JobConfig) *Service {
+	return &Service{jobRepo: jr, stepRunRepo: sr, tx: tx, wfRepo: wfRepo, tplLookup: tl, materials: mc, jobCfg: jobCfg}
 }
 
 // —— SubmitJob ——
@@ -368,22 +370,32 @@ func (s *Service) Retry(ctx context.Context, jobID string, reason string, inputO
 	if job.Status != domain.JobFailed {
 		return nil, fmt.Errorf("job %s status %s, expected failed", jobID, job.Status)
 	}
-	if job.RetryCount >= 3 {
+	maxRetries := 3
+	if s.jobCfg != nil && s.jobCfg.MaxRetries > 0 {
+		maxRetries = int(s.jobCfg.MaxRetries)
+	}
+	if job.RetryCount >= maxRetries {
 		return nil, errors.New("max retries exceeded")
 	}
-	// 重置 failed/skipped/need_confirm step_runs → pending/blocked
+	// 重置 failed/skipped/need_confirm step_runs → pending（仅重置非 succeeded 的）
+	// succeeded 的保留；failed → pending；skipped/need_confirm → pending（重新评估依赖）
 	stepRuns, err := s.stepRunRepo.ListByJob(ctx, jobID)
 	if err != nil {
 		return nil, err
 	}
+	// 先把 failed → pending，skipped → blocked（重新等依赖评估）
 	for _, sr := range stepRuns {
 		switch sr.Status {
-		case domain.SRFailed, domain.SRSkipped:
+		case domain.SRFailed:
 			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRPending, nil)
+		case domain.SRSkipped:
+			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRBlocked, nil)
 		case domain.SRNeedConfirm:
 			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRPending, map[string]any{"candidates": "[]"})
 		}
 	}
+	// 重新跑 DAG 推进：把能解锁的 blocked → pending
+	s.advanceDAG(ctx, jobID, "")
 	// input override
 	if inputOverride != nil {
 		_ = s.jobRepo.UpdateInput(ctx, jobID, *inputOverride)
@@ -539,8 +551,11 @@ func (s *Service) StartClaimTimeoutScanner(ctx context.Context) {
 }
 
 func (s *Service) scanStaleClaimed(ctx context.Context) {
-	// CLAIMED 超 10min → PENDING（worker 崩溃保护）
-	n, err := s.stepRunRepo.ReclaimStale(ctx, 600)
+	timeout := 600
+	if s.jobCfg != nil && s.jobCfg.ClaimTimeoutSeconds > 0 {
+		timeout = int(s.jobCfg.ClaimTimeoutSeconds)
+	}
+	n, err := s.stepRunRepo.ReclaimStale(ctx, timeout)
 	if err != nil {
 		return
 	}
