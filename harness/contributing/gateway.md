@@ -4,6 +4,8 @@
 > 适用对象：负责架构设计、网关配置、BFF 开发的 Coding Agent。
 > 核心目标：Traefik 负责 SSL/路由/负载均衡/服务发现（north-south），Hertz BFF 负责业务聚合/组装/透传（应用层），后端服务专注于领域逻辑。
 
+本文档是通用 harness 约束，不绑定具体服务。文中用 `<svc-A>` / `<svc-B>` 泛指任意后端服务，用 `<auth-svc>` 泛指认证服务，用 `<bff>` 泛指 BFF 服务。
+
 ---
 
 ## 1. 架构分层
@@ -25,7 +27,7 @@ Internet → Traefik（入口网关）→ BFF（业务聚合层）→ 后端服�
 | 类型 | 说明 | BFF 处理方式 |
 |:---|:---|:---|
 | 聚合 | 一个前端请求需要多个后端服务的响应拼装 | service 层并发调多个 typed client → 合并映射 |
-| 组装 | 前端传简单参数，BFF 负责查素材拼复杂入参 | service 层调 typed client 查数据 → 组装 → 调 typed client 提交 |
+| 组装 | 前端传简单参数，BFF 负责查数据拼复杂入参 | service 层调 typed client 查数据 → 组装 → 调 typed client 提交 |
 | 透传 | 前端请求与后端接口 1:1，无需聚合 | service 层调单个 typed client → 1:1 映射 |
 | SSE | 后端事件流透传到前端 | BFF 代理 chunk（唯一允许 raw HTTP 的场景） |
 | 直连 | 不经 BFF 的路由（如 OAuth callback） | Traefik 直接路由到后端服务 |
@@ -44,16 +46,16 @@ Internet → Traefik（入口网关）→ BFF（业务聚合层）→ 后端服�
 
 | 优先级 | 路径前缀 | 目标 | 说明 |
 |:---:|:---|:---|:---|
-| 高 | `/api/auth` | 后端服务 | OAuth callback 等不经 BFF |
-| 中 | `/api/bff` | BFF | 聚合/透传/SSE |
+| 高 | `/api/auth` | `<auth-svc>` | OAuth callback 等不经 BFF |
+| 中 | `/api/bff` | `<bff>` | 聚合/透传/SSE |
 | 中 | `/api/v1` | 后端服务 | 内部调试，prod 可关 |
 | 低 | `/` | 前端 nginx | 兜底 |
 
 ### 2.3 SSL
 
-- Traefik 统一终止 SSL，后端服务/BFF 收到的是明文 HTTP。
-- 证书走 Let's Encrypt 自动签发/续期，持久化到 `acme.json`。
-- **禁止**：后端服务/BFF 自己管 SSL 证书。
+- Traefik 统一终止 SSL，后端服务 / BFF 收到的是明文 HTTP。
+- 证书走 Let's Encrypt 自动签发 / 续期，持久化到 `acme.json`。
+- **禁止**：后端服务 / BFF 自己管 SSL 证书。
 
 ---
 
@@ -64,7 +66,7 @@ Internet → Traefik（入口网关）→ BFF（业务聚合层）→ 后端服�
 BFF 遵循 `architecture.md` 的 DDD 分层，但**无 dal / domain 层**（BFF 不持 DB、不持领域核心）：
 
 ```text
-media_bff/biz/
+<bff>/biz/
 ├── handler/          # 薄：bind → command → service → 映射
 ├── service/          # 聚合编排：调 typed client + 映射
 ├── shared/
@@ -96,7 +98,7 @@ shared   → hertz_infra/clienthertz / hertz_gen（typed client stub）
 
 ### 3.4 DTO 解耦
 
-- BFF IDL（`idl/media_bff/*.proto`）定义**前端视角**的 DTO，不引用后端 proto message。
+- BFF IDL（`idl/<bff>/*.proto`）定义**前端视角**的 DTO，不引用后端 proto message。
 - BFF service 层负责后端 DTO → BFF DTO 的映射（即使 1:1 也走映射）。
 - 后端改字段 → BFF service 层适配 → 前端无感。
 - **禁止**：BFF DTO 直接 import / 引用后端 proto message。
@@ -112,11 +114,11 @@ shared   → hertz_infra/clienthertz / hertz_gen（typed client stub）
 
 ## 4. Auth 约束
 
-- BFF 的 auth 与后端服务一致：cookie JWT（本地 HS256 验签）+ Bearer service token（调 media_auth 验证）。
-- BFF 是 OAuth client（在 media_auth `oauth_clients` 表注册），有自己的 `client_secret`。
-- 共享 `MW_JWT_SECRET`（materials / workflow / BFF 三个服务同一个密钥）。
+- BFF 的 auth 与后端服务一致：cookie JWT（本地 HS256 验签）+ Bearer service token（调 `<auth-svc>` 验证）。
+- BFF 是 OAuth client（在 `<auth-svc>` 的 `oauth_clients` 表注册），有自己的 `client_secret`。
+- BFF 与同网关下的后端服务共享 JWT 密钥（同一密钥 → cookie 跨服务同域有效）。
 - BFF 调后端时，后端 auth 中间件校验请求——cookie 同域自动带，或 BFF 在 typed client 请求头加 Bearer token。
-- **禁止**：BFF 绕过 auth 中间件暴露未鉴权接口（除 login/callback/logout）。
+- **禁止**：BFF 绕过 auth 中间件暴露未鉴权接口（除 login / callback / logout）。
 
 ---
 
@@ -145,24 +147,20 @@ shared   → hertz_infra/clienthertz / hertz_gen（typed client stub）
 
 ## 6. 配置约束
 
-### 6.1 公共配置
+### 6.1 三层配置
 
-走 `docker-compose/.env.<infra>` + `env_file`，所有服务共享：
-- infra 开关（`OTEL_ENABLED` 等）
-- 共享密钥（`MW_JWT_SECRET`、OAuth client secret）
-- 下游 URL（`MEDIA_AUTH_URL` 等，docker 用 `host.docker.internal`，本地 `go run` 用 yaml 默认值 `127.0.0.1`）
+| 层 | 载体 | 放什么 | 例子 |
+|:---|:---|:---|:---|
+| 公共 | `docker-compose/.env.<infra>` + `env_file` | infra 开关、共享密钥、下游 URL | `OTEL_ENABLED`、JWT 密钥、`<svc-A>_URL` |
+| 服务特有 | `docker-compose` `environment` | 该服务独有的变量 | `POSTGRES_DSN`（db 名不同）、`LOG_DIR` |
+| 本地默认 | yaml `${VAR:-default}` | `go run` 时的默认值 | `${SERVER_ADDR:-:8080}` |
 
-### 6.2 服务特有配置
-
-走 `docker-compose` `environment`，只放该服务独有的：
-- `POSTGRES_DSN`（db 名不同）
-- `LOG_DIR`（容器路径）
-
-### 6.3 约定大于配置
+### 6.2 约定大于配置
 
 - `SERVER_ADDR` 不在 `environment` 里设——yaml 已有 `${SERVER_ADDR:-:port}` 默认值。
-- 环境变量名全链路一致，不在 docker-compose 里重命名（如 `JWT_SECRET` → `MW_JWT_SECRET`）。
+- 环境变量名全链路一致，不在 docker-compose 里重命名。
 - yaml 提供本地 `go run` 的默认值，docker 环境用 env_file 覆盖。
+- 下游 URL 在 env_file 里用 `host.docker.internal`，yaml 默认值用 `127.0.0.1`。
 
 ---
 
