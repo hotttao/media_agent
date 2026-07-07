@@ -8,14 +8,9 @@ services:
     env_file:
       - ../docker-compose/.env.${INFRA:-unit}
     environment:
-      SERVER_ADDR: ":8002"
+      # 仅服务特有变量（其余走 env_file + yaml 默认值）
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_workflow?sslmode=disable
       LOG_DIR: /media_logs/media-workflow
-      # auth 中间件配置
-      JWT_SECRET: ${MW_JWT_SECRET:-mw-shared-secret-change-me}
-      MW_OAUTH_CLIENT_SECRET: ${MW_WORKFLOW_OAUTH_CLIENT_SECRET:-mw_workflow_secret_dev}
-      MEDIA_AUTH_URL: http://host.docker.internal:8001
-      MEDIA_MATERIALS_URL: http://host.docker.internal:8003
     volumes:
       - ../media_logs/media-workflow:/media_logs/media-workflow
     extra_hosts:
