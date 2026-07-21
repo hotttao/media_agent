@@ -143,3 +143,31 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+
+  # 9. Traefik - 入口网关（SSL 终止 / 路由 / 服务发现）
+  #    Docker label 驱动：各 media_ 服务在自己的 docker-compose.yml 里声明 Traefik label。
+  #    本服务只跑 Traefik 本体 + Docker provider，不手写路由配置（gateway.md §2.1）。
+  #    端口 80 = 业务入口；8080 = dashboard（dev only，prod 关 --api.insecure）。
+  traefik:
+    image: rancher/mirrored-library-traefik:3.7.4
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=media-net"
+      - "--entrypoints.web.address=:80"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - media-net
+    restart: unless-stopped
+
+# media-net：所有 media_ 服务 + Traefik 共享的 Docker 网络。
+# 各服务在自己的 docker-compose.yml 里以 external: true 引用此网络。
+networks:
+  media-net:
+    name: media-net

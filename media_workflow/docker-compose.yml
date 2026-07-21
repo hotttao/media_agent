@@ -16,3 +16,15 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+    networks:
+      - media-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.media-workflow.rule=PathPrefix(`/api/v1/workflows`) || PathPrefix(`/api/v1/templates`) || PathPrefix(`/api/v1/jobs`) || PathPrefix(`/api/v1/step-runs`)"
+      - "traefik.http.routers.media-workflow.entrypoints=web"
+      - "traefik.http.services.media-workflow.loadbalancer.server.port=8002"
+
+networks:
+  media-net:
+    external: true
