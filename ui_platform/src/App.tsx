@@ -1,31 +1,42 @@
 /**
  * Top-level App shell.
  *
- * Per contributing/architecture.md the app composes L3 pages with L1 foundation
- * providers. This skeleton intentionally ships with zero pages — add routes by
- * creating pages/<resource>/list|create|edit|show.tsx and registering them
- * inside <Routes> below.
+ * Routes:
+ *   /login            - LoginPage (public)
+ *   /register         - RegisterPage (public)
+ *   /oauth/authorize  - OAuthAuthorizePage (authenticated)
+ *   /                 - DashboardPage (authenticated)
+ *   *                 - redirect to /
  */
+import { ProtectedRoute } from "@/foundation/components/protected-route";
+import { LoginPage } from "@/pages/auth/login";
+import { RegisterPage } from "@/pages/auth/register";
+import { OAuthAuthorizePage } from "@/pages/oauth/authorize";
+import { DashboardPage } from "@/pages/dashboard";
+import { Navigate, Route, Routes } from "react-router-dom";
+
 export default function App() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b px-6 py-4">
-        <h1 className="text-lg font-semibold">@media/ui-platform</h1>
-        <p className="text-sm text-muted-foreground">
-          Skeleton only. See{" "}
-          <a
-            className="underline"
-            href="/contributing/architecture.md"
-            rel="noreferrer"
-          >
-            contributing/architecture.md
-          </a>{" "}
-          for the L0/L1/L2/L3 layer model.
-        </p>
-      </header>
-      <main className="px-6 py-6">
-        {/* Mount pages/<resource> routes here. */}
-      </main>
-    </div>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/oauth/authorize"
+        element={
+          <ProtectedRoute>
+            <OAuthAuthorizePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
