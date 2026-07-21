@@ -126,7 +126,7 @@ shared   → hertz_infra/clienthertz / hertz_gen（typed client stub）
 
 ### 5.1 项目位置
 
-前端源码放仓库根 `frontend/` 目录，独立于任何 Go module。
+前端源码放独立目录，独立于任何 Go module。
 
 ### 5.2 静态文件服务
 
@@ -140,8 +140,8 @@ shared   → hertz_infra/clienthertz / hertz_gen（typed client stub）
 
 ### 5.3 前端调用约束
 
-- 生产环境前端**只调** BFF `/api/bff/*`，不直连后端 `/api/v1/*`。
-- 开发环境可直连后端调试，但生产 Traefik 关闭 `/api/v1/*` 路由。
+- 生产环境前端**可以调** BFF `/api/bff/*`，也可以直连后端 `/api/v1/*`。
+- 开发环境可直连后端调试。
 
 ---
 
