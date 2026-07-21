@@ -19,6 +19,8 @@ var (
 type Client interface {
 	Login(context context.Context, req *auth.LoginRequest, reqOpt ...config.RequestOption) (resp *auth.LoginResponse, rawResponse *protocol.Response, err error)
 
+	Register(context context.Context, req *auth.RegisterRequest, reqOpt ...config.RequestOption) (resp *auth.RegisterResponse, rawResponse *protocol.Response, err error)
+
 	Logout(context context.Context, req *auth.LogoutRequest, reqOpt ...config.RequestOption) (resp *auth.LogoutResponse, rawResponse *protocol.Response, err error)
 
 	GetMe(context context.Context, req *auth.GetMeRequest, reqOpt ...config.RequestOption) (resp *auth.ApiUser, rawResponse *protocol.Response, err error)
@@ -58,6 +60,28 @@ func (s *AuthServiceClient) Login(context context.Context, req *auth.LoginReques
 		setRequestOption(reqOpt...).
 		setResult(httpResp).
 		execute("POST", "/api/auth/login")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *AuthServiceClient) Register(context context.Context, req *auth.RegisterRequest, reqOpt ...config.RequestOption) (resp *auth.RegisterResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &auth.RegisterResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/api/auth/register")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -186,6 +210,10 @@ func ConfigDefaultClient(ops ...Option) (err error) {
 
 func Login(context context.Context, req *auth.LoginRequest, reqOpt ...config.RequestOption) (resp *auth.LoginResponse, rawResponse *protocol.Response, err error) {
 	return defaultClient.Login(context, req, reqOpt...)
+}
+
+func Register(context context.Context, req *auth.RegisterRequest, reqOpt ...config.RequestOption) (resp *auth.RegisterResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.Register(context, req, reqOpt...)
 }
 
 func Logout(context context.Context, req *auth.LogoutRequest, reqOpt ...config.RequestOption) (resp *auth.LogoutResponse, rawResponse *protocol.Response, err error) {

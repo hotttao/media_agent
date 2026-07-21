@@ -85,7 +85,7 @@ type VerifyTokenResponse struct {
 	unknownFields protoimpl.UnknownFields
 
 	Active bool `protobuf:"varint,1,opt,name=active,proto3" form:"active" json:"active,omitempty" query:"active"`
-	// = service_tokens.created_by(control_plane 据此识别调用方)
+	// = service_tokens.created_by（调用方据此识别 token 持有者）
 	Sub string `protobuf:"bytes,2,opt,name=sub,proto3" form:"sub" json:"sub,omitempty" query:"sub"`
 	// svc:{name}
 	Username string `protobuf:"bytes,3,opt,name=username,proto3" form:"username" json:"username,omitempty" query:"username"`

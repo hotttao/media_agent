@@ -65,6 +65,10 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrAccountDisabled    = errors.New("this account cannot be used for login")
 	ErrPasswordNotSet     = errors.New("account has no local password")
+	ErrUsernameTaken      = domainauth.ErrUsernameTaken    // Register/CreateUser 用户名冲突（handler 409）
+	ErrUsernameRequired   = policyauth.ErrUsernameRequired // Register/CreateUser 用户名空（handler 400）
+	ErrPasswordTooShort   = policyauth.ErrPasswordTooShort // Register/ChangePassword 密码<6（handler 400）
+	ErrPasswordSame       = policyauth.ErrPasswordSame     // ChangePassword 新旧相同（handler 400）
 )
 
 // Login 本地密码 / LDAP 双路登录。成功返回 ApiUser + session token（下 cookie 由 handler 做）。
@@ -147,6 +151,54 @@ func (s *Service) Login(ctx context.Context, cmd LoginCommand) (ApiUser, string,
 		log.Printf("auth: platformTokenEnsurer not wired, skip ensurePlatformToken for %s", u.ID)
 	}
 
+	return toApiUser(u, s.resolver), token, nil
+}
+
+// Register 自服务注册：建本地账号（role=user，argon2 hash 密码）+ 签 session（自动登录）。
+//
+// 流程：校验入参 -> argon2 hash -> CreateUser(role=user) -> 签 session -> ensurePlatformToken。
+// 用户名冲突 -> ErrUsernameTaken（handler 409）。成功返回 (ApiUser, sessionToken)。
+func (s *Service) Register(ctx context.Context, cmd RegisterCommand) (ApiUser, string, error) {
+	if err := policyauth.ValidateCreateUser(cmd.Username, cmd.Password); err != nil {
+		return ApiUser{}, "", err
+	}
+	// displayName 缺省=username。
+	displayName := cmd.Username
+	if cmd.DisplayName != nil && *cmd.DisplayName != "" {
+		displayName = *cmd.DisplayName
+	}
+	email := ""
+	if cmd.Email != nil {
+		email = *cmd.Email
+	}
+	hash, err := argon2.Hash(cmd.Password)
+	if err != nil {
+		return ApiUser{}, "", err
+	}
+	u, err := s.repo.CreateUser(ctx, cmd.Username, displayName, hash, email, "user")
+	if err != nil {
+		return ApiUser{}, "", err // ErrUsernameTaken 透传
+	}
+	// 签 session（自动登录）。
+	sess := domainauth.Session{
+		Sub:      u.ID,
+		Username: u.Username,
+		Name:     u.DisplayName,
+		Email:    u.Email,
+		Role:     u.Role,
+	}
+	token, err := s.signer.Sign(sess)
+	if err != nil {
+		return ApiUser{}, "", err
+	}
+	// fire-and-forget ensure platform token。
+	if s.platformTokenEnsurer != nil {
+		go func() {
+			if err := s.platformTokenEnsurer.EnsurePlatformToken(context.Background(), u.ID); err != nil {
+				log.Printf("auth: ensurePlatformToken for %s: %v", u.ID, err)
+			}
+		}()
+	}
 	return toApiUser(u, s.resolver), token, nil
 }
 

@@ -30,6 +30,7 @@ import (
 	servicetokenhandler "media_agent/media_auth/biz/handler/service_token"
 	teamhandler "media_agent/media_auth/biz/handler/team"
 	tokenhandler "media_agent/media_auth/biz/handler/token"
+	userhandler "media_agent/media_auth/biz/handler/user"
 	wecomhandler "media_agent/media_auth/biz/handler/wecom"
 	"media_agent/media_auth/biz/middleware"
 	authservice "media_agent/media_auth/biz/service/auth"
@@ -39,6 +40,7 @@ import (
 	servicetokenservice "media_agent/media_auth/biz/service/service_token"
 	teamservice "media_agent/media_auth/biz/service/team"
 	tokenservice "media_agent/media_auth/biz/service/token"
+	userservice "media_agent/media_auth/biz/service/user"
 	wecomservice "media_agent/media_auth/biz/service/wecom"
 	"media_agent/media_auth/biz/shared/client/introspect"
 	ldapclient "media_agent/media_auth/biz/shared/client/ldap"
@@ -105,6 +107,10 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	// internal token service：复用 service_token TokenRepo + auth UserRepo（不新建 domain）。
 	tokenSvc := tokenservice.NewService(stRepo, userRepo)
 	tokenhandler.TokenSvc = tokenSvc
+
+	// user 管理服务（admin）：复用 auth UserRepo。
+	userSvc := userservice.NewService(userRepo)
+	userhandler.UserSvc = userSvc
 
 	// 重新装配 session middleware（支持 cookie JWT + Bearer service token）。
 	SessionMiddleware = middleware.SessionWithToken(signer, tokenSvc)

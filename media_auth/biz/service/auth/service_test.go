@@ -8,6 +8,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -80,6 +81,26 @@ func (r *fakeRepo) SetAutoEvolution(_ context.Context, id string, v bool) error 
 func (r *fakeRepo) UpdateLastLogin(_ context.Context, id string) error {
 	r.lastLoginUpdated = id
 	return nil
+}
+func (r *fakeRepo) CreateUser(_ context.Context, username, displayName, passwordHash, email, role string) (domainauth.User, error) {
+	if _, ok := r.byName[username]; ok {
+		return domainauth.User{}, domainauth.ErrUsernameTaken
+	}
+	u := domainauth.User{ID: "u-" + username, Username: username, DisplayName: displayName, PasswordHash: passwordHash, Email: email, Role: role}
+	r.users[u.ID] = u
+	r.byName[username] = u.ID
+	return u, nil
+}
+func (r *fakeRepo) ListUsers(_ context.Context, q, sort, order string, page, pageSize int) ([]domainauth.User, int, error) {
+	return nil, 0, nil
+}
+func (r *fakeRepo) DeleteUser(_ context.Context, id string) error {
+	if u, ok := r.users[id]; ok {
+		delete(r.users, id)
+		delete(r.byName, u.Username)
+		return nil
+	}
+	return domainauth.ErrUserNotFound
 }
 
 type fakeSigner struct{}
@@ -271,5 +292,74 @@ func TestSetDefaultPrompt(t *testing.T) {
 	}
 	if repo.defaultPrompt != "p1" {
 		t.Errorf("defaultPrompt: want p1, got %q", repo.defaultPrompt)
+	}
+}
+
+// --- Register ---
+
+func TestRegister_Success(t *testing.T) {
+	repo := newFakeRepo()
+	svc := newSvc(repo, nil)
+	user, token, err := svc.Register(context.Background(), RegisterCommand{
+		Username: "newuser", Password: "secret123",
+	})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if user.Username != "newuser" || user.AuthSource != "password" {
+		t.Errorf("got user=%+v", user)
+	}
+	if token == "" {
+		t.Errorf("token empty (should auto-login)")
+	}
+	// 用户落库。
+	got, err := repo.FindByUsername(context.Background(), "newuser")
+	if err != nil || got.Role != "user" || got.DisplayName != "newuser" {
+		t.Errorf("user not persisted as role=user: got=%+v err=%v", got, err)
+	}
+}
+
+func TestRegister_DisplayNameDefaultsToUsername(t *testing.T) {
+	repo := newFakeRepo()
+	svc := newSvc(repo, nil)
+	_, _, err := svc.Register(context.Background(), RegisterCommand{Username: "bob", Password: "secret123"})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	got, _ := repo.FindByUsername(context.Background(), "bob")
+	if got.DisplayName != "bob" {
+		t.Errorf("display_name should default to username, got %q", got.DisplayName)
+	}
+}
+
+func TestRegister_ValidationErrors(t *testing.T) {
+	svc := newSvc(newFakeRepo(), nil)
+	cases := []struct {
+		name string
+		cmd  RegisterCommand
+		err  error
+	}{
+		{"empty username", RegisterCommand{Password: "secret123"}, ErrUsernameRequired},
+		{"short password", RegisterCommand{Username: "x", Password: "123"}, ErrPasswordTooShort},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, _, err := svc.Register(context.Background(), c.cmd)
+			if !errors.Is(err, c.err) {
+				t.Errorf("want %v, got %v", c.err, err)
+			}
+		})
+	}
+}
+
+func TestRegister_UsernameTaken(t *testing.T) {
+	repo := newFakeRepo()
+	svc := newSvc(repo, nil)
+	// 先注册一个。
+	svc.Register(context.Background(), RegisterCommand{Username: "dup", Password: "secret123"})
+	// 再注册同名 -> ErrUsernameTaken。
+	_, _, err := svc.Register(context.Background(), RegisterCommand{Username: "dup", Password: "secret123"})
+	if !errors.Is(err, ErrUsernameTaken) {
+		t.Errorf("want ErrUsernameTaken, got %v", err)
 	}
 }

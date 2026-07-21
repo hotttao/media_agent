@@ -22,8 +22,40 @@ var AuthCmd = &cobra.Command{
 }
 
 func init() {
-	AuthCmd.AddCommand(loginCmd(), meCmd(), logoutCmd(), changePasswordCmd(), updateMeCmd())
+	AuthCmd.AddCommand(loginCmd(), registerCmd(), meCmd(), logoutCmd(), changePasswordCmd(), updateMeCmd())
 	mediamauth.MediaAuthCmd.AddCommand(AuthCmd) // 挂到一级子命令 media_auth
+}
+
+// registerCmd POST /api/auth/register - 自服务注册（自动登录下发 cookie）。
+func registerCmd() *cobra.Command {
+	var username, password, displayName, email string
+	c := &cobra.Command{
+		Use:   "register",
+		Short: "POST /api/auth/register - 自服务注册（自动登录）",
+		RunE: func(c *cobra.Command, args []string) error {
+			req := &authmodel.RegisterRequest{Username: username, Password: password}
+			if displayName != "" {
+				req.DisplayName = &displayName
+			}
+			if email != "" {
+				req.Email = &email
+			}
+			resp, _, err := Client().Register(context.Background(), req)
+			if err != nil {
+				return fmt.Errorf("register: %w", err)
+			}
+			fmt.Println("✅ register success (auto-login):")
+			printUser(resp.GetUser())
+			return nil
+		},
+	}
+	c.Flags().StringVar(&username, "username", "", "用户名")
+	c.Flags().StringVar(&password, "password", "", "密码（≥6）")
+	c.Flags().StringVar(&displayName, "display-name", "", "展示名（可选，缺省=username）")
+	c.Flags().StringVar(&email, "email", "", "邮箱（可选）")
+	_ = c.MarkFlagRequired("username")
+	_ = c.MarkFlagRequired("password")
+	return c
 }
 
 // loginCmd POST /api/auth/login {username,password} → 下发 cookie（middleware 落盘）+ 返回 ApiUser。

@@ -25,6 +25,7 @@ func Register(r *server.Hertz) {
 			_auth.POST("/logout", append(_logoutMw(), auth.Logout)...)
 			_auth.GET("/me", append(_getmeMw(), auth.GetMe)...)
 			_auth.PATCH("/me", append(_updatemeMw(), auth.UpdateMe)...)
+			_auth.POST("/register", append(_registerMw(), auth.Register)...)
 			{
 				_me := _auth.Group("/me", _meMw()...)
 				_me.PUT("/default-prompt", append(_setdefaultpromptMw(), auth.SetDefaultPrompt)...)

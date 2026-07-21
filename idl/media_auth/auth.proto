@@ -30,6 +30,16 @@ service AuthService {
     option (api.post) = "/api/auth/login";
   }
 
+  // POST /api/auth/register -- 自服务注册（建本地账号 role=user，自动登录下发 cookie）。
+  // 公开端点（在 skip list），无需 session。
+  rpc Register(RegisterRequest) returns(RegisterResponse) {
+    option (google.api.http) = {
+      post: "/api/auth/register"
+      body: "*"
+    };
+    option (api.post) = "/api/auth/register";
+  }
+
   // POST /api/auth/logout —— 清除 token cookie
   rpc Logout(LogoutRequest) returns(LogoutResponse) {
     option (google.api.http) = { post: "/api/auth/logout" };
@@ -78,6 +88,16 @@ message LoginRequest {
 }
 
 message LoginResponse {
+  ApiUser user = 1;
+}
+
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+  optional string display_name = 3;  // 缺省=用 username
+  optional string email = 4;
+}
+message RegisterResponse {
   ApiUser user = 1;
 }
 

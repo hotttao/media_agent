@@ -24,3 +24,12 @@ type ChangePasswordCommand struct {
 type SetDefaultPromptCommand struct {
 	PromptID *string
 }
+
+// RegisterCommand 是 Register 用例入参（自服务注册，role 固定 user）。
+// DisplayName nil=用 username 作展示名；Email nil=不设。
+type RegisterCommand struct {
+	Username    string
+	Password    string
+	DisplayName *string
+	Email       *string
+}

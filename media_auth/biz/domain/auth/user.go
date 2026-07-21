@@ -72,6 +72,16 @@ type UserRepo interface {
 	// Upsert 创建或更新用户（LDAP 登录命中时自动建号；更新 display_name/email/last_login_at）。
 	// 返回落库后的 User（含 id）。
 	Upsert(ctx context.Context, username, displayName, email string) (User, error)
+	// CreateUser 新建用户（Register / admin 创建用）。username 唯一冲突返回 ErrUsernameTaken。
+	// role 取值 user|admin；passwordHash 为 argon2 串（空串=无本地密码，仅 LDAP/企微派生账号才空）。
+	CreateUser(ctx context.Context, username, displayName, passwordHash, email, role string) (User, error)
+	// ListUsers 分页+模糊搜索用户（排除 system 账号）。
+	// q 匹配 username/display_name/email（ILIKE）；sort ∈ {created, name, last_active}；
+	// order ∈ {asc, desc}；page/pageSize 分页。返回 (users, total)。
+	ListUsers(ctx context.Context, q, sort, order string, page, pageSize int) ([]User, int, error)
+	// DeleteUser 按 id 删 user（FK CASCADE 清 service_tokens/user_identities/team_members/
+	// oauth_*/mcp_oauth_tokens）。0 行返回 ErrUserNotFound。
+	DeleteUser(ctx context.Context, id string) error
 	// SetPassword 更新 password_hash（改密）。
 	SetPassword(ctx context.Context, id, passwordHash string) error
 	// SetDefaultPrompt 更新 default_prompt_id（promptID 空串=清除）。
@@ -84,7 +94,8 @@ type UserRepo interface {
 
 // domain 错误。repo 实现用 errors.Is 透传，service/handler 据此映射 HTTP 状态。
 var (
-	ErrUserNotFound = errSentinel("user not found")
+	ErrUserNotFound  = errSentinel("user not found")
+	ErrUsernameTaken = errSentinel("username already taken")
 )
 
 // errSentinel 是简单的哨兵错误类型，支持 errors.Is 比较。

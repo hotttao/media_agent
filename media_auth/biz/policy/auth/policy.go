@@ -24,6 +24,9 @@ func CanChangePassword(u domainauth.User) bool {
 var (
 	ErrPasswordTooShort = errors.New("new password must be at least 6 characters")
 	ErrPasswordSame     = errors.New("new password must differ from current")
+	ErrUsernameRequired = errors.New("username is required")
+	ErrInvalidRole      = errors.New("invalid role: must be user or admin")
+	ErrCannotDeleteSelf = errors.New("cannot delete yourself")
 )
 
 // ValidateNewPassword 校验新密码：len<6 → too short；new==current → same。
@@ -34,6 +37,31 @@ func ValidateNewPassword(currentPlain, newPlain string) error {
 	}
 	if newPlain == currentPlain {
 		return ErrPasswordSame
+	}
+	return nil
+}
+
+// IsValidRole 校验 role 取值（user|admin）。system 不开放用户管理创建。
+func IsValidRole(role string) bool {
+	return role == "user" || role == "admin"
+}
+
+// ValidateCreateUser 校验新建用户入参：username 非空 + 密码≥6。
+// 用于 Register（role 固定 user）与 admin CreateUser（role 可选）。
+func ValidateCreateUser(username, password string) error {
+	if username == "" {
+		return ErrUsernameRequired
+	}
+	if len(password) < 6 {
+		return ErrPasswordTooShort
+	}
+	return nil
+}
+
+// CanDeleteUser 判定能否删 user：不能删自己。
+func CanDeleteUser(targetID, currentUserID string) error {
+	if targetID == currentUserID {
+		return ErrCannotDeleteSelf
 	}
 	return nil
 }

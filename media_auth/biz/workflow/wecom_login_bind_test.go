@@ -112,6 +112,16 @@ func (r *fakeUserRepo) SetPassword(context.Context, string, string) error      {
 func (r *fakeUserRepo) SetDefaultPrompt(context.Context, string, string) error { return nil }
 func (r *fakeUserRepo) SetAutoEvolution(context.Context, string, bool) error   { return nil }
 func (r *fakeUserRepo) UpdateLastLogin(context.Context, string) error          { return nil }
+func (r *fakeUserRepo) CreateUser(_ context.Context, username, displayName, passwordHash, email, role string) (domainauth.User, error) {
+	return domainauth.User{ID: "u-" + username, Username: username, DisplayName: displayName, Role: role}, nil
+}
+func (r *fakeUserRepo) ListUsers(context.Context, string, string, string, int, int) ([]domainauth.User, int, error) {
+	return nil, 0, nil
+}
+func (r *fakeUserRepo) DeleteUser(_ context.Context, id string) error {
+	delete(r.users, id)
+	return nil
+}
 
 type fakeEnsurer struct {
 	called bool

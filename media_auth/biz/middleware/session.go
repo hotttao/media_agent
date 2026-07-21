@@ -55,6 +55,7 @@ func VerifyToken(token string) (*auth.Session, error) {
 var skipAllPaths = map[string]bool{
 	// spec §3.10 公开业务端点
 	"/api/auth/login":           true,
+	"/api/auth/register":        true,
 	"/api/auth/wecom/enabled":   true,
 	"/api/auth/wecom/authorize": true,
 	"/api/auth/wecom/callback":  true,

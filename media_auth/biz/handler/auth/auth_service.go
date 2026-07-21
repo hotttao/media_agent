@@ -155,9 +155,37 @@ func writeAuthError(c *app.RequestContext, err error) {
 		c.JSON(consts.StatusUnauthorized, map[string]string{"error": err.Error()})
 	case errors.Is(err, authservice.ErrAccountDisabled):
 		c.JSON(consts.StatusForbidden, map[string]string{"error": err.Error()})
-	case errors.Is(err, authservice.ErrPasswordNotSet):
+	case errors.Is(err, authservice.ErrPasswordNotSet),
+		errors.Is(err, authservice.ErrUsernameRequired),
+		errors.Is(err, authservice.ErrPasswordTooShort),
+		errors.Is(err, authservice.ErrPasswordSame):
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
+	case errors.Is(err, authservice.ErrUsernameTaken):
+		c.JSON(consts.StatusConflict, map[string]string{"error": err.Error()})
 	default:
 		c.JSON(consts.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+}
+
+// Register POST /api/auth/register -- 自服务注册（建本地账号 role=user，自动登录下发 cookie）。
+// 公开端点（在 skip list），无需 session。
+func Register(ctx context.Context, c *app.RequestContext) {
+	var req authpb.RegisterRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	user, token, err := AuthSvc.Register(ctx, authservice.RegisterCommand{
+		Username:    req.GetUsername(),
+		Password:    req.GetPassword(),
+		DisplayName: req.DisplayName,
+		Email:       req.Email,
+	})
+	if err != nil {
+		writeAuthError(c, err)
+		return
+	}
+	// 注册成功自动登录：下发 httpOnly cookie。
+	c.SetCookie("token", token, 24*3600, "/", "", protocol.CookieSameSiteLaxMode, false, true)
+	c.JSON(consts.StatusCreated, &authpb.RegisterResponse{User: toApiUserDTO(user)})
 }

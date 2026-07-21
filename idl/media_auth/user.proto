@@ -1,0 +1,71 @@
+syntax = "proto3";
+package media_auth.user;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_auth/user";
+
+// UserService -- 用户管理（admin 鉴权：session + role==admin）。
+// ListUsers 分页+搜索（无 analytics，media_auth 不 own workspaces/sessions）。
+// CreateUser 建 user/admin（argon2 hash）。
+// DeleteUser 删 user（FK CASCADE 清 service_tokens/identities/team_members/oauth/mcp）。
+// ChangeUserPassword admin 改他人密码（仅本地密码账号）。
+service UserService {
+  rpc ListUsers(ListUsersRequest) returns(ListUsersResponse) {
+    option (google.api.http) = { get: "/api/users" };
+    option (api.get) = "/api/users";
+  }
+  rpc CreateUser(CreateUserRequest) returns(ApiUser) {
+    option (google.api.http) = { post: "/api/users" body: "*" };
+    option (api.post) = "/api/users";
+  }
+  rpc DeleteUser(DeleteUserRequest) returns(DeleteUserResponse) {
+    option (google.api.http) = { delete: "/api/users/{id}" };
+    option (api.delete) = "/api/users/:id";
+  }
+  rpc ChangeUserPassword(ChangeUserPasswordRequest) returns(ChangeUserPasswordResponse) {
+    option (google.api.http) = { put: "/api/users/{id}/password" body: "*" };
+    option (api.put) = "/api/users/:id/password";
+  }
+}
+
+message ListUsersRequest {
+  string q = 1 [(api.query) = "q"];          // 模糊搜索 username/display_name/email
+  string sort = 2 [(api.query) = "sort"];    // created|name|last_active，默认 created
+  string order = 3 [(api.query) = "order"];   // asc|desc，默认 desc
+  int32 page = 4 [(api.query) = "page"];
+  int32 page_size = 5 [(api.query) = "page_size"];
+}
+message ListUsersResponse {
+  repeated ApiUser items = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message CreateUserRequest {
+  string username = 1;
+  string display_name = 2;
+  string password = 3;
+  optional string email = 4;
+  optional string role = 5;   // user|admin，默认 user
+}
+
+message DeleteUserRequest  { string id = 1 [(api.path) = "id"]; }
+message DeleteUserResponse { bool success = 1; }
+
+message ChangeUserPasswordRequest {
+  string id = 1 [(api.path) = "id"];
+  string password = 2;
+}
+message ChangeUserPasswordResponse { bool success = 1; }
+
+message ApiUser {
+  string id = 1;
+  string username = 2;
+  string display_name = 3;
+  optional string email = 4;
+  string role = 5;            // user | admin
+  string auth_source = 6;    // password | ldap | wecom
+  string created_at = 7;
+  optional string last_login_at = 8;
+}

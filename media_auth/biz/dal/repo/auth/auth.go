@@ -100,6 +100,97 @@ func (r *repo) Upsert(ctx context.Context, username, displayName, email string) 
 	return rowToDomain(&row), nil
 }
 
+// CreateUser 新建用户（Register / admin 创建）。username 唯一冲突 -> ErrUsernameTaken。
+// role 默认 user；passwordHash 空串 = 无本地密码（LDAP/企微派生）。
+func (r *repo) CreateUser(ctx context.Context, username, displayName, passwordHash, email, role string) (domainauth.User, error) {
+	q := r.q(ctx)
+	if role == "" {
+		role = "user"
+	}
+	row := model.User{
+		ID:           ids.New(),
+		Username:     username,
+		DisplayName:  displayName,
+		PasswordHash: strPtr(passwordHash),
+		Email:        strPtr(email),
+		Role:         role,
+	}
+	if err := q.User.WithContext(ctx).Omit(q.User.CreatedAt).Create(&row); err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return domainauth.User{}, domainauth.ErrUsernameTaken
+		}
+		return domainauth.User{}, err
+	}
+	// 回读 DB 默认 created_at。
+	return r.FindByID(ctx, row.ID)
+}
+
+// userSortColumns 白名单：sort 参数 -> 列名（防注入）。
+var userSortColumns = map[string]string{
+	"created":     "created_at",
+	"name":        "display_name",
+	"last_active": "last_login_at",
+}
+
+// ListUsers 分页+模糊搜索用户（排除 system）。返回 (users, total)。
+//
+// 用 raw gorm.DB 而非 gen：gen 的 Or 不便分组（A AND (B OR C OR D)），
+// GORM 每个 Where 调用自动加括号，正好表达。
+func (r *repo) ListUsers(ctx context.Context, q, sort, order string, page, pageSize int) ([]domainauth.User, int, error) {
+	gormDB := dal.FromContext(ctx, r.db).Model(&model.User{})
+	gormDB = gormDB.Where("role <> 'system'")
+	if q != "" {
+		like := "%" + q + "%"
+		gormDB = gormDB.Where("username ILIKE ? OR display_name ILIKE ? OR email ILIKE ?", like, like, like)
+	}
+
+	var total int64
+	if err := gormDB.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// sort 白名单（防注入）；order 仅 asc/desc。
+	col, ok := userSortColumns[sort]
+	if !ok {
+		col = "created_at"
+	}
+	direction := "DESC"
+	if order == "asc" {
+		direction = "ASC"
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
+	offset := (page - 1) * pageSize
+
+	var rows []*model.User
+	if err := gormDB.Order(col + " " + direction + " NULLS LAST").
+		Offset(offset).Limit(pageSize).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	out := make([]domainauth.User, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, rowToDomain(row))
+	}
+	return out, int(total), nil
+}
+
+// DeleteUser 按 id 删 user（FK CASCADE 清关联表）。0 行 -> ErrUserNotFound。
+func (r *repo) DeleteUser(ctx context.Context, id string) error {
+	q := r.q(ctx)
+	res, err := q.User.WithContext(ctx).Where(q.User.ID.Eq(id)).Delete()
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected == 0 {
+		return domainauth.ErrUserNotFound
+	}
+	return nil
+}
+
 // SetPassword 更新 password_hash（改密）。
 func (r *repo) SetPassword(ctx context.Context, id, passwordHash string) error {
 	q := r.q(ctx)
