@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Lucide React Icon Demo</title>
+  <!-- 引入 lucide 独立 CDN 版本 -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.294.0/dist/umd/lucide.min.js"></script>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 30px;
+      background: #f8fafc;
+    }
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      background: white;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      width: 300px;
+      margin-bottom: 10px;
+    }
+    .icon {
+      color: #334155;
+    }
+  </style>
+</head>
+<body>
+  <h2>Columns2 / Columns3 / Square 图标预览</h2>
+
+  <div class="item">
+    <i data-lucide="columns-2" class="icon" style="width:28px;height:28px;"></i>
+    <span>Columns2 双分栏布局</span>
+  </div>
+
+  <div class="item">
+    <i data-lucide="columns-3" class="icon" style="width:28px;height:28px;"></i>
+    <span>Columns3 三分栏布局</span>
+  </div>
+
+  <div class="item">
+    <i data-lucide="square" class="icon" style="width:28px;height:28px;"></i>
+    <span>Square 单栏全屏</span>
+  </div>
+
+  <script>
+    // 初始化所有图标
+    lucide.createIcons();
+  </script>
+</body>
+</html>
