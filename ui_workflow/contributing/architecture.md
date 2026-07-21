@@ -32,6 +32,7 @@ foundation/
 ├── hooks/         Workspace, delete, column-visibility…
 ├── lib/           Utils, API client, i18n, constants
 ├── providers/     Auth, data, theme, notification
+├── stores/        Cross-cutting Zustand stores
 └── types/         Metadata, BaseStatus, shared serving types
 ```
 
