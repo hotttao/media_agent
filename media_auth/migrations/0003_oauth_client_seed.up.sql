@@ -9,6 +9,13 @@
 
 BEGIN;
 
+-- 0003 依赖 admin 用户 u_smoke（作为 oauth_clients.created_by）。
+-- 全新 DB（含 e2e 隔离库）无此 user 会触发 FK 违规，故先 seed（已存在则跳过）。
+-- dev/prod 若已有 u_smoke，ON CONFLICT DO NOTHING 为 no-op。
+INSERT INTO media_auth.users (id, username, display_name, role)
+VALUES ('u_smoke', 'smoke', 'Smoke User', 'admin')
+ON CONFLICT (id) DO NOTHING;
+
 -- media_materials client
 INSERT INTO media_auth.oauth_clients (id, name, secret_hash, redirect_uris, homepage_url, description, created_by, created_at, updated_at)
 VALUES (
