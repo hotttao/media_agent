@@ -1,0 +1,12 @@
+services:
+  media_crawler:
+    networks:
+    - media-net
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.media-crawler.rule=PathPrefix(`/api/crawler`) || PathPrefix(`/api/xhs`)
+    - traefik.http.routers.media-crawler.entrypoints=web
+    - traefik.http.services.media-crawler.loadbalancer.server.port=8004
+networks:
+  media-net:
+    external: true

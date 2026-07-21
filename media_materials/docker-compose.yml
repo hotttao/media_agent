@@ -4,27 +4,14 @@ services:
       context: ..
       dockerfile: media_materials/Dockerfile
     ports:
-      - "8003:8003"
+    - 8003:8003
     env_file:
-      - ../docker-compose/.env.${INFRA:-unit}
+    - ../docker-compose/.env.${INFRA:-unit}
     environment:
-      # 仅服务特有变量（其余走 env_file + yaml 默认值）
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-materials?sslmode=disable
       LOG_DIR: /media_logs/media-materials
     volumes:
-      - ../media_logs/media-materials:/media_logs/media-materials
+    - ../media_logs/media-materials:/media_logs/media-materials
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+    - host.docker.internal:host-gateway
     restart: unless-stopped
-
-    networks:
-      - media-net
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.media-materials.rule=PathPrefix(`/api/v1/materials`) || PathPrefix(`/api/v1/products`) || PathPrefix(`/api/v1/virtual-ips`) || PathPrefix(`/api/v1/asset-kinds`) || PathPrefix(`/api/v1/generated-assets`) || PathPrefix(`/api/internal`)"
-      - "traefik.http.routers.media-materials.entrypoints=web"
-      - "traefik.http.services.media-materials.loadbalancer.server.port=8003"
-
-networks:
-  media-net:
-    external: true

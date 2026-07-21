@@ -1,0 +1,13 @@
+services:
+  media_example:
+    networks:
+    - media-net
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.media-example.rule=PathPrefix(`/api/example`) || PathPrefix(`/api/hello`)
+      || PathPrefix(`/api/like`)
+    - traefik.http.routers.media-example.entrypoints=web
+    - traefik.http.services.media-example.loadbalancer.server.port=8000
+networks:
+  media-net:
+    external: true

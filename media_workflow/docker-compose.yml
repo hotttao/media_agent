@@ -4,27 +4,14 @@ services:
       context: ..
       dockerfile: media_workflow/Dockerfile
     ports:
-      - "8002:8002"
+    - 8002:8002
     env_file:
-      - ../docker-compose/.env.${INFRA:-unit}
+    - ../docker-compose/.env.${INFRA:-unit}
     environment:
-      # 仅服务特有变量（其余走 env_file + yaml 默认值）
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_workflow?sslmode=disable
       LOG_DIR: /media_logs/media-workflow
     volumes:
-      - ../media_logs/media-workflow:/media_logs/media-workflow
+    - ../media_logs/media-workflow:/media_logs/media-workflow
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+    - host.docker.internal:host-gateway
     restart: unless-stopped
-
-    networks:
-      - media-net
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.media-workflow.rule=PathPrefix(`/api/v1/workflows`) || PathPrefix(`/api/v1/templates`) || PathPrefix(`/api/v1/jobs`) || PathPrefix(`/api/v1/step-runs`)"
-      - "traefik.http.routers.media-workflow.entrypoints=web"
-      - "traefik.http.services.media-workflow.loadbalancer.server.port=8002"
-
-networks:
-  media-net:
-    external: true

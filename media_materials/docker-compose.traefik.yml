@@ -1,0 +1,14 @@
+services:
+  media_materials:
+    networks:
+    - media-net
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.media-materials.rule=PathPrefix(`/api/v1/materials`) ||
+      PathPrefix(`/api/v1/products`) || PathPrefix(`/api/v1/virtual-ips`) || PathPrefix(`/api/v1/asset-kinds`)
+      || PathPrefix(`/api/v1/generated-assets`) || PathPrefix(`/api/internal`)
+    - traefik.http.routers.media-materials.entrypoints=web
+    - traefik.http.services.media-materials.loadbalancer.server.port=8003
+networks:
+  media-net:
+    external: true

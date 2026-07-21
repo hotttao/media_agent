@@ -4,27 +4,15 @@ services:
       context: ..
       dockerfile: media_crawler/Dockerfile
     ports:
-      - "8004:8004"
+    - 8004:8004
     env_file:
-      - ../docker-compose/.env.${INFRA:-e2e}
+    - ../docker-compose/.env.${INFRA:-e2e}
     environment:
-      SERVER_ADDR: ":8004"
+      SERVER_ADDR: :8004
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-crawler?sslmode=disable
       LOG_DIR: /media_logs/media-crawler
     volumes:
-      - ../media_logs/media-crawler:/media_logs/media-crawler
+    - ../media_logs/media-crawler:/media_logs/media-crawler
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+    - host.docker.internal:host-gateway
     restart: unless-stopped
-
-    networks:
-      - media-net
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.media-crawler.rule=PathPrefix(`/api/crawler`) || PathPrefix(`/api/xhs`)"
-      - "traefik.http.routers.media-crawler.entrypoints=web"
-      - "traefik.http.services.media-crawler.loadbalancer.server.port=8004"
-
-networks:
-  media-net:
-    external: true
