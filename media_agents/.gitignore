@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.vulture_cache/
+
+# Editable install artifacts
+*.egg-link/
+
+# IDE
+.idea/
+.vscode/

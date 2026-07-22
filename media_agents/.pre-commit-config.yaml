@@ -1,0 +1,81 @@
+# Pre-commit hooks: commit 前执行全部检查（ruff / mypy / lint-imports / vulture / check_layers）
+# 所有 hook 用 language: system，跑 uv 装的本地工具，不联网拉 hook 仓库。
+#
+# 前置（一次性）:
+#   cd media_agents && uv sync --extra dev         # 装全部 workspace 成员 + dev 工具
+#   pre-commit install -c media_agents/.pre-commit-config.yaml
+#
+# 注: media_agents 位于父 git 仓库 (media_agent/) 下，pre-commit 在 git 根执行 hook。
+# files: ^media_agents/ 过滤保证只改父仓库其他目录（如 harness/）的 commit 不触发 Python 检查。
+# lint-imports 用 --config 指向 adapter/pyproject.toml（import-linter contracts 在那里）。
+
+default_stages: [pre-commit]
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check (lint)
+        entry: ruff check --config media_agents/pyproject.toml
+        language: system
+        types: [python]
+        files: ^media_agents/(adapter|codex|goose|claude_code|scripts)/
+        pass_filenames: true
+
+      - id: ruff-format
+        name: ruff format (format check)
+        entry: ruff format --check --config media_agents/pyproject.toml
+        language: system
+        types: [python]
+        files: ^media_agents/(adapter|codex|goose|claude_code|scripts)/
+        pass_filenames: true
+
+      - id: mypy
+        name: mypy (type check)
+        entry: mypy --config-file media_agents/pyproject.toml
+        language: system
+        types: [python]
+        files: ^media_agents/(adapter|codex|goose|claude_code)/
+        pass_filenames: false
+        args:
+          - media_agents/adapter/biz
+          - media_agents/adapter/schemas
+          - media_agents/adapter/clients
+          - media_agents/adapter/config
+          - media_agents/adapter/infra
+          - media_agents/codex
+          - media_agents/goose
+          - media_agents/claude_code
+
+      - id: lint-imports
+        name: import-linter (adapter architecture 边界 + 同层隔离)
+        entry: bash -c 'PYTHONPATH=media_agents lint-imports --config media_agents/adapter/pyproject.toml'
+        language: system
+        files: ^media_agents/adapter/
+        pass_filenames: false
+
+      - id: check-layers
+        name: check_layers (monorepo 跨包边界)
+        entry: python media_agents/scripts/check_layers.py
+        language: system
+        types: [python]
+        files: ^media_agents/(adapter|codex|goose|claude_code|scripts)/
+        pass_filenames: false
+
+      - id: vulture
+        name: vulture (dead code)
+        entry: vulture
+        language: system
+        files: ^media_agents/(adapter|codex|goose|claude_code)/
+        pass_filenames: false
+        args:
+          - media_agents/adapter/biz
+          - media_agents/adapter/schemas
+          - media_agents/adapter/config
+          - media_agents/adapter/infra
+          - media_agents/adapter/clients
+          - media_agents/codex
+          - media_agents/goose
+          - media_agents/claude_code
+          - --min-confidence
+          - "80"

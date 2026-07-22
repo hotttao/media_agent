@@ -1,0 +1,25 @@
+# Claude Code agent 配置。omegaconf 从此文件加载。
+# claude_code 不用 acp router，但仍复用 AdapterConfig（agent_type / capabilities /
+# workspace_dir / cp_url / workspace_id）和 omegaconf 加载机制。
+
+agent_type: claude-code
+
+capabilities:
+  system_prompt: true
+  mcp: true
+  skills: true
+  questions: true
+  reconnect: true
+  permissions: false  # claude-code 自己管理权限
+  streaming_deltas: true
+
+workspace_dir: ${oc.env:WORKSPACE_DIR,/workspace}
+keep_files: [AGENTS.md, runtime.json]
+cp_url: ${oc.env:CP_URL,null}
+workspace_id: ${oc.env:WORKSPACE_ID,null}
+
+# claude_code 特有：agent 二进制路径
+claude_code_bin: ${oc.env:CLAUDE_CODE_BIN,claude}
+
+# claude_code 特有：交互式会话进程存储
+session_store_dir: ${oc.env:SESSION_STORE_DIR,/tmp/claude-sessions}

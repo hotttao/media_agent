@@ -1,0 +1,201 @@
+[project]
+name = "adapter"
+version = "0.1.0"
+description = "ACP agent adapter: shared FastAPI routes, AcpBridge protocol, ACP event translator"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "pydantic-settings",
+    "omegaconf",
+    "sqlalchemy>=2",
+    "asyncpg",
+    "alembic",
+    "httpx",
+    "websockets",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["adapter*"]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "import-linter>=2.1",
+    "vulture>=2.11",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "TID", "UP"]
+
+# ---------------------------------------------------------------------------
+# mypy: 静态类型检查
+# 运行: mypy biz schemas clients config infra
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+exclude = ["alembic/versions/"]
+
+# ---------------------------------------------------------------------------
+# import-linter: 对标 Go archcheck，强制 architecture.md 的层级依赖与同层隔离
+# 运行: lint-imports
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_packages = ["adapter"]
+include_external_packages = true
+
+# ---- 层级禁止依赖（对标 architecture.md「禁止方向」表）----
+# 每个 contract 对应一层：source_modules 的包不得 import forbidden_modules 中的
+# 内部包前缀或外部框架（fastapi/pydantic/sqlalchemy 等）。
+
+[[tool.importlinter.contracts]]
+name = "domain-must-not-import-outer-layers"
+type = "forbidden"
+source_modules = ["adapter.biz.domain"]
+forbidden_modules = [
+    "adapter.schemas", "adapter.biz.api", "adapter.biz.middleware", "adapter.biz.dal",
+    "adapter.biz.policy", "adapter.biz.service", "adapter.biz.workflow", "adapter.biz.shared",
+    "adapter.config", "adapter.infra", "adapter.clients",
+    "fastapi", "pydantic", "pydantic_settings", "sqlalchemy",
+]
+
+[[tool.importlinter.contracts]]
+name = "policy-must-not-import-framework-or-infrastructure"
+type = "forbidden"
+source_modules = ["adapter.biz.policy"]
+forbidden_modules = [
+    "adapter.schemas", "adapter.biz.api", "adapter.biz.middleware", "adapter.biz.dal",
+    "adapter.biz.service", "adapter.biz.workflow", "adapter.biz.shared",
+    "adapter.config", "adapter.infra", "adapter.clients",
+    "fastapi", "pydantic", "pydantic_settings", "sqlalchemy",
+]
+
+[[tool.importlinter.contracts]]
+name = "service-must-not-import-web-or-concrete-infrastructure"
+type = "forbidden"
+source_modules = ["adapter.biz.service"]
+forbidden_modules = [
+    "adapter.schemas", "adapter.biz.api", "adapter.biz.middleware", "adapter.biz.dal",
+    "adapter.biz.workflow",
+    "adapter.infra", "adapter.clients",
+    "fastapi", "pydantic", "sqlalchemy",
+]
+
+[[tool.importlinter.contracts]]
+name = "workflow-must-not-import-web-or-raw-dal"
+type = "forbidden"
+source_modules = ["adapter.biz.workflow"]
+forbidden_modules = [
+    "adapter.schemas", "adapter.biz.api", "adapter.biz.middleware", "adapter.biz.dal",
+    "adapter.infra",
+    "fastapi", "pydantic", "sqlalchemy",
+]
+
+[[tool.importlinter.contracts]]
+name = "dal-must-not-import-application-or-web-layers"
+type = "forbidden"
+source_modules = ["adapter.biz.dal"]
+forbidden_modules = [
+    "adapter.schemas", "adapter.biz.api", "adapter.biz.middleware",
+    "adapter.biz.policy", "adapter.biz.service", "adapter.biz.workflow", "adapter.biz.shared",
+    "adapter.config", "adapter.infra", "adapter.clients",
+    "fastapi", "pydantic", "pydantic_settings",
+]
+
+[[tool.importlinter.contracts]]
+name = "shared-must-not-depend-on-any-business-layer"
+type = "forbidden"
+source_modules = ["adapter.biz.shared"]
+forbidden_modules = [
+    "adapter.schemas", "adapter.biz.api", "adapter.biz.middleware", "adapter.biz.dal",
+    "adapter.biz.policy", "adapter.biz.service", "adapter.biz.workflow", "adapter.biz.domain",
+    "adapter.config", "adapter.infra", "adapter.clients",
+    "fastapi", "pydantic", "pydantic_settings", "sqlalchemy",
+]
+
+[[tool.importlinter.contracts]]
+name = "api-must-not-import-dal"
+type = "forbidden"
+source_modules = ["adapter.biz.api"]
+forbidden_modules = [
+    "adapter.biz.dal",
+    "sqlalchemy",
+]
+
+[[tool.importlinter.contracts]]
+name = "config-must-not-import-business-or-infra"
+type = "forbidden"
+source_modules = ["adapter.config"]
+forbidden_modules = [
+    "adapter.biz", "adapter.clients", "adapter.infra",
+    "fastapi", "sqlalchemy",
+]
+
+[[tool.importlinter.contracts]]
+name = "infra-must-not-import-business-layers"
+type = "forbidden"
+source_modules = ["adapter.infra"]
+forbidden_modules = [
+    "biz", "adapter.schemas", "adapter.clients",
+    "fastapi", "pydantic",
+]
+
+[[tool.importlinter.contracts]]
+name = "clients-must-not-import-business-layers"
+type = "forbidden"
+source_modules = ["adapter.clients"]
+forbidden_modules = [
+    "biz", "adapter.schemas", "adapter.infra",
+    "fastapi",
+]
+
+# ---- 同层隔离（feature 互不依赖；新增 feature 时在此登记）----
+# independence contract: 列出的包之间不得相互 import。新增 domain/service/policy/api
+# feature 时，把对应的包加进 modules 列表。
+
+[[tool.importlinter.contracts]]
+name = "no-cross-domain-feature"
+type = "independence"
+modules = [
+    # 新增 domain feature 时登记，例：
+    # "adapter.biz.domain.like",
+    # "adapter.biz.domain.counter",
+]
+
+[[tool.importlinter.contracts]]
+name = "no-cross-service-feature"
+type = "independence"
+modules = [
+    # "adapter.biz.service.like",
+    # "adapter.biz.service.counter",
+]
+
+[[tool.importlinter.contracts]]
+name = "no-cross-policy-feature"
+type = "independence"
+modules = [
+    # "adapter.biz.policy.like",
+]
+
+[[tool.importlinter.contracts]]
+name = "no-cross-api-feature"
+type = "independence"
+modules = [
+    # "adapter.biz.api.v1.routes.like",
+    # "adapter.biz.api.v1.routes.counter",
+]

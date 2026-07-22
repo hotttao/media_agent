@@ -1,0 +1,61 @@
+# uv workspace 根配置。
+#
+# 这是 monorepo 根：不产出包，只声明 workspace 成员。每个成员在自己的
+# 子目录有独立的 pyproject.toml（adapter/ 与 agents/<name>/）。
+#
+# 用法：
+#   uv sync                          # 在根目录同步全部 workspace 成员
+#   uv pip install -e .              # 等价：把 workspace 全部以 editable 模式装上
+#   uv run --package codex uvicorn codex.main:app --reload
+#
+# 新增 agent 时：把目录加进 members，再在 agents/<name>/ 下放独立 pyproject.toml。
+
+[tool.uv.workspace]
+members = [
+    "adapter",
+    "codex",
+    "goose",
+    "claude_code",
+]
+
+# workspace 内部包互相依赖时用 `package = true`，uv 会建 editable link 而非 PyPI 拉。
+[tool.uv.sources]
+adapter = { workspace = true }
+codex = { workspace = true }
+goose = { workspace = true }
+claude-code = { workspace = true }
+
+# 根级 dev 工具：所有成员共享。子包 pyproject.toml 的 [project.optional-dependencies]
+# 仍可声明 dev，但用 uv 管理时建议在根 `uv sync --extra dev` 统一装。
+[tool.uv]
+dev-dependencies = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-asyncio",
+    "import-linter>=2.1",
+    "vulture>=2.11",
+    "pre-commit",
+]
+
+# 根级 ruff / mypy / importlinter 公共配置，子包可覆盖。各子包仍需在自己的
+# pyproject.toml 声明 [tool.importlinter] contracts（adapter 已有）。
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "TID", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["adapter", "codex", "goose", "claude_code"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["adapter", "agents"]

@@ -25,7 +25,14 @@ sys.path.insert(0, work_dir)
 
 # 清除 proxy 环境变量（subprocess 继承了系统代理如 clash 的 SOCKS，会导致爬虫 httpx
 # 报 ImportError: socksio 未装；爬虫直连目标平台，不应走系统代理）。
-for _k in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]:
+for _k in [
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+]:
     os.environ.pop(_k, None)
 
 # 2. 重组 sys.argv，让 cmd_arg.parse_cmd() 的 typer 正常解析

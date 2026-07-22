@@ -1,0 +1,23 @@
+[project]
+name = "claude-code"
+version = "0.1.0"
+description = "Claude Code agent: standalone FastAPI app, does NOT use ACP router"
+requires-python = ">=3.11"
+dependencies = [
+    "adapter",          # 复用 schemas / config / AdapterConfig / logging
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+    "omegaconf",
+    "pydantic>=2",
+    "pydantic-settings",
+    "websockets",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["claude_code"]
+package-dir = {"claude_code" = "."}
