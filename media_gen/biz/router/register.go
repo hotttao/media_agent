@@ -4,7 +4,6 @@ package router
 
 import (
 	"github.com/cloudwego/hertz/pkg/app/server"
-	health "media_agent/media_gen/biz/router/health"
 	publish "media_agent/media_gen/biz/router/publish"
 	worker "media_agent/media_gen/biz/router/worker"
 )
@@ -16,5 +15,4 @@ func GeneratedRegister(r *server.Hertz) {
 
 	worker.Register(r)
 
-	health.Register(r)
 }

@@ -3,8 +3,8 @@
 -- 可达性 / ListByOwner 查询过滤 bindings_end_at IS NULL 取生效绑定。
 -- 见 docs/media_materials/domain/0002-asset/asset.md §material_bindings。
 
-ALTER TABLE material_bindings ADD COLUMN bindings_end_at timestamptz;
+ALTER TABLE media_materials.material_bindings ADD COLUMN bindings_end_at timestamptz;
 
 CREATE INDEX idx_material_bindings_active
-  ON material_bindings (owner_kind, owner_id)
+  ON media_materials.material_bindings (owner_kind, owner_id)
   WHERE bindings_end_at IS NULL;

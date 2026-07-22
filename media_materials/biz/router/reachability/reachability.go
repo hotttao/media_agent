@@ -14,6 +14,12 @@ import (
 */
 
 // Register register routes based on the IDL 'api.${HTTP Method}' annotation.
+//
+// NOTE: Hertz 的 radix tree 把 `:` 当作路径参数前缀，所以 `/reachability:asset` 与
+// `/reachability:product` 会被解释为同位置的两个 param（名字不同）从而冲突
+// ("handlers are already registered")。这里把 Google API custom method 风格的
+// `:verb` 改写成 `/verb`（仍是 internal RPC，不影响对外契约的本质），并在
+// e2e 测试里同步更新。
 func Register(r *server.Hertz) {
 
 	root := r.Group("/", rootMw()...)
@@ -23,12 +29,12 @@ func Register(r *server.Hertz) {
 			_internal := _api.Group("/internal", _internalMw()...)
 			{
 				_v1 := _internal.Group("/v1", _v1Mw()...)
-				_v1.POST("/reachability:asset", append(_assetreachabilityMw(), reachability.AssetReachability)...)
-				_v1.POST("/reachability:product", append(_checkproductaccessibleMw(), reachability.CheckProductAccessible)...)
-				_v1.POST("/reachability:read", append(_assetreadMw(), reachability.AssetRead)...)
-				_v1.POST("/reachability:resolve-asset", append(_resolveassetbykindMw(), reachability.ResolveAssetByKind)...)
-				_v1.POST("/reachability:virtual-ip", append(_checkvirtualipaccessibleMw(), reachability.CheckVirtualIPAccessible)...)
-				_v1.POST("/reachability:visible-vips", append(_resolvevirtualipforreachabilityMw(), reachability.ResolveVirtualIpForReachability)...)
+				_v1.POST("/reachability/asset", append(_assetreachabilityMw(), reachability.AssetReachability)...)
+				_v1.POST("/reachability/product", append(_checkproductaccessibleMw(), reachability.CheckProductAccessible)...)
+				_v1.POST("/reachability/read", append(_assetreadMw(), reachability.AssetRead)...)
+				_v1.POST("/reachability/resolve-asset", append(_resolveassetbykindMw(), reachability.ResolveAssetByKind)...)
+				_v1.POST("/reachability/virtual-ip", append(_checkvirtualipaccessibleMw(), reachability.CheckVirtualIPAccessible)...)
+				_v1.POST("/reachability/visible-vips", append(_resolvevirtualipforreachabilityMw(), reachability.ResolveVirtualIpForReachability)...)
 			}
 		}
 	}

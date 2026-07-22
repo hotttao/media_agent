@@ -6,7 +6,6 @@ import (
 	"github.com/cloudwego/hertz/pkg/app/server"
 	asset_kind "media_agent/media_materials/biz/router/asset_kind"
 	generated_asset "media_agent/media_materials/biz/router/generated_asset"
-	health "media_agent/media_materials/biz/router/health"
 	material "media_agent/media_materials/biz/router/material"
 	product "media_agent/media_materials/biz/router/product"
 	reachability "media_agent/media_materials/biz/router/reachability"
@@ -28,5 +27,4 @@ func GeneratedRegister(r *server.Hertz) {
 
 	generated_asset.Register(r)
 
-	health.Register(r)
 }

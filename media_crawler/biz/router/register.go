@@ -5,7 +5,6 @@ package router
 import (
 	"github.com/cloudwego/hertz/pkg/app/server"
 	crawler "media_agent/media_crawler/biz/router/crawler"
-	health "media_agent/media_crawler/biz/router/health"
 	xhs "media_agent/media_crawler/biz/router/xhs"
 )
 
@@ -16,5 +15,4 @@ func GeneratedRegister(r *server.Hertz) {
 
 	xhs.Register(r)
 
-	health.Register(r)
 }

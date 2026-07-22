@@ -154,7 +154,7 @@ func TestMaterialsReachability(t *testing.T) {
 	// 1. AssetReachability（MATERIAL，可达）
 	// internal RPC 跳过 auth，可直接裸 doJSON 调用。
 	internalClient := &http.Client{Timeout: 30 * time.Second}
-	reachStatus, reachBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability:asset", map[string]any{
+	reachStatus, reachBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/asset", map[string]any{
 		"user_id":        uid,
 		"workflow_scope": scope,
 		"refs": []map[string]any{
@@ -185,7 +185,7 @@ func TestMaterialsReachability(t *testing.T) {
 	}
 
 	// 2. AssetReachability（MATERIAL，不存在 id）-> NOT_FOUND
-	reachStatus, reachBody = doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability:asset", map[string]any{
+	reachStatus, reachBody = doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/asset", map[string]any{
 		"user_id":        uid,
 		"workflow_scope": scope,
 		"refs": []map[string]any{
@@ -206,7 +206,7 @@ func TestMaterialsReachability(t *testing.T) {
 	}
 
 	// 3. ResolveAssetByKind（virtual_ip, vip_id, scene）-> MATERIAL + material_id
-	resolveStatus, resolveBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability:resolve-asset", map[string]any{
+	resolveStatus, resolveBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/resolve-asset", map[string]any{
 		"owner_kind": "virtual_ip",
 		"owner_id":   vip.ID,
 		"asset_kind": "scene",
@@ -230,7 +230,7 @@ func TestMaterialsReachability(t *testing.T) {
 	t.Logf("resolve asset by kind: %s/%s -> %s", "virtual_ip", vip.ID, resolveResp.AssetID)
 
 	// 4. AssetRead（MATERIAL, material_id）-> url
-	readStatus, readBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability:read", map[string]any{
+	readStatus, readBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/read", map[string]any{
 		"resource_type": "MATERIAL",
 		"id":            mat.ID,
 	})
@@ -251,7 +251,7 @@ func TestMaterialsReachability(t *testing.T) {
 	t.Logf("asset read: url=%s", readResp.URL)
 
 	// 5. CheckVirtualIPAccessible（vip_id, scope）-> accessible
-	vipCheckStatus, vipCheckBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability:virtual-ip", map[string]any{
+	vipCheckStatus, vipCheckBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/virtual-ip", map[string]any{
 		"user_id":        uid,
 		"workflow_scope": scope,
 		"virtual_ip_id":  vip.ID,
@@ -283,7 +283,7 @@ func TestMaterialsReachability(t *testing.T) {
 	json.Unmarshal(prodBody, &prod)
 	defer doJSONBearer(t, matAddr, "DELETE", "/api/v1/products/"+prod.ID, token, nil)
 
-	prodCheckStatus, prodCheckBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability:product", map[string]any{
+	prodCheckStatus, prodCheckBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/product", map[string]any{
 		"workflow_scope": scope,
 		"product_id":     prod.ID,
 	})
@@ -300,7 +300,7 @@ func TestMaterialsReachability(t *testing.T) {
 	}
 
 	// scope mismatch
-	prodMismatchStatus, _ := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability:product", map[string]any{
+	prodMismatchStatus, _ := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/product", map[string]any{
 		"workflow_scope": "other_scope",
 		"product_id":     prod.ID,
 	})
@@ -309,7 +309,7 @@ func TestMaterialsReachability(t *testing.T) {
 	}
 	json.Unmarshal(prodCheckBody, &prodAccResp) // re-read
 	// 重新读 mismatch 响应
-	prodMismatchBody := doJSONRaw(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability:product", map[string]any{
+	prodMismatchBody := doJSONRaw(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/product", map[string]any{
 		"workflow_scope": "other_scope",
 		"product_id":     prod.ID,
 	})
