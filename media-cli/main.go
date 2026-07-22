@@ -30,11 +30,11 @@ import (
 	// Init(cfg) 由 main 显式调用（不依赖 init()）。
 	_ "media_agent/media_cli/cmd/client"
 	_ "media_agent/media_cli/cmd/infra"
-	_ "media_agent/media_cli/cmd/media_auth"           // media_auth 接口 e2e 一级子命令
-	_ "media_agent/media_cli/cmd/media_auth/auth"      // auth 子命令挂到 MediaAuthCmd
+	_ "media_agent/media_cli/cmd/media_auth"              // media_auth 接口 e2e 一级子命令
+	_ "media_agent/media_cli/cmd/media_auth/auth"         // auth 子命令挂到 MediaAuthCmd
 	_ "media_agent/media_cli/cmd/media_auth/oauth_client" // oauth-client 子命令挂到 MediaAuthCmd
-	_ "media_agent/media_cli/cmd/media_auth/team"      // team 子命令挂到 MediaAuthCmd
-	_ "media_agent/media_cli/cmd/media_auth/user"      // user 子命令挂到 MediaAuthCmd
+	_ "media_agent/media_cli/cmd/media_auth/team"         // team 子命令挂到 MediaAuthCmd
+	_ "media_agent/media_cli/cmd/media_auth/user"         // user 子命令挂到 MediaAuthCmd
 	_ "media_agent/media_cli/cmd/media_example"
 	// hello 是 media_example 的子包（service 二级）；父包 init() 把它挂到 MediaExampleCmd。
 	_ "media_agent/media_cli/cmd/media_example/hello"
@@ -45,12 +45,16 @@ import (
 	_ "media_agent/media_cli/cmd/media_crawler/mcp"
 	_ "media_agent/media_cli/cmd/media_crawler/xhs"
 
+	// media_workflow caller（编排 bundle + SubmitJob）
+	_ "media_agent/media_cli/cmd/media_workflow"
+
 	clisub "media_agent/media_cli/cmd/client"
 	authsub "media_agent/media_cli/cmd/media_auth/auth"
 	oauthclientsub "media_agent/media_cli/cmd/media_auth/oauth_client"
 	teamsub "media_agent/media_cli/cmd/media_auth/team"
 	usersub "media_agent/media_cli/cmd/media_auth/user"
 	hellosub "media_agent/media_cli/cmd/media_example/hello"
+	wfsub "media_agent/media_cli/cmd/media_workflow"
 )
 
 func main() {
@@ -96,9 +100,15 @@ func main() {
 	//     client.media_auth 未配置时跳过（其他子命令仍可用）。
 	if cfg.GetClient()["media_auth"] != nil {
 		authsub.Init(cfg)
-		teamsub.Init(cfg)            // team 共享同一 cookie store，login 后 team 子命令自动带 cookie
-		oauthclientsub.Init(cfg)     // oauth-client 共享同一 cookie store
-		usersub.Init(cfg)            // user 管理共享同一 cookie store
+		teamsub.Init(cfg)        // team 共享同一 cookie store，login 后 team 子命令自动带 cookie
+		oauthclientsub.Init(cfg) // oauth-client 共享同一 cookie store
+		usersub.Init(cfg)        // user 管理共享同一 cookie store
+	}
+
+	// 4.3 media_workflow caller: reachability + workflow job typed client。
+	//     gate on media_materials + media_workflow 都配置（dev 缺 media_workflow 段则跳过）。
+	if cfg.GetClient()["media_materials"] != nil && cfg.GetClient()["media_workflow"] != nil {
+		wfsub.Init(cfg)
 	}
 
 	// 5. 启动 cobra 命令树。
