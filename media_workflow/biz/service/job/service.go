@@ -1,11 +1,13 @@
 package job
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/google/uuid"
@@ -220,21 +222,45 @@ type ClaimResult struct {
 }
 type ClaimAsset struct{ Label, URL, Content string }
 
-// resolveAndRender 解析 binding → resolved slot 值 + 渲染 prompt。
+// resolveAndRender 解析 binding -> resolved slot 值 + 用 Go template 渲染 prompt。
+//
+// prompt_body 用 Go template 语法 {{.name.field}}，通用引用 bundle 任意字段：
+//   - {{.virtual_ip.full_body_url}} / {{.virtual_ip.avatar_url}} / {{.virtual_ip.three_view_url}} ...
+//   - {{.product.target_audience}} / {{.product.product_details}} ...
+//   - {{.scene_image.url}} / {{.scene_image.content}}（material/asset 按 slot.name 索引）
+//   - {{.prev_step.url}}（STEP_OUTPUT 前驱产出）
+//   - {{.const_slot}}（CONST 字面值）
+//
+// bundle 序列化成 map[string]any（json tag 字段名），Go template 自动按属性查找；
+// 加新素材类型/字段不需改渲染（bundle 序列化自动反映）。
 func (s *Service) resolveAndRender(ctx context.Context, sr *domain.StepRun, tpl *wfdomain.TemplateSnapshot, input domain.JobInput) (map[string]any, string, []ClaimAsset) {
 	resolved := map[string]any{}
 	assets := []ClaimAsset{}
+	data := map[string]any{}
 
-	// 加载 workflow 取 bindings
+	// 1. bundle -> data（Go template 友好：json 序列化后字段按 json tag 小写）
+	if input.Product != nil {
+		data["product"] = toJSONMap(input.Product)
+	}
+	if input.VirtualIP != nil {
+		data["virtual_ip"] = toJSONMap(input.VirtualIP)
+	}
+	for _, m := range input.Materials {
+		data[m.Name] = toJSONMap(m)
+	}
+	for _, a := range input.Assets {
+		data[a.Name] = toJSONMap(a)
+	}
+
+	// 2. 加载 workflow + bindings + step_runs（STEP_OUTPUT 解析用）
 	job, err := s.jobRepo.Get(ctx, sr.JobID)
 	if err != nil {
-		return resolved, tpl.PromptBody, assets
+		return resolved, renderTemplateSafe(tpl.PromptBody, data), assets
 	}
 	wf, err := s.wfRepo.Get(ctx, job.WorkflowID)
 	if err != nil {
-		return resolved, tpl.PromptBody, assets
+		return resolved, renderTemplateSafe(tpl.PromptBody, data), assets
 	}
-	// 找当前 step 的 bindings
 	var bindings []wfdomain.Binding
 	for _, step := range wf.Steps {
 		if step.Key == sr.StepKey {
@@ -242,74 +268,64 @@ func (s *Service) resolveAndRender(ctx context.Context, sr *domain.StepRun, tpl 
 			break
 		}
 	}
-	// 加载同 job 的所有 step_run（STEP_OUTPUT 解析用）
 	allSRs, _ := s.stepRunRepo.ListByJob(ctx, sr.JobID)
 	srByKey := make(map[string]*domain.StepRun, len(allSRs))
 	for _, s2 := range allSRs {
 		srByKey[s2.StepKey] = s2
 	}
 
-	// 解析每个 binding
-	prompt := tpl.PromptBody
+	// 3. 解析 binding：STEP_OUTPUT/CONST 填 data + resolved + assets；WORKFLOW_INPUT 从 data 取填 resolved
 	for _, b := range bindings {
-		var url, content string
 		switch b.Source {
 		case wfdomain.SourceWorkflowInput:
-			// 从 bundle 按 to_input(=slot.name) 取
-			url, content = s.resolveFromBundle(b.ToInput, tpl, input)
+			if slotData, ok := data[b.ToInput].(map[string]any); ok {
+				resolved[b.ToInput] = slotData
+				url, _ := slotData["url"].(string)
+				content, _ := slotData["content"].(string)
+				assets = append(assets, ClaimAsset{Label: b.ToInput, URL: url, Content: content})
+			}
 		case wfdomain.SourceStepOutput:
-			// 从前驱 step_run 的选定 candidate 取 url
 			if prev, ok := srByKey[b.Ref]; ok && prev.SelectedIndex != nil && *prev.SelectedIndex < len(prev.Candidates) {
 				c := prev.Candidates[*prev.SelectedIndex]
-				url = c.URL
-				content = c.Content
+				slotData := map[string]any{"url": c.URL, "content": c.Content}
+				data[b.ToInput] = slotData
+				resolved[b.ToInput] = slotData
+				assets = append(assets, ClaimAsset{Label: b.ToInput, URL: c.URL, Content: c.Content})
 			}
 		case wfdomain.SourceConst:
-			content = b.ConstValue
+			data[b.ToInput] = b.ConstValue
+			resolved[b.ToInput] = map[string]any{"value": b.ConstValue}
+			assets = append(assets, ClaimAsset{Label: b.ToInput, Content: b.ConstValue})
 		}
-		resolved[b.ToInput] = map[string]any{"url": url, "content": content}
-		assets = append(assets, ClaimAsset{Label: b.ToInput, URL: url, Content: content})
-		// 渲染 prompt：替换 {slot.url} / {slot.content}
-		prompt = strings.ReplaceAll(prompt, "{"+b.ToInput+".url}", url)
-		prompt = strings.ReplaceAll(prompt, "{"+b.ToInput+".content}", content)
 	}
+
+	// 4. Go template 渲染（parse/execute 失败回退原文）
+	prompt := renderTemplateSafe(tpl.PromptBody, data)
 	return resolved, prompt, assets
 }
 
-// resolveFromBundle 从 JobInput bundle 按 slot.name 取 url/content。
-// slot.name 对 MATERIAL/ASSET = asset_kind；需在 bundle 的 material[]/asset[] 中按 name 找。
-func (s *Service) resolveFromBundle(slotName string, tpl *wfdomain.TemplateSnapshot, input domain.JobInput) (string, string) {
-	// 查 slot 的 resource_type
-	for _, slot := range tpl.Inputs {
-		if slot.Name != slotName {
-			continue
-		}
-		switch slot.ResourceType {
-		case "MATERIAL":
-			for _, m := range input.Materials {
-				if m.Name == slotName {
-					return m.URL, m.Content
-				}
-			}
-		case "ASSET":
-			for _, a := range input.Assets {
-				if a.Name == slotName {
-					return a.URL, a.Content
-				}
-			}
-		case "PRODUCT":
-			if input.Product != nil {
-				return "", input.Product.Name // product 无 url，取 name
-			}
-		case "VIRTUAL_IP":
-			if input.VirtualIP != nil {
-				return input.VirtualIP.AvatarURL, input.VirtualIP.Name
-			}
-		case "TEXT":
-			// TEXT slot 无 bundle 对应，走 const
-		}
+// renderTemplateSafe 用 Go template 渲染 prompt（parse/execute 失败则回退原文，不阻塞 claim）。
+func renderTemplateSafe(promptBody string, data map[string]any) string {
+	tmpl, err := template.New("prompt").Parse(promptBody)
+	if err != nil {
+		return promptBody
 	}
-	return "", ""
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return promptBody
+	}
+	return buf.String()
+}
+
+// toJSONMap 把 struct 值转成 map[string]any（Go template 友好，字段按 json tag 小写）。
+func toJSONMap(v any) map[string]any {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	var m map[string]any
+	json.Unmarshal(b, &m)
+	return m
 }
 
 // —— CompleteStepRun ——
