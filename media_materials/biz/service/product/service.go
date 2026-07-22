@@ -9,20 +9,27 @@ import (
 	"github.com/google/uuid"
 
 	domain "media_agent/media_materials/biz/domain/product"
+	"media_agent/media_materials/biz/shared"
 )
 
 // Service product 用例编排。无 user ACL（任意已认证 user 可 CRUD）。
-type Service struct{ repo domain.Repo }
+type Service struct {
+	repo         domain.Repo
+	bindingEnder shared.BindingEnder // 注入：owner 软删时失效 material_bindings
+}
 
 func NewService(repo domain.Repo) *Service { return &Service{repo: repo} }
+
+// SetBindingEnder 注入 material BindingEnder（owner 软删时失效其 material_bindings）。
+func (s *Service) SetBindingEnder(ender shared.BindingEnder) { s.bindingEnder = ender }
 
 func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Product, error) {
 	name := strings.TrimSpace(cmd.Name)
 	if name == "" {
 		return nil, errors.New("product name is required")
 	}
-	if cmd.Scope == "" {
-		return nil, errors.New("product scope is required")
+	if !shared.IsKnownScope(cmd.Scope) {
+		return nil, errors.New("product scope is not supported")
 	}
 	p := &domain.Product{
 		ID:    "prd_" + uuid.NewString(),
@@ -90,6 +97,11 @@ func (s *Service) Delete(ctx context.Context, id string) (*domain.Product, error
 	}
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return nil, fmt.Errorf("delete product: %w", err)
+	}
+	if s.bindingEnder != nil {
+		if err := s.bindingEnder.EndBindingsForOwner(ctx, "product", id); err != nil {
+			return nil, fmt.Errorf("end bindings for product: %w", err)
+		}
 	}
 	return p, nil
 }

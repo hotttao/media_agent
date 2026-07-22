@@ -65,6 +65,9 @@ func (m *mockBindingRepo) RemoveBinding(_ context.Context, materialID string, ow
 func (m *mockBindingRepo) ListByOwner(_ context.Context, ownerKind domain.BindingOwnerKind, ownerID string) ([]*domain.Material, error) {
 	return nil, nil
 }
+func (m *mockBindingRepo) EndBindings(_ context.Context, ownerKind, ownerID string) error {
+	return nil
+}
 
 // mockAssetKindLookup 返回固定 asset_kind 信息。
 type mockAssetKindLookup struct{}

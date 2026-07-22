@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	domain "media_agent/media_materials/biz/domain/material"
+	"media_agent/media_materials/biz/shared"
 )
 
 // Service material 用例编排。持有 Repo + BindingRepo + AssetKindLookup + OwnerScopeLookup。
@@ -23,6 +24,13 @@ func NewService(repo domain.Repo, bindings domain.BindingRepo, lookup domain.Ass
 	return &Service{repo: repo, bindings: bindings, kindLookup: lookup, ownerScope: ownerScope}
 }
 
+// EndBindingsForOwner 失效 owner（virtual_ip / product）的全部生效 material_bindings。
+// 实现 shared.BindingEnder，注入到 virtual_ip / product service，在 owner 软删时调用
+// （跨 domain 写用接口注入，避免 service 跨层 import，参照 OwnerScopeLookup 模式）。
+func (s *Service) EndBindingsForOwner(ctx context.Context, ownerKind, ownerID string) error {
+	return s.bindings.EndBindings(ctx, ownerKind, ownerID)
+}
+
 // Create 创建 material。
 func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Material, error) {
 	name := strings.TrimSpace(cmd.Name)
@@ -31,6 +39,9 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Materi
 	}
 	if strings.TrimSpace(cmd.URL) == "" && strings.TrimSpace(cmd.Content) == "" {
 		return nil, errors.New("material url or content is required")
+	}
+	if !shared.IsKnownScope(cmd.Scope) {
+		return nil, errors.New("material scope is not supported")
 	}
 	// asset_kind 校验：已注册、resource_type=MATERIAL、未停用
 	rt, _, status, err := s.kindLookup.Lookup(ctx, cmd.AssetKind)

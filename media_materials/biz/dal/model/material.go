@@ -22,11 +22,12 @@ func (Material) TableName() string { return "media_materials.materials" }
 
 // MaterialBinding 对应 media_materials.material_bindings 表。
 type MaterialBinding struct {
-	MaterialID string    `gorm:"column:material_id;primaryKey"`
-	OwnerKind  string    `gorm:"column:owner_kind;primaryKey"`
-	OwnerID    string    `gorm:"column:owner_id;primaryKey"`
-	BoundBy    string    `gorm:"column:bound_by;not null"`
-	BoundAt    time.Time `gorm:"column:bound_at;not null"`
+	MaterialID    string     `gorm:"column:material_id;primaryKey"`
+	OwnerKind     string     `gorm:"column:owner_kind;primaryKey"`
+	OwnerID       string     `gorm:"column:owner_id;primaryKey"`
+	BoundBy       string     `gorm:"column:bound_by;not null"`
+	BoundAt       time.Time  `gorm:"column:bound_at;not null"`
+	BindingsEndAt *time.Time `gorm:"column:bindings_end_at"`
 }
 
 func (MaterialBinding) TableName() string { return "media_materials.material_bindings" }

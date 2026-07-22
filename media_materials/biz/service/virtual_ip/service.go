@@ -9,27 +9,32 @@ import (
 	"github.com/google/uuid"
 
 	domain "media_agent/media_materials/biz/domain/virtual_ip"
+	"media_agent/media_materials/biz/shared"
 )
 
 // Service virtual_ip 用例编排。持有 Repo + GrantRepo。
 // visibility ACL：private=owner；public=任意；team 暂按 owner（team 成员来源待 media_auth 接入）。
 // Grant/Revoke/ChangeVisibility 仅 owner 可执行。
 type Service struct {
-	repo   domain.Repo
-	grants domain.GrantRepo
+	repo         domain.Repo
+	grants       domain.GrantRepo
+	bindingEnder shared.BindingEnder // 注入：owner 软删时失效 material_bindings
 }
 
 func NewService(repo domain.Repo, grants domain.GrantRepo) *Service {
 	return &Service{repo: repo, grants: grants}
 }
 
+// SetBindingEnder 注入 material BindingEnder（owner 软删时失效其 material_bindings）。
+func (s *Service) SetBindingEnder(ender shared.BindingEnder) { s.bindingEnder = ender }
+
 func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.VirtualIp, error) {
 	name := strings.TrimSpace(cmd.Name)
 	if name == "" {
 		return nil, errors.New("virtual_ip name is required")
 	}
-	if cmd.Scope == "" {
-		return nil, errors.New("virtual_ip scope is required")
+	if !shared.IsKnownScope(cmd.Scope) {
+		return nil, errors.New("virtual_ip scope is not supported")
 	}
 	vis := domain.Visibility(cmd.Visibility)
 	if vis == "" {
@@ -122,6 +127,11 @@ func (s *Service) Delete(ctx context.Context, id, callerID string) (*domain.Virt
 	}
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return nil, fmt.Errorf("delete virtual_ip: %w", err)
+	}
+	if s.bindingEnder != nil {
+		if err := s.bindingEnder.EndBindingsForOwner(ctx, "virtual_ip", id); err != nil {
+			return nil, fmt.Errorf("end bindings for virtual_ip: %w", err)
+		}
 	}
 	return v, nil
 }

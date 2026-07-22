@@ -19,6 +19,7 @@ import (
 	genassethandler "media_agent/media_materials/biz/handler/generated_asset"
 	materialhandler "media_agent/media_materials/biz/handler/material"
 	producthandler "media_agent/media_materials/biz/handler/product"
+	reachhandler "media_agent/media_materials/biz/handler/reachability"
 	viphandler "media_agent/media_materials/biz/handler/virtual_ip"
 	assetkindsvc "media_agent/media_materials/biz/service/asset_kind"
 	genassetsvc "media_agent/media_materials/biz/service/generated_asset"
@@ -27,6 +28,7 @@ import (
 	vipsvc "media_agent/media_materials/biz/service/virtual_ip"
 	"media_agent/media_materials/biz/shared"
 	"media_agent/media_materials/biz/shared/auth"
+	wflow "media_agent/media_materials/biz/workflow/reachability"
 )
 
 func main() {
@@ -85,10 +87,18 @@ func main() {
 	materialBindingRepo := materialrepo.NewBindingRepo(db)
 	materialSvc := materialsvc.NewService(materialRepo, materialBindingRepo, assetKindSvc, ownerScopeLookup)
 	materialhandler.Svc = materialSvc
+	// owner 软删时失效其 material_bindings（跨 domain 写，接口注入，见 shared.BindingEnder）。
+	vipSvc.SetBindingEnder(materialSvc)
+	productSvc.SetBindingEnder(materialSvc)
 
 	genAssetRepo := genassetrepo.NewRepo(db)
 	genAssetSvc := genassetsvc.NewService(genAssetRepo)
 	genassethandler.Svc = genAssetSvc
+
+	// reachability workflow：编排 material/generated_asset/vip/product 只读 + policy 决策。
+	// 供 caller（BFF）组装 JobInput bundle 时调用（ADR 0006）。
+	reachFlow := wflow.NewFlow(materialSvc, genAssetSvc, vipSvc, productSvc, assetKindSvc)
+	reachhandler.FlowSvc = reachFlow
 
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
 	mediaAuthURL := "http://127.0.0.1:8001"
@@ -108,6 +118,11 @@ func main() {
 		ServiceURL:        serviceURL,
 		OAuthClientID:     cfg.GetApp().GetName(),
 		OAuthClientSecret: cfg.GetAuth().GetOauthClientSecret(),
+		// skip 运维端点 + internal RPC（服务间调用不带 user session，靠网络隔离）
+		SkipPaths: map[string]bool{
+			"/health": true, "/metrics": true, "/ping": true, "/openapi.yaml": true,
+		},
+		SkipPrefixes: []string{"/swagger/", "/debug/pprof/", "/api/internal/"},
 	}
 	authMw := auth.New(authCfg)
 

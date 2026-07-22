@@ -152,19 +152,29 @@ func (r *BindingRepo) RemoveBinding(ctx context.Context, materialID string, owne
 }
 
 func (r *BindingRepo) ListByOwner(ctx context.Context, ownerKind domain.BindingOwnerKind, ownerID string) ([]*domain.Material, error) {
-	Q := query.Use(dal.FromContext(ctx, r.db))
-	rows, err := Q.Material.WithContext(ctx).
-		Join(Q.MaterialBinding, Q.MaterialBinding.MaterialID.EqCol(Q.Material.ID)).
-		Where(Q.MaterialBinding.OwnerKind.Eq(string(ownerKind)),
-			Q.MaterialBinding.OwnerID.Eq(ownerID),
-			Q.Material.DeletedAt.IsNull()).
-		Order(Q.Material.UpdatedAt.Desc()).Find()
+	db := dal.FromContext(ctx, r.db)
+	var rows []model.Material
+	err := db.Table("media_materials.materials").
+		Joins("JOIN media_materials.material_bindings ON material_bindings.material_id = materials.id").
+		Where("material_bindings.owner_kind = ? AND material_bindings.owner_id = ? AND material_bindings.bindings_end_at IS NULL AND materials.deleted_at IS NULL",
+			string(ownerKind), ownerID).
+		Order("materials.updated_at DESC").
+		Find(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	out := make([]*domain.Material, len(rows))
 	for i := range rows {
-		out[i] = toDomain(rows[i])
+		out[i] = toDomain(&rows[i])
 	}
 	return out, nil
+}
+
+// EndBindings 失效 owner 的全部生效 binding（置 bindings_end_at = now）。
+// owner（virtual_ip / product）软删时由 material service.EndBindingsForOwner 调用。
+func (r *BindingRepo) EndBindings(ctx context.Context, ownerKind, ownerID string) error {
+	db := dal.FromContext(ctx, r.db)
+	return db.Table("media_materials.material_bindings").
+		Where("owner_kind = ? AND owner_id = ? AND bindings_end_at IS NULL", ownerKind, ownerID).
+		Update("bindings_end_at", time.Now()).Error
 }

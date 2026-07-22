@@ -16,6 +16,8 @@ type BindingRepo interface {
 	AddBinding(ctx context.Context, b *Binding) error
 	RemoveBinding(ctx context.Context, materialID string, ownerKind BindingOwnerKind, ownerID string) error
 	ListByOwner(ctx context.Context, ownerKind BindingOwnerKind, ownerID string) ([]*Material, error)
+	// EndBindings 失效 owner 的全部生效 binding（置 bindings_end_at = now），owner 软删时调用。
+	EndBindings(ctx context.Context, ownerKind, ownerID string) error
 }
 
 // ListQuery 列表过滤。

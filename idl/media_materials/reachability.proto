@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package media_materials.reachability;
+
+import "api.proto";
+
+// Hertz 工具链:
+//   make hz-model     -> hertz_gen/model/media_materials/reachability/reachability.pb.go
+//   make hz-update    -> media_materials/biz/handler/reachability/reachability_service.go (handler 骨架)
+//                        media_materials/biz/router/reachability/{reachability.go,middleware.go}
+//
+// **internal service -- 不挂网关路由，不出 OpenAPI。**
+// 供 caller（BFF / 编排层）在 SubmitJob 前组装 JobInput bundle 时调用：校验可达性 + 解析 asset。
+// media_workflow 不调本服务（bundle 模式，见 docs/spec/media_workflow/impl.md §6）。
+// 网络隔离 / mTLS 由部署层负责。
+// 见 docs/media_materials/workflow/0001-reachability/reachability.md + docs/adr/0006-reachability-layering.md。
+option go_package = "media_materials/reachability";
+
+service ReachabilityService {
+  // 校验 refs 在 (userID, workflowScope) 下是否可引用（scope ∧ visibility ∧ 容器可达）。
+  rpc AssetReachability(AssetReachabilityReq) returns (AssetReachabilityResp) {
+    option (api.post) = "/api/internal/v1/reachability:asset";
+  }
+  // 校验 product.scope == workflowScope（product 无 user 概念）。
+  rpc CheckProductAccessible(CheckProductAccessibleReq) returns (AccessibleResp) {
+    option (api.post) = "/api/internal/v1/reachability:product";
+  }
+  // 校验 vip.scope == workflowScope ∧ MyPermission(user, vip) ≥ viewer。
+  rpc CheckVirtualIPAccessible(CheckVirtualIPAccessibleReq) returns (AccessibleResp) {
+    option (api.post) = "/api/internal/v1/reachability:virtual-ip";
+  }
+  // 返回 user 对哪些 vip 至少 viewer（供 AssetReachability 容器可达判定）。
+  rpc ResolveVirtualIpForReachability(ResolveVirtualIpForReachabilityReq) returns (ResolveVirtualIpForReachabilityResp) {
+    option (api.post) = "/api/internal/v1/reachability:visible-vips";
+  }
+  // 按 (ownerKind, ownerID, assetKind) 取唯一 asset（按 resource_type 分派）。
+  rpc ResolveAssetByKind(ResolveAssetByKindReq) returns (ResolveAssetByKindResp) {
+    option (api.post) = "/api/internal/v1/reachability:resolve-asset";
+  }
+  // 按 (resource_type, id) 取 url + metadata（不返回二进制）。
+  rpc AssetRead(AssetReadReq) returns (AssetReadResp) {
+    option (api.post) = "/api/internal/v1/reachability:read";
+  }
+}
+
+message AssetRef {
+  string resource_type = 1;  // MATERIAL / ASSET / PRODUCT / VIRTUAL_IP
+  string id = 2;
+}
+
+message AssetReachabilityReq {
+  string user_id = 1 [(api.body)="user_id"];
+  string workflow_scope = 2 [(api.body)="workflow_scope"];
+  repeated AssetRef refs = 3 [(api.body)="refs"];
+}
+
+message BlockedRef {
+  AssetRef ref = 1;
+  string reason = 2;  // SCOPE_MISMATCH / NOT_VISIBLE / CONTAINER_UNREACHABLE / NOT_FOUND
+}
+
+message AssetReachabilityResp {
+  map<string,bool> reachable = 1;  // key = ref.resource_type + ":" + ref.id
+  repeated BlockedRef blocked = 2;
+}
+
+message CheckProductAccessibleReq {
+  string workflow_scope = 1 [(api.body)="workflow_scope"];
+  string product_id = 2 [(api.body)="product_id"];
+}
+
+message CheckVirtualIPAccessibleReq {
+  string user_id = 1 [(api.body)="user_id"];
+  string workflow_scope = 2 [(api.body)="workflow_scope"];
+  string virtual_ip_id = 3 [(api.body)="virtual_ip_id"];
+}
+
+message AccessibleResp {
+  bool accessible = 1;
+  string reason = 2;
+}
+
+message ResolveVirtualIpForReachabilityReq {
+  string user_id = 1 [(api.body)="user_id"];
+  repeated string virtual_ip_ids = 2 [(api.body)="virtual_ip_ids"];
+}
+
+message ResolveVirtualIpForReachabilityResp {
+  repeated string visible_ids = 1;
+}
+
+message ResolveAssetByKindReq {
+  string owner_kind = 1 [(api.body)="owner_kind"];  // virtual_ip / product
+  string owner_id = 2 [(api.body)="owner_id"];
+  string asset_kind = 3 [(api.body)="asset_kind"];
+}
+
+message ResolveAssetByKindResp {
+  string resource_type = 1;
+  string asset_id = 2;
+}
+
+message AssetReadReq {
+  string resource_type = 1 [(api.body)="resource_type"];
+  string id = 2 [(api.body)="id"];
+}
+
+message AssetReadResp {
+  string url = 1;
+  string content = 2;
+  string metadata = 3;  // jsonb 序列化
+}
