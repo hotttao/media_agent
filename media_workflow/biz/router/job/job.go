@@ -35,12 +35,14 @@ func Register(r *server.Hertz) {
 			{
 				_step_runs := _v1.Group("/step-runs", _step_runsMw()...)
 				_step_runs.POST("/claim", append(_claimsteprunMw(), job.ClaimStepRun)...)
+				_step_runs.GET("/:step_run_id", append(_getsteprunMw(), job.GetStepRun)...)
 				{
 					_step_run_id := _step_runs.Group("/:step_run_id", _step_run_idMw()...)
 					_step_run_id.POST("/complete", append(_completesteprunMw(), job.CompleteStepRun)...)
 					_step_run_id.POST("/confirm", append(_confirmsteprunMw(), job.ConfirmStepRun)...)
 					_step_run_id.POST("/fail", append(_failsteprunMw(), job.FailStepRun)...)
 					_step_run_id.POST("/regenerate", append(_regeneratesteprunMw(), job.RegenerateStepRun)...)
+					_step_run_id.POST("/retry", append(_retrysteprunMw(), job.RetryStepRun)...)
 				}
 			}
 		}

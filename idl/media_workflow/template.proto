@@ -36,6 +36,10 @@ service TemplateService {
     option (google.api.http) = { post: "/api/v1/templates/{id}/archive" };
     option (api.post) = "/api/v1/templates/:id/archive";
   }
+  rpc PublishTemplate(GetTemplateReq) returns (Template) {
+    option (google.api.http) = { post: "/api/v1/templates/{id}/publish" };
+    option (api.post) = "/api/v1/templates/:id/publish";
+  }
   rpc GrantTemplate(GrantReq) returns (Template) {
     option (google.api.http) = { post: "/api/v1/templates/{id}/grants" body: "*" };
     option (api.post) = "/api/v1/templates/:id/grants";

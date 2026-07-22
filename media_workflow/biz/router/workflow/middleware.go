@@ -80,3 +80,8 @@ func _revokeworkflowMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _publishworkflowMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

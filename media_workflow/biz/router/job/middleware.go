@@ -90,3 +90,13 @@ func _regeneratesteprunMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _getsteprunMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _retrysteprunMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

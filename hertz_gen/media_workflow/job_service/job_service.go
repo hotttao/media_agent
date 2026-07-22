@@ -31,6 +31,10 @@ type Client interface {
 
 	RegenerateStepRun(context context.Context, req *job.RegenerateStepRunReq, reqOpt ...config.RequestOption) (resp *job.StepRun, rawResponse *protocol.Response, err error)
 
+	RetryStepRun(context context.Context, req *job.RetryStepRunReq, reqOpt ...config.RequestOption) (resp *job.StepRun, rawResponse *protocol.Response, err error)
+
+	GetStepRun(context context.Context, req *job.GetStepRunReq, reqOpt ...config.RequestOption) (resp *job.StepRun, rawResponse *protocol.Response, err error)
+
 	ClaimStepRun(context context.Context, req *job.ClaimStepRunReq, reqOpt ...config.RequestOption) (resp *job.ClaimStepRunResp, rawResponse *protocol.Response, err error)
 
 	CompleteStepRun(context context.Context, req *job.CompleteStepRunReq, reqOpt ...config.RequestOption) (resp *job.StepRun, rawResponse *protocol.Response, err error)
@@ -226,6 +230,54 @@ func (s *JobServiceClient) RegenerateStepRun(context context.Context, req *job.R
 	return resp, rawResponse, nil
 }
 
+func (s *JobServiceClient) RetryStepRun(context context.Context, req *job.RetryStepRunReq, reqOpt ...config.RequestOption) (resp *job.StepRun, rawResponse *protocol.Response, err error) {
+	httpResp := &job.StepRun{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"step_run_id": req.GetStepRunId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/api/v1/step-runs/:step_run_id/retry")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *JobServiceClient) GetStepRun(context context.Context, req *job.GetStepRunReq, reqOpt ...config.RequestOption) (resp *job.StepRun, rawResponse *protocol.Response, err error) {
+	httpResp := &job.StepRun{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"step_run_id": req.GetStepRunId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/v1/step-runs/:step_run_id")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
 func (s *JobServiceClient) ClaimStepRun(context context.Context, req *job.ClaimStepRunReq, reqOpt ...config.RequestOption) (resp *job.ClaimStepRunResp, rawResponse *protocol.Response, err error) {
 	httpResp := &job.ClaimStepRunResp{}
 	ret, err := s.client.r().
@@ -329,6 +381,14 @@ func ConfirmStepRun(context context.Context, req *job.ConfirmStepRunReq, reqOpt 
 
 func RegenerateStepRun(context context.Context, req *job.RegenerateStepRunReq, reqOpt ...config.RequestOption) (resp *job.StepRun, rawResponse *protocol.Response, err error) {
 	return defaultClient.RegenerateStepRun(context, req, reqOpt...)
+}
+
+func RetryStepRun(context context.Context, req *job.RetryStepRunReq, reqOpt ...config.RequestOption) (resp *job.StepRun, rawResponse *protocol.Response, err error) {
+	return defaultClient.RetryStepRun(context, req, reqOpt...)
+}
+
+func GetStepRun(context context.Context, req *job.GetStepRunReq, reqOpt ...config.RequestOption) (resp *job.StepRun, rawResponse *protocol.Response, err error) {
+	return defaultClient.GetStepRun(context, req, reqOpt...)
 }
 
 func ClaimStepRun(context context.Context, req *job.ClaimStepRunReq, reqOpt ...config.RequestOption) (resp *job.ClaimStepRunResp, rawResponse *protocol.Response, err error) {

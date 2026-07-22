@@ -157,6 +157,21 @@ func (s *Service) Archive(ctx context.Context, id string) (*domain.Template, err
 	return s.repo.Get(ctx, id)
 }
 
+// Publish draft -> published（状态机守卫：仅 draft 可 publish；archived 不可 publish）。
+func (s *Service) Publish(ctx context.Context, id string) (*domain.Template, error) {
+	t, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if t.Status != domain.StatusDraft {
+		return nil, fmt.Errorf("template %q status %s, expected draft", id, t.Status)
+	}
+	if err := s.repo.UpdateStatus(ctx, id, domain.StatusPublished); err != nil {
+		return nil, err
+	}
+	return s.repo.Get(ctx, id)
+}
+
 func (s *Service) Delete(ctx context.Context, id string) (*domain.Template, error) {
 	t, err := s.repo.Get(ctx, id)
 	if err != nil {

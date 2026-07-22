@@ -137,6 +137,11 @@ func main() {
 		ServiceURL:        "http://" + wfAddr,
 		OAuthClientID:     cfg.GetApp().GetName(),
 		OAuthClientSecret: cfg.GetAuth().GetOauthClientSecret(),
+		// skip 运维端点 + internal RPC（服务间调用不带 user session，靠网络隔离）
+		SkipPaths: map[string]bool{
+			"/health": true, "/metrics": true, "/ping": true, "/openapi.yaml": true,
+		},
+		SkipPrefixes: []string{"/swagger/", "/debug/pprof/", "/api/internal/"},
 	}
 	authMw := auth.New(authCfg)
 

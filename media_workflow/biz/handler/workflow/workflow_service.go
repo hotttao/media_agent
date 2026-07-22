@@ -289,3 +289,19 @@ func validationResultToPB(res *domain.ValidationResult) *pb.ValidationResult {
 }
 
 var _ = fmt.Sprintf // 抑制未用 import
+
+// PublishWorkflow .
+// @router /api/v1/workflows/:id/publish [POST]
+func PublishWorkflow(ctx context.Context, c *app.RequestContext) {
+	var req pb.GetWorkflowReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	w, err := Svc.Publish(ctx, req.GetId())
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	c.JSON(consts.StatusOK, toView(w))
+}

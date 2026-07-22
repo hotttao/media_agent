@@ -32,6 +32,7 @@ func Register(r *server.Hertz) {
 					_id := _workflows.Group("/:id", _idMw()...)
 					_id.POST("/archive", append(_archiveworkflowMw(), workflow.ArchiveWorkflow)...)
 					_id.POST("/grants", append(_grantworkflowMw(), workflow.GrantWorkflow)...)
+					_id.POST("/publish", append(_publishworkflowMw(), workflow.PublishWorkflow)...)
 					_id.POST("/visibility", append(_changeworkflowvisibilityMw(), workflow.ChangeWorkflowVisibility)...)
 					{
 						_grants := _id.Group("/grants", _grantsMw()...)

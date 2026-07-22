@@ -29,6 +29,10 @@ service WorkflowService {
     option (google.api.http) = { post: "/api/v1/workflows/{id}/archive" };
     option (api.post) = "/api/v1/workflows/:id/archive";
   }
+  rpc PublishWorkflow(GetWorkflowReq) returns (Workflow) {
+    option (google.api.http) = { post: "/api/v1/workflows/{id}/publish" };
+    option (api.post) = "/api/v1/workflows/:id/publish";
+  }
   rpc ValidateWorkflow(ValidateWorkflowReq) returns (ValidationResult) {
     option (google.api.http) = { post: "/api/v1/workflows/validate" body: "*" };
     option (api.post) = "/api/v1/workflows/validate";

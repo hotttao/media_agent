@@ -407,6 +407,73 @@ func (s *Service) Retry(ctx context.Context, jobID string, reason string, inputO
 }
 
 // —— GetJob / ListJobs ——
+// -- RetryStepRun（重跑单步 + 下游）--
+// RetryStepRun 重置 failed/skipped 的 step_run -> pending + retry_count+1，并重置其下游 -> blocked；
+// input_override 覆盖 job.input bundle（Claim 时重新解析）。Job -> running，advanceDAG 推进。
+func (s *Service) RetryStepRun(ctx context.Context, stepRunID, reason string, inputOverride *domain.JobInput) (*domain.StepRun, error) {
+	sr, err := s.stepRunRepo.Get(ctx, stepRunID)
+	if err != nil {
+		return nil, err
+	}
+	if sr.Status != domain.SRFailed && sr.Status != domain.SRSkipped {
+		return nil, fmt.Errorf("step_run %s status %s, expected failed/skipped", stepRunID, sr.Status)
+	}
+	updates := map[string]any{
+		"retry_count": sr.RetryCount + 1,
+		"candidates":  "[]", "failure_reason": "", "claimed_by": "", "output_asset_id": "",
+	}
+	_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRPending, updates)
+	s.resetDownstream(ctx, sr.JobID, sr.StepKey)
+	if inputOverride != nil {
+		_ = s.jobRepo.UpdateInput(ctx, sr.JobID, *inputOverride)
+	}
+	job, err := s.jobRepo.Get(ctx, sr.JobID)
+	if err == nil {
+		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobRunning, "")
+		record := domain.RetryRecord{RetryAt: time.Now(), Reason: reason, InputOverride: inputOverride}
+		_ = s.jobRepo.AppendRetryHistory(ctx, sr.JobID, record, job.RetryCount+1)
+	}
+	s.advanceDAG(ctx, sr.JobID, sr.StepKey)
+	return s.stepRunRepo.Get(ctx, sr.ID)
+}
+
+// resetDownstream 重置依赖 completedStepKey 输出的下游 step_run（非 succeeded）-> blocked。
+func (s *Service) resetDownstream(ctx context.Context, jobID, completedStepKey string) {
+	job, err := s.jobRepo.Get(ctx, jobID)
+	if err != nil {
+		return
+	}
+	wf, err := s.wfRepo.Get(ctx, job.WorkflowID)
+	if err != nil {
+		return
+	}
+	downstreamKeys := make(map[string]bool)
+	for _, step := range wf.Steps {
+		for _, b := range step.Bindings {
+			if b.Source == wfdomain.SourceStepOutput && b.Ref == completedStepKey {
+				downstreamKeys[step.Key] = true
+			}
+		}
+	}
+	if len(downstreamKeys) == 0 {
+		return
+	}
+	allSRs, _ := s.stepRunRepo.ListByJob(ctx, jobID)
+	for _, sr := range allSRs {
+		if !downstreamKeys[sr.StepKey] {
+			continue
+		}
+		if sr.Status != domain.SRSucceeded {
+			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRBlocked, nil)
+		}
+	}
+}
+
+// GetStepRun 读单条 step_run（只读）。
+func (s *Service) GetStepRun(ctx context.Context, stepRunID string) (*domain.StepRun, error) {
+	return s.stepRunRepo.Get(ctx, stepRunID)
+}
+
 func (s *Service) Get(ctx context.Context, id string) (*domain.Job, []*domain.StepRun, error) {
 	return s.jobRepo.GetWithStepRuns(ctx, id)
 }

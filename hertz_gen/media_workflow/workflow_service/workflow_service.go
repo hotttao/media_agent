@@ -27,6 +27,8 @@ type Client interface {
 
 	ArchiveWorkflow(context context.Context, req *workflow.GetWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error)
 
+	PublishWorkflow(context context.Context, req *workflow.GetWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error)
+
 	ValidateWorkflow(context context.Context, req *workflow.ValidateWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.ValidationResult, rawResponse *protocol.Response, err error)
 
 	GrantWorkflow(context context.Context, req *workflow.GrantReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error)
@@ -177,6 +179,30 @@ func (s *WorkflowServiceClient) ArchiveWorkflow(context context.Context, req *wo
 	return resp, rawResponse, nil
 }
 
+func (s *WorkflowServiceClient) PublishWorkflow(context context.Context, req *workflow.GetWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error) {
+	httpResp := &workflow.Workflow{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"id": req.GetId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/api/v1/workflows/:id/publish")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
 func (s *WorkflowServiceClient) ValidateWorkflow(context context.Context, req *workflow.ValidateWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.ValidationResult, rawResponse *protocol.Response, err error) {
 	httpResp := &workflow.ValidationResult{}
 	ret, err := s.client.r().
@@ -299,6 +325,10 @@ func ListWorkflows(context context.Context, req *workflow.ListWorkflowsReq, reqO
 
 func ArchiveWorkflow(context context.Context, req *workflow.GetWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error) {
 	return defaultClient.ArchiveWorkflow(context, req, reqOpt...)
+}
+
+func PublishWorkflow(context context.Context, req *workflow.GetWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error) {
+	return defaultClient.PublishWorkflow(context, req, reqOpt...)
 }
 
 func ValidateWorkflow(context context.Context, req *workflow.ValidateWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.ValidationResult, rawResponse *protocol.Response, err error) {

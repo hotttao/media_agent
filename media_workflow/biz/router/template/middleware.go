@@ -85,3 +85,8 @@ func _gettemplateversionMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _publishtemplateMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

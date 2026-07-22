@@ -38,6 +38,14 @@ service JobService {
     option (google.api.http) = { post: "/api/v1/step-runs/{step_run_id}/regenerate" };
     option (api.post) = "/api/v1/step-runs/:step_run_id/regenerate";
   }
+  rpc RetryStepRun(RetryStepRunReq) returns (StepRun) {
+    option (google.api.http) = { post: "/api/v1/step-runs/{step_run_id}/retry" body: "*" };
+    option (api.post) = "/api/v1/step-runs/:step_run_id/retry";
+  }
+  rpc GetStepRun(GetStepRunReq) returns (StepRun) {
+    option (google.api.http) = { get: "/api/v1/step-runs/{step_run_id}" };
+    option (api.get) = "/api/v1/step-runs/:step_run_id";
+  }
 
   // —— worker ——
   rpc ClaimStepRun(ClaimStepRunReq) returns (ClaimStepRunResp) {
@@ -191,3 +199,11 @@ message RetryJobReq {
   string reason = 2 [(api.body) = "reason"];
   JobInput input_override = 3 [(api.body) = "input_override"];
 }
+
+// -- 单步 retry + 单步读 --
+message RetryStepRunReq {
+  string step_run_id = 1 [(api.path) = "step_run_id"];
+  string reason = 2 [(api.body) = "reason"];
+  JobInput input_override = 3 [(api.body) = "input_override"];
+}
+message GetStepRunReq { string step_run_id = 1 [(api.path) = "step_run_id"]; }

@@ -220,3 +220,19 @@ func versionToView(tv *domain.TemplateVersion) *pb.Template {
 		CreatedBy: tv.CreatedBy, CreatedAt: tv.CreatedAt.UnixNano(),
 	}
 }
+
+// PublishTemplate .
+// @router /api/v1/templates/:id/publish [POST]
+func PublishTemplate(ctx context.Context, c *app.RequestContext) {
+	var req pb.GetTemplateReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	t, err := Svc.Publish(ctx, req.GetId())
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	c.JSON(consts.StatusOK, toView(t))
+}

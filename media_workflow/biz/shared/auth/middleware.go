@@ -13,6 +13,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -280,12 +281,41 @@ func (m *Middleware) prefetchTeams(userID string) {
 	m.fetchTeams(ctx, userID)
 }
 
-// fetchTeams 调 media_auth GET /api/teams 取 caller 的 team ID 列表（带缓存）。
-// 本期：media_auth /api/teams 需 session，下游服务无法直接调。
-// TODO: media_auth 加 internal endpoint /internal/teams?user_id=xxx 供下游服务查 team。
-// 目前返回 nil（team 校验降级为 false，不影响 private/public）。
+// fetchTeams 调 media_auth POST /internal/teams:byUser 取 caller 的 team ID 列表（带缓存）。
+// 供 team 可见性校验（material/generated_asset/virtual_ip 的 visibility=team 分支）。
+// 失败时返回 nil 不阻塞请求（team 校验降级为 false，不影响 private/public）。
 func (m *Middleware) fetchTeams(ctx context.Context, userID string) ([]string, error) {
-	return nil, nil
+	if userID == "" {
+		return nil, nil
+	}
+	if cached, ok := m.teams.get(userID); ok {
+		return cached, nil
+	}
+	body, err := json.Marshal(map[string]string{"user_id": userID})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.cfg.MediaAuthURL+"/internal/teams:byUser", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := m.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch teams: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("media_auth /internal/teams:byUser: status %d", resp.StatusCode)
+	}
+	var out struct {
+		TeamIDs []string `json:"team_ids"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode teams resp: %w", err)
+	}
+	m.teams.set(userID, out.TeamIDs)
+	return out.TeamIDs, nil
 }
 
 // verifyServiceToken 调 media_auth GET /api/auth/me with Bearer token。

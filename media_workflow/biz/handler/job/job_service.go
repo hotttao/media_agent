@@ -309,3 +309,40 @@ func stepRunToPB(sr *domain.StepRun) *pb.StepRun {
 		FailureReason: sr.FailureReason, ClaimedBy: sr.ClaimedBy,
 	}
 }
+
+// RetryStepRun .
+// @router /api/v1/step-runs/:step_run_id/retry [POST]
+func RetryStepRun(ctx context.Context, c *app.RequestContext) {
+	var req pb.RetryStepRunReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	var override *domain.JobInput
+	if req.GetInputOverride() != nil {
+		oi := jobInputFromPB(req.GetInputOverride())
+		override = &oi
+	}
+	sr, err := Svc.RetryStepRun(ctx, req.GetStepRunId(), req.GetReason(), override)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	c.JSON(consts.StatusOK, stepRunToPB(sr))
+}
+
+// GetStepRun .
+// @router /api/v1/step-runs/:step_run_id [GET]
+func GetStepRun(ctx context.Context, c *app.RequestContext) {
+	var req pb.GetStepRunReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	sr, err := Svc.GetStepRun(ctx, req.GetStepRunId())
+	if err != nil {
+		c.String(consts.StatusNotFound, err.Error())
+		return
+	}
+	c.JSON(consts.StatusOK, stepRunToPB(sr))
+}
