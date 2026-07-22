@@ -3,15 +3,53 @@
 	"paths": {
 		"@/*": ["src/*"]
 	},
+	"entry": ["src/plugin.tsx"],
+	"ignore": [
+		".husky/**",
+		"src/components/ui/alert.tsx",
+		"src/components/ui/card.tsx",
+		"src/components/ui/checkbox.tsx",
+		"src/components/ui/collapsible.tsx",
+		"src/components/ui/dropdown-menu.tsx",
+		"src/components/ui/progress.tsx",
+		"src/components/ui/separator.tsx",
+		"src/components/ui/table.tsx",
+		"src/components/ui/tabs.tsx"
+	],
 	"ignoreDependencies": [
-		"@tanstack/react-table",
-		"@tanstack/react-query",
-		"@vitest/coverage-v8"
+		"@testing-library/dom",
+		"@testing-library/react",
+		"@types/js-yaml",
+		"lint-staged",
+		"@radix-ui/react-alert-dialog",
+		"@radix-ui/react-checkbox",
+		"@radix-ui/react-collapsible",
+		"@radix-ui/react-dropdown-menu",
+		"@radix-ui/react-hover-card",
+		"@radix-ui/react-icons",
+		"@radix-ui/react-progress",
+		"@radix-ui/react-separator",
+		"@radix-ui/react-slider",
+		"@radix-ui/react-tabs",
+		"clipboard-polyfill",
+		"dayjs",
+		"js-yaml",
+		"react-hook-form",
+		"react-router",
+		"zod"
 	],
 	"ignoreExportsUsedInFile": false,
 	"project": ["src/**/*.{ts,tsx}"],
 	"ignoreIssues": {
 		"src/components/ui/**": ["exports", "types"],
-		"src/foundation/lib/api/api-gen.ts": ["exports", "types"]
+		"src/foundation/lib/plugin-host.ts": ["exports", "types"],
+		"src/foundation/lib/host-shim/index.ts": ["exports", "types"],
+		"src/foundation/lib/i18n.ts": ["exports"],
+		"src/foundation/lib/api-client.ts": ["exports"],
+		"src/foundation/providers/theme-provider.tsx": ["exports"],
+		"src/foundation/providers/slot-provider.tsx": ["exports"],
+		"src/foundation/stores/**": ["exports", "types"],
+		"src/domains/materials/lib/api.ts": ["exports"],
+		"src/domains/materials/types.ts": ["types"]
 	}
 }

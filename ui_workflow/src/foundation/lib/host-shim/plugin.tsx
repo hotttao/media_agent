@@ -1,0 +1,46 @@
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/foundation/lib/api-client";
+import { getTos } from "@/foundation/lib/plugin-host";
+import type { User } from "@/foundation/types/auth";
+import type { HostShim } from "./types";
+
+/**
+ * Plugin implementation: forwards nap-specific hooks to window.tos
+ * (workspace/windows), and reads the current user via /api/v1/auth/me (the
+ * host already authenticated the user, so mw_token cookie is present; query
+ * uses the plugin-local QueryClient mounted inside each panel per §4.3 方案 C).
+ */
+
+function useCurrentUser() {
+  const { data, isLoading } = useQuery<User>({
+    queryKey: ["auth-me"],
+    queryFn: () => api.getMe(),
+    retry: false,
+    staleTime: Infinity,
+  });
+  return {
+    user: data ?? null,
+    isLoading,
+    login: () => {
+      window.location.href = "/api/v1/auth/login";
+    },
+    logout: async () => {
+      await api.logout();
+    },
+  };
+}
+
+function PluginAppHeaderButton(props: Record<string, unknown>) {
+  const Comp = getTos().windows.AppHeaderButton;
+  return <Comp {...(props as Record<string, never>)} />;
+}
+
+export const pluginShim: HostShim = {
+  useAppHeaderSlot: () => getTos().windows.useAppHeaderSlot(),
+  AppHeaderButton: PluginAppHeaderButton,
+  useInstancePersistentState: (instanceId, key, defaultFn) =>
+    getTos().workspace.useInstancePersistentState(instanceId, key, defaultFn),
+  useInstanceState: (instanceId, key, defaultFn) =>
+    getTos().workspace.useInstanceState(instanceId, key, defaultFn),
+  useCurrentUser,
+};

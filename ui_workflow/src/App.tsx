@@ -1,31 +1,31 @@
 /**
- * Top-level App shell.
- *
- * Per contributing/architecture.md the app composes L3 pages with L1 foundation
- * providers. This skeleton intentionally ships with zero pages — add routes by
- * creating pages/<resource>/list|create|edit|show.tsx and registering them
- * inside <Routes> below.
+ * Standalone root. Gate on auth: while loading or unauthenticated, show a
+ * spinner and trigger the OAuth redirect (login() jumps to
+ * /api/v1/auth/login; the materials/workflow auth middleware does the full
+ * PKCE flow and 302s back with the mw_token cookie set). Once authenticated,
+ * mount the Desktop shell.
  */
+import { useEffect } from "react";
+import { Desktop } from "@/components/shell/Desktop";
+import { Spinner } from "@/components/ui/spinner";
+import { useAuth } from "@/foundation/providers/auth-provider";
+
 export default function App() {
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b px-6 py-4">
-        <h1 className="text-lg font-semibold">@media/ui-workflow</h1>
-        <p className="text-sm text-muted-foreground">
-          Skeleton only. See{" "}
-          <a
-            className="underline"
-            href="/contributing/architecture.md"
-            rel="noreferrer"
-          >
-            contributing/architecture.md
-          </a>{" "}
-          for the L0/L1/L2/L3 layer model.
-        </p>
-      </header>
-      <main className="px-6 py-6">
-        {/* Mount pages/<resource> routes here. */}
-      </main>
-    </div>
-  );
+  const { user, isLoading, login } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      login(window.location.pathname);
+    }
+  }, [isLoading, user, login]);
+
+  if (isLoading || !user) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Spinner className="h-6 w-6" />
+      </div>
+    );
+  }
+
+  return <Desktop />;
 }

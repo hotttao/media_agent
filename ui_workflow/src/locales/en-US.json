@@ -1,1 +1,28 @@
-{}
+{
+	"components": {
+		"shell": {
+			"slot": {
+				"openInPopout": "Open in popout",
+				"newInstance": "New instance",
+				"openApp": "Open app",
+				"searchPlaceholder": "Search apps...",
+				"noResults": "No results",
+				"emptyHint": "Open an app here"
+			},
+			"window": {
+				"close": "Close",
+				"popIn": "Pop in",
+				"popOut": "Pop out",
+				"fill": "Fill",
+				"unfill": "Unfill",
+				"fullscreen": "Fullscreen",
+				"exitFullscreen": "Exit fullscreen"
+			}
+		},
+		"dialog": {
+			"actions": {
+				"close": "Close"
+			}
+		}
+	}
+}
