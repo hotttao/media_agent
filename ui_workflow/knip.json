@@ -13,8 +13,7 @@
 		"src/components/ui/dropdown-menu.tsx",
 		"src/components/ui/progress.tsx",
 		"src/components/ui/separator.tsx",
-		"src/components/ui/table.tsx",
-		"src/components/ui/tabs.tsx"
+		"src/components/ui/table.tsx"
 	],
 	"ignoreDependencies": [
 		"@testing-library/dom",
@@ -30,7 +29,6 @@
 		"@radix-ui/react-progress",
 		"@radix-ui/react-separator",
 		"@radix-ui/react-slider",
-		"@radix-ui/react-tabs",
 		"clipboard-polyfill",
 		"dayjs",
 		"js-yaml",

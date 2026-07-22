@@ -31,7 +31,7 @@ function withQueryProvider(Comp: PanelComp): PanelComp {
 }
 
 registerPanel({
-  id: "media_materials_assets",
+  id: "media_materials",
   label: () => "Materials",
   component: withQueryProvider(MaterialsApp),
 });
