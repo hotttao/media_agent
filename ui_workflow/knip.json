@@ -48,6 +48,7 @@
 		"src/foundation/providers/slot-provider.tsx": ["exports"],
 		"src/foundation/stores/**": ["exports", "types"],
 		"src/domains/materials/lib/api.ts": ["exports"],
-		"src/domains/materials/types.ts": ["types"]
+		"src/domains/materials/types.ts": ["types"],
+		"src/domains/virtual-ips/types.ts": ["types"]
 	}
 }

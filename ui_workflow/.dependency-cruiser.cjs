@@ -16,10 +16,12 @@ module.exports = {
       to: { path: "^src/pages/" },
     },
     {
+      // materials is exempted: Material references AssetKind (registry) and
+      // reads the asset-kinds list - a one-way business dependency.
       name: "no-L2-cross-domain",
-      comment: "L2 domains must not import from other L2 domains",
+      comment: "L2 domains must not import from other L2 domains (except materials -> asset-kinds)",
       severity: "error",
-      from: { path: "^src/domains/([^/]+)/" },
+      from: { path: "^src/domains/([^/]+)/", pathNot: "^src/domains/materials/" },
       to: { path: "^src/domains/([^/]+)/", pathNot: "^src/domains/$1/" },
     },
     {

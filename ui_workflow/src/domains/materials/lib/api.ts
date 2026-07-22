@@ -6,8 +6,6 @@
  */
 import { api } from "@/foundation/lib/api-client";
 import type {
-  AssetKind,
-  AssetKindInput,
   Material,
   MaterialBindingInput,
   MaterialInput,
@@ -25,37 +23,16 @@ function buildQuery(params: object): string {
 }
 
 // ── AssetKind ───────────────────────────────────────────────────────────
-
-export async function listAssetKinds(): Promise<AssetKind[]> {
-  return api.request<AssetKind[]>("/asset-kinds");
-}
-
-export async function getAssetKind(name: string): Promise<AssetKind> {
-  return api.request<AssetKind>(`/asset-kinds/${encodeURIComponent(name)}`);
-}
-
-export async function createAssetKind(input: AssetKindInput): Promise<AssetKind> {
-  return api.request<AssetKind>("/asset-kinds", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-export async function updateAssetKind(
-  name: string,
-  patch: Partial<AssetKindInput>,
-): Promise<AssetKind> {
-  return api.request<AssetKind>(`/asset-kinds/${encodeURIComponent(name)}`, {
-    method: "PUT",
-    body: JSON.stringify(patch),
-  });
-}
-
-export async function deleteAssetKind(name: string): Promise<void> {
-  await api.request<void>(`/asset-kinds/${encodeURIComponent(name)}`, {
-    method: "DELETE",
-  });
-}
+// Canonical definitions live in @/domains/asset-kinds/lib/api (extracted to
+// its own domain). Re-exported here so existing materials imports keep
+// working.
+export {
+  createAssetKind,
+  deleteAssetKind,
+  getAssetKind,
+  listAssetKinds,
+  updateAssetKind,
+} from "@/domains/asset-kinds/lib/api";
 
 // ── Material ────────────────────────────────────────────────────────────
 

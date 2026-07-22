@@ -8,33 +8,15 @@
  */
 
 // ── AssetKind (global registry) ─────────────────────────────────────────
-
-export type AssetKindResourceType =
-  | "MATERIAL"
-  | "ASSET"
-  | "PRODUCT"
-  | "VIRTUAL_IP"
-  | "TEXT";
-export type AssetKindMediaType = "IMAGE" | "TEXT" | "VIDEO";
-export type AssetKindStatus = "SYSTEM" | "ENABLED" | "DISABLED";
-
-export interface AssetKind {
-  name: string;
-  resource_type: AssetKindResourceType;
-  media_type: AssetKindMediaType;
-  source_table?: string;
-  status: AssetKindStatus;
-  description?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AssetKindInput {
-  name: string;
-  resource_type: AssetKindResourceType;
-  media_type: AssetKindMediaType;
-  description?: string;
-}
+// Canonical definitions live in @/domains/asset-kinds/types (extracted to its
+// own domain). Re-exported here so existing materials imports keep working.
+export type {
+  AssetKind,
+  AssetKindInput,
+  AssetKindMediaType,
+  AssetKindResourceType,
+  AssetKindStatus,
+} from "@/domains/asset-kinds/types";
 
 // ── Material (raw input asset) ───────────────────────────────────────────
 
