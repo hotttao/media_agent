@@ -4,7 +4,7 @@ description: 把候选 Workflow 跨域校验一遍——DAG 结构、Template �
 dependencies:
     - workflow
     - template
-    - materials: media_materials.AssetReachability
+    - media_materials.asset_kind
 ---
 
 ## 一句话职责
@@ -29,14 +29,13 @@ dependencies:
 
 > 这一阶段阻止"draft 模板被 workflow bind 后被 archive"的情况：用户 archive 一个 template 时，本 service 需异步扫一遍 workflow / job 中活跃 binding；本期先实现"保存时校验"，后续引入 offline scan。
 
-### 3. 输入可达性 / scope 一致性校验
-按 workflow_input.`type` 分派校验（锚点均为 `workflow.scope`，user 不持 scope）：
-- **type=material**：调 `media_materials.AssetReachability(userID, workflowScope, [(MATERIAL, material_id)])`；material 不可达（scope 不匹配 / visibility 不通过 / 容器 vip 不可见或 product 不匹配）→ reject `ASSET_UNREACHABLE`。
-- **type=asset**：调 `media_materials.AssetReachability(userID, workflowScope, [(ASSET, generated_asset_id)])`；generated_asset 不可达 → reject `ASSET_UNREACHABLE`。
-- **type=product**：调 `media_materials.CheckProductAccessible(workflowScope, product_id)`；仅校验 `product.scope == workflowScope`（product 无 user 概念）。不匹配 → reject `SCOPE_MISMATCH`。
-- **type=virtual_ip**：调 `media_materials.CheckVirtualIPAccessible(userID, workflowScope, virtual_ip_id)`；校验 `virtual_ip.scope == workflowScope` ∧ `MyPermission(user, vip) ≥ viewer`。不匹配 → reject `VIP_UNREACHABLE`。
+### 3. 输入可达性校验（职责在 caller，不在 media_workflow）
+media_workflow 采用 bundle 模式（见 [media_workflow spec](../../spec/media_workflow/impl.md) §6）：caller（BFF）在 SubmitJob 前调 [media_materials reachability workflow](../../../media_materials/workflow/0001-reachability/reachability.md) 校验输入可达性 + 组装 JobInput bundle（含 url/content）。media_workflow 不做可达性校验，不调 reachability。
 
-slot.`kind` 合法性（kind 已注册、未停用、resource_type 与 workflow_input.type 自洽）由 `media_materials.BatchGetAssetKind` 在阶段 2 一并校验；对 product / virtual_ip 输入，slot.kind 的解析在 execution 阶段校验（见 [workflow_execution](../0002-workflow_execution/workflow_execution.md) §解析）。
+- **workflow 保存时（闸 1）**：只校验 slot.kind 注册（`BatchGetAssetKind`），不校验 asset 可达性（workflow 是定义，无 asset 实例）。
+- **SubmitJob 时（闸 2）**：校验 bundle ↔ input_schema（required 覆盖、material/asset name 唯一、无多余类型、product/virtual_ip 非空如 required）；不调 reachability（caller 已校验可达性）。
+
+可达性规则（scope ∧ visibility ∧ 容器可达）定义在 [reachability workflow](../../../media_materials/workflow/0001-reachability/reachability.md)，由 caller 调用。原 §3 的 AssetReachability / Check*Accessible 调用迁至 caller。
 
 ### 4. Result
 ```go
@@ -74,9 +73,13 @@ type RejectReason struct {
 任何 RejectReason → workflow / job 不写库；调用方拿到的是 ValidationResult 整体，可视化展示给前端。
 
 ## 与 media_materials 契约
-- RPC：`BatchGetAssetForValidation(ctx, caller{userID, workflowScope}, assetIDs []int64) → (assets []*Asset, missing []int64)`；`workflowScope` 是当前 workflow 的 scope，作可达性锚点。
-- RPC：`BatchGetAssetKind(ctx, names []string) → (kinds []*AssetKind, invalid []string)`——读 `media_materials.asset_kinds` 注册表（全局，无 scope），返回每个 kind 的 resource_type / media_type / status。
-- 不接受 media_materials 跨库直读。
+
+media_workflow 采用 bundle 模式（见 [media_workflow spec](../../spec/media_workflow/impl.md) §6），不直读 materials 库；caller（BFF）在 SubmitJob 前调 [media_materials reachability workflow](../../../media_materials/workflow/0001-reachability/reachability.md) 校验可达性 + 组装 bundle。media_workflow 仅调：
+
+- `BatchGetAssetKind(names) -> (kinds, invalid)`--Workflow 校验期校验 slot.kind / output_asset_kind 已注册、resource_type / media_type 匹配（§2）。
+- `UpsertGeneratedAsset(...)`--StepRun SUCCEEDED 时落产物（归 execution，见 [workflow_execution](../0002-workflow_execution/workflow_execution.md)）。
+
+> `AssetReachability` / `CheckProductAccessible` / `CheckVirtualIPAccessible` 由 caller 调 reachability workflow，**不归 media_workflow**（见 §3 职责在 caller）。
 
 ## 关联 domain
 - [workflow](../../domain/0002-workflow/workflow.md)

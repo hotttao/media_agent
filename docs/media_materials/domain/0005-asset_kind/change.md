@@ -8,6 +8,14 @@
 - `resource_type ∈ {MATERIAL, ASSET, PRODUCT, VIRTUAL_IP, TEXT}`——asset_kind 是覆盖所有资源类别（含 product / virtual_ip / text）的统一注册表，不只服务于 asset。
 - `media_type ∈ {IMAGE, TEXT, VIDEO}`——取代旧的 `output_resource_type` 概念；Template 的媒体形态由所引 asset_kind.media_type 推导。
 
+## 修改记录
+
+### 2026-07-21 · 术语断链修复 + TEXT 正交说明
+- 关联术语 Asset / Resource Type / Media Type 的 CONTEXT 链接此前为断链（CONTEXT 未定义这些条目），现已补齐（见 [CONTEXT](../../CONTEXT.md)）。
+- media_type 字段描述补"与 resource_type=TEXT 正交"说明，消除 `TEXT` 跨两个枚举（resource_type / media_type）的歧义。
+- 校验细则补第 6 条：`resource_type=TEXT` 的 kind 仅用于 const 源，不可作 template output_asset_kind（须 resource_type=ASSET）。
+- frontmatter `related_workflow` 补 media_workflow.workflow_validation（`BatchGetAssetKind` 被其调用）。
+
 ## media_agent 与 media_ai 的差异
 - 无差异：material / generated_asset 同样拆两张表（`materials` / `generated_assets`），source_table 指向实际表。
 

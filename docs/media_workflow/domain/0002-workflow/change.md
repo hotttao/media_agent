@@ -9,6 +9,11 @@
 
 ## 修改记录
 
+### 2026-07-21 · 补 Publish 能力 + 依赖修正
+- 新增 `PublishWorkflow`（`POST /api/v1/workflows/{id}/publish`，draft -> published，owner），补全状态机 published 产生路径（原状态机有 published 态但无操作可达）。
+- 校验细则新增第 7 条 status 流转：`draft ↔ published`（`PublishWorkflow` / 回退）`-> archived`（`ArchiveWorkflow`，终态不可逆）。
+- `dependencies` 去掉 `scope`（已降为 shared）。
+
 ### 2026-07-03 · 第二轮反馈：`source=const` 满足 required
 - **放宽** workflow.md §校验细则 第 4 条：原本约束 `binding.source 不得为 const`，现允许 const 满足 required input。
 - 同步修改 [template.md §Render 接口](../0001-template/template.md#render-接口)：ResolvedSlot 加 `SlotSource = asset|const`，Render 按 source 分支处理。

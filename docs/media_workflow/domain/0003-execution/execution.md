@@ -101,8 +101,8 @@ const (
 
 ## 行为约束
 
-1. SubmitJob 时把 workflow 全部 Binding 重新校验一遍（含 scope / 输入可达性：asset 走 AssetReachability、product / virtual_ip 走各自 CheckAccessible），无错才能进入 pending。
-2. 调度时按 step_order 升序逐个 Step 触发；每个 Step 完成后才能调度依赖它输出的下一 Step（用 binding 上的 `source=step_output` 反查）。
+1. SubmitJob 校验 bundle ↔ workflow.input_schema（required 覆盖、material/asset name 唯一、无多余类型）；**不重新校验可达性**（caller 在 SubmitJob 前已调 media_materials.reachability 校验）。无错才能进入 running。
+2. 调度采用**外部 worker pull**：worker 调 `ClaimStepRun` 拉取 pending step_run；`advanceDAG` 在前驱 StepRun succeeded 后把 blocked step 置 pending 供 worker 拉取（依赖关系由 binding `source=step_output` 反查）。详见 [workflow_execution](../../workflow/0002-workflow_execution/workflow_execution.md)。
 3. 同一 Step 内 Render 一次；Render 失败 → status=failed。
 4. Job 的最终资源产物由执行流的 sink step（`OutputStepKey`）的 `output_asset_id` 给出；Job 不独立记录 output。
 5. **Retry**：仅允许在 `status=failed` 状态下重试；不允许对 `succeeded` / `cancelled` Job 重试。
@@ -128,7 +128,7 @@ const (
 
 ### 权限
 
-Retry 操作需要 `my_permission(user, workflow) ≥ viewer`（与 SubmitJob 一致）。同时，AssetReachability 重新走一遍——重试时的 asset 必须仍 Reachable；不可达则前置拒绝。
+Retry 操作需要 `my_permission(user, workflow) ≥ viewer`（与 SubmitJob 一致）。可达性不重新校验（bundle 自包含；caller 组装 bundle 时已校验，retry 用原 bundle 或 input_override）。
 
 ### 产物覆盖语义
 

@@ -7,6 +7,13 @@
 
 ## 修改记录
 
+### 2026-07-21 · 跨域可达性 RPC 上提 + 数据模型修正
+- 把 `AssetReachability` / `ResolveAssetByKind` / `AssetRead` 从本 domain 能力清单移除，上提到 [reachability workflow](../../workflow/0001-reachability/reachability.md)（见 [ADR 0006](../../../adr/0006-reachability-layering.md)）。理由：可达性跨 asset / virtual_ip / product 三 domain，留在 asset domain 违反同层 domain 隔离。
+- `material_bindings` 补 `bindings_end_at` 列：owner（vip/product）软删时置 `now()` 使绑定失效但保留可查，替代"级联删除"，与 virtual_ip / product domain 的软删规则统一（原 virtual_ip.md 提到该列但本表未声明，本次补齐）。
+- 明确 `UpsertGeneratedAsset` 与 retry 的 name 语义：name 是业务维度稳定标识，retry 默认经 upsert 覆盖同一业务产物行，旧 attempt url 入 execution.retry_history；不自动加 attempt 后缀。
+- `dependencies` 去掉 `scope`（已降为 shared）与 `docs/research/permission.md`（非 domain）；`related_workflow` 补 reachability + media_workflow.validation/execution。
+- 关联术语补 Asset / Resource Type / Media Type（CONTEXT 已新增）。
+
 ### 2026-07-03 · Review 反馈：拆 materials + generated_assets 两张表
 - 撤回此前"统一 assets 表"的有意简化——用户纠正：generated_asset 必须记录"怎么生成的"（job / template / inputs），material 是 curated 原料无此需求，两者字段与生命周期不同，**不能混在一张表**。
 - 拆为 `materials`（resource_type=MATERIAL）+ `generated_assets`（resource_type=ASSET）两张表。

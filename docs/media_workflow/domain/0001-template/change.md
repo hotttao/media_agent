@@ -9,6 +9,12 @@
 
 ## 修改记录
 
+### 2026-07-21 · 补 Publish 能力 + archive 边界 + 依赖修正
+- 新增 `PublishTemplate`（`POST /api/v1/templates/{id}/publish`，draft -> published，owner），补全状态机 `draft ↔ published -> archived` 中 published 的产生路径（原状态机有 published 态但无操作可达）。
+- 校验细则第 7 条补 `PublishTemplate` / `ArchiveTemplate` 在状态流转中的角色；新增第 9 条 archive 边界：archive 被运行中 Job 引用的 template 不中断 Job（Job 持 `template_version` 快照），新 workflow 拒绝引用（workflow_validation 闸2），offline scan 待后续。
+- `dependencies` 去掉 `scope`（已降为 shared），补 `media_materials.asset_kind`（跨服务 `BatchGetAssetKind` 校验 slot.kind）。
+- 关联术语 `Resource Type` 链接修正：原指向 media_workflow CONTEXT（无此词条，断链），改为 media_materials CONTEXT。
+
 ### 2026-07-03 · 第二轮反馈：允许 const 满足 required input
 - 影响：Render 接口的 ResolvedSlot 增加 `SlotSource = asset|const` 字段。`asset` 由 `media_workflow.workflow_execution` 解析 binding 后通过 `AssetRead` 填充；`const` 由 step binding.const_value 直接填入。
 - 渲染规则：source 分两路，prompt_body 中 `{name}` 都能被替换；`{name.key}` 在 source=const 时不支持。

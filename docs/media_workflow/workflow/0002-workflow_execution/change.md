@@ -1,0 +1,19 @@
+# workflow_execution 变更记录
+
+## 2026-07-21 · 改为外部 worker pull 模型 + 补全执行协议
+
+- 触发点从"内部 worker 拉起"改为**外部 worker pull**：下游平台 worker 主动调 `ClaimStepRun` 拉取 step_run，调 `CompleteStepRun` / `FailStepRun` 回写。解耦调度与执行，避免服务内嵌执行器（对齐当前实现）。
+- 补全执行协议各阶段：SubmitJob、ClaimStepRun（`FOR UPDATE SKIP LOCKED` 原子领取）、CompleteStepRun、finalizeStepRun、FailStepRun、ConfirmStepRun、RegenerateStepRun、RetryStepRun、GetStepRun、超时回收 scanner、advanceDAG、checkJobCompletion。
+- 补 `RetryStepRun` / `GetStepRun`（原 [execution](../../domain/0003-execution/execution.md) 能力清单已声明但 proto / 本 workflow 未暴露，本次补全到设计与实现）。
+- 厘清 `RegenerateStepRun` vs `RetryStepRun` 边界：前者 need_confirm -> pending 重新生成候选，后者 failed/skipped -> pending 重跑单步 + 下游。
+- 厘清 `RetryStepRun` vs `RetryJob` 边界：前者单步 + 下游，后者整 Job。
+- `FailStepRun` 语义修正：让在跑的前驱 step 跑完（不中断已 claimed 前驱），仅后续 cascade skipped（原实现立即 Job failed，本次对齐文档语义）。
+- 跨服务 RPC 统一指向 `media_materials.reachability`（AssetReachability / Check* / ResolveAssetByKind / AssetRead / UpsertGeneratedAsset），见 [ADR 0006](../../../adr/0006-reachability-layering.md)。
+
+## 2026-07-21 · 调用方对齐 bundle 模式
+
+- 渲染改为用 caller 组装的 bundle（含 url/content），**不调** `ResolveAssetByKind` / `AssetRead`。
+- 跨服务 RPC 列表只剩 `BatchGetAssetKind`（校验期）+ `UpsertGeneratedAsset`（产出期）；删除 AssetReachability / Check* / ResolveAssetByKind / AssetRead（这些归 caller 调 reachability workflow，见 [media_materials reachability](../../../media_materials/workflow/0001-reachability/reachability.md)）。
+- §3 解析改为从 bundle 取 slot 值（caller 组装 bundle 时已调 reachability 解析 product/vip 输入 + 拿 url/content）。
+- `RetryStepRun` 的 `input_override` 覆盖 bundle 部分值；可达性由 caller 在 retry 时重新校验或信任原 bundle。
+- 与上一条的关系：上一条假设 execution 调 reachability，本次按现有 spec/实现的 bundle 决策校正（media_workflow 不调 reachability）。

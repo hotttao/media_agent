@@ -13,6 +13,8 @@
 - **id 风格**：text（uuid/nanoid，service 生成）。
 - **scope**：material / generated_asset / product / virtual_ip 持 scope；asset_kind **全局**无 scope。
 - **visibility**：material / generated_asset / virtual_ip = private/team/public（+ grants）；product 无 user 概念，无 visibility。
+- **scope 校验**：降为 `biz/shared/scope` 值对象（SupportedScopes 常量 + IsKnownScope/IsSameScope 纯函数），由 service 层调用；不独立成 domain。
+- **reachability workflow**：`biz/workflow/reachability` + `biz/policy/reachability`，对 caller（BFF）暴露可达性 RPC，供 caller 组装 JobInput bundle（见 §2.6、§6.2）。media_workflow 不调（bundle 模式）。
 
 ## 2. IDL
 
@@ -287,6 +289,43 @@ service VirtualIpService {
 }
 ```
 
+### 2.6 reachability.proto
+
+```protobuf
+syntax = "proto3";
+package media_materials.reachability;
+import "api.proto";
+
+message AssetRef { string resource_type = 1; string id = 2; }
+message AssetReachabilityReq { string user_id = 1; string workflow_scope = 2; repeated AssetRef refs = 3; }
+message BlockedRef { AssetRef ref = 1; string reason = 2; }   // SCOPE_MISMATCH/NOT_VISIBLE/CONTAINER_UNREACHABLE/NOT_FOUND
+message AssetReachabilityResp { map<string,bool> reachable = 1; repeated BlockedRef blocked = 2; }
+
+message CheckProductAccessibleReq { string workflow_scope = 1; string product_id = 2; }
+message CheckVirtualIPAccessibleReq { string user_id = 1; string workflow_scope = 2; string virtual_ip_id = 3; }
+message AccessibleResp { bool accessible = 1; string reason = 2; }
+
+message ResolveVirtualIpForReachabilityReq { string user_id = 1; repeated string virtual_ip_ids = 2; }
+message ResolveVirtualIpForReachabilityResp { repeated string visible_ids = 1; }
+
+message ResolveAssetByKindReq { string owner_kind = 1; string owner_id = 2; string asset_kind = 3; }
+message ResolveAssetByKindResp { string resource_type = 1; string asset_id = 2; }
+
+message AssetReadReq { string resource_type = 1; string id = 2; }
+message AssetReadResp { string url = 1; string content = 2; string metadata = 3; }
+
+service ReachabilityService {
+  rpc AssetReachability(AssetReachabilityReq) returns (AssetReachabilityResp) {}
+  rpc CheckProductAccessible(CheckProductAccessibleReq) returns (AccessibleResp) {}
+  rpc CheckVirtualIPAccessible(CheckVirtualIPAccessibleReq) returns (AccessibleResp) {}
+  rpc ResolveVirtualIpForReachability(ResolveVirtualIpForReachabilityReq) returns (ResolveVirtualIpForReachabilityResp) {}
+  rpc ResolveAssetByKind(ResolveAssetByKindReq) returns (ResolveAssetByKindResp) {}
+  rpc AssetRead(AssetReadReq) returns (AssetReadResp) {}
+}
+```
+
+> reachability RPC 供 caller（BFF）组装 JobInput bundle 时调用；media_workflow 不调（bundle 模式）。归 `biz/workflow/reachability` + `biz/policy/reachability`（[ADR 0006](../../adr/0006-reachability-layering.md)）。
+
 ## 3. 数据库
 
 ```sql
@@ -360,9 +399,11 @@ CREATE TABLE material_bindings (
   owner_id text NOT NULL,
   bound_by text NOT NULL,
   bound_at timestamptz NOT NULL DEFAULT now(),
+  bindings_end_at timestamptz,                    -- owner 软删时置 now()，绑定失效但保留可查；NULL=生效中
   PRIMARY KEY (material_id, owner_kind, owner_id)
 );
 CREATE INDEX idx_material_bindings_owner ON material_bindings (owner_kind, owner_id);
+CREATE INDEX idx_material_bindings_active ON material_bindings (owner_kind, owner_id) WHERE bindings_end_at IS NULL;
 
 CREATE TABLE products (
   id text PRIMARY KEY,
@@ -430,6 +471,17 @@ INSERT 前 service 比较 `material.scope == owner.scope`（owner = virtual_ip /
 - 生成记录字段（job_id / step_run_id / template_id / template_version / source_*_id）由 workflow 填入，不可改。
 - scope = workflow.scope；owner_user_id = job.submitted_by；visibility 默认 private。
 
+### 4.5 reachability workflow（供 caller 组装 bundle）
+caller（BFF）在 SubmitJob 前调 reachability workflow 校验可达性 + 组装 bundle：
+- `AssetReachability`：批量校验 material/generated_asset 在 (userID, workflowScope) 下可引用（scope ∧ visibility ∧ 容器可达）。
+- `CheckProductAccessible` / `CheckVirtualIPAccessible`：校验 product/vip 输入。
+- `ResolveAssetByKind`：按 slot.kind 解析 product/vip 输入为具体 material/generated_asset。
+- `AssetRead`：拿 url/content 填入 bundle。
+归 `biz/workflow/reachability`（编排 asset/vip/product 只读）+ `biz/policy/reachability`（纯决策）。media_workflow 不调。
+
+### 4.6 asset_kind TEXT 限制
+`resource_type=TEXT` 的 kind 仅用于 step_binding 的 `const` 源（字面常量，无表）；不可作为 Template 的 `output_asset_kind`（须 resource_type=ASSET），亦不可作为 material/generated_asset 的 asset_kind。
+
 ## 5. 配置
 
 ```yaml
@@ -438,7 +490,9 @@ supported_scopes: [ai_clothing, ai_guoxue]
 ```
 > asset_kind 注册表通过 seed 迁移初始化 SYSTEM kinds（scene/pose/movement/model_image/style_image/first_frame/ai_video/product_image/...）；ENABLED kinds 由 admin 通过 RegisterAssetKind 增。
 
-## 6. 与 media_workflow 的契约
+## 6. 跨服务契约
+
+### 6.1 与 media_workflow（bundle 模式：仅校验期 + 产出期）
 
 | RPC | 调用方 | 时机 | 用途 |
 |:---|:---|:---|:---|
@@ -459,6 +513,19 @@ caller（编排层 / BFF）用本服务的 CRUD + ListByOwner/ListBySource 组�
 | `VirtualIpData.*` | `virtual_ip.*`（avatar_url / full_body_url / ...） |
 
 > `materials.name` / `generated_assets.name` 是业务名（管理 UI 用），**不进 bundle**；bundle 的 `name` 恒等于 `asset_kind`（类型），是 slot 的选择键。
+
+### 6.2 与 caller（BFF / 编排层）
+
+caller 在 SubmitJob 前调 reachability workflow（§2.6）校验可达性 + 组装 JobInput bundle：
+
+| RPC | 用途 |
+|:---|:---|
+| `AssetReachability` | 校验 material/generated_asset 可达性 |
+| `CheckProductAccessible` / `CheckVirtualIPAccessible` | 校验 product/vip 输入 |
+| `ResolveAssetByKind` | 解析 product/vip 输入为具体 asset |
+| `AssetRead` | 拿 url/content 填入 bundle |
+
+caller 也可直接用 CRUD + ListByOwner/ListBySource 组装 bundle（reachability 为可选集中校验）。
 
 ## 7. 未定义的 boilerplate message
 

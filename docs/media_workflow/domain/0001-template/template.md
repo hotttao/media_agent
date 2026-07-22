@@ -2,7 +2,7 @@
 name: template
 description: Template（提示词模板）的存储、版本与渲染入口
 dependencies:
-    - scope: 来自 media_auth 跨域术语
+    - media_materials.asset_kind
 related_workflow:
     - workflow_validation
     - workflow_execution
@@ -39,6 +39,7 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 | GetTemplateVersion | 取指定 (id, version) 快照；viewer+ | `GET /api/v1/templates/{id}/versions/{version}` |
 | ListTemplates | 按 scope/asset_kind/name/visibility 过滤分页；返回 viewer+ 的集合 | `GET /api/v1/templates?scope=&asset_kind=&name=&visibility=` |
 | ArchiveTemplate | 改为 archived；editor+ | `POST /api/v1/templates/{id}/archive` |
+| PublishTemplate | draft -> published；owner | `POST /api/v1/templates/{id}/publish` |
 | Render | 接收 slot_values，输出渲染后 prompt 与 output_asset_kind；viewer+ | `POST /api/v1/templates/{id}/render` |
 | ParseSlotSpec | 仅解析 prompt_body 占位符并产出一个 draft inputs[]；无需权限 | `POST /api/v1/templates/parse` |
 | GrantTemplate | 写一条 template_grants；owner | `POST /api/v1/templates/{id}/grants` |
@@ -179,8 +180,9 @@ const (
 4. 每个 input slot 的 `Kind` 必填，且必须指向 `asset_kinds` 注册表中已注册、status∈{SYSTEM, ENABLED} 的 kind（调 `media_materials.BatchGetAssetKind` 校验）。
 5. `OutputAssetKind` 必填，且所引 asset_kind 的 `resource_type=ASSET`（产物落 generated_assets 表）；其 `media_type` 即产出的媒体形态。
 6. `Platform` / `GenWay` 必填；`GenType` 可空。
-7. `Status` 流转：`draft ↔ published → archived`；不允许 archived 恢复到 draft 或 published。
+7. `Status` 流转：`draft ↔ published`（`PublishTemplate` / 回退）`-> archived`（`ArchiveTemplate`，终态不可逆）；不允许 archived 恢复到 draft 或 published。
 8. update 时不允许直接改 `Scope`；改 `Scope` 必须新建 Template（避免版本历史跨 scope）。
+9. Archive 边界：archive 一个被运行中 Job 引用的 template 不会中断 Job（Job 持 `template_version` 不可变快照）；但新 workflow 不再能引用 archived template（workflow_validation 闸2 拒绝 `TEMPLATE_ARCHIVED`）。对已活跃 binding 的 offline scan 见 [workflow_validation](../../workflow/0001-workflow_validation/workflow_validation.md) §2（本期未实现）。
 
 ### Render 接口
 
@@ -233,4 +235,4 @@ Template 域**不直接访问** Asset/material；仅引用 asset_kind name。校
 - [workflow_execution](../../workflow/0002-workflow_execution/workflow_execution.md) — 渲染环节
 
 ### 关联术语
-[Scope](../../CONTEXT.md)、[Template Slot](../../CONTEXT.md)、[Template Version](../../CONTEXT.md)、[Asset Kind](../../media_materials/CONTEXT.md)、[Resource Type](../../CONTEXT.md)。
+[Scope](../../CONTEXT.md)、[Template Slot](../../CONTEXT.md)、[Template Version](../../CONTEXT.md)、[Asset Kind](../../media_materials/CONTEXT.md)、[Resource Type](../../../media_materials/CONTEXT.md)。

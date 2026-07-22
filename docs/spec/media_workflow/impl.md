@@ -103,6 +103,7 @@ service TemplateService {
   rpc GetTemplateVersion(GetTemplateVersionReq) returns (Template) { option (api.get) = "/api/v1/templates/:id/versions/:version"; }
   rpc ListTemplates(ListTemplatesReq) returns (ListTemplatesResp) { option (api.get) = "/api/v1/templates"; }
   rpc ArchiveTemplate(GetTemplateReq) returns (Template) { option (api.post) = "/api/v1/templates/:id/archive"; }
+  rpc PublishTemplate(GetTemplateReq) returns (Template) { option (api.post) = "/api/v1/templates/:id/publish"; }
   rpc GrantTemplate(GrantReq) returns (Template) { option (api.post) = "/api/v1/templates/:id/grants"; }
   rpc RevokeTemplate(RevokeReq) returns (Template) { option (api.delete) = "/api/v1/templates/:id/grants/:team_id"; }
   rpc ChangeVisibility(ChangeVisibilityReq) returns (Template) { option (api.post) = "/api/v1/templates/:id/visibility"; }
@@ -209,6 +210,7 @@ service WorkflowService {
   rpc GetWorkflow(GetByIdReq) returns (Workflow) { option (api.get) = "/api/v1/workflows/:id"; }
   rpc ListWorkflows(ListWorkflowsReq) returns (ListWorkflowsResp) { option (api.get) = "/api/v1/workflows"; }
   rpc ArchiveWorkflow(GetByIdReq) returns (Workflow) { option (api.post) = "/api/v1/workflows/:id/archive"; }
+  rpc PublishWorkflow(GetByIdReq) returns (Workflow) { option (api.post) = "/api/v1/workflows/:id/publish"; }
   rpc ValidateWorkflow(ValidateWorkflowReq) returns (ValidationResult) { option (api.post) = "/api/v1/workflows/validate"; }
   rpc GrantWorkflow(GrantReq) returns (Workflow) { option (api.post) = "/api/v1/workflows/:id/grants"; }
   rpc RevokeWorkflow(RevokeReq) returns (Workflow) { option (api.delete) = "/api/v1/workflows/:id/grants/:team_id"; }
@@ -343,6 +345,8 @@ message RegenerateStepRunReq { string step_run_id = 1 [(api.path)="step_run_id"]
 
 // —— retry ——
 message RetryJobReq { string id = 1 [(api.path)="id"]; string reason = 2 [(api.body)="reason"]; JobInput input_override = 3 [(api.body)="input_override"]; }
+message RetryStepRunReq { string step_run_id = 1 [(api.path)="step_run_id"]; string reason = 2 [(api.body)="reason"]; JobInput input_override = 3 [(api.body)="input_override"]; }
+message GetStepRunReq { string step_run_id = 1 [(api.path)="step_run_id"]; }
 
 // —— SSE 事件 ——
 enum EventType {
@@ -368,6 +372,8 @@ service JobService {
   rpc RetryJob(RetryJobReq) returns (Job) { option (api.post) = "/api/v1/jobs/:id/retry"; }
   rpc ConfirmStepRun(ConfirmStepRunReq) returns (StepRun) { option (api.post) = "/api/v1/step-runs/:step_run_id/confirm"; }
   rpc RegenerateStepRun(RegenerateStepRunReq) returns (StepRun) { option (api.post) = "/api/v1/step-runs/:step_run_id/regenerate"; }
+  rpc RetryStepRun(RetryStepRunReq) returns (StepRun) { option (api.post) = "/api/v1/step-runs/:step_run_id/retry"; }
+  rpc GetStepRun(GetStepRunReq) returns (StepRun) { option (api.get) = "/api/v1/step-runs/:step_run_id"; }
   // worker
   rpc ClaimStepRun(ClaimStepRunReq) returns (ClaimStepRunResp) { option (api.post) = "/api/v1/step-runs/claim"; }
   rpc CompleteStepRun(CompleteStepRunReq) returns (StepRun) { option (api.post) = "/api/v1/step-runs/:step_run_id/complete"; }
@@ -622,6 +628,12 @@ sink StepRun SUCCEEDED → Job SUCCEEDED → SSE: ET_JOB_STATUS(succeeded)
 
 ### 4.4 Retry
 仅 `Job.status=failed` 可 RetryJob；上限 MaxRetries（默认 3）。succeeded StepRun 保留；failed/skipped/need_confirm 重置（failed→pending, need_confirm→pending 重拉，skipped→blocked 重新评估）；retry_count+1，retry_history 追加。`input_override` 可覆盖 bundle 部分值。
+
+### 4.5 单步能力 + Publish
+
+- `RetryStepRun`（`POST /api/v1/step-runs/:step_run_id/retry`）：`failed/skipped -> pending` + `retry_count+1`，重跑该 step + 下游；`input_override` 可选覆盖 bundle 部分值。与 `RetryJob` 边界：前者单步+下游，后者整 Job。与 `RegenerateStepRun` 边界：前者 failed/skipped 修复重跑，后者 need_confirm 重新生成候选。详见 [workflow_execution](../../docs/media_workflow/workflow/0002-workflow_execution/workflow_execution.md) §8。
+- `GetStepRun`（`GET /api/v1/step-runs/:step_run_id`）：只读返回单条 step_run 状态 + resolved_inputs + rendered_prompt + output_asset_id + failure_reason。
+- `PublishTemplate` / `PublishWorkflow`（`POST /:id/publish`）：`draft -> published`，owner；补全状态机 `draft ↔ published -> archived` 中 published 的产生路径。
 
 ## 5. 配置
 

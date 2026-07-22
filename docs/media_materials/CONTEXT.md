@@ -19,9 +19,21 @@ _禁用替代词_：raw asset、input asset。
 workflow 执行产出的资源（model_image/style_image/first_frame/ai_video 等），落 `generated_assets` 表（asset_kind.resource_type=ASSET）；持生成记录（job_id / step_run_id / template_id / template_version / source_virtual_ip_id / source_product_id）；可见性同 Material 三档。由 `media_workflow.workflow_execution` upsert，不开放前端直接创建。
 _禁用替代词_：output asset、result、generation（generation 留给 generation_record 语义）。
 
+**Asset（资源）**:
+Material 与 Generated Asset 的统称，作为跨域引用与可达性校验的对象。两类分落 `materials` / `generated_assets` 表，由所属 Asset Kind 的 `resource_type` 区分；跨服务引用统一用 `(resource_type, id)` 二元组定位，**不直读对方库**。归 [asset](domain/0002-asset/asset.md) domain。
+_禁用替代词_：resource（留给 Resource Type）、item、entity。
+
 **Asset Kind（素材类别）**:
 全平台资源类别的注册实体（`asset_kinds` 表），全局注册、**不绑 scope**。每条声明 `name` / `resource_type ∈ {MATERIAL, ASSET, PRODUCT, VIRTUAL_IP, TEXT}` / `media_type ∈ {IMAGE, TEXT, VIDEO}` / `source_table` / `status`。Template 的 input slot `kind` 与 output `asset_kind` 引用此处的 `name`。归 [asset_kind](domain/0005-asset_kind/asset_kind.md) domain。
 _禁用替代词_：category、type（type 留给 service 内部枚举）。
+
+**Resource Type（资源类别 / 落表）**:
+Asset Kind 的属性，标识物理资源落哪张表，枚举 `{MATERIAL, ASSET, PRODUCT, VIRTUAL_IP, TEXT}`：`MATERIAL→materials`、`ASSET→generated_assets`、`PRODUCT→products`、`VIRTUAL_IP→virtual_ips`、`TEXT→无表（inline 常量）`。与 media_workflow 的 Workflow Input Type 区分：后者是 workflow 入口传哪种 id 的**载体类型**（material/asset/product/virtual_ip），本属性是 asset_kind 自身的**物理落表类别**；product/virtual_ip 输入经 ResolveAssetByKind 解析后落点仍由所绑 slot 的 Resource Type 决定。
+_禁用替代词_：kind（留给 asset_kind）、table_type、entity_type。
+
+**Media Type（媒体形态）**:
+Asset Kind 的属性，枚举 `{IMAGE, TEXT, VIDEO}`，决定 Template 渲染与下游生成器分发。注意与 Resource Type 的 `TEXT`（无表 inline 常量）**正交**：`media_type=TEXT` 指内容形态是文本，`resource_type=TEXT` 指该 kind 不落表；两者枚举值同名但语义无关。一个 asset 的 media_type 由其 asset_kind.media_type 推导，不另存。
+_禁用替代词_：format、content_type、mime。
 
 **Asset Binding（素材绑定）**:
 material ↔ virtual_ip / material ↔ product 的关联关系（N:N），落 `material_bindings` 表；两端必须同 scope。generated_asset 不走此表——它的"容器"是生成记录里的 `source_virtual_ip_id` / `source_product_id`。归 [asset](domain/0002-asset/asset.md) domain。

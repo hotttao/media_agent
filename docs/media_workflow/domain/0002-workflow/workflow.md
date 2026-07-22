@@ -3,7 +3,6 @@ name: workflow
 description: Workflow（DAG 结构）存储与 step binding 校验
 dependencies:
     - template
-    - scope: media_auth 跨域术语
 related_workflow:
     - workflow_validation
     - workflow_execution
@@ -42,6 +41,7 @@ Workflow 域负责存储「一组有序 Step 通过 StepBinding 串联而成的 
 | ListWorkflows | 按 scope/name/status/visibility 过滤分页；返回 viewer+ | `GET /api/v1/workflows?scope=&name=&status=&visibility=` |
 | ValidateWorkflow | 不保存，仅校验，返回 roots + edges + 错误；需 viewer+（或由 editor+ 触发） | `POST /api/v1/workflows/validate` |
 | ArchiveWorkflow | 改为 archived；editor+ | `POST /api/v1/workflows/{id}/archive` |
+| PublishWorkflow | draft -> published；owner | `POST /api/v1/workflows/{id}/publish` |
 | GrantWorkflow | 写一条 workflow_grants；owner | `POST /api/v1/workflows/{id}/grants` |
 | RevokeWorkflow | 删一条 workflow_grants；owner | `DELETE /api/v1/workflows/{id}/grants/{team_id}` |
 | ChangeVisibility | 改 visibility；owner | `POST /api/v1/workflows/{id}/visibility` |
@@ -251,6 +251,7 @@ const (
 4. **Required 必填**：所有 `template.inputs[i].required=true` 在该 step 的 Bindings 里至少出现一条，且 `ConstValue` 非 nil（`source=const` 也算满足 required，等同于"调用方在 step 上常量化一个固定值"）。
 5. Template 引用：`Template` 必须存在同 scope，未被 archived，且 step 引用的 `TemplateVersion` 仍存在。
 6. **scope 匹配**：所有 binding 解析出的 material / asset / product / virtual_ip 必须与 workflow 同 scope——由 `workflow_validation` 跨 service 校验（material / asset 走 AssetReachability；product / virtual_ip 输入走各自的可达性规则）。
+7. `Status` 流转：`draft ↔ published`（`PublishWorkflow` / 回退）`-> archived`（`ArchiveWorkflow`，终态不可逆）；不允许 archived 恢复。
 
 ### Validate（不保存）
 

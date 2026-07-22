@@ -13,6 +13,14 @@
 - product 仍**不能**作为 step_binding 的直接 source——step_binding source 仍是 `workflow_input / step_output / const`。
 - product 元数据不直接进 prompt（slot 只接 asset）。
 
+## 修改记录
+
+### 2026-07-21 · 跨域 RPC 上提 + 绑定端点收口
+- `CheckProductAccessible` 从本 domain 能力清单移除，上提到 [reachability workflow](../../workflow/0001-reachability/reachability.md)（见 [ADR 0006](../../../adr/0006-reachability-layering.md)）。
+- 移除 `AddAssetBinding` / `RemoveAssetBinding` 端点：product↔material 绑定收口到 [asset](../0002-asset/asset.md) domain 的 `AddMaterialBinding`（`owner_kind=product`），消除原"AddAssetBinding vs AddMaterialBinding"双头归属与命名漂移（asset binding / material binding）。
+- `dependencies` 去掉 `scope`（已降为 shared）；`related_workflow` 补 reachability + media_workflow.validation/execution。
+- 校验细则 5 补 `bindings_end_at` 置位（对齐 asset domain 声明）。
+
 ## 来自业务规则的强约束
 1. product 无 user 归属；CRUD 不做 user 级权限校验（任意已认证 user 可操作，与"创建不限 scope"立场一致）。
 2. product 绑定 asset 强制同 scope。

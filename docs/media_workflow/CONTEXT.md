@@ -46,6 +46,10 @@ _禁用替代词_：flow、pipeline、dag。
 Workflow 顶部声明的外部输入 entry，每条形如 `(name, type, required)`，`type ∈ {material, asset, product, virtual_ip}`——运行时由调用方在 SubmitJob 时提供对应 id（material_id / generated_asset_id / product_id / virtual_ip_id），被 Step 的 `workflow_input` 引用。product / virtual_ip 输入在执行时按所绑 template slot 的 `kind` 解析为具体 material/generated_asset。归 `workflow` domain。
 _禁用替代词_：argument、variable、param。
 
+**Workflow Input Type（工作流入口参数类型）**:
+Workflow Input 的 `type` 字段，枚举 `{material, asset, product, virtual_ip}`，决定调用方在 SubmitJob 时传哪种 id。与 media_materials 的 [Resource Type](../media_materials/CONTEXT.md) 区分：本类型是**入口载体类型**（传哪种 id），Resource Type 是 asset_kind 的**物理落表类别**（落哪张表）；二者仅 material/asset 两档同名且 1:1 对应，product/virtual_ip 输入经 ResolveAssetByKind 解析后，落点由所绑 slot.kind 的 Resource Type 决定。
+_禁用替代词_：input_kind、carrier、source_type。
+
 **Step（步骤）**:
 Workflow 中一个节点，引用一个 Template；通过 StepBinding 声明 inputs 来源。归 `workflow` domain。
 

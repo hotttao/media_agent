@@ -1,11 +1,12 @@
 ---
 name: asset
-description: material（curated 原料）+ generated_asset（workflow 产物）两张表 + 跨域 AssetReachability
+description: material（curated 原料）+ generated_asset（workflow 产物）两类物理资源的存储与 CRUD
 dependencies:
-    - scope
     - asset_kind
-    - docs/research/permission.md
-related_workflow: []
+related_workflow:
+    - reachability
+    - media_workflow.workflow_validation
+    - media_workflow.workflow_execution
 ---
 
 ## 一句话职责
@@ -13,88 +14,89 @@ asset domain 管理**两类物理资源**，分落两张表：
 - **material**（`materials` 表，resource_type=MATERIAL）：curated 原料（scene/pose/makeup/movement/music/caption），用户上传/策展，**无生成记录**。
 - **generated_asset**（`generated_assets` 表，resource_type=ASSET）：workflow 执行产物（model_image/style_image/first_frame/ai_video），**持生成记录**（job_id / step_run_id / template_id / template_version）。
 
-两者都引用 [asset_kind](../0005-asset_kind/asset_kind.md) 注册表（`asset_kind` 字段 → `asset_kinds.name`）；都持 scope / owner / visibility / team_id；可见性沿用 [资源级 ACL](../../media_auth/CONTEXT.md#资源级-acl-所有媒体资源通用) 的 `private/team/public` 三档（无 grants 表）。暴露 `AssetReachability` 给 `media_workflow`。
+两者都引用 [asset_kind](../0005-asset_kind/asset_kind.md) 注册表（`asset_kind` 字段 -> `asset_kinds.name`）；都持 scope / owner / visibility / team_id；可见性沿用 [资源级 ACL](../../media_auth/CONTEXT.md#资源级-acl-所有媒体资源通用) 的 `private/team/public` 三档（无 grants 表）。
+
+跨域可达性校验（`AssetReachability` / `ResolveAssetByKind` / `AssetRead` 等）**不在本 domain**--归 [reachability workflow](../../workflow/0001-reachability/reachability.md) 编排 + policy 决策（见 [ADR 0006](../../../adr/0006-reachability-layering.md)）。
 
 ### 不做什么
 - 不存素材二进制（用 `url` 引用，文件由 storage 子系统提供）。
 - 不执行 workflow / job / render（归 `media_workflow`）。
-- 不把 material 与 generated_asset 混在一张表——generated_asset 必须记录"怎么生成的"，material 不需要，字段与生命周期不同。
+- 不把 material 与 generated_asset 混在一张表--generated_asset 必须记录"怎么生成的"，material 不需要，字段与生命周期不同。
+- 不做跨域可达性决策（归 [reachability workflow](../../workflow/0001-reachability/reachability.md)）；本 domain 仅暴露只读查询能力供其编排。
 
 ## 边界
 
 ### 做什么
 - material 增删改查 + `material_bindings`（material ↔ virtual_ip / material ↔ product，N:N）。
-- generated_asset 增（由 workflow_execution upsert）/ 查 / 软删；持生成记录链接。
-- 提供 `AssetReachability(userID, workflowScope, refs)` 给 `media_workflow.workflow_validation`——`refs` 是 `(resource_type, id)` 列表，按 resource_type 分派到 materials / generated_assets / products / virtual_ips 表。
-- 提供 `ResolveAssetByKind(owner_kind, owner_id, asset_kind)` —— 按 asset_kind.resource_type 分发到 materials 或 generated_assets 表，取唯一 asset。
-- 提供 `AssetRead(resource_type, id) → (url, metadata)` 给 `media_workflow.workflow_execution`。
+- generated_asset 增（由 `media_workflow.workflow_execution` 经 reachability workflow 调 `UpsertGeneratedAsset`）/ 查 / 软删；持生成记录链接。
+- 对 reachability workflow 暴露 material / generated_asset 的**只读查询**（scope / visibility / owner / team / bindings / source_*_id）。
 
 ### 不做什么
 - 不做 user 级创建授权（创建不限 scope，见 [Scope](../../media_auth/CONTEXT.md#scope业务范围)）。
 - 不管理 publication_plan。
+- 不暴露跨服务可达性 RPC（归 reachability workflow）。
 
 ## 能力清单
 
 | 能力 | 说明 | 对外接口 |
 |:---|:---|:---|
-| UpsertMaterial | 新建/更新 material；asset_kind.resource_type 必须=MATERIAL | `POST /api/v1/materials` `PUT /api/v1/materials/{id}` |
+| UpsertMaterial | 新建/更新 material；asset_kind.resource_type 必须=MATERIAL | `POST /api/v1/materials`、`PUT /api/v1/materials/{id}` |
 | ListMaterials | 按 scope/asset_kind/owner/visibility 过滤 | `GET /api/v1/materials?scope=&asset_kind=&owner=&visibility=` |
 | SoftDeleteMaterial | 软删 | `DELETE /api/v1/materials/{id}` |
 | AddMaterialBinding | material ↔ vip / material ↔ product；两端同 scope | `POST /api/v1/materials/{id}/bindings` |
+| RemoveMaterialBinding | 解绑 | `DELETE /api/v1/materials/{id}/bindings/{owner_kind}/{owner_id}` |
 | GetGeneratedAsset | 按 id 取（含生成记录链接） | `GET /api/v1/generated-assets/{id}` |
 | ListGeneratedAssets | 按 scope/asset_kind/owner/job_id 过滤 | `GET /api/v1/generated-assets?scope=&asset_kind=&job_id=` |
 | SoftDeleteGeneratedAsset | 软删 | `DELETE /api/v1/generated-assets/{id}` |
-| AssetReachability | 跨域 RPC：复合校验 scope ∧ visibility ∧ 容器可达 | `AssetReachability` |
-| ResolveAssetByKind | 跨域 RPC：按 (owner_kind, owner_id, asset_kind) 取唯一 asset | `ResolveAssetByKind` |
-| AssetRead | 跨域 RPC：按 (resource_type, id) 拿 url + metadata | `AssetRead` |
+| UpsertGeneratedAsset | 由 workflow_execution 经 reachability 调用，落 step 产物；带生成记录字段 | `UpsertGeneratedAsset`（跨服务 RPC） |
 
-> generated_asset 的创建由 `media_workflow.workflow_execution` 在 step 产出时调 `UpsertGeneratedAsset` RPC 完成，不暴露 HTTP 给前端直接创建。
+> 跨服务可达性 RPC（`AssetReachability` / `ResolveAssetByKind` / `AssetRead` / `Check*Accessible`）归 [reachability workflow](../../workflow/0001-reachability/reachability.md)，不在本 domain 能力清单。`generated_asset` 不暴露 HTTP 给前端直接创建，仅由 `media_workflow.workflow_execution` 经 reachability workflow upsert。
 
 ## 数据模型
 
-### Tables — `materials`
+### Tables - `materials`
 
 | 字段 | 描述 | 类型 | 备注 |
 |:---|:---|:---|:---|
-| id | 主键 | bigserial | — |
-| scope | 业务范围 | text not null | 1:1；校验 `IsKnownScope` |
+| id | 主键 | bigserial | - |
+| scope | 业务范围 | text not null | 1:1；校验 `IsKnownScope`（service 调 `shared/scope`） |
 | asset_kind | 素材类别 | text not null | 引用 `asset_kinds.name`，且其 resource_type=MATERIAL；校验已注册未停用 |
 | name | 素材名 | text not null | (scope, asset_kind, name) 唯一 |
-| url | 文件位置 | text not null | — |
+| url | 文件位置 | text not null | - |
 | metadata | 渲染 hint | jsonb | default '{}' |
-| owner_user_id | 创建者 | text not null | — |
+| owner_user_id | 创建者 | text not null | - |
 | visibility | 可见性 | text not null | private / team / public；默认 private |
 | team_id | 可见 team | text nullable | 仅 visibility=team 时使用 |
-| created_at / updated_at / deleted_at | 时间戳 | timestamptz | — |
+| created_at / updated_at / deleted_at | 时间戳 | timestamptz | - |
 
 约束：UNIQUE `(scope, asset_kind, name)` WHERE `deleted_at IS NULL`；INDEX `(scope, asset_kind, updated_at desc)`；INDEX `(owner_user_id)`。
 
-### Tables — `generated_assets`
+### Tables - `generated_assets`
 
 | 字段 | 描述 | 类型 | 备注 |
 |:---|:---|:---|:---|
-| id | 主键 | bigserial | — |
+| id | 主键 | bigserial | - |
 | scope | 业务范围 | text not null | 沿用 job.workflow.scope |
 | asset_kind | 产物类别 | text not null | 引用 `asset_kinds.name`，且其 resource_type=ASSET；= 产出该 asset 的 template.output_asset_kind |
-| name | 产物名 | text not null | (scope, asset_kind, name) 唯一 |
-| url | 文件位置 | text not null | — |
+| name | 产物名 | text not null | (scope, asset_kind, name) 唯一；语义见下「UpsertGeneratedAsset 与 retry 的 name 语义」 |
+| url | 文件位置 | text not null | - |
 | metadata | 渲染 hint | jsonb | default '{}' |
 | owner_user_id | 提交者 | text not null | = job.submitted_by |
 | visibility | 可见性 | text not null | 默认 private（产物默认仅提交者可见） |
-| team_id | 可见 team | text nullable | — |
-| job_id | 生成 job | bigint not null | FK → media_workflow.jobs.id |
-| step_run_id | 生成 step | bigint not null | FK → media_workflow.step_runs.id；生成记录详情在 step_run |
-| template_id | 产出模板 | bigint not null | — |
+| team_id | 可见 team | text nullable | - |
+| job_id | 生成 job | bigint not null | FK -> media_workflow.jobs.id |
+| step_run_id | 生成 step | bigint not null | FK -> media_workflow.step_runs.id；生成记录详情在 step_run |
+| template_id | 产出模板 | bigint not null | - |
 | template_version | 产出模板版本 | int not null | 不可变快照 |
 | source_virtual_ip_id | 源虚拟形象 | bigint nullable | job 输入里的 virtual_ip（若有），用于可达性 |
 | source_product_id | 源产品 | bigint nullable | job 输入里的 product（若有） |
-| created_at / updated_at / deleted_at | 时间戳 | timestamptz | — |
+| created_at / updated_at / deleted_at | 时间戳 | timestamptz | - |
 
 约束：UNIQUE `(scope, asset_kind, name)` WHERE `deleted_at IS NULL`；INDEX `(scope, asset_kind, created_at desc)`；INDEX `(job_id)`；INDEX `(source_virtual_ip_id)`；INDEX `(source_product_id)`。
 
 > **生成记录**：`generated_asset` 持 `job_id` + `step_run_id` 反向链接到 execution 域的 StepRun（StepRun 已存 resolved_inputs / rendered_prompt / template_version 等完整生成上下文）。不另建 generation_records 表，避免冗余。
 
-### Tables — `material_bindings`
+### Tables - `material_bindings`
 
 material ↔ virtual_ip / material ↔ product 的 N:N 绑定。
 
@@ -103,74 +105,44 @@ material ↔ virtual_ip / material ↔ product 的 N:N 绑定。
 | material_id | FK materials | bigint not null | 复合 PK 一段 |
 | owner_kind | virtual_ip / product | text not null | 复合 PK 二段 |
 | owner_id | vip_id 或 product_id | bigint not null | 复合 PK 三段 |
-| bound_by | 谁绑定 | text not null | — |
-| bound_at | 时间戳 | timestamptz | — |
+| bound_by | 谁绑定 | text not null | - |
+| bound_at | 绑定时间戳 | timestamptz | - |
+| bindings_end_at | 失效时间戳 | timestamptz nullable | 默认 NULL=生效中；owner（vip/product）软删时置 `now()`，绑定即时失效但保留可查 |
 
-约束：PK `(material_id, owner_kind, owner_id)`；INDEX `(owner_kind, owner_id)`。INSERT 前 service 校验 `IsSameScope(material.scope, owner.scope)`。
+约束：PK `(material_id, owner_kind, owner_id)`；INDEX `(owner_kind, owner_id)`；PARTIAL INDEX `(owner_kind, owner_id) WHERE bindings_end_at IS NULL`（生效绑定查询）。INSERT 前 service 校验 `IsSameScope(material.scope, owner.scope)`。
 
-> generated_asset 不走 material_bindings——它的"容器"是生成记录里的 `source_virtual_ip_id` / `source_product_id`，由 execution 在 upsert 时填入。
+> generated_asset 不走 material_bindings--它的"容器"是生成记录里的 `source_virtual_ip_id` / `source_product_id`，由 execution 在 upsert 时填入。
+> `bindings_end_at` 替代"软删级联删除"：owner 软删时 binding 不删，置失效时间戳；可达性查询过滤 `bindings_end_at IS NULL`，既保留历史追溯又让绑定即时失效（与 [virtual_ip](../0003-virtual_ip/virtual_ip.md) / [product](../0004-product/product.md) 的软删规则统一）。
 
-## AssetReachability 复合规则
+## UpsertGeneratedAsset 与 retry 的 name 语义
 
-对 `(userID, workflowScope, refs)`，其中 `refs = [(resource_type, id), ...]`。按 resource_type 分派：
+generated_asset 唯一键 `(scope, asset_kind, name) WHERE deleted_at IS NULL`。`name` 是**业务维度稳定标识**（如 `model_image_v1`），不是 attempt 标识。
 
-### material 可达性
-```
-can = (material.scope == workflowScope)
-   ∧ visibility_rule(material, userID)
-   ∧ exists material_binding owner_kind=virtual_ip 且 user 对该 vip 可见（MyPermission ≥ viewer）
-     or exists material_binding owner_kind=product   // product 路径：仅 scope 匹配，无 user 校验
-```
+- **Upsert 语义**：按 `(scope, asset_kind, name)` upsert--存在则更新（覆盖 url / metadata / 生成记录字段），不存在则插入。用于 step 首次产出。
+- **Retry 覆盖语义**：retry 重跑同一 StepRun 时，新 attempt 产物**复用同一 name**，经 upsert 覆盖该 generated_asset 行的 url / metadata / 生成记录字段；旧 attempt 的产物 url 由 execution 写入 `retry_history`（保留可追溯），generated_asset 行本身被覆盖（不新增行、不保留旧 url）。
+- **若需保留旧 attempt 产物为独立 asset**：调用方在 retry 时传新 name（如 `model_image_v1_retry2`），upsert 落新行；name 增量策略由调用方决定，本 domain 不自动加 attempt 后缀。
 
-### generated_asset 可达性
-```
-can = (generated_asset.scope == workflowScope)
-   ∧ visibility_rule(generated_asset, userID)
-   ∧ ( generated_asset.source_virtual_ip_id 对 user 可见
-       or generated_asset.source_product_id 非空 )   // product 路径：仅 scope 匹配
-```
-
-### product / virtual_ip 输入可达性
-- product：`CheckProductAccessible(workflowScope, product_id)` — 仅 scope 匹配。
-- virtual_ip：`CheckVirtualIPAccessible(userID, workflowScope, vip_id)` — scope 匹配 ∧ MyPermission ≥ viewer。
-
-`visibility_rule(asset, user)`：
-```
-asset.visibility == 'public'
-or (asset.visibility == 'team'    and asset.team_id in userTeams(user))
-or (asset.visibility == 'private' and asset.owner_user_id == user)
-```
-
-返回 `ReachabilityResult{ Reachable map, Blocked []{Ref, Reason} }`，Reason ∈ {SCOPE_MISMATCH, NOT_VISIBLE, CONTAINER_UNREACHABLE, NOT_FOUND}。
-
-## ResolveAssetByKind
-
-```go
-// 按 asset_kind.resource_type 分发：
-// - MATERIAL → 查 materials 表
-// - ASSET    → 查 generated_assets 表
-// 取 owner (virtual_ip/product) 下 asset_kind 匹配的唯一 asset。
-// 0 个 → ErrAssetResolveMissing；>1 个 → ErrAssetResolveAmbiguous。
-func ResolveAssetByKind(ctx, ownerKind, ownerID, assetKind string) (assetID int64, err error)
-```
-
-material 走 `material_bindings` 找 owner 下的 material；generated_asset 走 `source_virtual_ip_id` / `source_product_id` 找 owner 下的 generated_asset。
+> 即：name 是业务维度稳定标识，retry 默认覆盖同一业务产物；attempt 维度的历史由 execution 的 `retry_history` 承载，不在 generated_assets 表膨胀行。
 
 ## 校验细则
 
-1. material.asset_kind / generated_asset.asset_kind 必须 ∈ asset_kinds 注册表且 status∈{SYSTEM, ENABLED}；resource_type 与表一致（material→MATERIAL，generated_asset→ASSET）。
-2. 创建后 scope 不可改；asset_kind 不可改。
-3. material_bindings 强制两端同 scope。
+1. material.asset_kind / generated_asset.asset_kind 必须 ∈ asset_kinds 注册表且 status∈{SYSTEM, ENABLED}；resource_type 与表一致（material->MATERIAL，generated_asset->ASSET）。
+2. 创建后 scope 不可改；asset_kind 不可改。scope 校验由 service 层调 `shared/scope.IsKnownScope` 完成（见 [scope](../0001-scope-del/scope.md) 降级说明）。
+3. material_bindings 强制两端同 scope（service 调 `shared/scope.IsSameScope`）。
 4. visibility=team 时 team_id 必填。
 5. generated_asset 的 job_id / step_run_id / template_id / template_version 在 upsert 时由 execution 填入，不可改。
-6. SoftDelete 不级联删 material_bindings（保留历史）；可达性查询忽略已软删记录。
+6. SoftDelete material：不级联删 material_bindings，保留历史；可达性查询忽略已软删 material。
+7. SoftDelete virtual_ip / product（owner 侧）：把其 `material_bindings` 行置 `bindings_end_at = now()`（不删），绑定即时失效；可达性查询过滤 `bindings_end_at IS NULL`。
 
 ## 关联关系
 
-### 被依赖的 domain
-- [`media_workflow.workflow_validation`](../../../media_workflow/workflow/0001-workflow_validation/workflow_validation.md) — AssetReachability / Check*Accessible
-- [`media_workflow.workflow_execution`](../../../media_workflow/workflow/0002-workflow_execution/workflow_execution.md) — ResolveAssetByKind / AssetRead / UpsertGeneratedAsset
-- [`media_workflow.execution`](../../../media_workflow/domain/0003-execution/execution.md) — generated_asset 反向链接 job_id / step_run_id
+### 依赖的 domain
+- [asset_kind](../0005-asset_kind/asset_kind.md) - asset_kind 注册表校验
+
+### 被依赖的 domain / workflow
+- [reachability workflow](../../workflow/0001-reachability/reachability.md) - 提供 material / generated_asset 只读查询供其编排可达性决策
+- [`media_workflow.workflow_execution`](../../../media_workflow/workflow/0002-workflow_execution/workflow_execution.md) - 经 reachability workflow 调 `UpsertGeneratedAsset` 落 step 产物
+- [`media_workflow.execution`](../../../media_workflow/domain/0003-execution/execution.md) - generated_asset 反向链接 job_id / step_run_id
 
 ### 关联术语
-[Material](../../CONTEXT.md)、[Generated Asset](../../CONTEXT.md)、[Asset Kind](../../CONTEXT.md)、[Asset Binding](../../CONTEXT.md)、[Asset Reachability](../../CONTEXT.md)。
+[Material](../../CONTEXT.md)、[Generated Asset](../../CONTEXT.md)、[Asset](../../CONTEXT.md)、[Asset Kind](../../CONTEXT.md)、[Asset Binding](../../CONTEXT.md)、[Resource Type](../../CONTEXT.md)、[Media Type](../../CONTEXT.md)。

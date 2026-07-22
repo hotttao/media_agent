@@ -9,6 +9,18 @@
 
 ## 修改记录
 
+### 2026-07-21 · 执行协议对齐外部 pull 模型 + 补单步能力
+- 行为约束第 2 条由"内部按 step_order 逐个触发"改为"外部 worker pull（ClaimStepRun）+ advanceDAG 推进"，对齐 [workflow_execution](../../workflow/0002-workflow_execution/workflow_execution.md) 与当前实现。
+- 确认 `RetryStepRun` / `GetStepRun` 为正式能力（原已列能力清单但 proto 未暴露，本次补全到 proto + workflow_execution，见 [workflow_execution change.md](../../workflow/0002-workflow_execution/change.md)）。
+- `FailStepRun` 语义明确：让在跑的前驱 step 跑完，仅后续 cascade skipped（见 workflow_execution §FailStepRun）。
+- 跨服务可达性 RPC 统一经 `media_materials.reachability`（[ADR 0006](../../../adr/0006-reachability-layering.md)）。
+
+### 2026-07-21 · bundle 模式对齐
+- 行为约束 1 改为 SubmitJob 校验 bundle ↔ input_schema，**不重新校验可达性**（caller 在 SubmitJob 前已调 media_materials.reachability 校验）。
+- Retry 权限：可达性不重新校验（bundle 自包含；retry 用原 bundle 或 input_override）。
+- 确认 media_workflow 不调 reachability，仅 `BatchGetAssetKind`（asset_kind）+ `UpsertGeneratedAsset`（generated_asset）。
+- 与上一条的关系：上一条假设 execution 调 reachability，本次按 bundle 决策校正。
+
 ### 2026-07-03 · 第三轮反馈：Job in-place retry 允许
 - 加 `retry_count` 与 `retry_history` JSONB 列；新增 `POST /api/v1/jobs/{id}/retry` 与 `POST /api/v1/jobs/{id}/steps/{step_run_id}/retry`。
 - 状态机由 "failed 终态" 扩为 `failed → running`（retry 触发）；其余终态不变。

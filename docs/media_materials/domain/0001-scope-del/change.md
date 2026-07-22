@@ -9,6 +9,14 @@
 
 ## 修改记录
 
+### 2026-07-21 · 废弃 domain，降为 shared 值对象
+- scope 无表、无接口、无实体，仅 `SupportedScopes` 闭集常量 + `IsKnownScope` / `IsSameScope` 纯函数，本质是值对象 + 纯校验工具，符合 `shared` 定位，不具备 domain 持久化与行为特征。
+- 降级为 `biz/shared/scope`（常量 + 工具函数），由 service 层调用；domain 实体不直接依赖 shared（架构禁止 domain -> shared）。
+- scope 业务规则（1:1 严配、跨 scope 引用非法、scope 正交 visibility、scope 不授权创建）改由各资源 domain（asset / virtual_ip / product）校验细则承载为不变式。
+- `IsSameScope` 不再以跨服务 RPC 暴露；scope 为字符串常量，各 service 从同一份 `supported_scopes` 配置加载，本地比较即一致。
+- 目录改名 `0001-scope-del` 标记废弃。
+- 未单独立 ADR：轻量、可回退决策。相关可达性归层决策见 [ADR 0006](../../../adr/0006-reachability-layering.md)。
+
 ### 2026-07-03 · Review 反馈：user 不持 scope，创建不限 scope
 - P0-2 决策：user **没有 scope 概念**；user 通过拥有的 [virtual_ip](../0003-virtual_ip/virtual_ip.md) 间接关联 scope（virtual_ip 带 scope）。
 - 创建不限制 scope：任何 user 可在任何 scope 下创建 virtual_ip / template / workflow / asset（暂不限制）。scope 仅作资源属性盖章 + 引用一致性校验，**不是授权边界**。

@@ -2,7 +2,8 @@
 name: asset_kind
 description: asset_kind 注册实体——全平台资源类别的统一注册表（name → resource_type / media_type / source_table）
 dependencies: []
-related_workflow: []
+related_workflow:
+    - media_workflow.workflow_validation
 ---
 
 ## 一句话职责
@@ -46,7 +47,7 @@ asset_kind domain 管理**全平台资源类别的注册表**：每条 `asset_ki
 | id | 主键 | bigserial | — |
 | name | 资源名（业务主键） | text not null | 全局唯一；如 `pose`/`scene`/`model_image`/`product_image` |
 | resource_type | 物理资源类别 | text not null | CHECK in ('MATERIAL','ASSET','PRODUCT','VIRTUAL_IP','TEXT') |
-| media_type | 媒体形态 | text not null | CHECK in ('IMAGE','TEXT','VIDEO')；锁定不可改 |
+| media_type | 媒体形态 | text not null | CHECK in ('IMAGE','TEXT','VIDEO')；锁定不可改。注意与 resource_type 的 `TEXT`（无表 inline 常量）**正交**：`media_type=TEXT` 指内容形态，`resource_type=TEXT` 指不落表（见 [CONTEXT §Media Type](../../CONTEXT.md)） |
 | source_table | 落表名 | text not null | 见下表；锁定不可改 |
 | description | 业务描述 | text nullable | — |
 | status | 状态 | text not null | CHECK in ('SYSTEM','ENABLED','DISABLED')；default ENABLED |
@@ -73,6 +74,7 @@ asset_kind domain 管理**全平台资源类别的注册表**：每条 `asset_ki
 3. SYSTEM 状态：不可 Delete，不可改 `resource_type` / `media_type` / `source_table` / `name`（仅可改 description / status↔DISABLED）。
 4. DISABLED：ListAssetKinds 仍返回（标注停用），但 Template 创建/更新引用该 kind → reject `ASSET_KIND_DISABLED`。
 5. Delete：仅 ENABLED 可删；已有 asset / template 引用该 kind 时 → reject `ASSET_KIND_IN_USE`（防悬挂）。
+6. `resource_type=TEXT` 的 kind 仅用于 step_binding 的 `const` 源（字面常量，无表）；不可作为 Template 的 `output_asset_kind`（产物须落 `generated_assets` 表，resource_type=ASSET），亦不可作为 material / generated_asset 的 asset_kind。
 
 ## 与其它域的关系
 
