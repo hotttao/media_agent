@@ -63,6 +63,8 @@ var skipAllPaths = map[string]bool{
 	"/api/oauth/userinfo":       true,
 	// internal VerifyToken 不经 cookie/session（网络隔离/mTLS 由部署层负责）。
 	"/internal/token/verify": true,
+	// internal teams 查询：供下游服务 fetchTeams 调用。
+	"/internal/teams:byUser": true,
 	// 运维端点（health/pprof/metrics/swagger/openapi/ping）不走 session 鉴权
 	"/health":       true,
 	"/ping":         true,

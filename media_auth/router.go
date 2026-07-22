@@ -11,6 +11,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"media_agent/hertz_infra/serverhertz/swaggerui"
 	handler "media_agent/media_auth/biz/handler"
+	teaminternalhandler "media_agent/media_auth/biz/handler/team_internal"
 )
 
 // openapiSpec 是本服务的 OpenAPI spec（make swagger-gen 从业务 IDL 生成），
@@ -41,5 +42,7 @@ func customizedRegister(r *server.Hertz) {
 		c.Write(openapiSpec)
 	})
 
+	// internal teams 查询：供下游服务 fetchTeams 调用（不挂网关，session skip list 内）。
+	r.POST("/internal/teams:byUser", teaminternalhandler.ListUserTeams)
 	// your code ...
 }

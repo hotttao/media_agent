@@ -29,6 +29,7 @@ import (
 	oauthclienthandler "media_agent/media_auth/biz/handler/oauth_client"
 	servicetokenhandler "media_agent/media_auth/biz/handler/service_token"
 	teamhandler "media_agent/media_auth/biz/handler/team"
+	teaminternalhandler "media_agent/media_auth/biz/handler/team_internal"
 	tokenhandler "media_agent/media_auth/biz/handler/token"
 	userhandler "media_agent/media_auth/biz/handler/user"
 	wecomhandler "media_agent/media_auth/biz/handler/wecom"
@@ -103,6 +104,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	teamRepo := dalteam.NewRepo(db)
 	teamSvc := teamservice.NewService(teamRepo, txRunner)
 	teamhandler.TeamSvc = teamSvc
+	teaminternalhandler.TeamSvc = teamSvc // internal /internal/teams:byUser 复用 team service
 
 	// internal token service：复用 service_token TokenRepo + auth UserRepo（不新建 domain）。
 	tokenSvc := tokenservice.NewService(stRepo, userRepo)
