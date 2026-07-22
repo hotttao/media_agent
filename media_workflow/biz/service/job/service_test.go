@@ -120,6 +120,13 @@ func (m *mockStepRunRepo) UpdateStatus(_ context.Context, id string, status doma
 		now := time.Now()
 		sr.FinishedAt = &now
 	}
+	if updates != nil {
+		if v, ok := updates["selected_index"]; ok {
+			if idx, ok2 := v.(int); ok2 {
+				sr.SelectedIndex = &idx
+			}
+		}
+	}
 	return nil
 }
 func (m *mockStepRunRepo) UpdateResolvedInputs(_ context.Context, id string, inputs map[string]any, prompt string) error {
@@ -431,6 +438,205 @@ func TestValidateBundle_RequiredProduct(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing required product")
 	}
+}
+
+// 闸2 补全：material name 唯一校验
+func TestValidateBundle_DuplicateMaterialName(t *testing.T) {
+	svc := &Service{}
+	schema := []wfdomain.InputSchemaEntry{
+		{Name: "scene", ResourceType: "MATERIAL", Required: true},
+	}
+	input := domain.JobInput{
+		Materials: []domain.MaterialData{
+			{Name: "scene", URL: "https://a.png"},
+			{Name: "scene", URL: "https://b.png"}, // 重复
+		},
+	}
+	err := svc.validateBundle(schema, input)
+	if err == nil {
+		t.Fatal("expected error for duplicate material name")
+	}
+}
+
+// 闸2 补全：asset name 唯一校验
+func TestValidateBundle_DuplicateAssetName(t *testing.T) {
+	svc := &Service{}
+	schema := []wfdomain.InputSchemaEntry{
+		{Name: "model_image", ResourceType: "ASSET", Required: true},
+	}
+	input := domain.JobInput{
+		Assets: []domain.AssetData{
+			{Name: "model_image", URL: "https://a.png"},
+			{Name: "model_image", URL: "https://b.png"}, // 重复
+		},
+	}
+	err := svc.validateBundle(schema, input)
+	if err == nil {
+		t.Fatal("expected error for duplicate asset name")
+	}
+}
+
+// 闸2 补全：无多余类型校验（bundle 含 schema 未声明的 material）
+func TestValidateBundle_ExtraMaterialNotInSchema(t *testing.T) {
+	svc := &Service{}
+	schema := []wfdomain.InputSchemaEntry{
+		{Name: "scene", ResourceType: "MATERIAL", Required: true},
+	}
+	input := domain.JobInput{
+		Materials: []domain.MaterialData{
+			{Name: "scene", URL: "https://a.png"},
+			{Name: "pose", URL: "https://b.png"}, // schema 未声明
+		},
+	}
+	err := svc.validateBundle(schema, input)
+	if err == nil {
+		t.Fatal("expected error for extra material not in schema")
+	}
+}
+
+// 闸2 补全：无多余类型校验（bundle material 与 schema resource_type 不匹配）
+func TestValidateBundle_ResourceTypeMismatch(t *testing.T) {
+	svc := &Service{}
+	schema := []wfdomain.InputSchemaEntry{
+		{Name: "model_image", ResourceType: "ASSET", Required: true},
+	}
+	// bundle 把 model_image 当 MATERIAL，但 schema 声明为 ASSET
+	input := domain.JobInput{
+		Materials: []domain.MaterialData{
+			{Name: "model_image", URL: "https://a.png"},
+		},
+	}
+	err := svc.validateBundle(schema, input)
+	if err == nil {
+		t.Fatal("expected error for resource_type mismatch")
+	}
+}
+
+// FailStepRun cascade skip 下游：A failed -> B (BLOCKED 依赖 A) -> SKIPPED
+func TestFail_CascadeSkipDownstream(t *testing.T) {
+	svc, jobRepo, srRepo := newTestServiceWithDAG()
+	// stepA: claimed（worker 领取）
+	srA := &domain.StepRun{
+		ID: "sr_a", JobID: "job1", StepKey: "step_a", StepOrder: 1,
+		TemplateID: "tpl1", TemplateVersion: 1, Status: domain.SRClaimed,
+		Platform: "gpt", GenWay: "i2i", AssetKind: "first_frame",
+		NeedsConfirm: false, CandidateCount: 1,
+	}
+	// stepB: blocked，依赖 step_a 输出
+	srB := &domain.StepRun{
+		ID: "sr_b", JobID: "job1", StepKey: "step_b", StepOrder: 2,
+		TemplateID: "tpl1", TemplateVersion: 1, Status: domain.SRBlocked,
+		Platform: "gpt", GenWay: "i2i", AssetKind: "first_frame",
+		NeedsConfirm: false, CandidateCount: 1,
+	}
+	srRepo.items["sr_a"] = srA
+	srRepo.items["sr_b"] = srB
+	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", Scope: "ai_clothing", WorkflowID: "wf1", Status: domain.JobRunning, SubmittedBy: "u1", Input: domain.JobInput{}}
+
+	_, err := svc.Fail(context.Background(), "sr_a", "generation timeout")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// step_a 应 failed
+	a, _ := srRepo.Get(context.Background(), "sr_a")
+	if a.Status != domain.SRFailed {
+		t.Errorf("step_a status = %s, want failed", a.Status)
+	}
+	// step_b 应 cascade skipped
+	b, _ := srRepo.Get(context.Background(), "sr_b")
+	if b.Status != domain.SRSkipped {
+		t.Errorf("step_b status = %s, want skipped (cascade)", b.Status)
+	}
+}
+
+// FailStepRun 状态守卫：succeeded step 不可 fail
+func TestFail_AlreadySucceeded(t *testing.T) {
+	svc, jobRepo, srRepo := newTestService(false)
+	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", Scope: "ai_clothing", WorkflowID: "wf1", Status: domain.JobRunning, SubmittedBy: "u1", Input: domain.JobInput{}}
+	sr := makeClaimedStepRun(srRepo, false)
+	sr.Status = domain.SRSucceeded
+
+	_, err := svc.Fail(context.Background(), "sr1", "too late")
+	if err == nil {
+		t.Fatal("expected error for failing already-succeeded step")
+	}
+}
+
+// Cancel 状态守卫：succeeded job 不可 cancel
+func TestCancel_TerminalJob(t *testing.T) {
+	svc, jobRepo, _ := newTestService(false)
+	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", Status: domain.JobSucceeded}
+
+	_, err := svc.Cancel(context.Background(), "job1")
+	if err == nil {
+		t.Fatal("expected error for cancelling terminal job")
+	}
+}
+
+// advanceDAG 多级 cascade：A failed -> B (依赖 A) skipped -> C (依赖 B) skipped
+func TestAdvanceDAG_MultiLevelCascade(t *testing.T) {
+	svc, jobRepo, srRepo := newTestServiceWithDAG()
+	srA := &domain.StepRun{ID: "sr_a", JobID: "job1", StepKey: "step_a", StepOrder: 1, Status: domain.SRFailed, Platform: "gpt", GenWay: "i2i"}
+	srB := &domain.StepRun{ID: "sr_b", JobID: "job1", StepKey: "step_b", StepOrder: 2, Status: domain.SRBlocked, Platform: "gpt", GenWay: "i2i"}
+	srC := &domain.StepRun{ID: "sr_c", JobID: "job1", StepKey: "step_c", StepOrder: 3, Status: domain.SRBlocked, Platform: "gpt", GenWay: "i2i"}
+	srRepo.items["sr_a"] = srA
+	srRepo.items["sr_b"] = srB
+	srRepo.items["sr_c"] = srC
+	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", Scope: "ai_clothing", WorkflowID: "wf1", Status: domain.JobFailed, SubmittedBy: "u1", Input: domain.JobInput{}}
+
+	// 触发 advanceDAG（通过 Fail 间接调用，但 step_a 已 failed，直接调内部方法测）
+	svc.advanceDAG(context.Background(), "job1", "step_a")
+
+	b, _ := srRepo.Get(context.Background(), "sr_b")
+	if b.Status != domain.SRSkipped {
+		t.Errorf("step_b status = %s, want skipped", b.Status)
+	}
+	c, _ := srRepo.Get(context.Background(), "sr_c")
+	if c.Status != domain.SRSkipped {
+		t.Errorf("step_c status = %s, want skipped (multi-level cascade)", c.Status)
+	}
+}
+
+// Complete 非 confirm 分支：selected_index 应落 primary candidate 的下标
+func TestComplete_NoConfirm_PersistsSelectedIndex(t *testing.T) {
+	svc, jobRepo, srRepo := newTestService(false)
+	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", Scope: "ai_clothing", WorkflowID: "wf1", Status: domain.JobRunning, SubmittedBy: "u1", Input: domain.JobInput{Materials: []domain.MaterialData{{Name: "scene", URL: "https://x.png"}}}}
+	_ = makeClaimedStepRun(srRepo, false)
+
+	// 2 候选，第 2 个是 primary
+	cands := []domain.Candidate{
+		{Index: 1, URL: "https://out1.png"},
+		{Index: 2, URL: "https://out2.png", IsPrimary: true},
+	}
+	_, err := svc.Complete(context.Background(), "sr1", cands)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	updated, _ := srRepo.Get(context.Background(), "sr1")
+	if updated.Status != domain.SRSucceeded {
+		t.Errorf("status = %s, want succeeded", updated.Status)
+	}
+	if updated.SelectedIndex == nil || *updated.SelectedIndex != 1 {
+		t.Errorf("selected_index = %v, want 1 (primary candidate)", updated.SelectedIndex)
+	}
+}
+
+// newTestServiceWithDAG 创建一个 2-step DAG（step_a -> step_b -> step_c）用于 cascade 测试。
+func newTestServiceWithDAG() (*Service, *mockJobRepo, *mockStepRunRepo) {
+	jobRepo := &mockJobRepo{jobs: map[string]*domain.Job{}, stepRuns: map[string][]*domain.StepRun{}}
+	srRepo := &mockStepRunRepo{items: map[string]*domain.StepRun{}}
+	wfLookup := &mockWorkflowLookup{wf: &wfdomain.Workflow{
+		ID: "wf1", Scope: "ai_clothing", OutputStepKey: "step_c",
+		Steps: []wfdomain.Step{
+			{Key: "step_a", Order: 1, TemplateID: "tpl1", TemplateVersion: 1, Bindings: []wfdomain.Binding{}},
+			{Key: "step_b", Order: 2, TemplateID: "tpl1", TemplateVersion: 1, Bindings: []wfdomain.Binding{{ToInput: "in", Source: wfdomain.SourceStepOutput, Ref: "step_a"}}},
+			{Key: "step_c", Order: 3, TemplateID: "tpl1", TemplateVersion: 1, Bindings: []wfdomain.Binding{{ToInput: "in", Source: wfdomain.SourceStepOutput, Ref: "step_b"}}},
+		},
+		InputSchema: []wfdomain.InputSchemaEntry{},
+	}}
+	tplLookup := &mockTplConfirm{needsConfirm: false}
+	svc := NewService(jobRepo, srRepo, nil, wfLookup, tplLookup, &mockMaterialsClient{}, nil)
+	return svc, jobRepo, srRepo
 }
 
 var _ = errors.New

@@ -105,26 +105,43 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 }
 
 // validateBundle 闸2: bundle vs input_schema。
+// 校验（按 docs/media_workflow/workflow/0002-workflow_execution/workflow_execution.md §1 + impl.md §4.2）：
+//   - required 全覆盖（含 PRODUCT/VIRTUAL_IP 非空）
+//   - material[]/asset[] name 唯一
+//   - 无多余类型：bundle 中每个 material/asset name 必须能在 input_schema 中找到同 resource_type 的 entry
 func (s *Service) validateBundle(schema []wfdomain.InputSchemaEntry, input domain.JobInput) error {
-	matNames := make(map[string]bool)
+	// 1. name 唯一校验（material / asset 各自 name 唯一）
+	matSeen := make(map[string]bool)
 	for _, m := range input.Materials {
-		matNames[m.Name] = true
+		if matSeen[m.Name] {
+			return fmt.Errorf("duplicate material name in bundle: %s", m.Name)
+		}
+		matSeen[m.Name] = true
 	}
-	assetNames := make(map[string]bool)
+	assetSeen := make(map[string]bool)
 	for _, a := range input.Assets {
-		assetNames[a.Name] = true
+		if assetSeen[a.Name] {
+			return fmt.Errorf("duplicate asset name in bundle: %s", a.Name)
+		}
+		assetSeen[a.Name] = true
 	}
+	// 2. input_schema 索引：name -> resource_type（用于 required 校验 + 无多余类型校验）
+	schemaByName := make(map[string]string, len(schema))
+	for _, e := range schema {
+		schemaByName[e.Name] = e.ResourceType
+	}
+	// 3. required 覆盖校验
 	for _, e := range schema {
 		if !e.Required {
 			continue
 		}
 		switch e.ResourceType {
 		case "MATERIAL":
-			if !matNames[e.Name] {
+			if !matSeen[e.Name] {
 				return fmt.Errorf("missing required material input: %s", e.Name)
 			}
 		case "ASSET":
-			if !assetNames[e.Name] {
+			if !assetSeen[e.Name] {
 				return fmt.Errorf("missing required asset input: %s", e.Name)
 			}
 		case "PRODUCT":
@@ -135,6 +152,25 @@ func (s *Service) validateBundle(schema []wfdomain.InputSchemaEntry, input domai
 			if input.VirtualIP == nil {
 				return fmt.Errorf("missing required virtual_ip input")
 			}
+		}
+	}
+	// 4. 无多余类型校验：bundle 中每个 material/asset name 必须在 input_schema 中存在且 resource_type 匹配
+	for name := range matSeen {
+		rt, ok := schemaByName[name]
+		if !ok {
+			return fmt.Errorf("material %q not declared in workflow input_schema (extra type)", name)
+		}
+		if rt != "MATERIAL" {
+			return fmt.Errorf("material %q resource_type mismatch: schema=%s, bundle=MATERIAL", name, rt)
+		}
+	}
+	for name := range assetSeen {
+		rt, ok := schemaByName[name]
+		if !ok {
+			return fmt.Errorf("asset %q not declared in workflow input_schema (extra type)", name)
+		}
+		if rt != "ASSET" {
+			return fmt.Errorf("asset %q resource_type mismatch: schema=%s, bundle=ASSET", name, rt)
 		}
 	}
 	return nil
@@ -294,15 +330,17 @@ func (s *Service) Complete(ctx context.Context, stepRunID string, candidates []d
 		_ = s.stepRunRepo.UpdateStatus(ctx, stepRunID, domain.SRNeedConfirm, nil)
 		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobNeedConfirm, "")
 	} else {
-		// 直接 SUCCEEDED
+		// 直接 SUCCEEDED：取 primary candidate（无 primary 标记则取第 0 个）
+		primaryIdx := 0
 		primary := candidates[0]
-		for _, c := range candidates {
+		for i, c := range candidates {
 			if c.IsPrimary {
+				primaryIdx = i
 				primary = c
 				break
 			}
 		}
-		if err := s.finalizeStepRun(ctx, sr, primary); err != nil {
+		if err := s.finalizeStepRun(ctx, sr, primary, &primaryIdx); err != nil {
 			return nil, err
 		}
 	}
@@ -322,10 +360,9 @@ func (s *Service) Confirm(ctx context.Context, stepRunID string, selectedIndex i
 		return nil, fmt.Errorf("selected_index %d out of range [0, %d)", selectedIndex, len(sr.Candidates))
 	}
 	selected := sr.Candidates[selectedIndex]
-	if err := s.finalizeStepRun(ctx, sr, selected); err != nil {
+	if err := s.finalizeStepRun(ctx, sr, selected, &selectedIndex); err != nil {
 		return nil, err
 	}
-	_ = s.stepRunRepo.UpdateStatus(ctx, stepRunID, domain.SRSucceeded, map[string]any{"selected_index": selectedIndex})
 	return s.stepRunRepo.Get(ctx, stepRunID)
 }
 
@@ -344,19 +381,37 @@ func (s *Service) Regenerate(ctx context.Context, stepRunID string) (*domain.Ste
 }
 
 // —— FailStepRun ——
+// 按 workflow_execution §5：step_run=failed + Job=failed + advanceDAG(cascade skip 下游)。
+// 让在跑的前驱 step 跑完（不中断已 claimed 前驱），仅把后续未启动 step 置 skipped。
 func (s *Service) Fail(ctx context.Context, stepRunID string, reason string) (*domain.StepRun, error) {
 	sr, err := s.stepRunRepo.Get(ctx, stepRunID)
 	if err != nil {
 		return nil, err
 	}
+	// 状态守卫：仅 claimed/need_confirm/pending 可 -> failed（已 succeeded/skipped/failed 不允许）
+	switch sr.Status {
+	case domain.SRClaimed, domain.SRNeedConfirm, domain.SRPending:
+	default:
+		return nil, fmt.Errorf("step_run %s status %s, expected claimed/need_confirm/pending", stepRunID, sr.Status)
+	}
 	_ = s.stepRunRepo.UpdateFailure(ctx, stepRunID, reason)
 	_ = s.stepRunRepo.UpdateStatus(ctx, stepRunID, domain.SRFailed, nil)
 	_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobFailed, reason)
+	// 级联跳过下游：advanceDAG 会把依赖本 step 的 BLOCKED step_run -> SKIPPED（任一依赖 FAILED/SKIPPED）
+	s.advanceDAG(ctx, sr.JobID, sr.StepKey)
 	return sr, nil
 }
 
 // —— CancelJob ——
+// 仅 running/pending/need_confirm 可 -> cancelled；已 succeeded/failed/cancelled 不可 cancel。
 func (s *Service) Cancel(ctx context.Context, jobID string) (*domain.Job, error) {
+	job, err := s.jobRepo.Get(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if job.Status.IsTerminal() {
+		return nil, fmt.Errorf("job %s status %s is terminal, cannot cancel", jobID, job.Status)
+	}
 	_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobCancelled, "cancelled by user")
 	return s.jobRepo.Get(ctx, jobID)
 }
@@ -486,7 +541,7 @@ func (s *Service) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, 
 }
 
 // —— finalizeStepRun: 落产物 + SUCCEEDED + 推进 DAG ——
-func (s *Service) finalizeStepRun(ctx context.Context, sr *domain.StepRun, selected domain.Candidate) error {
+func (s *Service) finalizeStepRun(ctx context.Context, sr *domain.StepRun, selected domain.Candidate, selectedIndex *int) error {
 	// 1. 调 materials 落 generated_asset
 	job, err := s.jobRepo.Get(ctx, sr.JobID)
 	if err != nil {
@@ -502,12 +557,16 @@ func (s *Service) finalizeStepRun(ctx context.Context, sr *domain.StepRun, selec
 	if err != nil {
 		return fmt.Errorf("upsert generated_asset: %w", err)
 	}
-	// 2. 更新 step_run: output_asset_id + SUCCEEDED
+	// 2. 更新 step_run: output_asset_id + SUCCEEDED + selected_index
 	_ = s.stepRunRepo.UpdateOutput(ctx, sr.ID, assetID)
-	_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRSucceeded, nil)
-	// 3. 推进 DAG: 下游 BLOCKED → PENDING
+	updates := map[string]any{}
+	if selectedIndex != nil {
+		updates["selected_index"] = *selectedIndex
+	}
+	_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRSucceeded, updates)
+	// 3. 推进 DAG: 下游 BLOCKED -> PENDING
 	s.advanceDAG(ctx, sr.JobID, sr.StepKey)
-	// 4. 检查 sink 是否 SUCCEEDED → Job SUCCEEDED
+	// 4. 检查 sink 是否 SUCCEEDED -> Job SUCCEEDED
 	s.checkJobCompletion(ctx, sr.JobID)
 	return nil
 }
@@ -528,7 +587,7 @@ func (s *Service) advanceDAG(ctx context.Context, jobID string, completedStepKey
 	if err != nil {
 		return
 	}
-	// step_key → step（含 bindings）
+	// step_key -> step（含 bindings）
 	stepByKey := make(map[string]wfdomain.Step, len(wf.Steps))
 	for _, step := range wf.Steps {
 		stepByKey[step.Key] = step
@@ -539,36 +598,51 @@ func (s *Service) advanceDAG(ctx context.Context, jobID string, completedStepKey
 	for _, sr := range allSRs {
 		srByKey[sr.StepKey] = sr
 	}
-	for _, sr := range blocked {
-		step, ok := stepByKey[sr.StepKey]
-		if !ok {
-			continue
-		}
-		// 收集该 step 的 STEP_OUTPUT 依赖
-		allDepsSucceeded := true
-		anyDepFailed := false
-		for _, b := range step.Bindings {
-			if b.Source != wfdomain.SourceStepOutput {
+	// 迭代直到一轮无变更（处理多级 cascade：A failed -> B skipped -> C skipped）
+	for {
+		changed := false
+		for _, sr := range blocked {
+			// 跳过已非 blocked 的（前一轮可能已推进）
+			if srByKey[sr.StepKey].Status != domain.SRBlocked {
 				continue
 			}
-			dep, ok := srByKey[b.Ref]
+			step, ok := stepByKey[sr.StepKey]
 			if !ok {
-				allDepsSucceeded = false
 				continue
 			}
-			switch dep.Status {
-			case domain.SRSucceeded:
-				// ok
-			case domain.SRFailed, domain.SRSkipped:
-				anyDepFailed = true
-			default:
-				allDepsSucceeded = false
+			// 收集该 step 的 STEP_OUTPUT 依赖
+			allDepsSucceeded := true
+			anyDepFailed := false
+			for _, b := range step.Bindings {
+				if b.Source != wfdomain.SourceStepOutput {
+					continue
+				}
+				dep, ok := srByKey[b.Ref]
+				if !ok {
+					allDepsSucceeded = false
+					continue
+				}
+				switch dep.Status {
+				case domain.SRSucceeded:
+					// ok
+				case domain.SRFailed, domain.SRSkipped:
+					anyDepFailed = true
+				default:
+					allDepsSucceeded = false
+				}
+			}
+			if anyDepFailed {
+				_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRSkipped, nil)
+				srByKey[sr.StepKey].Status = domain.SRSkipped
+				changed = true
+			} else if allDepsSucceeded {
+				_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRPending, nil)
+				srByKey[sr.StepKey].Status = domain.SRPending
+				changed = true
 			}
 		}
-		if anyDepFailed {
-			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRSkipped, nil)
-		} else if allDepsSucceeded {
-			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRPending, nil)
+		if !changed {
+			break
 		}
 	}
 }
