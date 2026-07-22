@@ -18,7 +18,7 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 - 创建 / 更新 / 软删 Template，强制 1:1 scope（scope 不可空，新建后不可改）。
 - 维护 inputs[] 的 schema：每个元素一个 input slot，含 `name` + `kind`（引用 asset_kind name）+ `required`；name 在同一 Template 内唯一。
 - 维护单一 `output_asset_kind`：一次模板执行产出**一个** asset，其类别由此字段声明（引用 asset_kind name）；media_type 由 `asset_kind.media_type` 推导，不另存。
-- 维护 prompt_body：声明式正文，使用 `{slot_name}` 形式的占位符引用 inputs 的 name。
+- 维护 prompt_body：声明式正文，使用 `{{.name}}` 形式的占位符引用 inputs 的 name。
 - 维护 `platform` / `gen_way` / `gen_type`：生成路由字段，供 workflow_execution 分发到下游生成器。
 - 版本化：update 时 `version + 1`，旧版本只读保留可查。
 - 提供 `Render(slot_values []ResolvedSlot)` 接口，输入每个 input slot 的解析结果，产出渲染后的 prompt_body + output_asset_kind（及其 media_type）。
@@ -56,7 +56,7 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 | scope | 业务范围 | text not null | 1:1；与 `config.SupportedScopes` 一致；不可改 |
 | name | 模板名 | text not null | (scope, name, version) 唯一 |
 | description | 模板说明 | text nullable | — |
-| prompt_body | 渲染正文 | text not null | 占位符 `{slot_name}` 引用 inputs.name |
+| prompt_body | 渲染正文 | text not null | 占位符 `{{.name}}` 引用 inputs.name |
 | output_asset_kind | 产出资源类别 | text not null | 引用 `asset_kinds.name`，且 resource_type=ASSET；必填 |
 | platform | 生成平台 | text not null | 如 `gpt` / `jimeng`；下游生成器分发用 |
 | gen_way | 生成方式 | text not null | 如 `t2i` / `i2i` / `i2v` |
@@ -94,7 +94,7 @@ Template 的输入槽位。每行一个 input slot；output 已提升为 `templa
 | id | 主键 | bigserial | — |
 | template_id | 所属 template | bigint not null, FK | ON DELETE CASCADE |
 | version | 模板版本号 | int not null | 与 templates.version 联动 |
-| name | slot 名 | text not null | 同 template+version 内唯一；在 prompt_body 中作为 `{name}` 占位符 |
+| name | slot 名 | text not null | 同 template+version 内唯一；在 prompt_body 中作为 `{{.name}}` 占位符 |
 | kind | asset_kind 名 | text not null | 引用 `asset_kinds.name`；决定该槽位的 resource_type / media_type / 落表 |
 | required | 是否必填 | bool not null | default false |
 | display_order | 渲染顺序 | int not null | — |
@@ -105,7 +105,7 @@ Template 的输入槽位。每行一个 input slot；output 已提升为 `templa
 
 ```go
 type Slot struct {
-    Name         string   // 在 prompt_body 中作为 {Name} 占位符
+    Name         string   // 在 prompt_body 中作为 {{.Name}} 占位符
     Kind         string   // asset_kind name；决定 resource_type / media_type / 落表
     Required     bool     // 默认 false
     DisplayOrder int      // 仅排版有用；不影响逻辑
@@ -176,7 +176,7 @@ const (
 
 1. `Scope != ""`；同一 `(scope, name)` 仅允许下一个待创建或下一个自增 version。
 2. `Inputs` 内部 `Name` 唯一。
-3. `PromptBody` 内出现的所有 `{name}` 必须能在 `Inputs` 的某个 slot 找到对应 name；多余的 `{name}` → reject。
+3. `PromptBody` 内出现的所有 `{{.name}}` 必须能在 `Inputs` 的某个 slot 找到对应 name；多余的 `{{.name}}` → reject。
 4. 每个 input slot 的 `Kind` 必填，且必须指向 `asset_kinds` 注册表中已注册、status∈{SYSTEM, ENABLED} 的 kind（调 `media_materials.BatchGetAssetKind` 校验）。
 5. `OutputAssetKind` 必填，且所引 asset_kind 的 `resource_type=ASSET`（产物落 generated_assets 表）；其 `media_type` 即产出的媒体形态。
 6. `Platform` / `GenWay` 必填；`GenType` 可空。
@@ -212,9 +212,9 @@ type RenderedTemplate struct {
 `Render` 必须：
 1. 对每个 `input` slot：
    - 若 `ResolvedSlot` 缺失但 `Required=true` → 返回 `ErrRequiredSlotMissing{name}`。
-   - 若 `source=asset`，从 `AssetURL` 或 `AssetMeta["url"]` 取可渲染字符串（实现选其一）；`AssetMeta` 其余 key 可被 prompt_body 通过 `{name.key}` 引用。
+   - 若 `source=asset`，从 `AssetURL` 或 `AssetMeta["url"]` 取可渲染字符串（实现选其一）；`AssetMeta` 其余 key 可被 prompt_body 通过 `{{.name.key}}` 引用。
    - 若 `source=const`，直接序列化 `ConstValue`（按 slot.kind 的 media_type 适配：TEXT→string、其它 marshal）。
-2. 把 `PromptBody` 中每个 `{name}` 或 `{name.key}` 替换为该 slot 的可渲染字符串。
+2. 把 `PromptBody` 中每个 `{{.name}}` 或 `{{.name.key}}` 替换为该 slot 的可渲染字符串。
 3. `RenderedTemplate.OutputAssetKind` 直接回填 `Template.OutputAssetKind`；`OutputMediaType` 由该 kind 的 `media_type` 给出（调 `BatchGetAssetKind` 缓存查）。
 4. 资源类型适配（类型简单校验，避免 Render 在生产期炸）：`ConstValue` 为 nil 时拒收 `source=const`；其它类型不严格要求，但 prompt 渲染端若读取不到 key 应回退到空串（不要 panic）。
 

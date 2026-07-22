@@ -168,7 +168,7 @@ type mockTemplateLookup struct{}
 func (m *mockTemplateLookup) GetVersion(_ context.Context, id string, version int) (*wfdomain.TemplateSnapshot, error) {
 	return &wfdomain.TemplateSnapshot{
 		ID: id, Scope: "ai_clothing", Status: "draft",
-		PromptBody: "test prompt {scene.url}", OutputAssetKind: "first_frame",
+		PromptBody: "test prompt {{.scene.url}}", OutputAssetKind: "first_frame",
 		Platform: "gpt", GenWay: "i2i",
 		NeedsConfirm: false, CandidateCount: 1,
 		Inputs: []wfdomain.SlotSnapshot{{Name: "scene", ResourceType: "MATERIAL", Required: true}},
@@ -207,7 +207,7 @@ type mockTplConfirm struct{ needsConfirm bool }
 func (m *mockTplConfirm) GetVersion(_ context.Context, id string, version int) (*wfdomain.TemplateSnapshot, error) {
 	return &wfdomain.TemplateSnapshot{
 		ID: id, Scope: "ai_clothing", Status: "draft",
-		PromptBody: "test {scene.url}", OutputAssetKind: "first_frame",
+		PromptBody: "test {{.scene.url}}", OutputAssetKind: "first_frame",
 		Platform: "gpt", GenWay: "i2i",
 		NeedsConfirm: m.needsConfirm, CandidateCount: 4,
 		Inputs: []wfdomain.SlotSnapshot{{Name: "scene", ResourceType: "MATERIAL", Required: true}},

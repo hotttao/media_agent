@@ -593,7 +593,7 @@ worker 轮询 ClaimStepRun(platform, gen_way, gen_type)
   → 找一个 PENDING 且 template.platform/gen_way/gen_type 匹配的 StepRun
   → 加载 Job.input(bundle) + template(version)
   → 按 binding.source 解析 slot 值（WORKFLOW_INPUT 从 bundle 按 slot.name 取；STEP_OUTPUT 从前驱 step_run.output_asset_id 取；CONST 取 const_value）
-  → 渲染 prompt（{slot.url}/{slot.content} 替换）
+  → 渲染 prompt（{{.name.url}}/{{.name.content}} 替换）
   → 返回 rendered_prompt + input_assets + candidate_count
   → StepRun: PENDING → CLAIMED（记 claimed_by/claimed_at）
   → SSE: ET_STEP_STATUS(claimed)

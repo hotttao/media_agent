@@ -41,7 +41,7 @@ dependencies:
 - `source=step_output`：从前驱 StepRun `output_asset_id` 取 generated_asset；前驱未 succeeded -> cascade skip。前驱产物的 url/content 从前驱 step_run 的 resolved_inputs / output 取。
 - `source=const`：用 `const_value`，跳过解析。
 - 解析结果 `{resource_type, id, url, content, ...}` 写入 `step_runs.resolved_inputs[to_input]`。
-- 渲染：把 `prompt_body` 的 `{slot.url}` / `{slot.content}` / `{slot.key}` 替换为 bundle/resolved 的值。
+- 渲染：把 `prompt_body` 的 `{{.name.url}}` / `{{.name.content}}` / `{{.name.key}}` 替换为 bundle/resolved 的值。
 - **不调 media_materials**（渲染用 bundle 自包含的 url/content；caller 组装 bundle 时已调 reachability 解析 product/vip 输入 + 拿 url/content）。
 
 ### 4. CompleteStepRun（worker 推结果）
