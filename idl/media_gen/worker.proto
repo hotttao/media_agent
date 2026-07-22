@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package media_gen.worker;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_gen/worker";
+
+// WorkerService -- media_gen 内部 worker 生命周期管理（进程内 goroutine）。
+//
+// worker loop 与 HTTP server 同进程（in-process goroutine），不独立 listener。
+// 本期 stub：StartWorker 注册 worker 并启动 goroutine，但 goroutine 不实际跑
+// Claim 循环（select { <-ctx.Done() }），避免无 media_workflow 时空转报错。
+// 真实实现需把 stub 替换为 Claim -> ExecuteOnce -> Complete/Fail 循环。
+//
+// 详见 docs/media_gen/workflow/0001-job-execution-loop/job-execution-loop.md。
+service WorkerService {
+  // StartWorker -- 启动 worker goroutine。
+  rpc StartWorker(StartWorkerReq) returns (WorkerInfo) {
+    option (google.api.http) = { post: "/api/v1/workers:start" body: "*" };
+    option (api.post) = "/api/v1/workers:start";
+  }
+  // StopWorker -- 停止 worker goroutine（幂等：已 STOPPED 直接返回当前状态）。
+  rpc StopWorker(StopWorkerReq) returns (WorkerInfo) {
+    option (google.api.http) = { post: "/api/v1/workers/{worker_id}:stop" body: "*" };
+    option (api.post) = "/api/v1/workers/:worker_id:stop";
+  }
+  // GetWorkerStatus -- 查询单个 worker 进程内状态。
+  rpc GetWorkerStatus(GetWorkerStatusReq) returns (WorkerInfo) {
+    option (google.api.http) = { get: "/api/v1/workers/{worker_id}" };
+    option (api.get) = "/api/v1/workers/:worker_id";
+  }
+  // ListWorkers -- 列出进程内全部 worker（含 STOPPED）。
+  rpc ListWorkers(ListWorkersReq) returns (ListWorkersResp) {
+    option (google.api.http) = { get: "/api/v1/workers" };
+    option (api.get) = "/api/v1/workers";
+  }
+}
+
+enum WorkerState {
+  WORKER_STATE_UNSPECIFIED = 0;
+  WORKER_STOPPED = 1;
+  WORKER_RUNNING = 2;
+}
+
+message WorkerInfo {
+  string worker_id = 1;
+  string platform = 2;     // 如 gpt / jimeng
+  string gen_way = 3;      // 如 t2i / i2i / i2v
+  string gen_type = 4;     // 平台细分类型，可空
+  WorkerState state = 5;
+  int32 poll_interval_ms = 6;
+  int64 started_at = 7;
+  int64 stopped_at = 8;
+  int64 last_claim_at = 9;
+  int64 last_complete_at = 10;
+  string last_error = 11;
+}
+
+message StartWorkerReq {
+  string worker_id = 1 [(api.body) = "worker_id"];
+  string platform = 2 [(api.body) = "platform"];
+  string gen_way = 3 [(api.body) = "gen_way"];
+  string gen_type = 4 [(api.body) = "gen_type"];
+  int32 poll_interval_ms = 5 [(api.body) = "poll_interval_ms"];
+}
+
+message StopWorkerReq {
+  string worker_id = 1 [(api.path) = "worker_id"];
+}
+
+message GetWorkerStatusReq {
+  string worker_id = 1 [(api.path) = "worker_id"];
+}
+
+message ListWorkersReq {
+  string state = 1 [(api.query) = "state"];
+}
+
+message ListWorkersResp {
+  repeated WorkerInfo items = 1;
+  int32 total = 2;
+}

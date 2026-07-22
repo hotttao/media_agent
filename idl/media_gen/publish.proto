@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package media_gen.publish;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_gen/publish";
+
+// PublishService -- 把已生成的视频 generated_asset 发布到目标平台。
+//
+// 本期 mock：不调 media_materials / media_crawler，直接返回假 publish_url + SUCCEEDED。
+// 真实实现需：
+//   1. 调 media_materials.AssetRead 校验 asset_id 存在 + media_type=VIDEO + 拿 url。
+//   2. 调 media_crawler 暴露的平台发布 API（待 crawler 增加发布接口）。
+//   3. 异步轮询平台状态（PUBLISHING -> SUCCEEDED/FAILED）+ 持久化到 publishes 表。
+//
+// 详见 docs/media_gen/workflow/0002-video-publish/video-publish.md
+//   + docs/media_gen/domain/0002-publish/publish.md。
+service PublishService {
+  // PublishVideo -- 发布视频到目标平台（mock：同步返回 SUCCEEDED + 假 url）。
+  rpc PublishVideo(PublishVideoReq) returns (PublishResult) {
+    option (google.api.http) = { post: "/api/v1/publish:video" body: "*" };
+    option (api.post) = "/api/v1/publish:video";
+  }
+  // GetSupportedTargets -- 返回当前支持的 publish_target 列表（mock 静态列表）。
+  rpc GetSupportedTargets(GetSupportedTargetsReq) returns (GetSupportedTargetsResp) {
+    option (google.api.http) = { get: "/api/v1/publish/targets" };
+    option (api.get) = "/api/v1/publish/targets";
+  }
+}
+
+enum PublishState {
+  PUBLISH_STATE_UNSPECIFIED = 0;
+  PUBLISH_PENDING = 1;
+  PUBLISH_PUBLISHING = 2;
+  PUBLISH_SUCCEEDED = 3;
+  PUBLISH_FAILED = 4;
+}
+
+message PublishVideoReq {
+  string asset_id = 1 [(api.body) = "asset_id"];         // generated_asset id（视频）
+  string target = 2 [(api.body) = "target"];              // xhs / douyin / bilibili
+  map<string, string> metadata = 3 [(api.body) = "metadata"];  // 平台特定元数据（标题/标签等），可选
+}
+
+message PublishResult {
+  string asset_id = 1;
+  string target = 2;
+  PublishState state = 3;
+  string publish_url = 4;             // 平台上的发布 url（mock）
+  string platform_publish_id = 5;     // 平台返回的发布 id（mock），供轮询用
+  int64 published_at = 6;
+  string failure_reason = 7;
+}
+
+message GetSupportedTargetsReq {}
+
+message GetSupportedTargetsResp {
+  repeated string targets = 1;  // ["xhs", "douyin", "bilibili"]
+}
