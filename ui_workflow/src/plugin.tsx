@@ -16,6 +16,7 @@ import { QueryProvider } from "@/foundation/providers/query-provider";
 import "@/foundation/lib/i18n"; // side-effect: initialize i18next + subscribe to lang.change
 import { registerPanel, type PluginPanelProps } from "@/foundation/lib/plugin-host";
 import { MaterialsApp } from "@/pages/materials/app";
+import { WorkflowApp } from "@/pages/workflow/app";
 
 type PanelComp = ComponentType<PluginPanelProps>;
 
@@ -34,4 +35,10 @@ registerPanel({
   id: "media_materials",
   label: () => "Materials",
   component: withQueryProvider(MaterialsApp),
+});
+
+registerPanel({
+  id: "media_workflow",
+  label: () => "Workflow",
+  component: withQueryProvider(WorkflowApp),
 });

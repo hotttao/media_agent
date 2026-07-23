@@ -1,5 +1,6 @@
 import type { AppDefinition } from "@/foundation/types/app-registry";
 import { MaterialsApp } from "@/pages/materials/app";
+import { WorkflowApp } from "@/pages/workflow/app";
 
 /**
  * App registry for standalone mode. Returns the AppDefinition[] shown in the
@@ -9,5 +10,6 @@ import { MaterialsApp } from "@/pages/materials/app";
 export function useStandaloneApps(): AppDefinition[] {
   return [
     { id: "materials", label: "Materials", Component: MaterialsApp, group: "tool" },
+    { id: "workflow", label: "Workflow", Component: WorkflowApp, group: "tool" },
   ];
 }

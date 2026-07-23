@@ -8,7 +8,6 @@
 		".husky/**",
 		"src/components/ui/alert.tsx",
 		"src/components/ui/card.tsx",
-		"src/components/ui/checkbox.tsx",
 		"src/components/ui/collapsible.tsx",
 		"src/components/ui/dropdown-menu.tsx",
 		"src/components/ui/progress.tsx",
@@ -21,7 +20,6 @@
 		"@types/js-yaml",
 		"lint-staged",
 		"@radix-ui/react-alert-dialog",
-		"@radix-ui/react-checkbox",
 		"@radix-ui/react-collapsible",
 		"@radix-ui/react-dropdown-menu",
 		"@radix-ui/react-hover-card",
@@ -48,7 +46,10 @@
 		"src/foundation/providers/slot-provider.tsx": ["exports"],
 		"src/foundation/stores/**": ["exports", "types"],
 		"src/domains/materials/lib/api.ts": ["exports"],
+		"src/domains/workflows/lib/api.ts": ["exports"],
+		"src/domains/templates/hooks/**": ["exports"],
 		"src/domains/materials/types.ts": ["types"],
-		"src/domains/virtual-ips/types.ts": ["types"]
+		"src/domains/virtual-ips/types.ts": ["types"],
+		"src/domains/workflows/types.ts": ["types"]
 	}
 }
