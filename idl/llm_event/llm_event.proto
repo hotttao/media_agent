@@ -1,0 +1,198 @@
+syntax = "proto3";
+
+package llm_event;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "llm_event";
+
+// =====================================================================
+// UniversalEvent 协议: agent <-> control-plane/web 的事件契约。
+// 对标 internal/types/events.ts,message 字段含义与 TS 版一一对应。
+//
+// Hertz 工具链:
+//   make hz-model  -> hertz_gen/model/llm_event/llm_event.pb.go  (DTO)
+// =====================================================================
+
+
+// ── UniversalEvent 内容片段类型 ───────────────────────────────────
+
+
+// ContentDelta.type: 流式增量类型
+enum ContentDeltaType {
+  CONTENT_DELTA_TYPE_UNSPECIFIED = 0;
+  CONTENT_DELTA_TYPE_TEXT = 1;        // 文本增量
+  CONTENT_DELTA_TYPE_REASONING = 2;  // 推理过程增量
+}
+
+// 文本/推理的流式增量片段,按片段下发
+message ContentDelta {
+  ContentDeltaType type = 1;  // 增量类型: 文本 或 推理
+  string text = 2;            // 增量文本内容
+}
+
+
+// ContentPart.type: 单条消息内容片段的种类
+enum ContentPartType {
+  CONTENT_PART_TYPE_UNSPECIFIED = 0;
+  CONTENT_PART_TYPE_TEXT = 1;         // 文本片段
+  CONTENT_PART_TYPE_TOOL_CALL = 2;   // 工具调用请求
+  CONTENT_PART_TYPE_TOOL_RESULT = 3; // 工具调用结果
+  CONTENT_PART_TYPE_REASONING = 4;    // 推理过程
+  CONTENT_PART_TYPE_STATUS = 5;       // 状态变更
+  CONTENT_PART_TYPE_IMAGE = 6;       // 图片
+}
+
+// 单条消息的内容片段; type 决定哪些字段有值
+message ContentPart {
+  ContentPartType type = 1;
+  string text = 2;           // type=text/reasoning/status 时的文本
+  string call_id = 3;        // type=tool_call/tool_result 的调用 id
+  string name = 4;           // type=tool_call 的工具名
+  string arguments = 5;      // type=tool_call 的参数(JSON 串)
+  string output = 6;         // type=tool_result 的输出
+  bool is_error = 7;          // type=tool_result 是否出错
+  string label = 8;           // type=status 的状态标签
+  string detail = 9;          // type=status 的状态详情
+  // 图片字段
+  string data = 10;          // type=image 的 base64 数据
+  string media_type = 11;    // type=image 的 MIME, 如 image/png
+}
+
+
+// 聊天请求附带的图片附件
+message ChatImageAttachment {
+  string data = 1;       // base64 编码的图片字节
+  string media_type = 2; // image/png | image/jpeg | image/gif | image/webp
+}
+
+
+// ── UniversalItem ────────────────────────────────────────────────
+
+
+// UniversalItem.kind: 对话项的种类
+enum UniversalItemKind {
+  UNIVERSAL_ITEM_KIND_UNSPECIFIED = 0;
+  UNIVERSAL_ITEM_KIND_MESSAGE = 1;      // 对话消息
+  UNIVERSAL_ITEM_KIND_TOOL_CALL = 2;   // 工具调用
+  UNIVERSAL_ITEM_KIND_TOOL_RESULT = 3; // 工具结果
+  UNIVERSAL_ITEM_KIND_STATUS = 4;       // 状态项
+}
+
+// UniversalItem.role: 发言角色(TS 的 null 用 UNSPECIFIED 占位)
+enum UniversalItemRole {
+  UNIVERSAL_ITEM_ROLE_UNSPECIFIED = 0;  // 对标 TS null
+  UNIVERSAL_ITEM_ROLE_USER = 1;
+  UNIVERSAL_ITEM_ROLE_ASSISTANT = 2;
+  UNIVERSAL_ITEM_ROLE_TOOL = 3;
+}
+
+// UniversalItem.status: 项生命周期状态
+// 注: status 是必填字段, proto3 默认值 0 即 IN_PROGRESS 与 TS 语义一致
+enum UniversalItemStatus {
+  UNIVERSAL_ITEM_STATUS_IN_PROGRESS = 0;  // 进行中
+  UNIVERSAL_ITEM_STATUS_COMPLETED = 1;    // 已完成
+  UNIVERSAL_ITEM_STATUS_FAILED = 2;        // 失败
+}
+
+// 对话中的一个项: 一条消息 / 一次工具调用 / 一次工具结果 / 一个状态
+message UniversalItem {
+  string item_id = 1;                       // 项唯一 id
+  UniversalItemKind kind = 2;                // 项种类
+  UniversalItemRole role = 3;                // 发言角色(message 专用, null=UNSPECIFIED)
+  UniversalItemStatus status = 4;           // 项状态
+  repeated ContentPart content = 5;          // 内容片段列表
+  string parent_tool_use_id = 6;             // 若由子 agent 产生, 记录触发它的 tool_use_id
+}
+
+
+// ── Agent 生命周期类型 ───────────────────────────────────────────
+
+
+// ContextGauge: 当前 context 占用快照
+// 说明: 这是"实时仪表"半边——模型 context window 当前多满、会话已进行多少 turn。
+//       是当前状态快照(非累加), 是唯一持久化到 session.last_turn_stats 并由
+//       聊天统计条渲染的部分。Token 计费在 append-only usage ledger, 不在这里。
+message ContextGauge {
+  int32 num_turns = 1;       // 会话已进行的 turn 数
+  int32 context_tokens = 2;  // 最近一次 API 调用的 input_tokens ≈ 当前 context 大小
+  int32 context_window = 3;  // 模型 context window 上限
+}
+
+// TurnStats: agent 在 session.ended 下发的完整 turn 统计
+// 说明: 在 ContextGauge 之上增加 turn 维度的 token/cost 估算。token/cost 仅随
+//       chat response 同步返回, 不是计费源——计费源是 workspace usage ledger。
+//       只有 ContextGauge 子集(num_turns/context_tokens/context_window)持久化。
+message TurnStats {
+  // ---- ContextGauge 子集 ----
+  int32 num_turns = 1;             // 会话已进行的 turn 数
+  int32 context_tokens = 2;        // 最近一次 API 调用的 input_tokens
+  int32 context_window = 3;        // 模型 context window 上限
+  // ---- turn 维度 token/cost(非计费源) ----
+  double cost_usd = 4;            // 本 turn 估算成本(美元)
+  int32 duration_ms = 5;          // 本 turn 耗时(毫秒)
+  int32 input_tokens = 6;         // 本 turn 输入 token
+  int32 output_tokens = 7;        // 本 turn 输出 token
+  int32 cache_read_tokens = 8;     // 本 turn 命中缓存的 token
+  int32 cache_creation_tokens = 9; // 本 turn 写入缓存的 token
+}
+
+
+// SessionEndReason: session.ended 事件的结束原因
+enum SessionEndReason {
+  SESSION_END_REASON_UNSPECIFIED = 0;
+  SESSION_END_REASON_COMPLETED = 1;    // 正常完成
+  SESSION_END_REASON_ERROR = 2;        // 出错
+  SESSION_END_REASON_INTERRUPTED = 3; // 被中断
+}
+
+
+// UniversalEvent: agent 下发给 cp/web 的统一事件
+// 不同 type 取用不同字段; 未使用的字段留空
+message UniversalEvent {
+  string type = 1;                          // 事件类型, 如 "session.started" / "item.update" / "session.ended"
+  double timestamp = 2;                     // 事件时间戳(Unix 毫秒)
+  string session_id = 3;                    // 会话 id
+  // session.ended 专用
+  SessionEndReason reason = 4;             // 结束原因
+  TurnStats stats = 5;                     // turn 统计
+  // item.* 事件专用
+  UniversalItem item = 6;                  // 完整的项
+  string item_id = 7;                      // 项 id(增量更新时只带 id)
+  ContentDelta delta = 8;                  // 增量内容
+  // question.requested 专用
+  string request_id = 9;                   // 问询请求 id
+  repeated google.protobuf.Value questions = 10;  // 问题列表(对标 TS unknown[])
+  // error 专用
+  string message = 11;                     // 错误消息
+  string code = 12;                        // 错误码
+}
+
+
+// agent 向用户发起的问询请求
+message AskUserRequest {
+  string request_id = 1;                            // 问询请求 id
+  repeated google.protobuf.Value questions = 2;    // 问题列表(对标 TS unknown[])
+}
+
+
+// ── Agent info 契约(GET /info) ──────────────────────────────────
+
+
+// AgentCapabilities: agent 能力声明, GET /info 响应的一部分
+message AgentCapabilities {
+  bool system_prompt = 1;     // 是否支持系统提示
+  bool mcp = 2;              // 是否支持 MCP 服务器
+  bool skills = 3;           // 是否支持 skills
+  bool questions = 4;        // 是否支持向用户问询
+  bool reconnect = 5;        // 是否支持 SSE 断线重连
+  bool permissions = 6;      // 是否支持权限请求回调
+  bool streaming_deltas = 7; // 是否支持流式增量
+}
+
+// AgentInfo: GET /info 端点响应
+message AgentInfo {
+  string agent_type = 1;              // agent 类型(codex/goose/claude-code)
+  string model = 2;                   // 当前使用的模型
+  AgentCapabilities capabilities = 3; // 能力声明
+}
