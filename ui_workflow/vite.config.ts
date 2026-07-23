@@ -14,12 +14,6 @@ const analyze = process.env.ANALYZE === "true";
 //    Provider per §4.3 方案 C).
 const target = process.env.VITE_TARGET ?? "standalone";
 
-// Dev proxy: route /api to the local materials/workflow gateway (or a service
-// port). Override per local env with VITE_DEV_API_TARGET. The /api/v1/auth/*
-// OAuth endpoints live on materials/workflow (shared auth middleware, same
-// JWT_SECRET + mw_token cookie domain).
-const DEV_API_TARGET = process.env.VITE_DEV_API_TARGET ?? "http://127.0.0.1:8002";
-
 const plugins = [react(), ...(analyze ? [visualizer({ filename: "stats.html", sourcemap: true })] : [])];
 const alias = { "@": resolve(__dirname, "./src") };
 
@@ -62,10 +56,18 @@ const standaloneConfig: UserConfig = {
     host: "0.0.0.0",
     port: 5173,
     proxy: {
-      "/api": {
-        target: DEV_API_TARGET,
-        changeOrigin: true,
-      },
+      // media_materials (8003): materials resources CRUD
+      "/api/v1/materials": { target: "http://localhost:8003", changeOrigin: true },
+      "/api/v1/products": { target: "http://localhost:8003", changeOrigin: true },
+      "/api/v1/virtual-ips": { target: "http://localhost:8003", changeOrigin: true },
+      "/api/v1/asset-kinds": { target: "http://localhost:8003", changeOrigin: true },
+      "/api/v1/generated-assets": { target: "http://localhost:8003", changeOrigin: true },
+      // media_workflow (8002): workflow/template/job + auth (OAuth via media_auth 8001)
+      "/api/v1/workflows": { target: "http://localhost:8002", changeOrigin: true },
+      "/api/v1/templates": { target: "http://localhost:8002", changeOrigin: true },
+      "/api/v1/jobs": { target: "http://localhost:8002", changeOrigin: true },
+      "/api/v1/step-runs": { target: "http://localhost:8002", changeOrigin: true },
+      "/api/v1/auth": { target: "http://localhost:8002", changeOrigin: true },
     },
   },
 };

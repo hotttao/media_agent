@@ -19,6 +19,5 @@ COPY --from=builder /out/media_crawler /app/media_crawler
 COPY media_crawler/migrations/ /app/migrations/
 COPY media_crawler/conf/ /app/conf/
 COPY media_crawler/.env /app/.env
-EXPOSE media_crawler
-ENTRYPOINT ["/app/8004"]
-%!(EXTRA string=media_crawler)
+EXPOSE 8004
+ENTRYPOINT ["/app/media_crawler"]

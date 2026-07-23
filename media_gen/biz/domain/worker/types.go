@@ -40,7 +40,7 @@ type Info struct {
 type StepExecutor interface {
 	// ExecuteOnce 执行单次 Claim -> 生成(mock) -> Complete/Fail 循环。
 	// 返回 nil 表示成功完成一次执行（含 Claim 返回空的无操作场景）。
-	ExecuteOnce(ctx context.Context, workerID string) error
+	ExecuteOnce(ctx context.Context, workerID, platform, genWay, genType string) error
 }
 
 // NowFn 可注入的时钟，便于测试。生产用 time.Now。

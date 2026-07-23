@@ -11,6 +11,9 @@ services:
       SERVER_ADDR: ":8005"
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-gen?sslmode=disable
       LOG_DIR: /media_logs/media-gen
+      MEDIA_AUTH_URL: http://host.docker.internal:8001
+      MEDIA_MATERIALS_URL: http://host.docker.internal:8003
+      MEDIA_WORKFLOW_URL: http://host.docker.internal:8002
     volumes:
       - ../media_logs/media-gen:/media_logs/media-gen
     extra_hosts:

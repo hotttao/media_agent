@@ -22,11 +22,11 @@ func Register(r *server.Hertz) {
 		{
 			_v1 := _api.Group("/v1", _v1Mw()...)
 			_v1.GET("/workers", append(_listworkersMw(), worker.ListWorkers)...)
-			_v1.POST("/workers:start", append(_startworkerMw(), worker.StartWorker)...)
+			_v1.POST("/workers/start", append(_startworkerMw(), worker.StartWorker)...)
 			{
 				_workers := _v1.Group("/workers", _workersMw()...)
 				_workers.GET("/:worker_id", append(_getworkerstatusMw(), worker.GetWorkerStatus)...)
-				_workers.POST("/:worker_id:stop", append(_stopworkerMw(), worker.StopWorker)...)
+				_workers.POST("/:worker_id/stop", append(_stopworkerMw(), worker.StopWorker)...)
 			}
 		}
 	}

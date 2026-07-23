@@ -19,6 +19,5 @@ COPY --from=builder /out/media_gen /app/media_gen
 COPY media_gen/migrations/ /app/migrations/
 COPY media_gen/conf/ /app/conf/
 COPY media_gen/.env /app/.env
-EXPOSE media_gen
-ENTRYPOINT ["/app/8005"]
-%!(EXTRA string=media_gen)
+EXPOSE 8005
+ENTRYPOINT ["/app/media_gen"]

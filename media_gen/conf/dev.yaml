@@ -13,7 +13,7 @@ database:
   dsn: ${POSTGRES_DSN:-postgres://media_auth:media_auth@127.0.0.1:5432/media-gen?sslmode=disable}
   max_open_conns: 50
   max_idle_conns: 10
-  migrate_on_start: true
+  migrate_on_start: false
 
 consul:
   enabled: ${CONSUL_ENABLED:-false}
@@ -66,3 +66,17 @@ pprof:
 health:
   enabled: true
   path: "/health"
+
+client:
+  media_auth:
+    enabled: true
+    service_name: "media-auth"
+    base_domain: ${MEDIA_AUTH_URL:-http://127.0.0.1:8001}
+  media_materials:
+    enabled: true
+    service_name: "media-materials"
+    base_domain: ${MEDIA_MATERIALS_URL:-http://127.0.0.1:8003}
+  media_workflow:
+    enabled: true
+    service_name: "media-workflow"
+    base_domain: ${MEDIA_WORKFLOW_URL:-http://127.0.0.1:8002}

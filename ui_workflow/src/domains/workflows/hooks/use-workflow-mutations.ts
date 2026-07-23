@@ -5,7 +5,7 @@ import {
   updateWorkflow,
   validateWorkflow,
 } from "@/domains/workflows/lib/api";
-import type { ValidationResult, WorkflowInput } from "@/domains/workflows/types";
+import type { WorkflowInput } from "@/domains/workflows/types";
 
 export function useCreateWorkflow() {
   const qc = useQueryClient();

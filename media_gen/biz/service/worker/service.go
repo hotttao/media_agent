@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	workerdomain "media_agent/media_gen/biz/domain/worker"
 )
@@ -159,9 +160,33 @@ func (s *Service) List(stateFilter string) []*workerdomain.Info {
 //	}
 func (s *Service) loop(ctx context.Context, entry *workerEntry) {
 	defer close(entry.done)
-	log.Printf("worker %s started (stub loop, not actually claiming)", entry.info.WorkerID)
-	<-ctx.Done()
-	log.Printf("worker %s stopped", entry.info.WorkerID)
+	log.Printf("worker %s started (platform=%s gen_way=%s)", entry.info.WorkerID, entry.info.Platform, entry.info.GenWay)
+	pollInterval := time.Duration(entry.info.PollIntervalMs) * time.Millisecond
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("worker %s stopped", entry.info.WorkerID)
+			return
+		default:
+		}
+		err := s.executor.ExecuteOnce(ctx, entry.info.WorkerID, entry.info.Platform, entry.info.GenWay, entry.info.GenType)
+		s.mu.Lock()
+		entry.info.LastClaimAt = workerdomain.NowFn().UnixMilli()
+		if err != nil {
+			entry.info.LastError = err.Error()
+			log.Printf("worker %s execute: %v", entry.info.WorkerID, err)
+		} else {
+			entry.info.LastCompleteAt = workerdomain.NowFn().UnixMilli()
+			entry.info.LastError = ""
+		}
+		s.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			log.Printf("worker %s stopped", entry.info.WorkerID)
+			return
+		case <-time.After(pollInterval):
+		}
+	}
 }
 
 // StartRequest 是 Start 的入参（对齐 proto StartWorkerReq）。

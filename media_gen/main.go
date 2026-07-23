@@ -53,9 +53,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("init db: %v", err)
 	}
-	if err := dal.Migrate("migrations", dbCfg); err != nil {
-		log.Fatalf("db migrate: %v", err)
-	}
+	// media_gen 无表，不跑 migration（避免 dirty database 崩溃）
+	// _ = db
 	_ = db
 
 	// 下游 client 装配：media_workflow.job_service（ClaimStepRun / CompleteStepRun / FailStepRun）。

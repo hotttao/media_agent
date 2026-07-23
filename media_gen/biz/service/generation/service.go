@@ -30,12 +30,12 @@ func NewService(repo gendomain.Repository) *Service {
 //  2. 若返回 StepRunID=="" 表示无待领，直接 return nil
 //  3. GenerateCandidates(mock): 按 candidate_count 产 N 个假候选
 //  4. Complete 回写候选；失败则 Fail 回写原因
-func (s *Service) ExecuteOnce(ctx context.Context, workerID string) error {
+func (s *Service) ExecuteOnce(ctx context.Context, workerID, platform, genWay, genType string) error {
 	// TODO(real-impl): 从 worker registry 取 (platform, gen_way, gen_type)。
 	// 当前签名只收 workerID，platform/gen_way/gen_type 由调用方在 loop 内传入或由 registry 查询。
 	// 本期 mock loop 不实际跑，签名保持最简。
 	// 真实实现时 ExecuteOnce 签名可能扩展为 (ctx, workerInfo) 或查询 registry。
-	return s.executeOnceWith(ctx, workerID, "", "", "")
+	return s.executeOnceWith(ctx, workerID, platform, genWay, genType)
 }
 
 // executeOnceWith 内部入口，可指定 platform/gen_way/gen_type（便于真实实现扩展签名）。

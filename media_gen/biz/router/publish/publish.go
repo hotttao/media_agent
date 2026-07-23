@@ -21,7 +21,7 @@ func Register(r *server.Hertz) {
 		_api := root.Group("/api", _apiMw()...)
 		{
 			_v1 := _api.Group("/v1", _v1Mw()...)
-			_v1.POST("/publish:video", append(_publishvideoMw(), publish.PublishVideo)...)
+			_v1.POST("/publish/video", append(_publishvideoMw(), publish.PublishVideo)...)
 			{
 				_publish := _v1.Group("/publish", _publishMw()...)
 				_publish.GET("/targets", append(_getsupportedtargetsMw(), publish.GetSupportedTargets)...)
