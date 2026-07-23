@@ -33,8 +33,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from adapter.biz.api.v1.deps import AdapterConfigDep, AgentHooksDep, SessionManagerDep
-from adapter.biz.domain.acp.entity import StopReason
-from adapter.biz.domain.acp.errors import LoadSessionFailed
+from adapter.biz.domain.acp_adapter.entity import StopReason
+from adapter.biz.domain.acp_adapter.errors import LoadSessionFailed
 from adapter.schemas.acp.request import ChatRequest, ReloadConfigRequest
 from adapter.schemas.acp.response import (
     AgentInfo,

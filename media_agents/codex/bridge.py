@@ -20,8 +20,8 @@ import logging
 import os
 from typing import Any, cast
 
-from adapter.biz.domain.acp.entity import PromptResult, StopReason
-from adapter.biz.domain.acp.repository import AcpSessionHandler
+from adapter.biz.domain.acp_adapter.entity import PromptResult, StopReason
+from adapter.biz.domain.acp_adapter.repository import AcpSessionHandler
 
 logger = logging.getLogger(__name__)
 

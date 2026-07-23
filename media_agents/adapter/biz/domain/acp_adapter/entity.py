@@ -11,7 +11,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from adapter.biz.domain.acp.bridge import AcpBridge
+    from adapter.biz.domain.acp_adapter.bridge import AcpBridge
 
 
 class StopReason(StrEnum):

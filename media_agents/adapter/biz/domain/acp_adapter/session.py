@@ -4,8 +4,8 @@ import asyncio
 import json
 from __future__ import annotations
 from typing import Any, Protocol, runtime_checkable
-from adapter.biz.domain.acp.bridge import AcpBridge
-from adapter.biz.domain.acp.translator import AcpEventTranslator
+from adapter.biz.domain.acp_adapter.bridge import AcpBridge
+from adapter.biz.domain.acp_adapter.translator import AcpEventTranslator
 
 
 @runtime_checkable

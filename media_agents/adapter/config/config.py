@@ -6,7 +6,7 @@ schema 模板，OmegaConf.to_object() 返回 Pydantic 实例。
 
 对标 acp-server.ts 的 AcpAgentServerConfig 静态部分。运行时回调（load_config /
 load_skills / restart_bridge / record_usage 等）由 AgentHooks Protocol 注入，
-见 biz/domain/acp/repository.py。
+见 biz/domain/acp_adapter/repository.py。
 """
 
 from __future__ import annotations

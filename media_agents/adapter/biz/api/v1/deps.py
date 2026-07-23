@@ -10,7 +10,7 @@ from typing import Annotated, cast
 
 from fastapi import Depends, Request
 
-from adapter.biz.domain.acp.repository import AgentHooks
+from adapter.biz.domain.acp_adapter.repository import AgentHooks
 from adapter.biz.service.acp.service import SessionManager
 from adapter.config.config import AdapterConfig
 

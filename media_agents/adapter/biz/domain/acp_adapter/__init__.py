@@ -1,8 +1,8 @@
 
 
-from adapter.biz.domain.acp.acp_abs import BridgeFactory, AgentHooks
-from adapter.biz.domain.acp.entity import Chat
-from adapter.biz.domain.acp.session import AcpSession
+from adapter.biz.domain.acp_adapter.acp_abs import BridgeFactory, AgentHooks
+from adapter.biz.domain.acp_adapter.entity import Chat
+from adapter.biz.domain.acp_adapter.session import AcpSession
 
 
 class AcpServer:

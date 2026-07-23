@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from adapter.biz.api.v1.routes.acp.router import build_acp_router
-from adapter.biz.domain.acp.repository import AgentHooks, BridgeFactory
+from adapter.biz.domain.acp_adapter.repository import AgentHooks, BridgeFactory
 from adapter.biz.service.acp.service import SessionManager
 from adapter.config.config import AdapterConfig
 from adapter.infra.logging import setup_logging

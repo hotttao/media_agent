@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from adapter.biz.domain.acp.entity import PromptResult
-from adapter.biz.domain.acp.session import AcpSession
+from adapter.biz.domain.acp_adapter.entity import PromptResult
+from adapter.biz.domain.acp_adapter.session import AcpSession
 
 
 class AcpBridge:

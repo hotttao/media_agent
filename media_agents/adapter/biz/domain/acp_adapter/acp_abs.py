@@ -1,5 +1,5 @@
 from typing import Any, Protocol, runtime_checkable
-from adapter.biz.domain.acp.bridge import AcpBridge
+from adapter.biz.domain.acp_adapter.bridge import AcpBridge
 
 
 @runtime_checkable

@@ -15,9 +15,9 @@ import asyncio
 import logging
 from typing import Any
 
-from adapter.biz.domain.acp.entity import AcpSession, PromptResult
-from adapter.biz.domain.acp.errors import LoadSessionFailed
-from adapter.biz.domain.acp.repository import (
+from adapter.biz.domain.acp_adapter.entity import AcpSession, PromptResult
+from adapter.biz.domain.acp_adapter.errors import LoadSessionFailed
+from adapter.biz.domain.acp_adapter.repository import (
     AcpSessionHandler,
     AgentHooks,
     BridgeFactory,

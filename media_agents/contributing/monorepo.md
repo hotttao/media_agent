@@ -46,7 +46,7 @@ adapter  <──── agents/codex
 - **adapter** 是被依赖方：`biz / schemas / config / infra / clients` 不得 import `agents_*`
 - **agents 互不依赖**：`agents_codex` / `agents_goose` / `agents_claude_code` 不得相互 import；跨 agent
   的公共能力下沉到 `adapter`
-- **agents 可 import adapter**：`from adapter.main import build_app` / `from biz.domain.acp.repository
+- **agents 可 import adapter**：`from adapter.main import build_app` / `from biz.domain.acp_adapter
   import AgentHooks` / `from config.config import load_adapter_config` 等
 
 ## 配置加载：omegaconf + Pydantic
