@@ -19,6 +19,5 @@ COPY --from=builder /out/media_materials /app/media_materials
 COPY media_materials/migrations/ /app/migrations/
 COPY media_materials/conf/ /app/conf/
 COPY media_materials/.env /app/.env
-EXPOSE media_materials
-ENTRYPOINT ["/app/8003"]
-%!(EXTRA string=media_materials)
+EXPOSE 8003
+ENTRYPOINT ["/app/media_materials"]

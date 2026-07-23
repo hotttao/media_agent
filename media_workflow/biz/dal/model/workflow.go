@@ -42,8 +42,8 @@ type StepBinding struct {
 	StepID       string    `gorm:"column:step_id;not null"`
 	ToInput      string    `gorm:"column:to_input;not null"`
 	Source       string    `gorm:"column:source;not null"`
-	Ref          string    `gorm:"column:ref"`
-	ConstValue   string    `gorm:"column:const_value"`
+	Ref          *string   `gorm:"column:ref"`
+	ConstValue   *string   `gorm:"column:const_value"`
 	DisplayOrder int       `gorm:"column:display_order;not null"`
 	CreatedAt    time.Time `gorm:"column:created_at;not null"`
 }

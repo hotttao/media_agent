@@ -39,7 +39,7 @@ func (a *templateLookupAdapter) GetVersion(ctx context.Context, id string, versi
 		slots[i] = wfdomain.SlotSnapshot{Name: in.Name, ResourceType: in.ResourceType, Required: in.Required}
 	}
 	// status 需从当前 template 取（version 快照无 status；查当前）
-	t, err := a.svc.Get(ctx, id, "") // internal lookup, no caller check
+	t, err := a.svc.Get(ctx, id, auth.CallerID(ctx)) // 传 callerID 供 canRead 校验
 	if err != nil {
 		return nil, err
 	}

@@ -134,11 +134,18 @@ func BatchGetAssetKind(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	kinds, notFound := Svc.BatchGet(ctx, req.GetNames())
-	rows := make([]*pb.AssetKind, len(kinds))
+	// 返回 DTO（resource_type/media_type/status 用 string，避免 proto enum 经 encoding/json 编码为 number）
+	out := make([]map[string]string, len(kinds))
 	for i, ak := range kinds {
-		rows[i] = toView(ak)
+		out[i] = map[string]string{
+			"name":          ak.Name,
+			"resource_type": string(ak.ResourceType),
+			"media_type":     string(ak.MediaType),
+			"source_table":  ak.SourceTable,
+			"status":        string(ak.Status),
+		}
 	}
-	c.JSON(consts.StatusOK, &pb.BatchGetAssetKindResp{Kinds: rows, NotFound: notFound})
+	c.JSON(consts.StatusOK, map[string]any{"kinds": out, "not_found": notFound})
 }
 
 // —— 映射 ——

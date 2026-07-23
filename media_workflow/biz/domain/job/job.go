@@ -37,13 +37,30 @@ type JobInput struct {
 	Materials []MaterialData `json:"material,omitempty"`
 }
 
-type MaterialData struct{ Name, URL, Content string }
-type AssetData struct{ Name, URL, Content string }
+type MaterialData struct {
+	Name    string `json:"name"`
+	URL     string `json:"url"`
+	Content string `json:"content"`
+}
+type AssetData struct {
+	Name    string `json:"name"`
+	URL     string `json:"url"`
+	Content string `json:"content"`
+}
 type ProductData struct {
-	ID, Name, TargetAudience, ProductDetails, DisplayActions string
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	TargetAudience  string `json:"target_audience"`
+	ProductDetails  string `json:"product_details"`
+	DisplayActions  string `json:"display_actions"`
 }
 type VirtualIpData struct {
-	ID, Name, AvatarURL, FullBodyURL, ThreeViewURL, NineViewURL string
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	AvatarURL    string `json:"avatar_url"`
+	FullBodyURL  string `json:"full_body_url"`
+	ThreeViewURL string `json:"three_view_url"`
+	NineViewURL  string `json:"nine_view_url"`
 }
 
 type Candidate struct {

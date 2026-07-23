@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 	"testing"
 )
 
@@ -39,6 +40,7 @@ func TestWorkflowFull(t *testing.T) {
 	user := envOr("MEDIA_AUTH_E2E_USER", "smoke")
 	pass := envOr("MEDIA_AUTH_E2E_PASS", "smoke123")
 	scope := "ai_clothing"
+	ts := time.Now().Format("0102150405")
 
 	// 1. login + service token
 	uid, token := materialsBearerToken(t, authAddr, user, pass)
@@ -46,7 +48,7 @@ func TestWorkflowFull(t *testing.T) {
 
 	// 2. create material(scene 图)+ virtual_ip
 	matStatus, matBody := doJSONBearer(t, matAddr, "POST", "/api/v1/materials?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
-		"name": "e2e_scene", "asset_kind": "scene", "url": "https://mock/scene.jpg", "visibility": "public",
+		"name": "e2e_scene_"+ts, "asset_kind": "scene", "url": "https://mock/scene.jpg", "visibility": "public",
 	})
 	if matStatus != http.StatusOK {
 		t.Fatalf("create material: status=%d body=%s", matStatus, matBody)
@@ -59,7 +61,7 @@ func TestWorkflowFull(t *testing.T) {
 	defer doJSONBearer(t, matAddr, "DELETE", "/api/v1/materials/"+mat.ID, token, nil)
 
 	vipStatus, vipBody := doJSONBearer(t, matAddr, "POST", "/api/v1/virtual-ips?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
-		"name": "e2e_vip", "avatar_url": "https://mock/avatar.jpg", "visibility": "public",
+		"name": "e2e_vip_"+ts, "avatar_url": "https://mock/avatar.jpg", "visibility": "public",
 	})
 	if vipStatus != http.StatusOK {
 		t.Fatalf("create virtual_ip: status=%d body=%s", vipStatus, vipBody)
@@ -73,7 +75,7 @@ func TestWorkflowFull(t *testing.T) {
 
 	// 3. create template(Go template prompt_body + needs_confirm=false 单候选)
 	tplStatus, tplBody := doJSONBearer(t, wfAddr, "POST", "/api/v1/templates?scope="+scope+"&created_by="+uid, token, map[string]any{
-		"name": "e2e_template", "prompt_body": "生成 {{.scene.url}} 的图",
+		"name": "e2e_template_"+ts, "prompt_body": "生成 {{.scene.url}} 的图",
 		"inputs": []map[string]any{
 			{"name": "scene", "resource_type": "MATERIAL", "required": true, "display_order": 1},
 		},
@@ -100,7 +102,7 @@ func TestWorkflowFull(t *testing.T) {
 
 	// 4. create workflow(单 step gen,引用 template,binding scene = WORKFLOW_INPUT)
 	wfStatus, wfBody := doJSONBearer(t, wfAddr, "POST", "/api/v1/workflows?scope="+scope+"&created_by="+uid, token, map[string]any{
-		"name": "e2e_workflow", "output_step_key": "gen",
+		"name": "e2e_workflow_"+ts, "output_step_key": "gen",
 		"steps": []map[string]any{
 			{
 				"key": "gen", "name": "gen", "step_order": 1,
@@ -143,10 +145,10 @@ func TestWorkflowFull(t *testing.T) {
 	}
 	var job struct {
 		JobID  string `json:"job_id"`
-		Status string `json:"status"`
+		Status int `json:"status"`
 	}
 	json.Unmarshal(jobBody, &job)
-	t.Logf("submitted job id=%s status=%s", job.JobID, job.Status)
+	t.Logf("submitted job id=%s status=%d", job.JobID, job.Status)
 
 	// 6. claim step run(模拟 worker)
 	claimStatus, claimBody := doJSONBearer(t, wfAddr, "POST", "/api/v1/step-runs/claim", token, map[string]any{
@@ -185,21 +187,22 @@ func TestWorkflowFull(t *testing.T) {
 	}
 	var jobResult struct {
 		Job struct {
-			Status string `json:"status"`
+			Status int `json:"status"`
 		} `json:"job"`
 		StepRuns []struct {
-			Status        string `json:"status"`
+			Status        int    `json:"status"`
 			OutputAssetID string `json:"output_asset_id"`
 		} `json:"step_runs"`
 	}
 	json.Unmarshal(getBody, &jobResult)
-	t.Logf("job status=%s step_runs=%d", jobResult.Job.Status, len(jobResult.StepRuns))
+	t.Logf("job raw=%s", string(getBody))
+	t.Logf("job status=%d step_runs=%d", jobResult.Job.Status, len(jobResult.StepRuns))
 
-	if jobResult.Job.Status != "succeeded" {
-		t.Errorf("job status: got %q, want succeeded", jobResult.Job.Status)
+	if jobResult.Job.Status != 4 { // JobStatus SUCCEEDED=4
+		t.Errorf("job status: got %d, want 4(succeeded)", jobResult.Job.Status)
 	}
-	if len(jobResult.StepRuns) == 0 || jobResult.StepRuns[0].Status != "succeeded" {
-		t.Errorf("step_run[0] status: got %v, want succeeded", jobResult.StepRuns)
+	if len(jobResult.StepRuns) == 0 || jobResult.StepRuns[0].Status != 5 { // StepRunStatus SUCCEEDED=5
+		t.Errorf("step_run[0] status: got %d, want 5(succeeded)", jobResult.StepRuns[0].Status)
 	}
 	if len(jobResult.StepRuns) == 0 || jobResult.StepRuns[0].OutputAssetID == "" {
 		t.Errorf("step_run[0].output_asset_id empty (finalizeStepRun should have set it)")

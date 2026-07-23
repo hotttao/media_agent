@@ -9,6 +9,7 @@ services:
     - ../docker-compose/.env.${INFRA:-unit}
     environment:
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-materials?sslmode=disable
+      MEDIA_AUTH_URL: http://host.docker.internal:8001
       LOG_DIR: /media_logs/media-materials
     volumes:
     - ../media_logs/media-materials:/media_logs/media-materials

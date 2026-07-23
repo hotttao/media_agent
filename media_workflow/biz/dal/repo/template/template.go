@@ -46,6 +46,17 @@ func (r *Repo) Save(ctx context.Context, t *domain.Template) error {
 			return err
 		}
 	}
+	// version=1 快照入 template_versions（供 workflow validate GetVersion 查询）
+	inputsJSON, _ := json.Marshal(t.Inputs)
+	tv := &model.TemplateVersion{
+		ID:             "tv_" + row.ID + "_" + pad(t.Version),
+		TemplateID:     row.ID, Version: t.Version,
+		PromptBody:     t.PromptBody, OutputAssetKind: t.OutputAssetKind,
+		Platform:       t.Platform, GenWay: t.GenWay, GenType: t.GenType,
+		NeedsConfirm:   t.NeedsConfirm, CandidateCount: t.CandidateCount,
+		InputsSnapshot: inputsJSON, CreatedBy: t.CreatedBy, CreatedAt: time.Now(),
+	}
+	_ = Q.TemplateVersion.WithContext(ctx).Create(tv)
 	return nil
 }
 

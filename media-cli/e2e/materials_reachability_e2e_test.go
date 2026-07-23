@@ -4,7 +4,7 @@
 // 前提：media_auth + media_materials server 已起；media_gen publish 测试还需 media_gen server。
 //   - 内部 RPC（/api/internal/v1/reachability:* / generated-assets:upsert）跳过 auth 中间件
 //     （materials main.go SkipPrefixes 含 /api/internal/），可直接裸 HTTP 调用。
-//   - 公开 API（/api/v1/*）走 auth 中间件，需 Bearer service token（从 media_auth /api/auth/tokens 建）。
+//   - 公开 API（/api/v1/*）走 auth 中间件，需 Bearer service token（从 media_auth /api/service-tokens 建）。
 //
 // 用环境变量指定地址：MEDIA_AUTH_ADDR / MEDIA_MATERIALS_ADDR / MEDIA_GEN_ADDR；未设则 skip。
 // 用 MEDIA_AUTH_E2E_USER / MEDIA_AUTH_E2E_PASS 指定已 seed 的测试账号。
@@ -66,13 +66,13 @@ func doJSONBearer(t *testing.T, addr, method, path, token string, body any) (int
 }
 
 // materialsBearerToken 在 media_auth 创建 service token 并返回（用于调 materials 公开 API）。
-// 复用现有 e2e 的 login + doJSON 工具：login 拿 session cookie，POST /api/auth/tokens 建 token。
+// 复用现有 e2e 的 login + doJSON 工具：login 拿 session cookie，POST /api/service-tokens 建 token。
 func materialsBearerToken(t *testing.T, authAddr, user, pass string) (uid, token string) {
 	t.Helper()
 	authClient := httpClient(t)
 	uid = login(t, authClient, authAddr, user, pass)
 
-	status, body := doJSON(t, authClient, "POST", authAddr+"/api/auth/tokens", map[string]string{
+	status, body := doJSON(t, authClient, "POST", authAddr+"/api/service-tokens", map[string]string{
 		"name": "e2e_materials_reach_" + time.Now().Format("150405"),
 	})
 	if status != 201 {
@@ -327,7 +327,7 @@ func TestMaterialsReachability(t *testing.T) {
 	// revoke token（best-effort，不阻塞测试结果）
 	authClient := httpClient(t)
 	login(t, authClient, authAddr, user, pass)
-	doJSON(t, authClient, "DELETE", authAddr+"/api/auth/tokens/"+token, nil)
+	doJSON(t, authClient, "DELETE", authAddr+"/api/service-tokens/"+token, nil)
 
 	t.Log("✅ materials reachability e2e passed")
 }
@@ -444,7 +444,7 @@ func TestMaterialsBindingsEndAt(t *testing.T) {
 	// revoke token
 	authClient := httpClient(t)
 	login(t, authClient, authAddr, user, pass)
-	doJSON(t, authClient, "DELETE", authAddr+"/api/auth/tokens/"+token, nil)
+	doJSON(t, authClient, "DELETE", authAddr+"/api/service-tokens/"+token, nil)
 
 	t.Log("✅ materials bindings_end_at e2e passed")
 }
@@ -560,7 +560,7 @@ func TestMaterialsGenPublishIntegration(t *testing.T) {
 	// revoke token
 	authClient := httpClient(t)
 	login(t, authClient, authAddr, user, pass)
-	doJSON(t, authClient, "DELETE", authAddr+"/api/auth/tokens/"+token, nil)
+	doJSON(t, authClient, "DELETE", authAddr+"/api/service-tokens/"+token, nil)
 
 	t.Log("✅ materials + media_gen cross-service publish e2e passed")
 }

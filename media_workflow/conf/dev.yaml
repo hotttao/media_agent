@@ -66,3 +66,14 @@ pprof:
 health:
   enabled: true
   path: "/health"
+
+# 下游 client（docker 用 MEDIA_AUTH_URL=host.docker.internal:8001）
+client:
+  media_auth:
+    enabled: true
+    service_name: "media-auth"
+    base_domain: ${MEDIA_AUTH_URL:-http://127.0.0.1:8001}
+  media_materials:
+    enabled: true
+    service_name: "media-materials"
+    base_domain: ${MEDIA_MATERIALS_URL:-http://127.0.0.1:8003}

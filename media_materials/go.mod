@@ -4,16 +4,21 @@ go 1.26.3
 
 require (
 	github.com/cloudwego/hertz v0.10.5
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
+	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.7.0
 	github.com/lib/pq v1.12.3
 	gorm.io/driver/postgres v1.5.11
+	gorm.io/gen v0.3.28
 	gorm.io/gorm v1.31.2
+	gorm.io/plugin/dbresolver v1.6.2
 	media_agent/hertz_gen v0.0.0
 	media_agent/hertz_infra v0.0.0-00010101000000-000000000000
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/alibaba/sentinel-golang v1.0.4 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
@@ -32,10 +37,9 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.4 // indirect
+	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
-	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/hashicorp/consul/api v1.34.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
@@ -58,7 +62,7 @@ require (
 	github.com/hertz-contrib/registry/consul v0.0.0-20250319055937-8a220332e808 // indirect
 	github.com/hertz-contrib/requestid v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
+	github.com/jackc/pgservicefile v0.0.0-20231201235250-de7065d80cb9 // indirect
 	github.com/jackc/pgx/v5 v5.5.5 // indirect
 	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
@@ -101,16 +105,21 @@ require (
 	golang.org/x/arch v0.6.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
+	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
+	golang.org/x/tools v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250818200422-3122310a409c // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250818200422-3122310a409c // indirect
 	google.golang.org/grpc v1.74.2 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gorm.io/datatypes v1.2.4 // indirect
+	gorm.io/driver/mysql v1.5.7 // indirect
+	gorm.io/hints v1.1.0 // indirect
 )
 
 replace (

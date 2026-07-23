@@ -169,7 +169,7 @@ func (r *Repo) saveSteps(ctx context.Context, Q *query.Query, w *domain.Workflow
 			bindRow := &model.StepBinding{
 				ID:     "sbd_" + stepRow.ID + "_" + pad(j),
 				StepID: stepRow.ID, ToInput: b.ToInput,
-				Source: string(b.Source), Ref: b.Ref, ConstValue: b.ConstValue,
+				Source: string(b.Source), Ref: strPtr(b.Ref), ConstValue: strPtr(b.ConstValue),
 				DisplayOrder: b.DisplayOrder, CreatedAt: time.Now(),
 			}
 			if err := Q.StepBinding.WithContext(ctx).Create(bindRow); err != nil {
@@ -212,7 +212,7 @@ func stepToDomain(s *model.WorkflowStep, bindings []*model.StepBinding) domain.S
 	for _, b := range bindings {
 		st.Bindings = append(st.Bindings, domain.Binding{
 			ToInput: b.ToInput, Source: domain.BindingSource(b.Source),
-			Ref: b.Ref, ConstValue: b.ConstValue, DisplayOrder: b.DisplayOrder,
+			Ref: strVal(b.Ref), ConstValue: strVal(b.ConstValue), DisplayOrder: b.DisplayOrder,
 		})
 	}
 	return st
@@ -267,3 +267,9 @@ func (r *GrantRepo) RemoveGrant(ctx context.Context, workflowID, teamID string) 
 	}
 	return nil
 }
+
+
+func strPtr(v string) *string { if v == "" { return nil }; return &v }
+
+
+func strVal(p *string) string { if p == nil { return "" }; return *p }
