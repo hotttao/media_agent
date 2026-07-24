@@ -8,9 +8,19 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from adapter.biz.shared.agent_environment import (
+    apply_credentials,
+    build_acp_mcp_servers,
+    parse_mcp_servers,
+    read_runtime_config,
+    write_mcp_json,
+    write_prompt_file,
+    write_runtime_config,
+)
 from adapter.clients.cp import CpClient
 from adapter.config.config import AdapterConfig, ConfigError, load_agent_config
 
@@ -76,10 +86,15 @@ class GooseHooks:
         workspace_id: str | None = None,
         goose_path_root: str | None = None,
         workspace_dir: str | Path = DEFAULT_WORKSPACE_DIR,
+        goose_config_dir: str | Path = HOME / ".config" / "goose",
     ) -> None:
         self._cp_client = cp_client or CpClient(base_url=cp_url, workspace_id=workspace_id)
         self._goose_path_root = goose_path_root
         self._workspace_dir = Path(workspace_dir)
+        self._goose_config_dir = Path(goose_config_dir).expanduser()
+        self._api_key = ""
+        self._user_mcp: dict[str, dict[str, Any]] = {}
+        self._has_mcp = False
         self._accumulated: dict[str, tuple[int, int]] = {}
 
     def track_ext_notification(
@@ -97,42 +112,36 @@ class GooseHooks:
         self._accumulated[platform_session_id] = (inp, out)
 
     def load_mcp_servers(self, session_token: str | None) -> list[Any]:
-        if not self._cp_client.is_configured():
-            return []
-        url = self._cp_client.mcp_url()
-        if not url:
-            return []
-        return [
-            {
-                "type": "http",
-                "name": "tos-platform",
-                "url": url,
-                "headers": self._cp_client.mcp_headers(session_token),
-            }
-        ]
+        return build_acp_mcp_servers(
+            platform_url=self._cp_client.mcp_url(),
+            platform_headers=self._cp_client.mcp_headers(session_token),
+            user_mcp_servers=self._user_mcp,
+            session_token=session_token,
+            include_user_http=True,
+            include_user_stdio=True,
+        )
 
     def has_mcp_servers(self) -> bool:
-        return self._cp_client.is_configured()
+        return self._has_mcp
 
     async def load_config(self) -> bool:
         config = await self._cp_client.fetch_workspace_config()
         if config is None:
             return False
-        self._workspace_dir.mkdir(parents=True, exist_ok=True)
-        (self._workspace_dir / "runtime.json").write_text(
-            json.dumps(
-                {
-                    "model": config.get("model", ""),
-                    "provider_type": config.get("provider_type", ""),
-                    "base_url": config.get("base_url", ""),
-                    "small_model": config.get("small_model", ""),
-                }
-            ),
-            encoding="utf-8",
+        self._api_key = str(config.get("api_key") or "")
+        self._user_mcp = parse_mcp_servers(config.get("mcp_config"))
+        self._has_mcp = bool(self._user_mcp)
+
+        prompt = write_prompt_file(self._workspace_dir, config)
+        runtime = write_runtime_config(self._workspace_dir, config)
+        write_mcp_json(self._goose_config_dir, self._user_mcp)
+        _write_goose_config_yaml(config, self._goose_config_dir, runtime)
+        logger.info(
+            "Config written: model=%s provider=%s prompt=%dchars",
+            config.get("model"),
+            config.get("provider_type"),
+            len(prompt),
         )
-        prompt = config.get("prompt_content") or config.get("system_prompt") or ""
-        (self._workspace_dir / "AGENTS.md").write_text(prompt, encoding="utf-8")
-        logger.info("Config written: model=%s", config.get("model"))
         return True
 
     async def load_skills(self) -> tuple[bool, list[str]]:
@@ -143,14 +152,18 @@ class GooseHooks:
         credentials = await self._cp_client.fetch_credentials()
         if credentials is None:
             return False
+        result = apply_credentials(credentials, home=HOME)
         logger.info(
-            'Credentials fetched but injection is not implemented count=%s',
-            len(credentials),
+            "Credentials loaded: %d injected, %d cleaned",
+            result.injected,
+            result.cleaned,
         )
         return True
 
     async def restart_bridge(self) -> None:
-        return
+        runtime = read_runtime_config(self._workspace_dir)
+        if runtime is not None:
+            _apply_goose_provider_env(runtime, self._api_key)
 
     def record_usage(self, session_id: str, usage: Any) -> None:
         acc = self._accumulated.get(session_id)
@@ -186,9 +199,94 @@ class GooseHooks:
             logger.exception("record_usage write failed session=%s", session_id)
 
 
-def _load_runtime_model(workspace_dir: Path) -> str | None:
-    try:
-        text = (workspace_dir / "runtime.json").read_text(encoding="utf-8")
-        return cast(str | None, json.loads(text).get("model"))
-    except (FileNotFoundError, json.JSONDecodeError):
+def _write_goose_config_yaml(
+    config: dict[str, Any], goose_dir: Path, runtime: dict[str, str]
+) -> None:
+    goose_dir.mkdir(parents=True, exist_ok=True)
+    yaml_lines = [
+        f"GOOSE_MODEL: {json.dumps(runtime['model'])}",
+        "GOOSE_MODE: auto",
+        "extensions:",
+        "  developer:",
+        "    type: builtin",
+        "    name: developer",
+        "    enabled: true",
+        "  memory:",
+        "    type: builtin",
+        "    name: memory",
+        "    enabled: false",
+        "  chatrecall:",
+        "    type: builtin",
+        "    name: chatrecall",
+        "    enabled: false",
+    ]
+    agent_settings = str(config.get("agent_settings") or "").strip()
+    if _is_yaml_agent_settings(agent_settings):
+        yaml_lines.extend(
+            ["", "# agent_settings", _strip_platform_managed_yaml_keys(agent_settings)]
+        )
+    (goose_dir / "config.yaml").write_text("\n".join(yaml_lines) + "\n", encoding="utf-8")
+
+
+def _is_yaml_agent_settings(agent_settings: str) -> bool:
+    if not agent_settings or agent_settings == "{}" or agent_settings.startswith("{"):
+        return False
+    return not any("=" in line for line in agent_settings.splitlines() if line.strip())
+
+
+def _strip_platform_managed_yaml_keys(yaml: str) -> str:
+    managed = {"GOOSE_MODEL", "GOOSE_MODE", "extensions"}
+    kept: list[str] = []
+    skipping = False
+    for line in yaml.splitlines():
+        key = _top_level_yaml_key(line)
+        if key is not None:
+            skipping = key in managed
+        if not skipping:
+            kept.append(line)
+    return "\n".join(kept)
+
+
+def _top_level_yaml_key(line: str) -> str | None:
+    if not line or line[0].isspace() or ":" not in line:
         return None
+    key = line.split(":", 1)[0]
+    if not key.replace("_", "").replace("-", "").replace(".", "").isalnum():
+        return None
+    return key
+
+
+def _apply_goose_provider_env(runtime: dict[str, str], api_key: str) -> None:
+    for key in [
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_HOST",
+        "OPENAI_BASE_PATH",
+        "GOOSE_FAST_MODEL",
+    ]:
+        os.environ.pop(key, None)
+    os.environ["GOOSE_PROVIDER"] = "openai"
+    os.environ["GOOSE_MODEL"] = runtime["model"]
+    os.environ["GOOSE_MODE"] = "auto"
+    os.environ["GOOSE_DISABLE_KEYRING"] = "1"
+    os.environ["OPENAI_CUSTOM_HEADERS"] = "User-Agent=agent-platform-goose/1.0"
+    os.environ["GOOSE_DISABLE_TOOL_CALL_SUMMARY"] = "1"
+    os.environ["GOOSE_DISABLE_SESSION_NAMING"] = "1"
+    if api_key:
+        os.environ["OPENAI_API_KEY"] = api_key
+    if runtime.get("small_model"):
+        os.environ["GOOSE_FAST_MODEL"] = runtime["small_model"]
+    if runtime.get("base_url"):
+        parsed = urlparse(runtime["base_url"])
+        if parsed.scheme and parsed.netloc:
+            os.environ["OPENAI_HOST"] = f"{parsed.scheme}://{parsed.netloc}"
+            base_path = parsed.path.rstrip("/").lstrip("/")
+            os.environ["OPENAI_BASE_PATH"] = f"{base_path}/chat/completions"
+        else:
+            logger.error("Invalid base_url, ignoring: %s", runtime["base_url"])
+
+
+def _load_runtime_model(workspace_dir: Path) -> str | None:
+    runtime = read_runtime_config(workspace_dir)
+    return cast(str | None, runtime.get("model") if runtime else None)

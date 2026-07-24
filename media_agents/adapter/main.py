@@ -1,17 +1,9 @@
-"""adapter FastAPI app 工厂。
-
-对标 acp-server.ts 的 createAcpAgentApp + TS agent 的 server.ts 包装层。
-agent 包在自己的 main.py 调用 build_app(cfg, hooks, bridge_factory) 得到 FastAPI 实例，
-然后 `app.include_router(build_agent_router(...))` 追加自己的路由（skills / usage 等）。
-
-main.py 是 wiring 层：只做 app 创建 / middleware 注册 / router include / lifespan /
-日志初始化。禁止业务逻辑。
-"""
+﻿"""Shared FastAPI app factories for ACP agent adapters."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncContextManager, AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -25,20 +17,27 @@ from adapter.infra.logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
+ExtraLifespan = Callable[[FastAPI], AsyncContextManager[None]]
+
+
+def _add_common_middleware(app: FastAPI) -> None:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "MKCOL", "MOVE", "OPTIONS"],
+        allow_headers=["Content-Type", "Destination"],
+    )
+
 
 def build_base_app(cfg: AdapterConfig) -> FastAPI:
-    """构造共享 FastAPI 骨架：lifespan + CORS + 日志 + app.state。
-
-    不 include 任何 router。codex/goose 通过 build_app() 在此基础上挂 ACP 路由；
-    claude_code 不用 ACP router，直接调此函数拿到骨架再 include 自己的 routes。
-    """
+    """Build the shared FastAPI shell without ACP routes."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         setup_logging()
         app.state.adapter_config = cfg
         app.state.acp_server = None
-        app.state.session_manager = None  # claude_code 不用 SessionManager
+        app.state.session_manager = None
         app.state.hooks = None
         logger.info(
             "adapter base app started: agent=%s workspace=%s",
@@ -49,12 +48,7 @@ def build_base_app(cfg: AdapterConfig) -> FastAPI:
         logger.info("adapter base app shutdown")
 
     app = FastAPI(lifespan=lifespan)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["GET", "POST", "PUT", "DELETE", "MKCOL", "MOVE", "OPTIONS"],
-        allow_headers=["Content-Type", "Destination"],
-    )
+    _add_common_middleware(app)
     return app
 
 
@@ -63,19 +57,13 @@ def build_app(
     *,
     hooks: AgentHooks,
     bridge_factory: BridgeFactory,
+    extra_lifespan: ExtraLifespan | None = None,
 ) -> FastAPI:
-    """构造共享 FastAPI app（含 ACP router）。
+    """Build the shared FastAPI app with ACP routes.
 
-    Args:
-        cfg: AdapterConfig（omegaconf 从 yaml 加载成的 Pydantic 实例）。
-        hooks: agent 回调实现（load_config / load_skills / restart_bridge / record_usage）。
-        bridge_factory: bridge 工厂，每个 session 调用一次返回启动好的 AcpBridge。
-
-    agent 包在 main.py 用法：
-        cfg = load_adapter_config("conf/config.yaml")
-        app = build_app(cfg, hooks=MyHooks(), bridge_factory=make_bridge)
-        app.include_router(build_codex_router())  # agent 特有路由
-        uvicorn.run(app, host="0.0.0.0", port=3001)
+    Agent packages can pass ``extra_lifespan`` for boot-time config loading,
+    credential loading, skills sync, and auxiliary processes while keeping ACP
+    routers thin.
     """
 
     @asynccontextmanager
@@ -97,19 +85,16 @@ def build_app(
             cfg.workspace_dir,
         )
         try:
-            yield
+            if extra_lifespan is None:
+                yield
+            else:
+                async with extra_lifespan(app):
+                    yield
         finally:
             acp_server.stop_evictor()
             logger.info("adapter app shutdown")
 
     app = FastAPI(lifespan=lifespan)
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["GET", "POST", "PUT", "DELETE", "MKCOL", "MOVE", "OPTIONS"],
-        allow_headers=["Content-Type", "Destination"],
-    )
-
+    _add_common_middleware(app)
     app.include_router(build_acp_router())
     return app

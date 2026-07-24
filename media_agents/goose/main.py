@@ -25,6 +25,7 @@ def create_app() -> FastAPI:
         cp_client=CpClient(base_url=cfg.cp.url, workspace_id=cfg.cp.workspace_id),
         goose_path_root=cfg.goose.path_root,
         workspace_dir=cfg.workspace.dir,
+        goose_config_dir=cfg.goose.config_dir,
     )
 
     def bridge_factory(session_id: str) -> GooseAcpBridge:

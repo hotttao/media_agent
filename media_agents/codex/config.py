@@ -1,4 +1,4 @@
-"""Codex agent configuration and hooks."""
+﻿"""Codex agent configuration and hooks."""
 
 from __future__ import annotations
 
@@ -6,11 +6,21 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from adapter.biz.shared.agent_environment import (
+    apply_credentials,
+    build_acp_mcp_servers,
+    parse_mcp_servers,
+    read_runtime_config,
+    write_mcp_json,
+    write_prompt_file,
+    write_runtime_config,
+)
+from adapter.biz.shared.provider_environment import apply_openai_compatible_env
 from adapter.clients.cp import CpClient
 from adapter.config.config import AdapterConfig, ConfigError, load_agent_config
 
@@ -24,7 +34,7 @@ class CodexSectionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     program: str = "codex-acp"
-    initial_agent_mode: str = "default"
+    initial_agent_mode: str = "agent-full-access"
     config_dir: str = "~/.codex"
     disable_response_storage: bool = True
 
@@ -72,29 +82,14 @@ class CodexHooks:
         self._has_mcp = False
 
     def load_mcp_servers(self, session_token: str | None) -> list[Any]:
-        if not self._cp_client.is_configured():
-            return []
-        url = self._cp_client.mcp_url()
-        if not url:
-            return []
-        servers: list[Any] = [
-            {
-                "type": "http",
-                "name": "tos-platform",
-                "url": url,
-                "headers": self._cp_client.mcp_headers(session_token),
-            }
-        ]
-        for name, cfg in self._user_mcp.items():
-            if name == "tos-platform" or not cfg.get("url"):
-                continue
-            entry_headers = dict(cfg.get("headers") or {})
-            if session_token:
-                entry_headers["X-Session-Token"] = session_token
-            servers.append(
-                {"type": "http", "name": name, "url": cfg["url"], "headers": entry_headers}
-            )
-        return servers
+        return build_acp_mcp_servers(
+            platform_url=self._cp_client.mcp_url(),
+            platform_headers=self._cp_client.mcp_headers(session_token),
+            user_mcp_servers=self._user_mcp,
+            session_token=session_token,
+            include_user_http=True,
+            include_user_stdio=False,
+        )
 
     def has_mcp_servers(self) -> bool:
         return self._has_mcp
@@ -104,32 +99,21 @@ class CodexHooks:
         if config is None:
             return False
 
-        self._api_key = config.get("api_key") or ""
-        mcp_servers: dict[str, Any] = {}
-        try:
-            parsed = json.loads(config.get("mcp_config") or "{}")
-            mcp_servers = parsed.get("mcpServers") or parsed
-        except json.JSONDecodeError:
-            logger.warning("CP mcp_config is not valid JSON")
-        self._user_mcp = mcp_servers
-        self._has_mcp = bool(mcp_servers)
+        self._api_key = str(config.get("api_key") or "")
+        self._user_mcp = parse_mcp_servers(config.get("mcp_config"))
+        self._has_mcp = bool(self._user_mcp)
 
-        self._workspace_dir.mkdir(parents=True, exist_ok=True)
-        (self._workspace_dir / "runtime.json").write_text(
-            json.dumps(
-                {
-                    "model": config.get("model", ""),
-                    "provider_type": config.get("provider_type", ""),
-                    "base_url": config.get("base_url", ""),
-                    "small_model": config.get("small_model", ""),
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        _write_codex_toml(config, mcp_servers, self._codex_config_dir)
+        prompt = write_prompt_file(self._workspace_dir, config)
+        write_runtime_config(self._workspace_dir, config)
+        write_mcp_json(self._codex_config_dir, self._user_mcp)
+        _write_codex_toml(config, self._user_mcp, self._codex_config_dir)
         _write_codex_auth(self._api_key, self._codex_config_dir)
-        logger.info("Config written: model=%s", config.get("model"))
+        logger.info(
+            "Config written: model=%s provider=%s prompt=%dchars",
+            config.get("model"),
+            config.get("provider_type"),
+            len(prompt),
+        )
         return True
 
     async def load_skills(self) -> tuple[bool, list[str]]:
@@ -140,18 +124,17 @@ class CodexHooks:
         credentials = await self._cp_client.fetch_credentials()
         if credentials is None:
             return False
+        result = apply_credentials(credentials, home=HOME)
         logger.info(
-            'Credentials fetched but injection is not implemented count=%s',
-            len(credentials),
+            "Credentials loaded: %d injected, %d cleaned",
+            result.injected,
+            result.cleaned,
         )
         return True
 
     async def restart_bridge(self) -> None:
-        runtime = _load_runtime(self._workspace_dir)
-        if runtime and self._api_key:
-            os.environ["OPENAI_API_KEY"] = self._api_key
-            if runtime.get("base_url"):
-                os.environ["OPENAI_BASE_URL"] = runtime["base_url"]
+        runtime = read_runtime_config(self._workspace_dir)
+        apply_openai_compatible_env(runtime, api_key=self._api_key)
 
     def record_usage(self, session_id: str, usage: Any) -> None:
         return
@@ -163,13 +146,19 @@ def _write_codex_toml(
     codex_dir.mkdir(parents=True, exist_ok=True)
     model = config.get("model", "")
     provider_name = "custom" if config.get("base_url") else "openai"
+    agent_settings = str(config.get("agent_settings") or "").strip()
+    is_toml_agent_settings = bool(
+        agent_settings and agent_settings != "{}" and not agent_settings.startswith("{")
+    )
     toml: dict[str, Any] = {
         "model_provider": provider_name,
         "model": model,
         "disable_response_storage": True,
-        "sandbox_mode": "danger-full-access",
-        "approval_policy": "never",
     }
+    if not _toml_has_key(agent_settings, "sandbox_mode"):
+        toml["sandbox_mode"] = "danger-full-access"
+    if not _toml_has_key(agent_settings, "approval_policy"):
+        toml["approval_policy"] = "never"
     if config.get("base_url"):
         toml["model_providers"] = {
             "custom": {
@@ -189,7 +178,14 @@ def _write_codex_toml(
         toml["mcp_servers"] = mcp_section
     toml["features"] = {"memories": False}
 
-    (codex_dir / "config.toml").write_bytes(tomli_w.dumps(toml).encode("utf-8"))
+    content = tomli_w.dumps(toml)
+    if is_toml_agent_settings:
+        content += "\n# agent_settings\n" + agent_settings.rstrip() + "\n"
+    (codex_dir / "config.toml").write_bytes(content.encode("utf-8"))
+
+
+def _toml_has_key(agent_settings: str, key: str) -> bool:
+    return any(line.strip().startswith(f"{key} =") for line in agent_settings.splitlines())
 
 
 def _write_codex_auth(api_key: str, codex_dir: Path) -> None:
@@ -197,11 +193,3 @@ def _write_codex_auth(api_key: str, codex_dir: Path) -> None:
         return
     codex_dir.mkdir(parents=True, exist_ok=True)
     (codex_dir / "auth.json").write_text(json.dumps({"OPENAI_API_KEY": api_key}), encoding="utf-8")
-
-
-def _load_runtime(workspace_dir: Path) -> dict[str, Any] | None:
-    try:
-        data = json.loads((workspace_dir / "runtime.json").read_text(encoding="utf-8"))
-        return cast(dict[str, Any], data)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return None
