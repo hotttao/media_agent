@@ -89,14 +89,30 @@ class _ActiveToolCall:
     而不是默认 "completed"，否则会对一个 call emit N 个 terminal 事件。
     """
 
-    __slots__ = ("item_id", "title", "raw_input", "last_status", "terminal_emitted")
+    __slots__ = (
+        "item_id",
+        "title",
+        "raw_input",
+        "last_status",
+        "terminal_emitted",
+        "is_image_gen",
+    )
 
-    def __init__(self, item_id: str, title: str, raw_input: object, last_status: str) -> None:
+    def __init__(
+        self,
+        item_id: str,
+        title: str,
+        raw_input: object,
+        last_status: str,
+        *,
+        is_image_gen: bool = False,
+    ) -> None:
         self.item_id = item_id
         self.title = title
         self.raw_input = raw_input
         self.last_status = last_status
         self.terminal_emitted: bool = False
+        self.is_image_gen = is_image_gen
 
 
 # ── translator ───────────────────────────────────────────
@@ -139,6 +155,17 @@ class AcpEventTranslator:
             session_id=self.session_id,
             reason=reason,
             stats=stats,
+        )
+
+    def question_requested(
+        self, request_id: str, questions: list[object]
+    ) -> UniversalEvent:
+        return UniversalEvent(
+            type="question.requested",
+            timestamp=_ts(),
+            session_id=self.session_id,
+            request_id=request_id,
+            questions=questions,
         )
 
     def error(self, message: str, code: str | None = None) -> UniversalEvent:
@@ -237,20 +264,24 @@ class AcpEventTranslator:
     # ── tool_call -> finalize message + item.started(tool_call) ──
 
     def _on_tool_call(self, update: ToolCallStart) -> list[UniversalEvent]:
+        if update.tool_call_id.startswith("mcp_startup."):
+            return []
+
         events: list[UniversalEvent] = []
 
         # 先 finalize 正在进行的 text message（对标 TS currentMessageItem flush）
         events.extend(self._finalize_current_message())
 
         item_id = _next_item_id()
-        # 稳定工具名：优先 kind，其次 title（agent 子类可 override 提取 _meta）
         name = self._resolve_tool_name(update)
         status = update.status or "pending"
+        is_image_gen = update.title == "Image generation" or update.tool_call_id.startswith("ig_")
         self.active_tool_calls[update.tool_call_id] = _ActiveToolCall(
             item_id=item_id,
             title=name,
             raw_input=update.raw_input,
             last_status=status,
+            is_image_gen=is_image_gen,
         )
 
         tool_item = UniversalItem(
@@ -293,6 +324,14 @@ class AcpEventTranslator:
             if tracked
             else (update.status or "in_progress")
         )
+
+        if (
+            tracked
+            and tracked.is_image_gen
+            and effective_status != "failed"
+            and _has_image_content(update)
+        ):
+            effective_status = "completed"
 
         if tracked:
             if update.raw_input is not None:
@@ -345,7 +384,7 @@ class AcpEventTranslator:
                     item_id=item_id,
                     kind="tool_call",
                     role="assistant",
-                    status="completed" if not is_error else "failed",
+                    status="completed",
                     content=[
                         ContentPart(
                             type="tool_call",
@@ -360,6 +399,8 @@ class AcpEventTranslator:
 
         # 2) tool_result item.completed
         output = self._extract_tool_output(update)
+        if tracked is not None and tracked.is_image_gen:
+            output = _summarize_image_generation_output(getattr(update, "raw_output", None))
         events.append(
             UniversalEvent(
                 type="item.completed",
@@ -411,12 +452,10 @@ class AcpEventTranslator:
     # ── agent 子类 override 钩子 ──────────────────────────
 
     def _resolve_tool_name(self, update: object) -> str:
-        """提取稳定的工具名。
-
-        默认：优先 ACP ``kind``（execute/read/edit/...），其次 ``title``。
-        agent 子类可 override 从 ``_meta`` 提取私有工具名（如 goose 的
-        ``_meta.goose.toolCall.toolName``）。
-        """
+        """提取稳定的工具名。优先 goose _meta，其次 ACP kind，最后 title。"""
+        goose_name = _goose_tool_name(update)
+        if goose_name:
+            return goose_name
         kind = getattr(update, "kind", None)
         if kind:
             return str(kind)
@@ -510,6 +549,54 @@ class AcpEventTranslator:
 
 # ── 模块级辅助 ─────────────────────────────────────────────
 
+
+def _goose_tool_name(update: object) -> str | None:
+    meta = getattr(update, "field_meta", None) or getattr(update, "_meta", None)
+    if not isinstance(meta, dict):
+        return None
+    goose = meta.get("goose")
+    if not isinstance(goose, dict):
+        return None
+    tool_call = goose.get("toolCall")
+    if not isinstance(tool_call, dict):
+        return None
+    name = tool_call.get("toolName")
+    return name if isinstance(name, str) and name else None
+
+
+def _has_image_content(update: object) -> bool:
+    content = getattr(update, "content", None) or []
+    for block in content:
+        block_type = getattr(block, "type", None) or (
+            block.get("type") if isinstance(block, dict) else None
+        )
+        if block_type == "image":
+            return True
+        inner = getattr(block, "content", None) or (
+            block.get("content") if isinstance(block, dict) else None
+        )
+        inner_type = getattr(inner, "type", None) or (
+            inner.get("type") if isinstance(inner, dict) else None
+        )
+        if inner_type == "image":
+            return True
+    return False
+
+
+def _summarize_image_generation_output(raw_output: object) -> str:
+    saved_path: str | None = None
+    revised_prompt: str | None = None
+    if isinstance(raw_output, dict):
+        saved = raw_output.get("savedPath")
+        revised = raw_output.get("revisedPrompt")
+        saved_path = saved if isinstance(saved, str) else None
+        revised_prompt = revised if isinstance(revised, str) else None
+    parts = [
+        "Image generated.",
+        f"Revised prompt: {revised_prompt}" if revised_prompt else None,
+        f"Saved to: {saved_path}" if saved_path else None,
+    ]
+    return "\n".join(part for part in parts if part)
 
 def _stringify_raw(raw: object) -> str:
     """序列化 raw_input / raw_output 为展示字符串。对标 TS stringifyRaw。"""

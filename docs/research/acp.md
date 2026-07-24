@@ -127,3 +127,24 @@ python 实现上对上面的抽象做一些改动:
 ## SessionStream queue 的问题
 
 queue 是无限队列，并且写入和读取是异步的。比如 读取的时候失败了，此时写入会缓存，但是此时 queue 里面其实是有缓存的 event 的，称为 old1，重连之前写入 buffer 的是 new1，当 reconnect 重连的时候，是先读取的 buffer，是不是new1 就排到了 old1 之前了。顺序错误了。你可以对比一下原 js 版本(D:\Code\koala\agent-platform\internal\acp-adapter\acp-server.ts)。没有 queue，直接顺序调用的 stream.writeSSE({ event, data }) 。顺序调用如果第一个 event 没发送完。后续是如何处理的。请把这段处理逻辑解释清楚，更新到 docs\wiki\agents\acp_server.md
+
+
+新实现的 SessionStream 为什么要用 condition + list 。而且chunk 被 yeild 之后如果发生了一场，也不会重新进队列里啊，不是么？
+
+```python
+        async def event_stream() -> Any:
+            try:
+                async for chunk in stream.read(keepalive_interval=KEEPALIVE_INTERVAL_S):
+                    if await request.is_disconnected():
+                        sm.detach_stream(session_id, writer_id)
+                        return
+                    yield chunk
+            except asyncio.CancelledError:
+                sm.detach_stream(session_id, writer_id)
+                raise
+            finally:
+                if await request.is_disconnected():
+                    sm.detach_stream(session_id, writer_id)
+```
+
+而且消费的时候每次都要被 wait() 么？首先是效率问题，其次不会死锁么，有可能是多次 notify 连续执行。这样 wait 就没法跟notify 成对出现了。
