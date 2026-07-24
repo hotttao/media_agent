@@ -6,12 +6,13 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
 
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from adapter.agent_environment import (
+    AcpMcpServerDeclaration,
+    McpServerMap,
     apply_credentials,
     build_acp_mcp_servers,
     parse_mcp_servers,
@@ -78,10 +79,10 @@ class CodexHooks:
         self._workspace_dir = Path(workspace_dir)
         self._codex_config_dir = Path(codex_config_dir).expanduser()
         self._api_key: str = ""
-        self._user_mcp: dict[str, dict[str, Any]] = {}
+        self._user_mcp: McpServerMap = {}
         self._has_mcp = False
 
-    def load_mcp_servers(self, session_token: str | None) -> list[Any]:
+    def load_mcp_servers(self, session_token: str | None) -> list[AcpMcpServerDeclaration]:
         return build_acp_mcp_servers(
             platform_url=self._cp_client.mcp_url(),
             platform_headers=self._cp_client.mcp_headers(session_token),
@@ -106,7 +107,7 @@ class CodexHooks:
         prompt = write_prompt_file(self._workspace_dir, config)
         write_runtime_config(self._workspace_dir, config)
         write_mcp_json(self._codex_config_dir, self._user_mcp)
-        _write_codex_toml(config, self._user_mcp, self._codex_config_dir)
+        _write_codex_toml(dict(config), self._user_mcp, self._codex_config_dir)
         _write_codex_auth(self._api_key, self._codex_config_dir)
         logger.info(
             "Config written: model=%s provider=%s prompt=%dchars",
@@ -136,21 +137,22 @@ class CodexHooks:
         runtime = read_runtime_config(self._workspace_dir)
         apply_openai_compatible_env(runtime, api_key=self._api_key)
 
-    def record_usage(self, session_id: str, usage: Any) -> None:
+    def record_usage(self, session_id: str, usage: object) -> None:
         return
 
 
 def _write_codex_toml(
-    config: dict[str, Any], mcp_servers: dict[str, Any], codex_dir: Path
+    config: dict[str, object], mcp_servers: McpServerMap, codex_dir: Path
 ) -> None:
     codex_dir.mkdir(parents=True, exist_ok=True)
     model = config.get("model", "")
-    provider_name = "custom" if config.get("base_url") else "openai"
+    base_url = config.get("base_url")
+    provider_name = "custom" if base_url else "openai"
     agent_settings = str(config.get("agent_settings") or "").strip()
     is_toml_agent_settings = bool(
         agent_settings and agent_settings != "{}" and not agent_settings.startswith("{")
     )
-    toml: dict[str, Any] = {
+    toml: dict[str, object] = {
         "model_provider": provider_name,
         "model": model,
         "disable_response_storage": True,
@@ -159,17 +161,17 @@ def _write_codex_toml(
         toml["sandbox_mode"] = "danger-full-access"
     if not _toml_has_key(agent_settings, "approval_policy"):
         toml["approval_policy"] = "never"
-    if config.get("base_url"):
+    if isinstance(base_url, str) and base_url:
         toml["model_providers"] = {
             "custom": {
                 "name": "custom",
-                "base_url": config["base_url"],
+                "base_url": base_url,
                 "wire_api": "responses",
             }
         }
     if any(cfg.get("url") for cfg in mcp_servers.values()):
         toml["experimental_use_rmcp_client"] = True
-    mcp_section: dict[str, Any] = {}
+    mcp_section: dict[str, object] = {}
     for name, cfg in mcp_servers.items():
         if cfg.get("url"):
             continue

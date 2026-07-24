@@ -7,7 +7,7 @@ agent adapters and the control plane/web UI.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
-from typing import Any, Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field
 
@@ -100,15 +100,15 @@ class UniversalEvent:
     item_id: str | None = None
     delta: ContentDelta | None = None
     request_id: str | None = None
-    questions: list[Any] | None = None
+    questions: list[object] | None = None
     message: str | None = None
     code: str | None = None
 
 
-def to_event_dict(event: UniversalEvent) -> dict[str, Any]:
+def to_event_dict(event: UniversalEvent) -> dict[str, object]:
     """Convert a UniversalEvent dataclass into compact JSON-ready data."""
 
-    def compact(value: Any) -> Any:
+    def compact(value: object) -> object:
         if is_dataclass(value):
             value = asdict(value)
         if isinstance(value, dict):
@@ -122,4 +122,4 @@ def to_event_dict(event: UniversalEvent) -> dict[str, Any]:
         return value
 
     data = compact(event)
-    return data if isinstance(data, dict) else {}
+    return cast(dict[str, object], data) if isinstance(data, dict) else {}

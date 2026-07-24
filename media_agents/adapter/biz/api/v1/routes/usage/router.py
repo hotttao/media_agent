@@ -1,4 +1,4 @@
-﻿"""Usage pull route."""
+"""Usage pull route."""
 
 from __future__ import annotations
 

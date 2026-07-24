@@ -1,4 +1,6 @@
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
+
+from adapter.agent_environment import AcpMcpServerDeclaration
 from adapter.biz.domain.acp_adapter.bridge import AcpBridge
 
 
@@ -21,7 +23,7 @@ class AgentHooks(Protocol):
     capabilities / workspace_dir 等）经 AdapterConfig 提供，不在 hooks 内。
     """
 
-    def load_mcp_servers(self, session_token: str | None) -> list[Any]:
+    def load_mcp_servers(self, session_token: str | None) -> list[AcpMcpServerDeclaration]:
         """ACP session 要挂载的 MCP 服务器列表。HTTP 类走 cp 代理 + X-Session-Token。"""
         ...
 
@@ -45,6 +47,6 @@ class AgentHooks(Protocol):
         """config/credentials 重载后刷新 provider env，新 bridge 接管。"""
         ...
 
-    def record_usage(self, session_id: str, usage: Any) -> None:
+    def record_usage(self, session_id: str, usage: object) -> None:
         """单 turn 完成后记录 token 用量。失败应吞掉异常并日志记录。"""
         ...

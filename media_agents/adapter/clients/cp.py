@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import Any
+from typing import cast
 
 import httpx
 
+from adapter.agent_environment import CredentialPayload, WorkspaceConfigPayload
+
 logger = logging.getLogger(__name__)
+
+JsonResponse = dict[str, object] | list[object]
 
 
 class CpClient:
@@ -52,14 +56,19 @@ class CpClient:
             headers["X-Session-Token"] = session_token
         return headers
 
-    async def fetch_workspace_config(self) -> dict[str, Any] | None:
+    async def fetch_workspace_config(self) -> WorkspaceConfigPayload | None:
         if not self.is_configured():
             logger.info("CP config skipped: cp.url/cp.workspace_id unset")
             return None
         url = f"{self._base_url}/_cp/workspaces/{self._workspace_id}/config"
-        return await self._get_json(url, "workspace config")
+        payload = await self._get_json(url, "workspace config")
+        if isinstance(payload, Mapping):
+            return cast(WorkspaceConfigPayload, payload)
+        if payload is not None:
+            logger.error("CP workspace config response has unexpected shape")
+        return None
 
-    async def fetch_credentials(self) -> list[dict[str, Any]] | None:
+    async def fetch_credentials(self) -> list[CredentialPayload] | None:
         if not self.is_configured():
             logger.info("CP credentials skipped: cp.url/cp.workspace_id unset")
             return None
@@ -68,15 +77,19 @@ class CpClient:
         if payload is None:
             return None
         if isinstance(payload, list):
-            return [item for item in payload if isinstance(item, dict)]
+            return [cast(CredentialPayload, item) for item in payload if isinstance(item, Mapping)]
         if isinstance(payload, Mapping):
             credentials = payload.get("credentials")
             if isinstance(credentials, list):
-                return [item for item in credentials if isinstance(item, dict)]
+                return [
+                    cast(CredentialPayload, item)
+                    for item in credentials
+                    if isinstance(item, Mapping)
+                ]
         logger.error("CP credentials response has unexpected shape")
         return None
 
-    async def _get_json(self, url: str, label: str) -> dict[str, Any] | list[Any] | None:
+    async def _get_json(self, url: str, label: str) -> JsonResponse | None:
         try:
             if self._http_client is not None:
                 response = await self._http_client.get(url)
@@ -101,6 +114,6 @@ class CpClient:
             logger.exception("CP %s response is not JSON url=%s", label, url)
             return None
         if isinstance(payload, (dict, list)):
-            return payload
+            return cast(JsonResponse, payload)
         logger.error("CP %s response has unexpected shape url=%s", label, url)
         return None

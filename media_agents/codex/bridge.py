@@ -1,4 +1,4 @@
-﻿"""Codex ACP bridge factory wrapper."""
+"""Codex ACP bridge factory wrapper."""
 
 from __future__ import annotations
 

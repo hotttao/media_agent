@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -41,7 +40,7 @@ class PromptResult:
     """
 
     stop_reason: StopReason
-    usage: Any | None = None
+    usage: object | None = None
 
 
 # ── HTTP 请求体 ────────────────────────────────────────────

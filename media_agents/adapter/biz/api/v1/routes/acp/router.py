@@ -10,15 +10,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from adapter.biz.api.v1.deps import AcpServerDep, AdapterConfigDep, AgentHooksDep
-from adapter.biz.domain.acp_adapter.entity import Chat
+from adapter.biz.domain.acp_adapter.entity import Chat, PromptResult
 from adapter.biz.domain.acp_adapter.errors import BridgeNotFound, LoadSessionFailed
 from adapter.schemas.acp.request import ChatRequest, ReloadConfigRequest
 from adapter.schemas.acp.response import (
@@ -45,16 +45,18 @@ def build_acp_router() -> APIRouter:
 
     @router.get("/info", response_model=AgentInfo)
     async def info(cfg: AdapterConfigDep) -> AgentInfo:
-        runtime: dict[str, Any] = {}
+        runtime: dict[str, object] = {}
         runtime_path = Path(cfg.workspace_dir) / "runtime.json"
         if runtime_path.exists():
             try:
-                runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+                payload = json.loads(runtime_path.read_text(encoding="utf-8"))
+                runtime = payload if isinstance(payload, dict) else {}
             except json.JSONDecodeError:
                 logger.warning("runtime.json malformed at %s", runtime_path)
+        model = runtime.get("model")
         return AgentInfo(
             agent_type=cfg.agent_type,
-            model=runtime.get("model", "default"),
+            model=model if isinstance(model, str) else "default",
             capabilities=cfg.capabilities,
         )
 
@@ -67,10 +69,10 @@ def build_acp_router() -> APIRouter:
         if not body.message:
             raise HTTPException(status_code=400, detail="Message is required")
 
-        async def event_stream() -> Any:
+        async def event_stream() -> AsyncIterator[str]:
             session_id: str | None = None
             writer_id: int | None = None
-            turn_task: asyncio.Task[Any] | None = None
+            turn_task: asyncio.Task[PromptResult] | None = None
             try:
                 session, _ = await sm.chat(Chat.model_validate(body.model_dump()))
                 session_id = session.session_id
@@ -113,7 +115,7 @@ def build_acp_router() -> APIRouter:
             raise HTTPException(status_code=404, detail=str(err)) from err
         writer_id = stream.writer_id
 
-        async def event_stream() -> Any:
+        async def event_stream() -> AsyncIterator[str]:
             try:
                 async for chunk in stream.read(keepalive_interval=KEEPALIVE_INTERVAL_S):
                     if await request.is_disconnected():
@@ -195,13 +197,13 @@ def build_acp_router() -> APIRouter:
         return None
 
     @router.post("/sessions/{session_id}/respond")
-    async def respond(_session_id: str) -> dict[str, Any]:
+    async def respond(_session_id: str) -> dict[str, object]:
         return {"success": False, "error": "Not supported"}
 
     return router
 
 
-def _event_response(stream: Any) -> StreamingResponse:
+def _event_response(stream: AsyncIterator[str]) -> StreamingResponse:
     return StreamingResponse(
         stream,
         media_type="text/event-stream",
@@ -213,7 +215,7 @@ def _sse(event: str, data: str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
 
-def _log_task_error(task: asyncio.Task[Any]) -> None:
+def _log_task_error(task: asyncio.Task[PromptResult]) -> None:
     try:
         task.result()
     except asyncio.CancelledError:
@@ -222,7 +224,7 @@ def _log_task_error(task: asyncio.Task[Any]) -> None:
         logger.exception("ACP turn task failed")
 
 
-def _consume_task_error(task: asyncio.Task[Any]) -> None:
+def _consume_task_error(task: asyncio.Task[PromptResult]) -> None:
     try:
         task.result()
     except asyncio.CancelledError:

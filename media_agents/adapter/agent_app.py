@@ -1,4 +1,4 @@
-﻿"""Shared FastAPI app factories for ACP agent adapters."""
+"""Shared FastAPI app factories for ACP agent adapters."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-﻿"""Generic ACP bridge built on the Python ACP SDK.
+"""Generic ACP bridge built on the Python ACP SDK.
 
 Agent packages provide concrete process options, while this class owns the ACP
 handshake and session/prompt lifecycle.
@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from acp import PROTOCOL_VERSION, connect_to_agent, image_block, text_block
 from acp.schema import (
@@ -23,7 +23,7 @@ from acp.schema import (
 )
 
 from adapter.biz.domain.acp_adapter.client import AcpClientAdapter
-from adapter.biz.domain.acp_adapter.entity import PromptResult, StopReason
+from adapter.biz.domain.acp_adapter.entity import ChatImageAttachment, PromptResult, StopReason
 from adapter.biz.domain.acp_adapter.errors import LoadSessionFailed
 from adapter.biz.domain.acp_adapter.session import AcpSession
 
@@ -122,10 +122,10 @@ class AcpBridge:
         """Hook for agents that expose an MCP-ready extension."""
 
     async def prompt(
-        self, session_id: str, message: str, images: list[Any] | None = None
+        self, session_id: str, message: str, images: list[ChatImageAttachment] | None = None
     ) -> PromptResult:
         assert self.conn is not None, "bridge not started"
-        prompt: list[Any] = [text_block(message)]
+        prompt: list[object] = [text_block(message)]
         if images:
             for img in images:
                 data = getattr(img, "data", None) or (

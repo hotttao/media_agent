@@ -1,4 +1,4 @@
-﻿"""Async managed subprocess helpers shared by agent packages."""
+"""Async managed subprocess helpers shared by agent packages."""
 
 from __future__ import annotations
 

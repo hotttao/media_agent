@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from acp.schema import (
     AgentMessageChunk,
@@ -38,8 +38,8 @@ from acp.schema import (
     UserMessageChunk,
 )
 
-from adapter.biz.domain.acp_adapter.entity import PromptResult, StopReason
-from adapter.biz.domain.acp_adapter.llm_event import to_event_dict
+from adapter.biz.domain.acp_adapter.entity import ChatImageAttachment, PromptResult, StopReason
+from adapter.biz.domain.acp_adapter.llm_event import UniversalEvent, to_event_dict
 from adapter.biz.domain.acp_adapter.translator import AcpEventTranslator
 
 if TYPE_CHECKING:
@@ -210,7 +210,7 @@ class AcpSession:
         self,
         session_id: str,
         update: SessionUpdate,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> None:
         """ACP session/update -> translator 翻译为 UniversalEvent -> sink。
 
@@ -221,7 +221,7 @@ class AcpSession:
         for event in self.translator.translate(update):
             await self.write_event(event)
 
-    async def write_event(self, event: Any) -> None:
+    async def write_event(self, event: UniversalEvent) -> None:
         """Write one UniversalEvent to the SSE sink as structured JSON."""
         await self.sink.write("message", json.dumps(to_event_dict(event), ensure_ascii=False))
 
@@ -234,7 +234,7 @@ class AcpSession:
         session_id: str,
         tool_call: ToolCallUpdate,
         options: list[PermissionOption],
-        **kwargs: Any,
+        **kwargs: object,
     ) -> RequestPermissionResponse:
         """默认接受第一个选项。
 
@@ -259,7 +259,9 @@ class AcpSession:
 
     # ── turn 执行（AcpServer 调用）─────────────────────────
 
-    async def run_turn(self, message: str, images: list[Any] | None = None) -> PromptResult:
+    async def run_turn(
+        self, message: str, images: list[ChatImageAttachment] | None = None
+    ) -> PromptResult:
         """运行一个 turn：busy_turns 计数 + bridge.prompt。
 
         busy_turns 用于 /reload-config 与 LRU 驱逐时避免销毁正在执行 turn 的

@@ -1,11 +1,11 @@
-﻿"""Usage transcript parsing and sweeping shared by agent packages."""
+"""Usage transcript parsing and sweeping shared by agent packages."""
 
 from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 UsageSource = Literal["codex"]
 FileFingerprint = dict[str, float | int]
@@ -30,7 +30,7 @@ class UsageRecord:
     fields_incomplete: bool
     dedup_key: str
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
@@ -40,7 +40,7 @@ class UsageSweepResult:
     cursors: SweepCursors
     has_more: bool
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "records": [record.to_dict() for record in self.records],
             "cursors": self.cursors,
@@ -200,7 +200,7 @@ def _fingerprint(path: Path) -> FileFingerprint | None:
     }
 
 
-def _num(value: Any) -> int:
+def _num(value: object) -> int:
     if isinstance(value, bool):
         return 0
     if isinstance(value, int | float) and value == value:

@@ -20,10 +20,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks, BridgeFactory
-from adapter.biz.domain.acp_adapter.entity import Chat, PromptResult
+from adapter.biz.domain.acp_adapter.entity import Chat, ChatImageAttachment, PromptResult
 from adapter.biz.domain.acp_adapter.errors import BridgeNotFound, LoadSessionFailed
 from adapter.biz.domain.acp_adapter.session import AcpSession, SessionStream
 from adapter.biz.shared.clock import Clock, SystemClock
@@ -106,7 +106,7 @@ class AcpServer:
         return session, True
 
     async def run_turn(
-        self, session: AcpSession, message: str, images: list[Any] | None = None
+        self, session: AcpSession, message: str, images: list[ChatImageAttachment] | None = None
     ) -> PromptResult:
         """运行一个 turn：session.run_turn + 记录 usage + drain pending。
 

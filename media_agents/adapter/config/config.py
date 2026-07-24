@@ -8,7 +8,7 @@ packages should load their own typed config subclass via ``load_agent_config``.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TypeVar, cast
+from typing import TypeVar, cast
 
 from omegaconf import OmegaConf
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -35,7 +35,7 @@ class WorkspaceConfig(BaseModel):
 
     @field_validator("keep_files", mode="before")
     @classmethod
-    def _normalize_keep_files(cls, value: Any) -> Any:
+    def _normalize_keep_files(cls, value: object) -> object:
         if value is None:
             return set()
         return value
@@ -49,7 +49,7 @@ class CpConfig(BaseModel):
 
     @field_validator("url", "workspace_id", mode="before")
     @classmethod
-    def _empty_to_none(cls, value: Any) -> Any:
+    def _empty_to_none(cls, value: object) -> object:
         if value is None:
             return None
         if isinstance(value, str) and value.strip().lower() in {"", "null", "none"}:

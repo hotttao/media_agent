@@ -7,10 +7,10 @@ have not moved yet.
 
 from __future__ import annotations
 
-from typing import Any
-
 from adapter.biz.domain.acp_adapter import AcpServer
 from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks, BridgeFactory
+from adapter.biz.domain.acp_adapter.entity import PromptResult as DomainPromptResult
+from adapter.biz.domain.acp_adapter.session import AcpSession
 from adapter.biz.shared.clock import Clock
 
 
@@ -36,5 +36,5 @@ class SessionManager(AcpServer):
 __all__: list[str] = ["SessionManager", "AcpServer", "AgentHooks", "BridgeFactory"]
 
 # Preserve the old broad import surface for typing-only consumers.
-AcpSessionHandler = Any
-PromptResult = Any
+AcpSessionHandler = AcpSession
+PromptResult = DomainPromptResult

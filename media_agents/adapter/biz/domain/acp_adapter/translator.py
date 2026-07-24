@@ -27,7 +27,7 @@ import itertools
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from acp.schema import (
     AgentMessageChunk,
@@ -91,7 +91,7 @@ class _ActiveToolCall:
 
     __slots__ = ("item_id", "title", "raw_input", "last_status", "terminal_emitted")
 
-    def __init__(self, item_id: str, title: str, raw_input: Any, last_status: str) -> None:
+    def __init__(self, item_id: str, title: str, raw_input: object, last_status: str) -> None:
         self.item_id = item_id
         self.title = title
         self.raw_input = raw_input
@@ -152,7 +152,7 @@ class AcpEventTranslator:
 
     # ── SessionUpdate -> UniversalEvent[] ─────────────────
 
-    def translate(self, update: Any) -> list[UniversalEvent]:
+    def translate(self, update: object) -> list[UniversalEvent]:
         """翻译单个 SDK SessionUpdate 为 0 或多个 UniversalEvent。
 
         用 isinstance 判断 SDK union 的具体子类型（对标 TS switch on
@@ -312,7 +312,7 @@ class AcpEventTranslator:
             tracked.terminal_emitted = True
         return self._emit_tool_terminal(update, update.tool_call_id)
 
-    def _emit_tool_terminal(self, update: Any, tool_call_id: str) -> list[UniversalEvent]:
+    def _emit_tool_terminal(self, update: object, tool_call_id: str) -> list[UniversalEvent]:
         """emit tool_call item.completed + tool_result item.completed。
 
         对标 TS tool_call_update terminal 分支。从 tracked + update 合并出
@@ -399,18 +399,18 @@ class AcpEventTranslator:
         # 回声消息，不 surface（前端已展示用户输入）
         return []
 
-    def _on_plan(self, update: Any) -> list[UniversalEvent]:
+    def _on_plan(self, update: object) -> list[UniversalEvent]:
         # planning 步骤暂无 UI 映射
         return []
 
-    def _on_meta_update(self, update: Any) -> list[UniversalEvent]:
+    def _on_meta_update(self, update: object) -> list[UniversalEvent]:
         # available_commands / current_mode / session_info / config_option
         # 仅影响 UI chrome 不产生 item 事件
         return []
 
     # ── agent 子类 override 钩子 ──────────────────────────
 
-    def _resolve_tool_name(self, update: Any) -> str:
+    def _resolve_tool_name(self, update: object) -> str:
         """提取稳定的工具名。
 
         默认：优先 ACP ``kind``（execute/read/edit/...），其次 ``title``。
@@ -423,7 +423,7 @@ class AcpEventTranslator:
         title = getattr(update, "title", None)
         return title or ""
 
-    def _extract_tool_output(self, update: Any) -> str:
+    def _extract_tool_output(self, update: object) -> str:
         """从 tool_call_update 提取 output 文本。
 
         默认：优先 raw_output，其次 content blocks 文本。agent 子类可
@@ -511,7 +511,7 @@ class AcpEventTranslator:
 # ── 模块级辅助 ─────────────────────────────────────────────
 
 
-def _stringify_raw(raw: Any) -> str:
+def _stringify_raw(raw: object) -> str:
     """序列化 raw_input / raw_output 为展示字符串。对标 TS stringifyRaw。"""
     if raw is None:
         return ""
@@ -523,7 +523,7 @@ def _stringify_raw(raw: Any) -> str:
         return str(raw)
 
 
-def _stringify_content_block(block: Any) -> str:
+def _stringify_content_block(block: object) -> str:
     """从 ToolCallUpdate.content 的一个 block 提取文本。
 
     对标 TS tool_call_update content blocks 提取：content.text / diff /
@@ -575,7 +575,7 @@ def _stringify_content_block(block: Any) -> str:
     return ""
 
 
-def _coalesce(*values: Any) -> Any:
+def _coalesce(*values: object) -> object:
     """返回第一个非 None 的值。"""
     for value in values:
         if value is not None:

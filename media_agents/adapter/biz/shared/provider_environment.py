@@ -1,11 +1,10 @@
-﻿"""Provider environment helpers shared by agent packages."""
+"""Provider environment helpers shared by agent packages."""
 
 from __future__ import annotations
 
 import os
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
-from typing import Any
 
 ProviderEnv = MutableMapping[str, str]
 
@@ -44,7 +43,7 @@ def clear_provider_env(
 
 
 def apply_openai_compatible_env(
-    runtime: dict[str, Any] | None,
+    runtime: Mapping[str, object] | None,
     *,
     api_key: str | None,
     environ: ProviderEnv | None = None,

@@ -5,14 +5,18 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from adapter.agent_environment import (
+    AcpMcpServerDeclaration,
+    McpServerMap,
+    RuntimeConfig,
     apply_credentials,
     build_acp_mcp_servers,
     parse_mcp_servers,
@@ -47,7 +51,7 @@ class GooseSectionConfig(BaseModel):
 
     @field_validator("path_root", mode="before")
     @classmethod
-    def _empty_to_none(cls, value: Any) -> Any:
+    def _empty_to_none(cls, value: object) -> object:
         if value is None:
             return None
         if isinstance(value, str) and value.strip().lower() in {"", "null", "none"}:
@@ -71,8 +75,8 @@ def load_goose_config(yaml_path: str | Path) -> GooseConfig:
     return load_agent_config(yaml_path, GooseConfig)
 
 
-def _num(v: Any) -> int:
-    return int(v) if isinstance(v, (int, float)) and v == v else 0
+def _num(value: object) -> int:
+    return int(value) if isinstance(value, (int, float)) and value == value else 0
 
 
 class GooseHooks:
@@ -93,16 +97,18 @@ class GooseHooks:
         self._workspace_dir = Path(workspace_dir)
         self._goose_config_dir = Path(goose_config_dir).expanduser()
         self._api_key = ""
-        self._user_mcp: dict[str, dict[str, Any]] = {}
+        self._user_mcp: McpServerMap = {}
         self._has_mcp = False
         self._accumulated: dict[str, tuple[int, int]] = {}
 
     def track_ext_notification(
-        self, platform_session_id: str, method: str, params: dict[str, Any]
+        self, platform_session_id: str, method: str, params: Mapping[str, object]
     ) -> None:
         if method != "_goose/unstable/session/update":
             return
-        update = params.get("update") or {}
+        update = params.get("update")
+        if not isinstance(update, Mapping):
+            return
         if update.get("sessionUpdate") != "usage_update":
             return
         inp = _num(update.get("accumulatedInputTokens"))
@@ -111,7 +117,7 @@ class GooseHooks:
             return
         self._accumulated[platform_session_id] = (inp, out)
 
-    def load_mcp_servers(self, session_token: str | None) -> list[Any]:
+    def load_mcp_servers(self, session_token: str | None) -> list[AcpMcpServerDeclaration]:
         return build_acp_mcp_servers(
             platform_url=self._cp_client.mcp_url(),
             platform_headers=self._cp_client.mcp_headers(session_token),
@@ -135,7 +141,7 @@ class GooseHooks:
         prompt = write_prompt_file(self._workspace_dir, config)
         runtime = write_runtime_config(self._workspace_dir, config)
         write_mcp_json(self._goose_config_dir, self._user_mcp)
-        _write_goose_config_yaml(config, self._goose_config_dir, runtime)
+        _write_goose_config_yaml(dict(config), self._goose_config_dir, runtime)
         logger.info(
             "Config written: model=%s provider=%s prompt=%dchars",
             config.get("model"),
@@ -165,10 +171,10 @@ class GooseHooks:
         if runtime is not None:
             _apply_goose_provider_env(runtime, self._api_key)
 
-    def record_usage(self, session_id: str, usage: Any) -> None:
+    def record_usage(self, session_id: str, usage: object) -> None:
         acc = self._accumulated.get(session_id)
         model = _load_runtime_model(self._workspace_dir)
-        payload: dict[str, Any] | None = None
+        payload: dict[str, object] | None = None
         if acc:
             payload = {
                 "ts": datetime.now(UTC).isoformat(),
@@ -176,7 +182,7 @@ class GooseHooks:
                 "accumulated_input_tokens": acc[0],
                 "accumulated_output_tokens": acc[1],
             }
-        elif isinstance(usage, dict):
+        elif isinstance(usage, Mapping):
             inp = _num(usage.get("inputTokens"))
             out = _num(usage.get("outputTokens"))
             if inp == 0 and out == 0:
@@ -200,7 +206,7 @@ class GooseHooks:
 
 
 def _write_goose_config_yaml(
-    config: dict[str, Any], goose_dir: Path, runtime: dict[str, str]
+    config: dict[str, object], goose_dir: Path, runtime: RuntimeConfig
 ) -> None:
     goose_dir.mkdir(parents=True, exist_ok=True)
     yaml_lines = [
@@ -256,7 +262,7 @@ def _top_level_yaml_key(line: str) -> str | None:
     return key
 
 
-def _apply_goose_provider_env(runtime: dict[str, str], api_key: str) -> None:
+def _apply_goose_provider_env(runtime: RuntimeConfig, api_key: str) -> None:
     for key in [
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_BASE_URL",

@@ -17,13 +17,18 @@ import asyncio
 import json
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import TypeAlias, cast
 
-from adapter.biz.domain.acp_adapter.entity import PromptResult, StopReason
+from adapter.biz.domain.acp_adapter.entity import ChatImageAttachment, PromptResult, StopReason
 from adapter.biz.domain.acp_adapter.repository import AcpSessionHandler
 
 logger = logging.getLogger(__name__)
+
+JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+JsonObject: TypeAlias = dict[str, JsonValue]
+ExtNotificationHandler: TypeAlias = Callable[[str, str, JsonObject], None]
 
 
 class GooseAcpBridge:
@@ -41,7 +46,7 @@ class GooseAcpBridge:
         cwd: str = "/workspace",
         goose_path_root: str | None = None,
         session_id: str | None = None,
-        on_ext_notification: Any | None = None,
+        on_ext_notification: ExtNotificationHandler | None = None,
     ) -> None:
         self._cwd = cwd
         self._goose_path_root = goose_path_root
@@ -51,7 +56,7 @@ class GooseAcpBridge:
         self._handlers: dict[str, AcpSessionHandler] = {}
         self._reader_task: asyncio.Task[None] | None = None
         self._next_id = 0
-        self._pending: dict[int, asyncio.Future[Any]] = {}
+        self._pending: dict[int, asyncio.Future[JsonValue]] = {}
 
     async def start(self) -> None:
         env = dict(os.environ)
@@ -76,10 +81,12 @@ class GooseAcpBridge:
     def is_alive(self) -> bool:
         return self._proc is not None and self._proc.returncode is None
 
-    async def create_session(self, *, mcp_servers: list[Any] | None = None) -> str:
+    async def create_session(self, *, mcp_servers: list[JsonObject] | None = None) -> str:
         return cast(str, await self._call("createSession", {"mcpServers": mcp_servers or []}))
 
-    async def load_session(self, session_id: str, *, mcp_servers: list[Any] | None = None) -> str:
+    async def load_session(
+        self, session_id: str, *, mcp_servers: list[JsonObject] | None = None
+    ) -> str:
         return cast(
             str,
             await self._call(
@@ -101,7 +108,7 @@ class GooseAcpBridge:
         self,
         session_id: str,
         message: str,
-        images: list[Any] | None = None,
+        images: list[ChatImageAttachment] | None = None,
     ) -> PromptResult:
         result = await self._call(
             "prompt",
@@ -144,7 +151,7 @@ class GooseAcpBridge:
         except Exception:
             logger.exception("goose acp read loop crashed")
 
-    def _dispatch(self, msg: dict[str, Any]) -> None:
+    def _dispatch(self, msg: JsonObject) -> None:
         if "id" in msg and ("result" in msg or "error" in msg):
             fut = self._pending.pop(msg["id"], None)
             if fut and not fut.done():
@@ -169,25 +176,25 @@ class GooseAcpBridge:
             elif method == "permission/request":
                 asyncio.create_task(self._handle_permission(sid, params))
 
-    async def _handle_permission(self, sid: str, params: dict[str, Any]) -> None:
+    async def _handle_permission(self, sid: str, params: JsonObject) -> None:
         handler = self._handlers.get(sid)
         if not handler:
             return
         result = await handler.on_permission_request(params)
         await self._notify("permission/response", {"sessionId": sid, "result": result})
 
-    async def _call(self, method: str, params: dict[str, Any]) -> Any:
+    async def _call(self, method: str, params: JsonObject) -> JsonValue:
         assert self._proc and self._proc.stdin
         self._next_id += 1
         req_id = self._next_id
-        fut: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
+        fut: asyncio.Future[JsonValue] = asyncio.get_event_loop().create_future()
         self._pending[req_id] = fut
         payload = json.dumps({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params})
         self._proc.stdin.write(payload.encode("utf-8") + b"\n")
         await self._proc.stdin.drain()
         return await fut
 
-    async def _notify(self, method: str, params: dict[str, Any]) -> None:
+    async def _notify(self, method: str, params: JsonObject) -> None:
         assert self._proc and self._proc.stdin
         payload = json.dumps({"jsonrpc": "2.0", "method": method, "params": params})
         self._proc.stdin.write(payload.encode("utf-8") + b"\n")

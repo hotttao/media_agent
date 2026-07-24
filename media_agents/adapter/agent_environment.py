@@ -1,8 +1,8 @@
 """Reusable agent environment preparation helpers.
 
-This module is intentionally stdlib-only so it can live in ``biz.shared`` under
-adapter architecture rules. Callers pass already-fetched CP payloads and concrete
-paths; this module only normalizes data and performs local filesystem/env work.
+This module is intentionally agent-core level, not ACP-domain logic. Callers pass
+already-fetched CP payloads and concrete paths; this module only normalizes data
+and performs local filesystem/env work.
 """
 
 from __future__ import annotations
@@ -10,16 +10,60 @@ from __future__ import annotations
 import json
 import logging
 import os
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import NotRequired, TypeAlias, TypedDict
 
 logger = logging.getLogger(__name__)
 
-McpServerConfig = dict[str, Any]
-McpServerMap = dict[str, McpServerConfig]
-RuntimeConfig = dict[str, str]
+JsonValue: TypeAlias = (
+    str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+)
+JsonObject: TypeAlias = dict[str, JsonValue]
+RuntimeConfig: TypeAlias = dict[str, str]
+
+
+class WorkspaceConfigPayload(TypedDict, total=False):
+    model: str
+    provider_type: str
+    base_url: str
+    small_model: str
+    api_key: str
+    prompt_content: str
+    system_prompt: str
+    agent_settings: str
+    mcp_config: JsonValue
+
+
+class McpServerConfig(TypedDict, total=False):
+    url: str
+    command: str
+    args: list[str]
+    env: dict[str, str]
+    headers: dict[str, str]
+
+
+McpServerMap: TypeAlias = dict[str, McpServerConfig]
+
+
+class AcpMcpServerDeclaration(TypedDict, total=False):
+    type: NotRequired[str]
+    name: str
+    url: NotRequired[str]
+    headers: NotRequired[dict[str, str]]
+    command: NotRequired[str]
+    args: NotRequired[list[str]]
+    env: NotRequired[dict[str, str]]
+
+
+class CredentialPayload(TypedDict, total=False):
+    name: str
+    value: str
+    inject: str
+    path: str | None
+    mode: str | int | None
+    status: str
 
 
 @dataclass(frozen=True)
@@ -29,15 +73,11 @@ class CredentialLoadResult:
     env_file: Path
 
 
-def parse_mcp_servers(raw_mcp_config: Any) -> McpServerMap:
-    """Parse CP mcp_config into a name -> config mapping.
-
-    CP may return either ``{"mcpServers": {...}}`` or the raw mapping. Invalid
-    or empty JSON is treated as no MCP servers, matching the TS agents.
-    """
+def parse_mcp_servers(raw_mcp_config: JsonValue | object) -> McpServerMap:
+    """Parse CP mcp_config into a normalized name -> config mapping."""
     if not raw_mcp_config:
         return {}
-    if isinstance(raw_mcp_config, dict):
+    if isinstance(raw_mcp_config, Mapping):
         candidate = raw_mcp_config.get("mcpServers", raw_mcp_config)
     elif isinstance(raw_mcp_config, str):
         try:
@@ -45,24 +85,31 @@ def parse_mcp_servers(raw_mcp_config: Any) -> McpServerMap:
         except json.JSONDecodeError:
             logger.warning("CP mcp_config is not valid JSON")
             return {}
-        candidate = parsed.get("mcpServers", parsed) if isinstance(parsed, dict) else {}
+        candidate = parsed.get("mcpServers", parsed) if isinstance(parsed, Mapping) else {}
     else:
         return {}
-    if not isinstance(candidate, dict):
+    if not isinstance(candidate, Mapping):
         return {}
-    return {str(name): cfg for name, cfg in candidate.items() if isinstance(cfg, dict)}
+
+    normalized: McpServerMap = {}
+    for name, raw_cfg in candidate.items():
+        if isinstance(name, str) and isinstance(raw_cfg, Mapping):
+            normalized[name] = _normalize_mcp_server(raw_cfg)
+    return normalized
 
 
-def runtime_from_workspace_config(config: dict[str, Any]) -> RuntimeConfig:
+def runtime_from_workspace_config(config: Mapping[str, object]) -> RuntimeConfig:
     return {
-        "model": str(config.get("model") or ""),
-        "provider_type": str(config.get("provider_type") or ""),
-        "base_url": str(config.get("base_url") or ""),
-        "small_model": str(config.get("small_model") or ""),
+        "model": _string_field(config, "model"),
+        "provider_type": _string_field(config, "provider_type"),
+        "base_url": _string_field(config, "base_url"),
+        "small_model": _string_field(config, "small_model"),
     }
 
 
-def write_runtime_config(workspace_dir: str | Path, config: dict[str, Any]) -> RuntimeConfig:
+def write_runtime_config(
+    workspace_dir: str | Path, config: Mapping[str, object]
+) -> RuntimeConfig:
     runtime = runtime_from_workspace_config(config)
     workspace = Path(workspace_dir)
     workspace.mkdir(parents=True, exist_ok=True)
@@ -75,18 +122,22 @@ def read_runtime_config(workspace_dir: str | Path) -> RuntimeConfig | None:
         data = json.loads((Path(workspace_dir) / "runtime.json").read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         return None
-    if not isinstance(data, dict):
+    if not isinstance(data, Mapping):
         return None
     return runtime_from_workspace_config(data)
 
 
-def prompt_from_workspace_config(config: dict[str, Any]) -> str:
-    return str(config.get("prompt_content") or config.get("system_prompt") or "")
+def prompt_from_workspace_config(config: Mapping[str, object]) -> str:
+    prompt_content = config.get("prompt_content")
+    system_prompt = config.get("system_prompt")
+    if isinstance(prompt_content, str) and prompt_content:
+        return prompt_content
+    return system_prompt if isinstance(system_prompt, str) else ""
 
 
 def write_prompt_file(
     workspace_dir: str | Path,
-    config: dict[str, Any],
+    config: Mapping[str, object],
     *,
     filename: str = "AGENTS.md",
 ) -> str:
@@ -114,19 +165,14 @@ def build_acp_mcp_servers(
     session_token: str | None,
     include_user_http: bool = True,
     include_user_stdio: bool = False,
-) -> list[dict[str, Any]]:
-    """Build ACP-session MCP server declarations shared by agents.
-
-    Platform-controlled headers override user headers on ``tos-platform``.
-    User HTTP MCPs receive the session token so CP can translate it upstream.
-    """
+) -> list[AcpMcpServerDeclaration]:
+    """Build ACP-session MCP server declarations shared by agents."""
     if not platform_url:
         return []
 
-    servers: list[dict[str, Any]] = []
+    servers: list[AcpMcpServerDeclaration] = []
     user_platform = user_mcp_servers.get("tos-platform", {})
-    user_platform_headers = _string_headers(user_platform.get("headers"))
-    headers = {**user_platform_headers, **platform_headers}
+    headers = {**user_platform.get("headers", {}), **platform_headers}
     servers.append(
         {"type": "http", "name": "tos-platform", "url": platform_url, "headers": headers}
     )
@@ -134,25 +180,27 @@ def build_acp_mcp_servers(
     for name, cfg in user_mcp_servers.items():
         if name == "tos-platform":
             continue
-        if include_user_http and cfg.get("url"):
-            entry_headers = _string_headers(cfg.get("headers"))
+        url = cfg.get("url")
+        command = cfg.get("command")
+        if include_user_http and url:
+            entry_headers = dict(cfg.get("headers", {}))
             if session_token:
                 entry_headers["X-Session-Token"] = session_token
             servers.append(
-                {"type": "http", "name": name, "url": cfg["url"], "headers": entry_headers}
+                {"type": "http", "name": name, "url": url, "headers": entry_headers}
             )
-        elif include_user_stdio and cfg.get("command"):
-            server: dict[str, Any] = {"name": name, "command": cfg["command"]}
-            if isinstance(cfg.get("args"), list):
+        elif include_user_stdio and command:
+            server: AcpMcpServerDeclaration = {"name": name, "command": command}
+            if cfg.get("args"):
                 server["args"] = cfg["args"]
-            if isinstance(cfg.get("env"), dict):
+            if cfg.get("env"):
                 server["env"] = cfg["env"]
             servers.append(server)
     return servers
 
 
 def apply_credentials(
-    credentials: list[dict[str, Any]],
+    credentials: list[CredentialPayload],
     *,
     home: str | Path,
     environ: MutableMapping[str, str] | None = None,
@@ -211,10 +259,35 @@ def shell_quote(value: str) -> str:
     return "'" + value.replace("'", "'\\''") + "'"
 
 
-def _string_headers(value: Any) -> dict[str, str]:
-    if not isinstance(value, dict):
+def _normalize_mcp_server(raw_cfg: Mapping[object, object]) -> McpServerConfig:
+    cfg: McpServerConfig = {}
+    url = raw_cfg.get("url")
+    command = raw_cfg.get("command")
+    if isinstance(url, str):
+        cfg["url"] = url
+    if isinstance(command, str):
+        cfg["command"] = command
+    args = raw_cfg.get("args")
+    if isinstance(args, list):
+        cfg["args"] = [item for item in args if isinstance(item, str)]
+    env = _string_mapping(raw_cfg.get("env"))
+    if env:
+        cfg["env"] = env
+    headers = _string_mapping(raw_cfg.get("headers"))
+    if headers:
+        cfg["headers"] = headers
+    return cfg
+
+
+def _string_mapping(value: object) -> dict[str, str]:
+    if not isinstance(value, Mapping):
         return {}
     return {str(k): v for k, v in value.items() if isinstance(v, str)}
+
+
+def _string_field(config: Mapping[str, object], key: str) -> str:
+    value = config.get(key)
+    return value if isinstance(value, str) else ""
 
 
 def _ensure_ssh_config(home: Path) -> None:
@@ -246,12 +319,12 @@ def _resolve_agent_path(path: str, home: Path) -> Path:
     return Path(path)
 
 
-def _parse_mode(value: Any) -> int | None:
+def _parse_mode(value: str | int | None) -> int | None:
     if value is None:
         return None
     if isinstance(value, int):
         return value
-    if isinstance(value, str) and value:
+    if value:
         try:
             return int(value, 8)
         except ValueError:

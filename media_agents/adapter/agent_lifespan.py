@@ -1,4 +1,4 @@
-﻿"""Reusable agent startup lifecycle orchestration."""
+"""Reusable agent startup lifecycle orchestration."""
 
 from __future__ import annotations
 

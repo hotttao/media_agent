@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from adapter.biz.shared.provider_environment import apply_openai_compatible_env, clear_provider_env
 
