@@ -84,7 +84,7 @@ async def test_chat_opens_stream_and_reconnect_attaches_same_stream() -> None:
 
     assert reconnected is stream
     assert reconnected.writer_id != writer_id
-    assert reconnected.buffered_events
+    assert "session.started" in await anext(reconnected.read())
 
 
 @pytest.mark.asyncio

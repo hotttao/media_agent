@@ -117,3 +117,19 @@ async def test_session_stream_reconnect_flushes_buffer_then_live_events() -> Non
     await stream.write("message", '{"n":2}')
     assert await anext(reader) == 'event: message\ndata: {"n":2}\n\n'
     await reader.aclose()
+
+
+@pytest.mark.asyncio
+async def test_session_stream_reconnect_preserves_queued_event_order() -> None:
+    stream = SessionStream("s1")
+    writer_id = stream.attach_writer()
+    await stream.write("message", '{"n":1}')
+
+    stream.detach_writer(writer_id)
+    await stream.write("message", '{"n":2}')
+
+    stream.attach_writer()
+    reader = stream.read()
+    assert await anext(reader) == 'event: message\ndata: {"n":1}\n\n'
+    assert await anext(reader) == 'event: message\ndata: {"n":2}\n\n'
+    await reader.aclose()

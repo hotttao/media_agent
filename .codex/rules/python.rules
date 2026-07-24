@@ -1,0 +1,122 @@
+# pytest
+
+prefix_rule(
+    pattern = ["pytest"],
+    decision = "allow",
+    justification = "允许执行项目测试",
+    match = [
+        "pytest",
+        "pytest -q",
+        "pytest tests",
+        "pytest tests/test_api.py",
+        "pytest tests/test_api.py::test_create",
+    ],
+)
+
+prefix_rule(
+    pattern = ["python", "-m", "pytest"],
+    decision = "allow",
+    justification = "允许通过当前 Python 解释器执行 pytest",
+    match = [
+        "python -m pytest",
+        "python -m pytest -q",
+        "python -m pytest tests",
+    ],
+)
+
+prefix_rule(
+    pattern = ["python3", "-m", "pytest"],
+    decision = "allow",
+    justification = "允许通过 python3 执行 pytest",
+    match = [
+        "python3 -m pytest",
+        "python3 -m pytest -q",
+    ],
+)
+
+
+# Ruff 格式化与检查
+
+prefix_rule(
+    pattern = ["ruff", "format"],
+    decision = "allow",
+    justification = "允许使用 Ruff 格式化 Python 代码",
+    match = [
+        "ruff format .",
+        "ruff format src tests",
+        "ruff format --check .",
+    ],
+)
+
+prefix_rule(
+    pattern = ["ruff", "check"],
+    decision = "allow",
+    justification = "允许使用 Ruff 检查并修复 Python 代码",
+    match = [
+        "ruff check .",
+        "ruff check --fix .",
+        "ruff check src tests",
+    ],
+)
+
+
+# Black
+
+prefix_rule(
+    pattern = ["black"],
+    decision = "allow",
+    justification = "允许使用 Black 格式化 Python 代码",
+    match = [
+        "black .",
+        "black src tests",
+        "black --check .",
+    ],
+)
+
+
+# isort
+
+prefix_rule(
+    pattern = ["isort"],
+    decision = "allow",
+    justification = "允许整理 Python import",
+    match = [
+        "isort .",
+        "isort src tests",
+        "isort --check-only .",
+    ],
+)
+
+
+# uv 项目
+
+prefix_rule(
+    pattern = ["uv", "run", "pytest"],
+    decision = "allow",
+    justification = "允许通过 uv 执行 pytest",
+    match = [
+        "uv run pytest",
+        "uv run pytest -q",
+        "uv run pytest tests",
+    ],
+)
+
+prefix_rule(
+    pattern = ["uv", "run", "ruff", "format"],
+    decision = "allow",
+    justification = "允许通过 uv 执行 Ruff 格式化",
+    match = [
+        "uv run ruff format .",
+        "uv run ruff format --check .",
+    ],
+)
+
+prefix_rule(
+    pattern = ["uv", "run", "ruff", "check"],
+    decision = "allow",
+    justification = "允许通过 uv 执行 Ruff 检查",
+    match = [
+        "uv run ruff check .",
+        "uv run ruff check --fix .",
+    ],
+)

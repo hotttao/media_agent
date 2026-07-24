@@ -69,18 +69,17 @@ SessionUpdate = (
 
 
 class SessionStream:
-    """SSE 事件缓冲：asyncio.Queue 串起 translator 翻译后的 UniversalEvent。
+    """Ordered SSE event stream for one active ACP turn.
 
-    write 侧由 AcpSession.session_update 调用（async）；read 侧由 SSE
-    generator 消费。close 后写入 sentinel 让 read generator 正常退出。
+    All pending events live in one backlog. Disconnect only detaches the current
+    reader; it does not move events between separate queue/buffer containers.
+    That keeps reconnect delivery in the same order events were produced.
     """
-
-    _SENTINEL: tuple[str, str] = ("\x00", "\x00")
 
     def __init__(self, session_id: str) -> None:
         self.session_id = session_id
-        self._queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
-        self._buffer: list[tuple[str, str]] = []
+        self._backlog: list[tuple[str, str]] = []
+        self._condition = asyncio.Condition()
         self._writer_seq: int = 0
         self._active_writer_id: int | None = None
         self.disconnected: bool = False
@@ -96,7 +95,9 @@ class SessionStream:
 
     @property
     def buffered_events(self) -> list[tuple[str, str]]:
-        return list(self._buffer)
+        if not self.disconnected:
+            return []
+        return list(self._backlog)
 
     def attach_writer(self) -> int:
         self._writer_seq += 1
@@ -114,45 +115,56 @@ class SessionStream:
         return True
 
     async def write(self, event: str, data: str) -> None:
-        """写入一条 SSE 事件（event 名 + data 字符串）。"""
+        """Append one SSE event to the ordered pending backlog."""
         if self.closed:
             return
-        if self.disconnected:
-            self._buffer.append((event, data))
-            return
-        await self._queue.put((event, data))
+        async with self._condition:
+            self._backlog.append((event, data))
+            self._condition.notify_all()
 
     def close(self) -> None:
-        """关闭 sink：写入 sentinel 让 read generator 退出。"""
+        """Close the stream after already queued events are drained."""
         if self.closed:
             return
         self.closed = True
         self.done.set()
-        self._queue.put_nowait(self._SENTINEL)
+        self._notify_readers()
 
     async def read(self, keepalive_interval: float = 0.0) -> AsyncIterator[str]:
-        """SSE 事件 generator。遇到 sentinel 退出。
-
-        keepalive_interval > 0 时，空闲超时后 yield ``: \\n\\n`` comment frame
-        作为心跳，避免 nginx / uvicorn 长连接超时断开（对标 TS KEEPALIVE_MS）。
-        """
-        while self._buffer:
-            event, data = self._buffer.pop(0)
-            yield self._format(event, data)
+        """Yield SSE chunks in production order, with optional comment heartbeats."""
         while True:
-            try:
-                if keepalive_interval > 0:
-                    event, data = await asyncio.wait_for(
-                        self._queue.get(), timeout=keepalive_interval
-                    )
-                else:
-                    event, data = await self._queue.get()
-            except TimeoutError:
-                yield ": \n\n"
-                continue
-            if (event, data) == self._SENTINEL:
+            item = await self._next_event(keepalive_interval)
+            if item is None:
                 break
+            event, data = item
             yield self._format(event, data)
+
+    async def _next_event(self, keepalive_interval: float) -> tuple[str, str] | None:
+        async with self._condition:
+            while not self._backlog and not self.closed:
+                try:
+                    if keepalive_interval > 0:
+                        await asyncio.wait_for(
+                            self._condition.wait(), timeout=keepalive_interval
+                        )
+                    else:
+                        await self._condition.wait()
+                except TimeoutError:
+                    return (":", "")
+            if self._backlog:
+                return self._backlog.pop(0)
+            return None
+
+    def _notify_readers(self) -> None:
+        async def _notify() -> None:
+            async with self._condition:
+                self._condition.notify_all()
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(_notify())
 
     @staticmethod
     def _format(event: str, data: str) -> str:
