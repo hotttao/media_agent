@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from adapter.biz.shared.agent_environment import (
+from adapter.agent_environment import (
     apply_credentials,
     build_acp_mcp_servers,
     parse_mcp_servers,

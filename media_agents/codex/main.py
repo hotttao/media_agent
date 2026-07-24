@@ -1,4 +1,4 @@
-﻿"""Codex agent FastAPI entrypoint."""
+"""Codex agent FastAPI entrypoint."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 
+from adapter.agent_environment import read_runtime_config
+from adapter.agent_lifespan import agent_lifespan
 from adapter.biz.api.v1.routes.usage.router import build_usage_router
-from adapter.biz.shared.agent_environment import read_runtime_config
-from adapter.biz.shared.agent_lifespan import agent_lifespan
 from adapter.biz.shared.managed_process import ManagedProcessSpec
 from adapter.clients.cp import CpClient
 from adapter.main import build_app

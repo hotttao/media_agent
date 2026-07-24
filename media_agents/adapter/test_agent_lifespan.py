@@ -1,15 +1,22 @@
 ﻿from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
-from adapter.biz.shared.agent_lifespan import agent_lifespan
+from adapter.agent_lifespan import agent_lifespan
 
 
 class _Hooks:
     def __init__(self) -> None:
         self.calls: list[str] = []
+
+    def load_mcp_servers(self, session_token: str | None) -> list[Any]:
+        return []
+
+    def has_mcp_servers(self) -> bool:
+        return False
 
     async def load_config(self) -> bool:
         self.calls.append("config")
@@ -25,6 +32,9 @@ class _Hooks:
 
     async def restart_bridge(self) -> None:
         self.calls.append("restart")
+
+    def record_usage(self, session_id: str, usage: Any) -> None:
+        return None
 
 
 @pytest.mark.asyncio

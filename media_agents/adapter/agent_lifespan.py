@@ -5,25 +5,18 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from typing import Protocol
 
+from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks
 from adapter.biz.shared.managed_process import ManagedProcessGroup, ManagedProcessSpec
 
 logger = logging.getLogger(__name__)
-
-
-class AgentLifecycleHooks(Protocol):
-    async def load_config(self) -> bool: ...
-    async def load_skills(self) -> tuple[bool, list[str]]: ...
-    async def load_credentials(self) -> bool: ...
-    async def restart_bridge(self) -> None: ...
 
 
 @asynccontextmanager
 async def agent_lifespan(
     app: object,
     *,
-    hooks: AgentLifecycleHooks,
+    hooks: AgentHooks,
     processes: Sequence[ManagedProcessSpec] = (),
 ) -> AsyncIterator[None]:
     """Run common boot-time hooks and own agent auxiliary processes."""
@@ -50,4 +43,3 @@ async def agent_lifespan(
     finally:
         await group.stop()
         logger.info("agent lifecycle shutdown")
-

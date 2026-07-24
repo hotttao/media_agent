@@ -1,4 +1,4 @@
-﻿"""Codex agent configuration and hooks."""
+"""Codex agent configuration and hooks."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from adapter.biz.shared.agent_environment import (
+from adapter.agent_environment import (
     apply_credentials,
     build_acp_mcp_servers,
     parse_mcp_servers,

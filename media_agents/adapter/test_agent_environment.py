@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from adapter.biz.shared.agent_environment import (
+from adapter.agent_environment import (
     apply_credentials,
     build_acp_mcp_servers,
     parse_mcp_servers,
