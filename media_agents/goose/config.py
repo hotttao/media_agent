@@ -1,10 +1,4 @@
-"""Goose AgentHooks 实现。
-
-对标 agents/goose/src/server.ts 的 trackExtNotification + recordUsage：
-- trackExtNotification 拦截 _goose/unstable/session/update 累计 token
-- recordUsage 在 turn 完成后写 ~/.acp-usage/<sessionId>.jsonl，因为 goose SQLite
-  不能被 agent-usage sweeper 解析
-"""
+"""Goose agent configuration and hooks."""
 
 from __future__ import annotations
 
@@ -15,12 +9,56 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-import httpx
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from adapter.clients.cp import CpClient
+from adapter.config.config import AdapterConfig, ConfigError, load_agent_config
 
 logger = logging.getLogger(__name__)
 
 HOME = Path(os.environ.get("HOME", "/root"))
-WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace"))
+DEFAULT_WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace"))
+
+
+class GooseSectionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    program: str = "goose"
+    args: list[str] = Field(default_factory=list)
+    path_root: str | None = None
+    config_dir: str = "~/.config/goose"
+
+    @field_validator("program")
+    @classmethod
+    def _program_required(cls, value: str) -> str:
+        if not value.strip():
+            raise ConfigError("goose.program must be non-empty")
+        return value
+
+    @field_validator("path_root", mode="before")
+    @classmethod
+    def _empty_to_none(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str) and value.strip().lower() in {"", "null", "none"}:
+            return None
+        return value
+
+
+class GooseConfig(AdapterConfig):
+    model_config = ConfigDict(extra="forbid")
+
+    goose: GooseSectionConfig = Field(default_factory=GooseSectionConfig)
+
+    @model_validator(mode="after")
+    def _validate_goose(self) -> GooseConfig:
+        if self.agent.type != "goose":
+            raise ConfigError("goose config requires agent.type=goose")
+        return self
+
+
+def load_goose_config(yaml_path: str | Path) -> GooseConfig:
+    return load_agent_config(yaml_path, GooseConfig)
 
 
 def _num(v: Any) -> int:
@@ -28,23 +66,21 @@ def _num(v: Any) -> int:
 
 
 class GooseHooks:
-    """AgentHooks Protocol 的 goose 实现。"""
+    """AgentHooks implementation for goose."""
 
     def __init__(
         self,
         *,
-        cp_url: str | None,
-        workspace_id: str | None,
+        cp_client: CpClient | None = None,
+        cp_url: str | None = None,
+        workspace_id: str | None = None,
         goose_path_root: str | None = None,
+        workspace_dir: str | Path = DEFAULT_WORKSPACE_DIR,
     ) -> None:
-        self._cp_url = cp_url
-        self._workspace_id = workspace_id
+        self._cp_client = cp_client or CpClient(base_url=cp_url, workspace_id=workspace_id)
         self._goose_path_root = goose_path_root
-        # 平台 session id -> 累计 token（input/output）
-        # 注：bridge 把 ext notification 的 native id 替换成 platform id 后回调
+        self._workspace_dir = Path(workspace_dir)
         self._accumulated: dict[str, tuple[int, int]] = {}
-
-    # ── trackExtNotification：goose 特有，bridge 调用 ─────────────
 
     def track_ext_notification(
         self, platform_session_id: str, method: str, params: dict[str, Any]
@@ -60,42 +96,30 @@ class GooseHooks:
             return
         self._accumulated[platform_session_id] = (inp, out)
 
-    # ── AgentHooks 协议实现 ────────────────────────────────────────
-
     def load_mcp_servers(self, session_token: str | None) -> list[Any]:
-        if not self._cp_url or not self._workspace_id:
+        if not self._cp_client.is_configured():
             return []
-        headers = {
-            "X-Workspace-ID": self._workspace_id,
-            "X-Agent-ID": self._workspace_id,
-        }
-        if session_token:
-            headers["X-Session-Token"] = session_token
+        url = self._cp_client.mcp_url()
+        if not url:
+            return []
         return [
             {
                 "type": "http",
                 "name": "tos-platform",
-                "url": f"{self._cp_url}/mcp",
-                "headers": headers,
+                "url": url,
+                "headers": self._cp_client.mcp_headers(session_token),
             }
         ]
 
     def has_mcp_servers(self) -> bool:
-        # 简化版：goose 总是挂 platform MCP
-        return bool(self._cp_url and self._workspace_id)
+        return self._cp_client.is_configured()
 
     async def load_config(self) -> bool:
-        if not self._cp_url or not self._workspace_id:
-            logger.info("Config skipped: CP_URL/WORKSPACE_ID unset")
+        config = await self._cp_client.fetch_workspace_config()
+        if config is None:
             return False
-        url = f"{self._cp_url}/_cp/workspaces/{self._workspace_id}/config"
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url)
-            if not resp.is_success:
-                logger.error("Config fetch failed %s %s", resp.status_code, resp.reason_phrase)
-                return False
-            config = resp.json()
-        (WORKSPACE_DIR / "runtime.json").write_text(
+        self._workspace_dir.mkdir(parents=True, exist_ok=True)
+        (self._workspace_dir / "runtime.json").write_text(
             json.dumps(
                 {
                     "model": config.get("model", ""),
@@ -106,9 +130,8 @@ class GooseHooks:
             ),
             encoding="utf-8",
         )
-        # 写 AGENTS.md 系统提示（对标 config.prompt_content）
         prompt = config.get("prompt_content") or config.get("system_prompt") or ""
-        (WORKSPACE_DIR / "AGENTS.md").write_text(prompt, encoding="utf-8")
+        (self._workspace_dir / "AGENTS.md").write_text(prompt, encoding="utf-8")
         logger.info("Config written: model=%s", config.get("model"))
         return True
 
@@ -117,17 +140,21 @@ class GooseHooks:
         return True, []
 
     async def load_credentials(self) -> bool:
-        logger.info("Credentials load skipped (not implemented)")
-        return False
+        credentials = await self._cp_client.fetch_credentials()
+        if credentials is None:
+            return False
+        logger.info(
+            'Credentials fetched but injection is not implemented count=%s',
+            len(credentials),
+        )
+        return True
 
     async def restart_bridge(self) -> None:
-        # goose 没有像 codex 那样要刷 OPENAI_API_KEY env（provider config 写在 session config）
         return
 
     def record_usage(self, session_id: str, usage: Any) -> None:
-        """对标 agents/goose/src/server.ts recordUsage：写 JSONL 到 ~/.acp-usage/。"""
         acc = self._accumulated.get(session_id)
-        model = _load_runtime_model()
+        model = _load_runtime_model(self._workspace_dir)
         payload: dict[str, Any] | None = None
         if acc:
             payload = {
@@ -159,9 +186,9 @@ class GooseHooks:
             logger.exception("record_usage write failed session=%s", session_id)
 
 
-def _load_runtime_model() -> str | None:
+def _load_runtime_model(workspace_dir: Path) -> str | None:
     try:
-        text = (WORKSPACE_DIR / "runtime.json").read_text(encoding="utf-8")
+        text = (workspace_dir / "runtime.json").read_text(encoding="utf-8")
         return cast(str | None, json.loads(text).get("model"))
     except (FileNotFoundError, json.JSONDecodeError):
         return None

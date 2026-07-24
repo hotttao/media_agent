@@ -1,8 +1,4 @@
-"""Codex AgentHooks 实现。
-
-对标 agents/codex/src/config.ts 的 loadConfig / loadSkills / loadCredentials /
-loadAcpMcpServers / applyProviderEnv，以及 agents/codex/src/server.ts 的 restartBridge。
-"""
+"""Codex agent configuration and hooks."""
 
 from __future__ import annotations
 
@@ -12,49 +8,83 @@ import os
 from pathlib import Path
 from typing import Any, cast
 
-import httpx
 import tomli_w
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from adapter.clients.cp import CpClient
+from adapter.config.config import AdapterConfig, ConfigError, load_agent_config
 
 logger = logging.getLogger(__name__)
 
 HOME = Path(os.environ.get("HOME", "/root"))
-WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace"))
+DEFAULT_WORKSPACE_DIR = Path(os.environ.get("WORKSPACE_DIR", "/workspace"))
+
+
+class CodexSectionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    program: str = "codex-acp"
+    initial_agent_mode: str = "default"
+    config_dir: str = "~/.codex"
+    disable_response_storage: bool = True
+
+    @field_validator("program", "initial_agent_mode")
+    @classmethod
+    def _required_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ConfigError("codex program and initial_agent_mode must be non-empty")
+        return value
+
+
+class CodexConfig(AdapterConfig):
+    model_config = ConfigDict(extra="forbid")
+
+    codex: CodexSectionConfig = Field(default_factory=CodexSectionConfig)
+
+    @model_validator(mode="after")
+    def _validate_codex(self) -> CodexConfig:
+        if self.agent.type != "codex":
+            raise ConfigError("codex config requires agent.type=codex")
+        return self
+
+
+def load_codex_config(yaml_path: str | Path) -> CodexConfig:
+    return load_agent_config(yaml_path, CodexConfig)
 
 
 class CodexHooks:
-    """AgentHooks Protocol 的 codex 实现。
+    """AgentHooks implementation for codex."""
 
-    静态配置（agent_type / capabilities / workspace_dir 等）走 AdapterConfig
-    （omegaconf 从 conf/config.yaml 加载），hooks 只负责回调。
-    """
-
-    def __init__(self, *, cp_url: str | None, workspace_id: str | None) -> None:
-        self._cp_url = cp_url
-        self._workspace_id = workspace_id
+    def __init__(
+        self,
+        *,
+        cp_client: CpClient | None = None,
+        cp_url: str | None = None,
+        workspace_id: str | None = None,
+        workspace_dir: str | Path = DEFAULT_WORKSPACE_DIR,
+        codex_config_dir: str | Path = HOME / ".codex",
+    ) -> None:
+        self._cp_client = cp_client or CpClient(base_url=cp_url, workspace_id=workspace_id)
+        self._workspace_dir = Path(workspace_dir)
+        self._codex_config_dir = Path(codex_config_dir).expanduser()
         self._api_key: str = ""
         self._user_mcp: dict[str, dict[str, Any]] = {}
         self._has_mcp = False
 
-    # ── AgentHooks 协议实现 ────────────────────────────────────────
-
     def load_mcp_servers(self, session_token: str | None) -> list[Any]:
-        if not self._cp_url or not self._workspace_id:
+        if not self._cp_client.is_configured():
             return []
-        servers: list[Any] = []
-        headers = {
-            "X-Workspace-ID": self._workspace_id,
-            "X-Agent-ID": self._workspace_id,
-        }
-        if session_token:
-            headers["X-Session-Token"] = session_token
-        servers.append(
+        url = self._cp_client.mcp_url()
+        if not url:
+            return []
+        servers: list[Any] = [
             {
                 "type": "http",
                 "name": "tos-platform",
-                "url": f"{self._cp_url}/mcp",
-                "headers": headers,
+                "url": url,
+                "headers": self._cp_client.mcp_headers(session_token),
             }
-        )
+        ]
         for name, cfg in self._user_mcp.items():
             if name == "tos-platform" or not cfg.get("url"):
                 continue
@@ -70,21 +100,9 @@ class CodexHooks:
         return self._has_mcp
 
     async def load_config(self) -> bool:
-        if not self._cp_url or not self._workspace_id:
-            logger.info("Config skipped: CP_URL/WORKSPACE_ID unset")
+        config = await self._cp_client.fetch_workspace_config()
+        if config is None:
             return False
-        url = f"{self._cp_url}/_cp/workspaces/{self._workspace_id}/config"
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url)
-            if not resp.is_success:
-                logger.error(
-                    "Config fetch failed %s %s url=%s",
-                    resp.status_code,
-                    resp.reason_phrase,
-                    url,
-                )
-                return False
-            config = resp.json()
 
         self._api_key = config.get("api_key") or ""
         mcp_servers: dict[str, Any] = {}
@@ -92,12 +110,12 @@ class CodexHooks:
             parsed = json.loads(config.get("mcp_config") or "{}")
             mcp_servers = parsed.get("mcpServers") or parsed
         except json.JSONDecodeError:
-            pass
+            logger.warning("CP mcp_config is not valid JSON")
         self._user_mcp = mcp_servers
         self._has_mcp = bool(mcp_servers)
 
-        # 写 runtime.json
-        (WORKSPACE_DIR / "runtime.json").write_text(
+        self._workspace_dir.mkdir(parents=True, exist_ok=True)
+        (self._workspace_dir / "runtime.json").write_text(
             json.dumps(
                 {
                     "model": config.get("model", ""),
@@ -109,40 +127,39 @@ class CodexHooks:
             encoding="utf-8",
         )
 
-        _write_codex_toml(config, mcp_servers)
-        _write_codex_auth(self._api_key)
+        _write_codex_toml(config, mcp_servers, self._codex_config_dir)
+        _write_codex_auth(self._api_key, self._codex_config_dir)
         logger.info("Config written: model=%s", config.get("model"))
         return True
 
     async def load_skills(self) -> tuple[bool, list[str]]:
-        # TODO: 接 agent-skills 同步逻辑（对标 agents/codex/src/config.ts loadSkills）
         logger.info("Skills load skipped (not implemented)")
         return True, []
 
     async def load_credentials(self) -> bool:
-        # TODO: 接 credentials 注入（对标 agents/codex/src/config.ts loadCredentials）
-        logger.info("Credentials load skipped (not implemented)")
-        return False
+        credentials = await self._cp_client.fetch_credentials()
+        if credentials is None:
+            return False
+        logger.info(
+            'Credentials fetched but injection is not implemented count=%s',
+            len(credentials),
+        )
+        return True
 
     async def restart_bridge(self) -> None:
-        # codex-acp 读 OPENAI_API_KEY / OPENAI_BASE_URL 环境变量
-        rc = _load_runtime()
-        if rc and rc.get("api_key"):
-            os.environ["OPENAI_API_KEY"] = rc["api_key"]
-            if rc.get("base_url"):
-                os.environ["OPENAI_BASE_URL"] = rc["base_url"]
+        runtime = _load_runtime(self._workspace_dir)
+        if runtime and self._api_key:
+            os.environ["OPENAI_API_KEY"] = self._api_key
+            if runtime.get("base_url"):
+                os.environ["OPENAI_BASE_URL"] = runtime["base_url"]
 
     def record_usage(self, session_id: str, usage: Any) -> None:
-        # codex 的 PromptResponse.usage 可能为 None；agent-usage sweeper 从 .codex
-        # transcripts 直接读，这里不需要写 JSONL。对标 TS codex 不传 recordUsage。
         return
 
 
-# ── 内部工具 ──────────────────────────────────────────────────────
-
-
-def _write_codex_toml(config: dict[str, Any], mcp_servers: dict[str, Any]) -> None:
-    codex_dir = HOME / ".codex"
+def _write_codex_toml(
+    config: dict[str, Any], mcp_servers: dict[str, Any], codex_dir: Path
+) -> None:
     codex_dir.mkdir(parents=True, exist_ok=True)
     model = config.get("model", "")
     provider_name = "custom" if config.get("base_url") else "openai"
@@ -163,7 +180,6 @@ def _write_codex_toml(config: dict[str, Any], mcp_servers: dict[str, Any]) -> No
         }
     if any(cfg.get("url") for cfg in mcp_servers.values()):
         toml["experimental_use_rmcp_client"] = True
-    # stdio MCP entries
     mcp_section: dict[str, Any] = {}
     for name, cfg in mcp_servers.items():
         if cfg.get("url"):
@@ -176,18 +192,16 @@ def _write_codex_toml(config: dict[str, Any], mcp_servers: dict[str, Any]) -> No
     (codex_dir / "config.toml").write_bytes(tomli_w.dumps(toml).encode("utf-8"))
 
 
-def _write_codex_auth(api_key: str) -> None:
+def _write_codex_auth(api_key: str, codex_dir: Path) -> None:
     if not api_key:
         return
-    codex_dir = HOME / ".codex"
     codex_dir.mkdir(parents=True, exist_ok=True)
     (codex_dir / "auth.json").write_text(json.dumps({"OPENAI_API_KEY": api_key}), encoding="utf-8")
 
 
-def _load_runtime() -> dict[str, Any] | None:
+def _load_runtime(workspace_dir: Path) -> dict[str, Any] | None:
     try:
-        data = json.loads((WORKSPACE_DIR / "runtime.json").read_text(encoding="utf-8"))
-        data["api_key"] = os.environ.get("OPENAI_API_KEY", "")
+        data = json.loads((workspace_dir / "runtime.json").read_text(encoding="utf-8"))
         return cast(dict[str, Any], data)
     except (FileNotFoundError, json.JSONDecodeError):
         return None

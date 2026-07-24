@@ -1,0 +1,42 @@
+agent:
+  type: generic
+  port: ${oc.env:PORT,3000}
+
+capabilities:
+  system_prompt: true
+  mcp: true
+  skills: false
+  questions: false
+  reconnect: true
+  permissions: true
+  streaming_deltas: true
+
+workspace:
+  dir: ${oc.env:WORKSPACE_DIR,/workspace}
+  keep_files:
+    - AGENTS.md
+    - runtime.json
+
+cp:
+  url: ${oc.env:CP_URL,null}
+  workspace_id: ${oc.env:WORKSPACE_ID,null}
+
+bridge_ttl:
+  idle_ttl_ms: 600000
+  max_count: 10
+  evict_interval_ms: 60000
+
+keepalive:
+  interval_ms: 15000
+
+runtime:
+  file: runtime.json
+  prompt_file: AGENTS.md
+
+skills:
+  enabled: false
+  dir: .agents/skills
+
+environment:
+  shell_rc: .bashrc
+  credentials_dir: .credentials

@@ -1,7 +1,6 @@
-# Codex agent 配置。omegaconf 从此文件加载，含 ${oc.env:VAR,default} 环境变量插值。
-# AdapterConfig schema 定义在 adapter/config/config.py，未列字段用默认值。
-
-agent_type: codex
+agent:
+  type: codex
+  port: ${oc.env:PORT,3001}
 
 capabilities:
   system_prompt: true
@@ -12,15 +11,8 @@ capabilities:
   permissions: true
   streaming_deltas: true
 
-workspace_dir: ${oc.env:WORKSPACE_DIR,/workspace}
-keep_files: [AGENTS.md, runtime.json]
-cp_url: ${oc.env:CP_URL,null}
-workspace_id: ${oc.env:WORKSPACE_ID,null}
-
-bridge_ttl:
-  idle_ttl_ms: 600000      # 10 min
-  max_count: 10
-  evict_interval_ms: 60000
-
-keepalive:
-  interval_ms: 15000
+codex:
+  program: ${oc.env:CODEX_ACP_BIN,codex-acp}
+  initial_agent_mode: ${oc.env:CODEX_INITIAL_AGENT_MODE,default}
+  config_dir: ${oc.env:CODEX_CONFIG_DIR,/root/.codex}
+  disable_response_storage: true

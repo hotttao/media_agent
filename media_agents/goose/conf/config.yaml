@@ -1,6 +1,6 @@
-# Goose agent 配置。omegaconf 从此文件加载。
-
-agent_type: goose
+agent:
+  type: goose
+  port: ${oc.env:PORT,3002}
 
 capabilities:
   system_prompt: true
@@ -11,18 +11,8 @@ capabilities:
   permissions: true
   streaming_deltas: true
 
-workspace_dir: ${oc.env:WORKSPACE_DIR,/workspace}
-keep_files: [AGENTS.md, runtime.json]
-cp_url: ${oc.env:CP_URL,null}
-workspace_id: ${oc.env:WORKSPACE_ID,null}
-
-# goose 特有：session 数据目录根（对标 GOOSE_PATH_ROOT）
-goose_path_root: ${oc.env:GOOSE_PATH_ROOT,null}
-
-bridge_ttl:
-  idle_ttl_ms: 600000
-  max_count: 10
-  evict_interval_ms: 60000
-
-keepalive:
-  interval_ms: 15000
+goose:
+  program: ${oc.env:GOOSE_BIN,goose}
+  args: []
+  path_root: ${oc.env:GOOSE_PATH_ROOT,null}
+  config_dir: ${oc.env:GOOSE_CONFIG_DIR,/root/.config/goose}

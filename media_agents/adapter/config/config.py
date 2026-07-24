@@ -1,62 +1,184 @@
-"""adapter 配置定义。
+"""Adapter configuration definitions.
 
-omegaconf 负责 yaml 加载 + ${oc.env:VAR,default} 环境变量插值，pydantic 负责
-schema 校验与类型。OmegaConf.structured(AdapterConfig) 用 Pydantic BaseModel 作为
-schema 模板，OmegaConf.to_object() 返回 Pydantic 实例。
-
-对标 acp-server.ts 的 AcpAgentServerConfig 静态部分。运行时回调（load_config /
-load_skills / restart_bridge / record_usage 等）由 AgentHooks Protocol 注入，
-见 biz/domain/acp_adapter/repository.py。
+OmegaConf is responsible for YAML loading and environment interpolation;
+Pydantic is responsible for schema validation and semantic checks. Agent
+packages should load their own typed config subclass via ``load_agent_config``.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from typing import Any, TypeVar, cast
 
 from omegaconf import OmegaConf
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from adapter.schemas.acp.response import AgentCapabilities
 
 
-class BridgeTtlConfig(BaseModel):
-    """bridge LRU 驱逐配置。对标 acp-server.ts BRIDGE_IDLE_TTL_MS / BRIDGE_MAX_COUNT。"""
+class ConfigError(ValueError):
+    """Raised when adapter configuration is structurally valid but unsafe."""
 
-    idle_ttl_ms: int = 10 * 60 * 1000  # 10 分钟空闲驱逐
-    max_count: int = 10  # 最多保留 10 个并发 bridge（codex-acp ~127MB，2GiB 限制）
-    evict_interval_ms: int = 60 * 1000  # 每分钟扫一次
+
+class AgentConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: str
+    port: int = Field(default=3000, gt=0, le=65535)
+
+
+class WorkspaceConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dir: str = "/workspace"
+    keep_files: set[str] = Field(default_factory=lambda: {"AGENTS.md", "runtime.json"})
+
+    @field_validator("keep_files", mode="before")
+    @classmethod
+    def _normalize_keep_files(cls, value: Any) -> Any:
+        if value is None:
+            return set()
+        return value
+
+
+class CpConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str | None = None
+    workspace_id: str | None = None
+
+    @field_validator("url", "workspace_id", mode="before")
+    @classmethod
+    def _empty_to_none(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str) and value.strip().lower() in {"", "null", "none"}:
+            return None
+        return value
+
+
+class BridgeTtlConfig(BaseModel):
+    """Bridge LRU eviction configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    idle_ttl_ms: int = Field(default=10 * 60 * 1000, gt=0)
+    max_count: int = Field(default=10, gt=0)
+    evict_interval_ms: int = Field(default=60 * 1000, gt=0)
 
 
 class KeepaliveConfig(BaseModel):
-    """SSE 心跳配置。对标 acp-server.ts KEEPALIVE_MS=15_000。"""
+    """SSE heartbeat configuration."""
 
-    interval_ms: int = 15_000
+    model_config = ConfigDict(extra="forbid")
+
+    interval_ms: int = Field(default=15_000, gt=0)
+
+
+class RuntimeConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file: str = "runtime.json"
+    prompt_file: str = "AGENTS.md"
+
+
+class SkillsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    dir: str = ".agents/skills"
+
+
+class EnvironmentConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shell_rc: str = ".bashrc"
+    credentials_dir: str = ".credentials"
+
+
+TConfig = TypeVar("TConfig", bound="AdapterConfig")
 
 
 class AdapterConfig(BaseModel):
-    """adapter 总配置。omegaconf 从 yaml 加载后转为此 Pydantic 实例。
+    """Shared adapter config loaded from common YAML plus agent overrides."""
 
-    agent 包的 conf/config.yaml 只写 override 字段；未列出的字段用 BaseModel 默认值。
-    """
+    model_config = ConfigDict(extra="allow")
 
-    agent_type: str
+    agent: AgentConfig
     capabilities: AgentCapabilities
-    workspace_dir: str = "/workspace"
-    keep_files: set[str] = Field(default_factory=lambda: {"AGENTS.md", "runtime.json"})
-    cp_url: str | None = None
-    workspace_id: str | None = None
+    workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
+    cp: CpConfig = Field(default_factory=CpConfig)
     bridge_ttl: BridgeTtlConfig = Field(default_factory=BridgeTtlConfig)
     keepalive: KeepaliveConfig = Field(default_factory=KeepaliveConfig)
+    runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
+    skills: SkillsConfig = Field(default_factory=SkillsConfig)
+    environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
+
+    @model_validator(mode="after")
+    def _validate_adapter(self) -> AdapterConfig:
+        self.validate_config()
+        return self
+
+    @property
+    def agent_type(self) -> str:
+        return self.agent.type
+
+    @property
+    def workspace_dir(self) -> str:
+        return self.workspace.dir
+
+    @property
+    def keep_files(self) -> set[str]:
+        return self.workspace.keep_files
+
+    @property
+    def cp_url(self) -> str | None:
+        return self.cp.url
+
+    @property
+    def workspace_id(self) -> str | None:
+        return self.cp.workspace_id
+
+    def validate_config(self) -> None:
+        if not self.agent.type.strip():
+            raise ConfigError("agent.type is required")
+
+        has_cp_url = bool(self.cp.url)
+        has_workspace_id = bool(self.cp.workspace_id)
+        if has_cp_url != has_workspace_id:
+            raise ConfigError("cp.url and cp.workspace_id must be configured together")
+
+        for keep_file in self.workspace.keep_files:
+            keep_path = Path(keep_file)
+            if keep_path.is_absolute() or ".." in keep_path.parts:
+                raise ConfigError(
+                    f"workspace.keep_files must be relative workspace files: {keep_file}"
+                )
+
+        self._assert_workspace_relative(self.runtime.file, "runtime.file")
+        self._assert_workspace_relative(self.runtime.prompt_file, "runtime.prompt_file")
+
+    def _assert_workspace_relative(self, value: str, field_name: str) -> None:
+        path = Path(value)
+        if path.is_absolute() or ".." in path.parts:
+            raise ConfigError(f"{field_name} must be a relative path inside workspace")
+
+
+def load_agent_config(
+    yaml_path: str | Path,
+    model_type: type[TConfig] = cast(type[TConfig], AdapterConfig),
+    *,
+    base_path: str | Path | None = None,
+) -> TConfig:
+    """Load common adapter config and one agent override into a typed model."""
+    common_path = (
+        Path(base_path) if base_path is not None else Path(__file__).with_name("base.yaml")
+    )
+    merged = OmegaConf.merge(OmegaConf.load(str(common_path)), OmegaConf.load(str(yaml_path)))
+    data = OmegaConf.to_container(merged, resolve=True)
+    return model_type.model_validate(data)
 
 
 def load_adapter_config(yaml_path: str | Path) -> AdapterConfig:
-    """从 yaml 加载 AdapterConfig。
-
-    用 OmegaConf.structured(AdapterConfig) 作为 schema 模板，合并 yaml 文件（含
-    ${oc.env:VAR,default} 插值），最后 OmegaConf.to_object 转回 Pydantic 实例。
-    """
-    schema = OmegaConf.structured(AdapterConfig)
-    yaml_cfg = OmegaConf.load(str(yaml_path))
-    merged = OmegaConf.merge(schema, yaml_cfg)
-    return cast(AdapterConfig, OmegaConf.to_object(merged))
+    """Backward-compatible shared config loader."""
+    return load_agent_config(yaml_path, AdapterConfig)
