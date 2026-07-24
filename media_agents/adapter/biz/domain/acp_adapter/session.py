@@ -105,10 +105,23 @@ class SessionSink:
         self.closed = True
         self._queue.put_nowait(self._SENTINEL)
 
-    async def read(self) -> AsyncIterator[str]:
-        """SSE 事件 generator。遇到 sentinel 退出。"""
+    async def read(self, keepalive_interval: float = 0.0) -> AsyncIterator[str]:
+        """SSE 事件 generator。遇到 sentinel 退出。
+
+        keepalive_interval > 0 时，空闲超时后 yield ``: \\n\\n`` comment frame
+        作为心跳，避免 nginx / uvicorn 长连接超时断开（对标 TS KEEPALIVE_MS）。
+        """
         while True:
-            event, data = await self._queue.get()
+            try:
+                if keepalive_interval > 0:
+                    event, data = await asyncio.wait_for(
+                        self._queue.get(), timeout=keepalive_interval
+                    )
+                else:
+                    event, data = await self._queue.get()
+            except asyncio.TimeoutError:
+                yield ": \n\n"
+                continue
             if (event, data) == self._SENTINEL:
                 break
             yield f"event: {event}\ndata: {data}\n\n"
