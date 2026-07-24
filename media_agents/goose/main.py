@@ -9,8 +9,8 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 
+from adapter.agent_app import build_app
 from adapter.clients.cp import CpClient
-from adapter.main import build_app
 from goose.bridge import GooseAcpBridge
 from goose.config import GooseHooks, load_goose_config
 
