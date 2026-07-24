@@ -29,6 +29,7 @@ from acp.schema import (
     SseMcpServer,
 )
 
+from adapter.biz.domain.acp_adapter.client import AcpClientAdapter
 from adapter.biz.domain.acp_adapter.entity import PromptResult, StopReason
 from adapter.biz.domain.acp_adapter.errors import LoadSessionFailed
 from adapter.biz.domain.acp_adapter.session import AcpSession
@@ -72,6 +73,7 @@ class AcpBridge:
         self.proc: asyncio.subprocess.Process | None = None
         self.conn: ClientSideConnection | None = None
         self.session: AcpSession | None = None
+        self.client: AcpClientAdapter | None = None
 
     async def start(self) -> None:
         """启动子进程 + 创建 ClientSideConnection + JSON-RPC 握手。
@@ -96,8 +98,9 @@ class AcpBridge:
             env=env,
         )
         self.session = AcpSession(self.session_id, self)
+        self.client = AcpClientAdapter(self.session)
         self.conn = connect_to_agent(
-            client=self.session,
+            client=self.client,
             input_stream=self.proc.stdin,
             output_stream=self.proc.stdout,
         )
@@ -135,7 +138,8 @@ class AcpBridge:
             cwd=self.cwd,
             mcp_servers=mcp_servers or [],
         )
-        self.session.session_id = resp.session_id
+        self.session.set_session_id(resp.session_id)
+        self.session_id = resp.session_id
         return self.session
 
     async def load_session(

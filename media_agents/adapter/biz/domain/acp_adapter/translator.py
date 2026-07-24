@@ -41,18 +41,17 @@ from acp.schema import (
     PromptResponse,
     SessionInfoUpdate,
     TextContentBlock,
-    ToolCallStart,
     ToolCallProgress,
+    ToolCallStart,
     UsageUpdate,
     UserMessageChunk,
 )
 
-from adapter.biz.domain.acp_adapter.entity import (
+from adapter.biz.domain.acp_adapter.entity import PromptResult
+from adapter.biz.domain.acp_adapter.llm_event import (
     ContentDelta,
     ContentPart,
-    PromptResult,
     SessionEndReason,
-    StopReason,
     TurnStats,
     UniversalEvent,
     UniversalItem,
@@ -177,7 +176,15 @@ class AcpEventTranslator:
             return self._on_user_message(update)
         if isinstance(update, (AgentPlanUpdate, AgentPlanContentUpdate, AgentPlanRemovedUpdate)):
             return self._on_plan(update)
-        if isinstance(update, (AvailableCommandsUpdate, CurrentModeUpdate, SessionInfoUpdate, ConfigOptionUpdate)):
+        if isinstance(
+            update,
+            (
+                AvailableCommandsUpdate,
+                CurrentModeUpdate,
+                SessionInfoUpdate,
+                ConfigOptionUpdate,
+            ),
+        ):
             return self._on_meta_update(update)
         logger.debug("unhandled session_update: %r", type(update).__name__)
         return []
@@ -281,7 +288,11 @@ class AcpEventTranslator:
     def _on_tool_call_update(self, update: ToolCallProgress) -> list[UniversalEvent]:
         tracked = self.active_tool_calls.get(update.tool_call_id)
         # spec: omitted status = unchanged，从跟踪状态继承
-        effective_status = update.status or tracked.last_status if tracked else (update.status or "in_progress")
+        effective_status = (
+            update.status or tracked.last_status
+            if tracked
+            else (update.status or "in_progress")
+        )
 
         if tracked:
             if update.raw_input is not None:
@@ -317,7 +328,9 @@ class AcpEventTranslator:
             final_name = self._resolve_tool_name(update)
             final_raw_input = getattr(update, "raw_input", None)
 
-        status = getattr(update, "status", None) or (tracked.last_status if tracked else "completed")
+        status = getattr(update, "status", None) or (
+            tracked.last_status if tracked else "completed"
+        )
         is_error = status == "failed"
 
         events: list[UniversalEvent] = []
@@ -516,22 +529,48 @@ def _stringify_content_block(block: Any) -> str:
     对标 TS tool_call_update content blocks 提取：content.text / diff /
     terminal 标识。未知 block 返回空串而非报错，避免阻塞 SSE 流。
     """
-    block_type = getattr(block, "type", None) or (block.get("type") if isinstance(block, dict) else None)
+    block_type = getattr(block, "type", None) or (
+        block.get("type") if isinstance(block, dict) else None
+    )
     if block_type == "content":
-        inner = getattr(block, "content", None) or (block.get("content") if isinstance(block, dict) else None)
-        inner_type = getattr(inner, "type", None) or (inner.get("type") if isinstance(inner, dict) else None)
+        inner = getattr(block, "content", None) or (
+            block.get("content") if isinstance(block, dict) else None
+        )
+        inner_type = getattr(inner, "type", None) or (
+            inner.get("type") if isinstance(inner, dict) else None
+        )
         if inner_type == "text":
-            return getattr(inner, "text", None) or (inner.get("text") if isinstance(inner, dict) else "") or ""
+            return (
+                getattr(inner, "text", None)
+                or (inner.get("text") if isinstance(inner, dict) else "")
+                or ""
+            )
         return _stringify_raw(inner)
     if block_type == "diff":
-        path = getattr(block, "path", None) or (block.get("path") if isinstance(block, dict) else "") or ""
-        old_text = getattr(block, "old_text", None) or (block.get("oldText") if isinstance(block, dict) else "") or ""
-        new_text = getattr(block, "new_text", None) or (block.get("newText") if isinstance(block, dict) else "") or ""
+        path = (
+            getattr(block, "path", None)
+            or (block.get("path") if isinstance(block, dict) else "")
+            or ""
+        )
+        old_text = (
+            getattr(block, "old_text", None)
+            or (block.get("oldText") if isinstance(block, dict) else "")
+            or ""
+        )
+        new_text = (
+            getattr(block, "new_text", None)
+            or (block.get("newText") if isinstance(block, dict) else "")
+            or ""
+        )
         if old_text:
             return f"--- {path}\n+++ {path}\n{old_text}\n->\n{new_text}"
         return f"+++ {path}\n{new_text}"
     if block_type == "terminal":
-        terminal_id = getattr(block, "terminal_id", None) or (block.get("terminalId") if isinstance(block, dict) else "") or ""
+        terminal_id = (
+            getattr(block, "terminal_id", None)
+            or (block.get("terminalId") if isinstance(block, dict) else "")
+            or ""
+        )
         return f"[terminal: {terminal_id}]"
     return ""
 

@@ -1,12 +1,11 @@
-"""ACP 会话：实现 SDK Client 协议，面向 SSE 连接层。
+"""ACP 会话：面向 SSE 连接层的 session 状态与事件流。
 
-对标 TS AcpSessionHandler + SessionSink 的合并体。一个 session 绑定一个
-AcpBridge 子进程；AcpSession 作为 connect_to_agent 的 client 参数，接收
-SDK 的 session_update / request_permission 回调，翻译为 UniversalEvent 写入
-SessionSink 供 SSE generator 消费。
+AcpSession 绑定一个 AcpBridge 子进程，接收 AcpClientAdapter 转发来的
+session_update / request_permission，翻译为 UniversalEvent 写入 SessionSink
+供 SSE generator 消费。
 
 设计要点（见 docs/wiki/agents/acp.md）：
-1. 删除原 AcpSessionHandler，由 AcpSession 直接实现 Client 接口
+1. 删除原 AcpSessionHandler，由 AcpSession 直接承载会话事件流状态
 2. AcpSession 面相 SSE 连接层（数据发送），AcpBridge 面向 agent core 层
 3. busy_turns / last_active / pending_destroy 用于 LRU 驱逐与 busy bridge
    延后销毁
@@ -19,7 +18,6 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from acp import RequestError
 from acp.schema import (
     AgentMessageChunk,
     AgentPlanContentUpdate,
@@ -29,27 +27,19 @@ from acp.schema import (
     AllowedOutcome,
     AvailableCommandsUpdate,
     ConfigOptionUpdate,
-    CreateElicitationResponse,
-    CreateTerminalResponse,
     CurrentModeUpdate,
-    DeclineElicitationResponse,
-    KillTerminalResponse,
     PermissionOption,
-    ReadTextFileResponse,
-    ReleaseTerminalResponse,
     RequestPermissionResponse,
     SessionInfoUpdate,
-    TerminalOutputResponse,
     ToolCallProgress,
     ToolCallStart,
     ToolCallUpdate,
     UsageUpdate,
     UserMessageChunk,
-    WaitForTerminalExitResponse,
-    WriteTextFileResponse,
 )
 
-from adapter.biz.domain.acp_adapter.entity import PromptResult
+from adapter.biz.domain.acp_adapter.entity import PromptResult, StopReason
+from adapter.biz.domain.acp_adapter.llm_event import to_event_dict
 from adapter.biz.domain.acp_adapter.translator import AcpEventTranslator
 
 if TYPE_CHECKING:
@@ -74,11 +64,11 @@ SessionUpdate = (
     | CurrentModeUpdate
     | ConfigOptionUpdate
     | SessionInfoUpdate
-    | UsageUpdate,
+    | UsageUpdate
 )
 
 
-class SessionSink:
+class SessionStream:
     """SSE 事件缓冲：asyncio.Queue 串起 translator 翻译后的 UniversalEvent。
 
     write 侧由 AcpSession.session_update 调用（async）；read 侧由 SSE
@@ -90,11 +80,45 @@ class SessionSink:
     def __init__(self, session_id: str) -> None:
         self.session_id = session_id
         self._queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
+        self._buffer: list[tuple[str, str]] = []
+        self._writer_seq: int = 0
+        self._active_writer_id: int | None = None
+        self.disconnected: bool = False
         self.closed: bool = False
+        self.done: asyncio.Event = asyncio.Event()
+
+    def set_session_id(self, session_id: str) -> None:
+        self.session_id = session_id
+
+    @property
+    def writer_id(self) -> int | None:
+        return self._active_writer_id
+
+    @property
+    def buffered_events(self) -> list[tuple[str, str]]:
+        return list(self._buffer)
+
+    def attach_writer(self) -> int:
+        self._writer_seq += 1
+        self._active_writer_id = self._writer_seq
+        self.disconnected = False
+        return self._writer_seq
+
+    def detach_writer(self, expected_writer_id: int | None) -> bool:
+        if expected_writer_id is not None and self._active_writer_id != expected_writer_id:
+            return False
+        if self.closed:
+            return False
+        self._active_writer_id = None
+        self.disconnected = True
+        return True
 
     async def write(self, event: str, data: str) -> None:
         """写入一条 SSE 事件（event 名 + data 字符串）。"""
         if self.closed:
+            return
+        if self.disconnected:
+            self._buffer.append((event, data))
             return
         await self._queue.put((event, data))
 
@@ -103,6 +127,7 @@ class SessionSink:
         if self.closed:
             return
         self.closed = True
+        self.done.set()
         self._queue.put_nowait(self._SENTINEL)
 
     async def read(self, keepalive_interval: float = 0.0) -> AsyncIterator[str]:
@@ -111,6 +136,9 @@ class SessionSink:
         keepalive_interval > 0 时，空闲超时后 yield ``: \\n\\n`` comment frame
         作为心跳，避免 nginx / uvicorn 长连接超时断开（对标 TS KEEPALIVE_MS）。
         """
+        while self._buffer:
+            event, data = self._buffer.pop(0)
+            yield self._format(event, data)
         while True:
             try:
                 if keepalive_interval > 0:
@@ -119,34 +147,72 @@ class SessionSink:
                     )
                 else:
                     event, data = await self._queue.get()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 yield ": \n\n"
                 continue
             if (event, data) == self._SENTINEL:
                 break
-            yield f"event: {event}\ndata: {data}\n\n"
+            yield self._format(event, data)
+
+    @staticmethod
+    def _format(event: str, data: str) -> str:
+        if event == ":":
+            return ": \n\n"
+        return f"event: {event}\ndata: {data}\n\n"
+
+
+SessionSink = SessionStream
 
 
 class AcpSession:
-    """一个 ACP 会话。实现 SDK Client 协议，面向 SSE 连接层。
+    """一个 ACP 会话。面向 SSE 连接层。
 
     - session_update: ACP session/update 通知 -> translator -> sink（SSE）
     - request_permission: 默认接受第一个选项（对标 TS onPermissionRequest）
-    - 文件 / 终端 / 扩展方法: 默认 method_not_found（cp 端不支持），agent
-      子类可 override 启用具体能力
     """
 
     def __init__(self, session_id: str, bridge: AcpBridge) -> None:
         self.session_id = session_id
         self.bridge = bridge
-        self.sink = SessionSink(session_id)
+        self.stream = SessionStream(session_id)
+        self.sink = self.stream
         self.translator = AcpEventTranslator(session_id)
         # 运行时状态（原 entity.py 的 AcpSession dataclass 字段）
         self.busy_turns: int = 0
         self.last_active: float = 0.0
         self.pending_destroy: bool = False
 
-    # ── Client 协议（SDK ClientSideConnection 回调）──────────
+    def set_session_id(self, session_id: str) -> None:
+        """Update the resolved platform session id across session collaborators."""
+        self.session_id = session_id
+        self.stream.set_session_id(session_id)
+        self.translator.set_session_id(session_id)
+
+    def open_stream(self) -> SessionStream:
+        """Create a fresh turn stream and attach the initial SSE reader."""
+        self.stream = SessionStream(self.session_id)
+        self.sink = self.stream
+        self.stream.attach_writer()
+        return self.stream
+
+    def attach_stream(self) -> SessionStream:
+        """Attach a reconnect reader to the current turn stream."""
+        self.stream.attach_writer()
+        if self.stream.done.is_set():
+            self.stream.close()
+        return self.stream
+
+    def detach_stream(self, expected_writer_id: int | None) -> bool:
+        """Detach a reader; switches to buffer mode if ownership still matches."""
+        return self.stream.detach_writer(expected_writer_id)
+
+    def finish_stream(self) -> None:
+        """Mark the turn done; keep disconnected streams around for reconnect."""
+        self.stream.done.set()
+        if not self.stream.disconnected:
+            self.stream.close()
+
+    # ── Client adapter 转发来的核心回调 ─────────────────────
 
     async def session_update(
         self,
@@ -161,7 +227,15 @@ class AcpSession:
         json 序列化（对标 TS SSE event: message + data: JSON）。
         """
         for event in self.translator.translate(update):
-            await self.sink.write("message", json.dumps(event, ensure_ascii=False, default=str))
+            await self.write_event(event)
+
+    async def write_event(self, event: Any) -> None:
+        """Write one UniversalEvent to the SSE sink as structured JSON."""
+        await self.sink.write("message", json.dumps(to_event_dict(event), ensure_ascii=False))
+
+    async def emit_started(self) -> None:
+        """Emit the session.started lifecycle event for this SSE stream."""
+        await self.write_event(self.translator.session_started(self.session_id))
 
     async def request_permission(
         self,
@@ -184,80 +258,11 @@ class AcpSession:
             outcome=AllowedOutcome(outcome="selected", option_id=option_id)
         )
 
-    # ── 文件系统（cp 端默认不开放，agent 子类可 override）────
-
-    async def write_text_file(
-        self, session_id: str, path: str, content: str, **kwargs: Any
-    ) -> WriteTextFileResponse | None:
-        raise RequestError.method_not_found("fs/write_text_file")
-
-    async def read_text_file(
-        self, session_id: str, path: str, line: int | None = None, limit: int | None = None, **kwargs: Any
-    ) -> ReadTextFileResponse:
-        raise RequestError.method_not_found("fs/read_text_file")
-
-    # ── 终端（cp 端默认不开放，agent 子类可 override）──────
-
-    async def create_terminal(
-        self,
-        session_id: str,
-        command: str,
-        args: list[str] | None = None,
-        env: list[Any] | None = None,
-        cwd: str | None = None,
-        output_byte_limit: int | None = None,
-        **kwargs: Any,
-    ) -> CreateTerminalResponse:
-        raise RequestError.method_not_found("terminal/create")
-
-    async def terminal_output(
-        self, session_id: str, terminal_id: str, **kwargs: Any
-    ) -> TerminalOutputResponse:
-        raise RequestError.method_not_found("terminal/output")
-
-    async def release_terminal(
-        self, session_id: str, terminal_id: str, **kwargs: Any
-    ) -> ReleaseTerminalResponse | None:
-        raise RequestError.method_not_found("terminal/release")
-
-    async def wait_for_terminal_exit(
-        self, session_id: str, terminal_id: str, **kwargs: Any
-    ) -> WaitForTerminalExitResponse:
-        raise RequestError.method_not_found("terminal/wait_for_exit")
-
-    async def kill_terminal(
-        self, session_id: str, terminal_id: str, **kwargs: Any
-    ) -> KillTerminalResponse | None:
-        raise RequestError.method_not_found("terminal/kill")
-
-    # ── Elicitation（agent 请求用户输入，默认 decline）──────
-
-    async def create_elicitation(
-        self, message: str, mode: Any, **kwargs: Any
-    ) -> CreateElicitationResponse:
-        """agent 请求用户输入时默认拒绝（cp 端不展示 elicitation UI）。"""
-        return DeclineElicitationResponse(action="decline")
-
-    async def complete_elicitation(self, elicitation_id: str, **kwargs: Any) -> None:
-        """elicitation 完成通知，默认无操作。"""
-
-    # ── 扩展方法 / 通知 ─────────────────────────────────────
-
-    async def ext_method(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
-        """扩展方法，默认 method_not_found。agent 子类可 override 处理私有方法。"""
-        raise RequestError.method_not_found(method)
-
-    async def ext_notification(self, method: str, params: dict[str, Any]) -> None:
-        """扩展通知，默认忽略。agent 子类可 override 处理 goose/codex 私有事件。"""
-
-    def on_connect(self, conn: Any) -> None:
-        """ClientSideConnection 建立时的回调。骨架阶段无操作。"""
-
     # ── SSE 读取（router 层消费）────────────────────────────
 
-    async def read(self) -> AsyncIterator[str]:
+    async def read(self, keepalive_interval: float = 0.0) -> AsyncIterator[str]:
         """返回 SSE 事件 generator 供 StreamingResponse 消费。"""
-        async for chunk in self.sink.read():
+        async for chunk in self.stream.read(keepalive_interval=keepalive_interval):
             yield chunk
 
     # ── turn 执行（AcpServer 调用）─────────────────────────
@@ -270,7 +275,17 @@ class AcpSession:
         """
         self.busy_turns += 1
         try:
-            return await self.bridge.prompt(self.session_id, message, images)
+            result = await self.bridge.prompt(self.session_id, message, images)
+            for event in self.translator.finalize():
+                await self.write_event(event)
+            reason = "interrupted" if result.stop_reason == StopReason.CANCELLED else "completed"
+            await self.write_event(
+                self.translator.session_ended(reason, self.translator.build_stats(result))
+            )
+            return result
+        except Exception:
+            await self.write_event(self.translator.session_ended("error"))
+            raise
         finally:
             self.busy_turns -= 1
 
@@ -280,4 +295,4 @@ class AcpSession:
 
     def close(self) -> None:
         """关闭 sink，让 SSE read generator 退出。"""
-        self.sink.close()
+        self.stream.close()

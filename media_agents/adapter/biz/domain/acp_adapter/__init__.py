@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks, BridgeFactory
 from adapter.biz.domain.acp_adapter.entity import Chat, PromptResult
 from adapter.biz.domain.acp_adapter.errors import BridgeNotFound, LoadSessionFailed
-from adapter.biz.domain.acp_adapter.session import AcpSession
+from adapter.biz.domain.acp_adapter.session import AcpSession, SessionStream
 from adapter.biz.shared.clock import Clock, SystemClock
 from adapter.biz.shared.id import new_session_id
 
@@ -76,6 +76,7 @@ class AcpServer:
         session_id = chat.session_id
 
         if session_id and session_id in self.sessions:
+            session = self.sessions[session_id]
             # 复用内存中存活的 session（检查 bridge 是否还活着）
             session = self.sessions[session_id]
             if not session.bridge.is_alive():
@@ -83,17 +84,25 @@ class AcpServer:
                 self._destroy(session_id)
                 # 走 load 路径重新加载
                 session = await self.load_session(session_id, chat.session_token)
+                session.open_stream()
+                await session.emit_started()
                 return session, False
             self._touch(session_id)
+            session.open_stream()
+            await session.emit_started()
             return session, False
 
         if session_id:
-            # 加载已持久化的 session（rollout / SQLite）
             session = await self.load_session(session_id, chat.session_token)
+            session.open_stream()
+            # 加载已持久化的 session（rollout / SQLite）
+            await session.emit_started()
             return session, False
 
         # 全新 session
         session = await self.create_session(chat.session_token)
+        session.open_stream()
+        await session.emit_started()
         return session, True
 
     async def run_turn(
@@ -105,28 +114,37 @@ class AcpServer:
         由 router 层 try/except 处理（对标原 /chat handler 的重试一次逻辑）。
         turn 结束后 drain_pending 清理 pending_destroy 的 bridge。
         """
-        result = await session.run_turn(message, images)
         try:
-            self.hooks.record_usage(session.session_id, result.usage)
-        except Exception as err:
-            logger.error("record_usage failed session=%s: %s", session.session_id, err)
-        self._touch(session.session_id)
-        self.drain_pending(session.session_id)
-        return result
+            result = await session.run_turn(message, images)
+            try:
+                self.hooks.record_usage(session.session_id, result.usage)
+            except Exception as err:
+                logger.error("record_usage failed session=%s: %s", session.session_id, err)
+            self._touch(session.session_id)
+            return result
+        finally:
+            session.finish_stream()
+            self.drain_pending(session.session_id)
 
     # ── /reconnect 编排 ─────────────────────────────────────
 
-    async def reconnect(self, session_id: str) -> AcpSession:
+    async def reconnect(self, session_id: str) -> SessionStream:
         """POST /reconnect 编排：从已有 session 恢复 SSE 流。
 
         session 必须已在内存中（/chat 时创建）；否则返回 BridgeNotFound。
         router 层 flush buffer 后 async for session.read()。
         """
         session = self.sessions.get(session_id)
-        if session is None:
+        if session is None or session.stream.closed:
             raise BridgeNotFound(session_id)
         self._touch(session_id)
-        return session
+        return session.attach_stream()
+
+    def detach_stream(self, session_id: str, expected_writer_id: int | None) -> bool:
+        session = self.sessions.get(session_id)
+        if session is None:
+            return False
+        return session.detach_stream(expected_writer_id)
 
     # ── /interrupt 编排 ─────────────────────────────────────
 
@@ -150,12 +168,18 @@ class AcpServer:
     # ── LRU 驱逐（对标原 SessionManager）─────────────────────
 
     def start_evictor(self, interval_ms: int) -> None:
+        """Start the background idle bridge evictor once."""
+        if self.evict_task is not None and not self.evict_task.done():
+            return
         """启动后台驱逐循环：每 interval_ms 扫一次 idle TTL / cap。"""
 
         async def _evict_loop() -> None:
             while True:
                 await asyncio.sleep(interval_ms / 1000)
-                self._evict_once()
+                try:
+                    self._evict_once()
+                except Exception:
+                    logger.exception("ACP bridge evictor failed")
 
         self.evict_task = asyncio.create_task(_evict_loop())
 
@@ -227,6 +251,7 @@ class AcpServer:
                     continue
                 if session.busy_turns > 0:
                     session.pending_destroy = True
+                    overflow -= 1
                 else:
                     self._destroy(sid)
                     overflow -= 1
@@ -237,11 +262,15 @@ class AcpServer:
         """创建新 session：bridge.start -> wait_for_mcp_ready -> create_session。"""
         draft_id = new_session_id()
         bridge = self.factory(draft_id)
-        await bridge.start()
-        mcp_servers = self.hooks.load_mcp_servers(session_token)
-        if self.hooks.has_mcp_servers():
-            await bridge.wait_for_mcp_ready()
-        session = await bridge.create_session(mcp_servers=mcp_servers)
+        try:
+            await bridge.start()
+            mcp_servers = self.hooks.load_mcp_servers(session_token)
+            if self.hooks.has_mcp_servers():
+                await bridge.wait_for_mcp_ready()
+            session = await bridge.create_session(mcp_servers=mcp_servers)
+        except Exception:
+            bridge.destroy()
+            raise
         session.last_active = self.clock.now()
         self.sessions[session.session_id] = session
         self.bridges[session.session_id] = bridge
@@ -251,9 +280,9 @@ class AcpServer:
     async def load_session(self, session_id: str, session_token: str | None) -> AcpSession:
         """加载已持久化的 session：bridge.start -> load_session。"""
         bridge = self.factory(session_id)
-        await bridge.start()
-        mcp_servers = self.hooks.load_mcp_servers(session_token)
         try:
+            await bridge.start()
+            mcp_servers = self.hooks.load_mcp_servers(session_token)
             session = await bridge.load_session(session_id, mcp_servers=mcp_servers)
         except LoadSessionFailed:
             bridge.destroy()

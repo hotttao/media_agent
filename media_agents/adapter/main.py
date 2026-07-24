@@ -18,8 +18,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from adapter.biz.api.v1.routes.acp.router import build_acp_router
-from adapter.biz.domain.acp_adapter.repository import AgentHooks, BridgeFactory
-from adapter.biz.service.acp.service import SessionManager
+from adapter.biz.domain.acp_adapter import AcpServer
+from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks, BridgeFactory
 from adapter.config.config import AdapterConfig
 from adapter.infra.logging import setup_logging
 
@@ -37,6 +37,7 @@ def build_base_app(cfg: AdapterConfig) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         setup_logging()
         app.state.adapter_config = cfg
+        app.state.acp_server = None
         app.state.session_manager = None  # claude_code 不用 SessionManager
         app.state.hooks = None
         logger.info(
@@ -80,15 +81,15 @@ def build_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         setup_logging()
-        sm = SessionManager(
+        acp_server = AcpServer(
+            agent_hooks=hooks,
             bridge_factory=bridge_factory,
-            hooks=hooks,
             idle_ttl_ms=cfg.bridge_ttl.idle_ttl_ms,
             max_count=cfg.bridge_ttl.max_count,
         )
-        sm.start_evictor(cfg.bridge_ttl.evict_interval_ms)
+        acp_server.start_evictor(cfg.bridge_ttl.evict_interval_ms)
         app.state.adapter_config = cfg
-        app.state.session_manager = sm
+        app.state.acp_server = acp_server
         app.state.hooks = hooks
         logger.info(
             "adapter app started: agent=%s workspace=%s",
@@ -98,7 +99,7 @@ def build_app(
         try:
             yield
         finally:
-            sm.stop_evictor()
+            acp_server.stop_evictor()
             logger.info("adapter app shutdown")
 
     app = FastAPI(lifespan=lifespan)
