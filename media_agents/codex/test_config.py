@@ -7,7 +7,20 @@ from typing import Any
 
 import pytest
 
-from codex.config import CodexHooks
+from codex.config import CodexConfig, CodexHooks, load_codex_config
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_load_codex_config_merges_common_defaults() -> None:
+    cfg = load_codex_config(ROOT / "codex" / "conf" / "config.yaml")
+
+    assert isinstance(cfg, CodexConfig)
+    assert cfg.agent_type == "codex"
+    assert cfg.agent.port == 3001
+    assert cfg.workspace_dir == "/workspace"
+    assert cfg.bridge_ttl.max_count == 10
+    assert cfg.codex.program == "codex-acp"
 
 
 class _CpClient:

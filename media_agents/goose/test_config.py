@@ -6,7 +6,19 @@ from typing import Any
 
 import pytest
 
-from goose.config import GooseHooks
+from goose.config import GooseConfig, GooseHooks, load_goose_config
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_load_goose_config_has_agent_specific_section() -> None:
+    cfg = load_goose_config(ROOT / "goose" / "conf" / "config.yaml")
+
+    assert isinstance(cfg, GooseConfig)
+    assert cfg.agent_type == "goose"
+    assert cfg.agent.port == 3002
+    assert cfg.goose.program == "goose"
+    assert cfg.goose.path_root is None
 
 
 class _CpClient:
