@@ -27,6 +27,7 @@ from adapter.agent_environment import (
 )
 from adapter.clients.cp import CpClient
 from adapter.config.config import AdapterConfig, ConfigError, load_agent_config
+from adapter.platform_prompt import normalize_memory_attachments, write_platform_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,7 @@ class GooseHooks:
         self._user_mcp: McpServerMap = {}
         self._has_mcp = False
         self._accumulated: dict[str, tuple[int, int]] = {}
+        self._user_display_name: str | None = None
 
     def track_ext_notification(
         self, platform_session_id: str, method: str, params: Mapping[str, object]
@@ -134,6 +136,17 @@ class GooseHooks:
         config = await self._cp_client.fetch_workspace_config()
         if config is None:
             return False
+        if isinstance(config.get("user_display_name"), str):
+            self._user_display_name = config["user_display_name"]
+        write_platform_prompt(
+            agent_kind="goose",
+            target_dir=self._goose_config_dir,
+            filename="AGENTS.md",
+            workspace_id=self._cp_client.workspace_id,
+            user_name=self._user_display_name,
+            memory_attachments=normalize_memory_attachments(config.get("memory_attachments")),
+        )
+
         self._api_key = str(config.get("api_key") or "")
         self._user_mcp = parse_mcp_servers(config.get("mcp_config"))
         self._has_mcp = bool(self._user_mcp)

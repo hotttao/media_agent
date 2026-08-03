@@ -24,6 +24,10 @@ def test_load_codex_config_merges_common_defaults() -> None:
 
 
 class _CpClient:
+    @property
+    def workspace_id(self) -> str:
+        return "w1"
+
     def is_configured(self) -> bool:
         return True
 
@@ -44,6 +48,17 @@ class _CpClient:
             "small_model": "small",
             "api_key": "sk-test",
             "prompt_content": "system prompt",
+            "user_display_name": "Alice",
+            "memory_attachments": [
+                {
+                    "store_id": "mem1",
+                    "store_name": "Project Memory",
+                    "store_description": "notes",
+                    "access": "read_only",
+                    "instructions": "Read first.",
+                    "index_content": "# Memory",
+                }
+            ],
             "mcp_config": json.dumps(
                 {
                     "mcpServers": {
@@ -72,6 +87,9 @@ async def test_codex_hook_writes_shared_workspace_files_and_mcp(tmp_path: Path) 
     assert await hooks.load_config() is True
 
     assert (workspace / "AGENTS.md").read_text(encoding="utf-8") == "system prompt"
+    platform_prompt = (codex_dir / "AGENTS.md").read_text(encoding="utf-8")
+    assert 'id: w1), serving user "Alice"' in platform_prompt
+    assert "`/mnt/memory/mem1/` (read_only) - Project Memory: notes" in platform_prompt
     assert json.loads((workspace / "runtime.json").read_text(encoding="utf-8")) == {
         "model": "gpt-test",
         "provider_type": "openai",

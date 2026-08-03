@@ -22,6 +22,10 @@ def test_load_goose_config_has_agent_specific_section() -> None:
 
 
 class _CpClient:
+    @property
+    def workspace_id(self) -> str:
+        return "w1"
+
     def is_configured(self) -> bool:
         return True
 
@@ -42,6 +46,17 @@ class _CpClient:
             "small_model": "small",
             "api_key": "sk-test",
             "system_prompt": "goose prompt",
+            "user_display_name": "Alice",
+            "memory_attachments": [
+                {
+                    "store_id": "mem1",
+                    "store_name": "Project Memory",
+                    "store_description": "notes",
+                    "access": "read_write",
+                    "instructions": "Read first.",
+                    "index_content": "# Memory",
+                }
+            ],
             "mcp_config": json.dumps(
                 {
                     "mcpServers": {
@@ -70,6 +85,9 @@ async def test_goose_hook_writes_shared_files_and_session_mcp(tmp_path: Path) ->
     assert await hooks.load_config() is True
 
     assert (workspace / "AGENTS.md").read_text(encoding="utf-8") == "goose prompt"
+    platform_prompt = (goose_dir / "AGENTS.md").read_text(encoding="utf-8")
+    assert 'id: w1), serving user "Alice"' in platform_prompt
+    assert "`/mnt/memory/mem1/` (read_write) - Project Memory: notes" in platform_prompt
     assert json.loads((workspace / "runtime.json").read_text(encoding="utf-8"))["model"] == (
         "gpt-test"
     )

@@ -24,6 +24,8 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = [".."]
 include = ["adapter*"]
+[tool.setuptools.package-data]
+adapter = ["platform_prompt.md"]
 
 [project.optional-dependencies]
 dev = [

@@ -8,22 +8,47 @@ import {
   Route,
   Search,
   Server,
+  Share2,
   Workflow,
 } from "lucide-react";
 import { domains, edges, tables, walkthroughs } from "./schemaData.js";
+import { platformPromptExplainData } from "./platformPromptData.js";
+import { workspaceExplainData } from "./workspaceExplainData.js";
+import { webExplainData } from "./webExplainData.js";
 
 const GRAPH_NODE_WIDTH = 185;
 const GRAPH_NODE_HEIGHT = 84;
 
 const modules = [
   { id: "schema", label: "数据库表", icon: Database },
-  { id: "oauth", label: "OAuth 登录", icon: KeyRound },
-  { id: "mcpOauth", label: "MCP OAuth", icon: Link2 },
-  { id: "agentStartup", label: "Agent 启动", icon: Server },
-  { id: "configLoad", label: "Config 加载", icon: Workflow },
-  { id: "skillUpdates", label: "Skill 更新", icon: Workflow },
+  { id: "workspace", label: "Workspace", icon: Server },
+  { id: "web", label: "Web", icon: Network },
+  { id: "oauth", label: "OAuth 登录", icon: KeyRound, group: "auth" },
+  { id: "mcpOauth", label: "MCP OAuth", icon: Link2, group: "auth" },
+  { id: "serviceTokens", label: "Service Token", icon: KeyRound, group: "auth" },
+  { id: "agentStartup", label: "Agent 启动", icon: Server, group: "agents" },
+  { id: "agentQuestions", label: "Question 流程", icon: Workflow, group: "agents" },
+  { id: "configLoad", label: "Config 加载", icon: Workflow, group: "agents" },
+  { id: "skillUpdates", label: "Skill 更新", icon: Workflow, group: "agents" },
+  { id: "memorySystem", label: "记忆系统", icon: Network, group: "agents" },
+  { id: "afsSharedFiles", label: "共享文件 AFS", icon: Share2, group: "agents" },
+  { id: "usageParsing", label: "Usage 解析", icon: Route, group: "agents" },
+  { id: "platformPrompt", label: "提示词解析", icon: BookOpen },
   { id: "reading", label: "源码阅读", icon: BookOpen },
 ];
+
+const topModules = [
+  { id: "schema", label: "数据库表", icon: Database, target: "schema" },
+  { id: "workspace", label: "Workspace", icon: Server, target: "workspace" },
+  { id: "web", label: "Web", icon: Network, target: "web" },
+  { id: "auth", label: "认证和鉴权", icon: KeyRound, target: "oauth", children: ["oauth", "mcpOauth", "serviceTokens"] },
+  { id: "agents", label: "Agents", icon: Server, target: "agentStartup", children: ["agentStartup", "agentQuestions", "configLoad", "skillUpdates", "memorySystem", "afsSharedFiles", "usageParsing"] },
+  { id: "platformPrompt", label: "提示词解析", icon: BookOpen, target: "platformPrompt" },
+  { id: "reading", label: "源码阅读", icon: BookOpen, target: "reading" },
+];
+
+const moduleById = Object.fromEntries(modules.map((m) => [m.id, m]));
+const topModuleById = Object.fromEntries(topModules.map((m) => [m.id, m]));
 
 const missingTableGroups = [
   {
@@ -49,12 +74,32 @@ const missingTableGroups = [
 ];
 const moduleDomainMap = {
   schema: "all",
+  workspace: "all",
+  web: "all",
   oauth: "oauth",
   mcpOauth: "mcp",
+  serviceTokens: "runtime",
   agentStartup: "config",
+  agentQuestions: "runtime",
   configLoad: "config",
   skillUpdates: "skills",
+  memorySystem: "memory",
+  afsSharedFiles: "afs",
+  usageParsing: "runtime",
+  platformPrompt: "all",
 };
+
+function resolveModuleId(id) {
+  return topModuleById[id]?.target ?? id;
+}
+
+function activeTopModuleId(moduleId) {
+  return moduleById[moduleId]?.group ?? moduleId;
+}
+
+function activeTopModule(moduleId) {
+  return topModuleById[activeTopModuleId(moduleId)] ?? topModules[0];
+}
 
 const nodePositions = {
   users: [70, 60],
@@ -85,95 +130,95 @@ export function App() {
   const [selected, setSelected] = useState("workspace_config");
   const [query, setQuery] = useState("");
   const [showAllFields, setShowAllFields] = useState(false);
+  const [returnTarget, setReturnTarget] = useState(null);
 
   const activeDomain = moduleId === "schema" ? domain : moduleDomainMap[moduleId] ?? "all";
 
   function switchModule(next) {
-    setModuleId(next);
-    const nextDomain = next === "schema" ? domain : moduleDomainMap[next] ?? "all";
+    setReturnTarget(null);
+    const resolved = resolveModuleId(next);
+    setModuleId(resolved);
+    const nextDomain = resolved === "schema" ? domain : moduleDomainMap[resolved] ?? "all";
     const first = Object.keys(tables).find((name) => tableVisible(name, nextDomain));
     if (first && !tableVisible(selected, nextDomain)) setSelected(first);
   }
+
+  function jumpTo(link) {
+    const targetModuleId = link.moduleId ? resolveModuleId(link.moduleId) : null;
+    if (targetModuleId && targetModuleId !== moduleId) {
+      setReturnTarget({ moduleId, domain, selected, label: moduleById[moduleId]?.label ?? activeTopModule(moduleId)?.label ?? "上一模块" });
+    }
+    if (targetModuleId) setModuleId(targetModuleId);
+    if (link.domain) setDomain(link.domain);
+    if (link.table) setSelected(link.table);
+    if (link.hash) {
+      window.setTimeout(() => document.getElementById(link.hash)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+    }
+  }
+
+  function goBackToReturnTarget() {
+    if (!returnTarget) return;
+    setModuleId(returnTarget.moduleId);
+    setDomain(returnTarget.domain);
+    setSelected(returnTarget.selected);
+    setReturnTarget(null);
+  }
+
+  function renderCurrentModule() {
+    if (moduleId === "schema") return <SchemaModule domain={domain} setDomain={setDomain} activeDomain={activeDomain} selected={selected} setSelected={setSelected} query={query} setQuery={setQuery} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "workspace") return <WorkspaceModule />;
+    if (moduleId === "web") return <WebModule />;
+    if (moduleId === "oauth") return <WalkthroughModule kind="oauth" title={walkthroughs.oauthLogin.title} intro={walkthroughs.oauthLogin.intro} steps={walkthroughs.oauthLogin.steps} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "mcpOauth") return <McpOauthModule selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "serviceTokens") return <WalkthroughModule kind="serviceToken" title={walkthroughs.serviceTokenFlow.title} intro={walkthroughs.serviceTokenFlow.intro} steps={walkthroughs.serviceTokenFlow.steps} quickLinks={walkthroughs.serviceTokenFlow.quickLinks} onNavigate={jumpTo} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "agentStartup") return <WalkthroughModule kind="agent" title={walkthroughs.agentStartup.title} intro={walkthroughs.agentStartup.intro} steps={walkthroughs.agentStartup.steps} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "agentQuestions") return <WalkthroughModule kind="question" title={walkthroughs.agentQuestions.title} intro={walkthroughs.agentQuestions.intro} steps={walkthroughs.agentQuestions.steps} quickLinks={walkthroughs.agentQuestions.quickLinks} onNavigate={jumpTo} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "configLoad") return <WalkthroughModule kind="agent" title={walkthroughs.workspaceConfigLoad.title} intro={walkthroughs.workspaceConfigLoad.intro} steps={walkthroughs.workspaceConfigLoad.steps} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "skillUpdates") return <WalkthroughModule kind="skills" title={walkthroughs.skillUpdates.title} intro={walkthroughs.skillUpdates.intro} steps={walkthroughs.skillUpdates.steps} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "memorySystem") return <WalkthroughModule kind="memory" title={walkthroughs.memorySystem.title} intro={walkthroughs.memorySystem.intro} steps={walkthroughs.memorySystem.steps} quickLinks={walkthroughs.memorySystem.quickLinks} onNavigate={jumpTo} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "afsSharedFiles") return <WalkthroughModule kind="afs" title={walkthroughs.afsSharedFiles.title} intro={walkthroughs.afsSharedFiles.intro} steps={walkthroughs.afsSharedFiles.steps} quickLinks={walkthroughs.afsSharedFiles.quickLinks} onNavigate={jumpTo} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "usageParsing") return <WalkthroughModule kind="runtime" title={walkthroughs.usageParsing.title} intro={walkthroughs.usageParsing.intro} steps={walkthroughs.usageParsing.steps} quickLinks={walkthroughs.usageParsing.quickLinks} onNavigate={jumpTo} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "platformPrompt") return <PlatformPromptModule />;
+    if (moduleId === "reading") return <ReadingModule />;
+    return null;
+  }
+
+  const topModule = activeTopModule(moduleId);
+  const childModules = topModule.children?.map((id) => moduleById[id]).filter(Boolean) ?? [];
 
   return (
     <div className="shell">
       <Header moduleId={moduleId} setModuleId={switchModule} />
       <main className="workspace">
-        {moduleId === "schema" && (
-          <SchemaModule
-            domain={domain}
-            setDomain={setDomain}
-            activeDomain={activeDomain}
-            selected={selected}
-            setSelected={setSelected}
-            query={query}
-            setQuery={setQuery}
-            showAllFields={showAllFields}
-            setShowAllFields={setShowAllFields}
-          />
+        {returnTarget && moduleId !== returnTarget.moduleId && (
+          <button className="return-link" type="button" onClick={goBackToReturnTarget}>返回{returnTarget.label}</button>
         )}
-        {moduleId === "oauth" && (
-          <WalkthroughModule
-            kind="oauth"
-            title={walkthroughs.oauthLogin.title}
-            intro={walkthroughs.oauthLogin.intro}
-            steps={walkthroughs.oauthLogin.steps}
-            selected={selected}
-            setSelected={setSelected}
-            showAllFields={showAllFields}
-            setShowAllFields={setShowAllFields}
-          />
-        )}
-        {moduleId === "mcpOauth" && (
-          <McpOauthModule
-            selected={selected}
-            setSelected={setSelected}
-            showAllFields={showAllFields}
-            setShowAllFields={setShowAllFields}
-          />
-        )}
-        {moduleId === "agentStartup" && (
-          <WalkthroughModule
-            kind="agent"
-            title={walkthroughs.agentStartup.title}
-            intro={walkthroughs.agentStartup.intro}
-            steps={walkthroughs.agentStartup.steps}
-            selected={selected}
-            setSelected={setSelected}
-            showAllFields={showAllFields}
-            setShowAllFields={setShowAllFields}
-          />
-        )}
-        {moduleId === "configLoad" && (
-          <WalkthroughModule
-            kind="agent"
-            title={walkthroughs.workspaceConfigLoad.title}
-            intro={walkthroughs.workspaceConfigLoad.intro}
-            steps={walkthroughs.workspaceConfigLoad.steps}
-            selected={selected}
-            setSelected={setSelected}
-            showAllFields={showAllFields}
-            setShowAllFields={setShowAllFields}
-          />
-        )}        {moduleId === "skillUpdates" && (
-          <WalkthroughModule
-            kind="skills"
-            title={walkthroughs.skillUpdates.title}
-            intro={walkthroughs.skillUpdates.intro}
-            steps={walkthroughs.skillUpdates.steps}
-            selected={selected}
-            setSelected={setSelected}
-            showAllFields={showAllFields}
-            setShowAllFields={setShowAllFields}
-          />
-        )}
-        {moduleId === "reading" && <ReadingModule />}
+        {childModules.length > 0 ? (
+          <div className="module-section-layout">
+            <aside className="module-section-nav">
+              <div className="mini-title">{topModule.label}</div>
+              <div className="module-section-list">
+                {childModules.map((m) => {
+                  const Icon = m.icon;
+                  return (
+                    <button key={m.id} type="button" className={moduleId === m.id ? "active" : ""} onClick={() => switchModule(m.id)}>
+                      <Icon size={16} />
+                      <span>{m.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </aside>
+            <section className="module-section-content">{renderCurrentModule()}</section>
+          </div>
+        ) : renderCurrentModule()}
       </main>
     </div>
   );
 }
 
 function Header({ moduleId, setModuleId }) {
+  const activeTop = activeTopModuleId(moduleId);
   return (
     <header className="topbar">
       <div>
@@ -184,10 +229,10 @@ function Header({ moduleId, setModuleId }) {
         </p>
       </div>
       <nav className="module-tabs" aria-label="模块切换">
-        {modules.map((m) => {
+        {topModules.map((m) => {
           const Icon = m.icon;
           return (
-            <button key={m.id} className={moduleId === m.id ? "active" : ""} onClick={() => setModuleId(m.id)}>
+            <button key={m.id} className={activeTop === m.id ? "active" : ""} onClick={() => setModuleId(m.id)}>
               <Icon size={16} />
               <span>{m.label}</span>
             </button>
@@ -195,6 +240,259 @@ function Header({ moduleId, setModuleId }) {
         })}
       </nav>
     </header>
+  );
+}
+
+function WebModule() {
+  const articleIds = useMemo(() => webExplainData.chapters.map((chapter) => chapter.id), []);
+  const [activeArticleId, setActiveArticleId] = useState(() => {
+    const hashId = window.location.hash.replace(/^#/, "");
+    return articleIds.includes(hashId) ? hashId : webExplainData.chapters[0]?.id ?? "";
+  });
+  const activeChapter = webExplainData.chapters.find((chapter) => chapter.id === activeArticleId) ?? webExplainData.chapters[0];
+  const outline = buildWebArticleOutline(activeChapter);
+
+  useEffect(() => {
+    function syncFromHash() {
+      const hashId = window.location.hash.replace(/^#/, "");
+      if (articleIds.includes(hashId)) setActiveArticleId(hashId);
+    }
+    window.addEventListener("hashchange", syncFromHash);
+    syncFromHash();
+    return () => window.removeEventListener("hashchange", syncFromHash);
+  }, [articleIds]);
+
+  function selectArticle(event, id) {
+    event.preventDefault();
+    setActiveArticleId(id);
+    window.history.pushState(null, "", "#" + id);
+    window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
+  return (
+    <div className="web-doc-layout">
+      <aside className="workspace-explain-nav web-article-list">
+        <div className="mini-title">文章列表</div>
+        <div className="workspace-explain-links web-article-links">
+          {webExplainData.chapters.map((chapter) => (
+            <a key={chapter.id} href={"#" + chapter.id} className={chapter.id === activeChapter.id ? "active" : ""} onClick={(event) => selectArticle(event, chapter.id)}>
+              {chapter.title}
+            </a>
+          ))}
+        </div>
+      </aside>
+      <section className="workspace-explain-reader web-article-reader" id="web-article-top">
+        <div className="module-title">
+          <Network size={22} />
+          <div>
+            <h2>{webExplainData.title}</h2>
+            <p>{webExplainData.intro}</p>
+          </div>
+        </div>
+        {activeChapter && <WebArticleContent chapter={activeChapter} />}
+      </section>
+      <aside className="web-outline-nav">
+        <div className="mini-title">本文大纲</div>
+        <div className="web-outline-links">
+          {outline.map((item) => (
+            <a key={item.target} href={"#" + item.target}>{item.label}</a>
+          ))}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function buildWebArticleOutline(chapter) {
+  if (!chapter) return [];
+  if (chapter.outline?.length > 0) return chapter.outline;
+  const outline = [
+    { label: "文章开头", target: chapter.id },
+    { label: "源码入口", target: chapter.id + "-source" },
+  ];
+  if (chapter.bullets?.length > 0) outline.push({ label: "核心说明", target: chapter.id + "-overview" });
+  if (chapter.layoutTree) outline.push({ label: "结构图", target: chapter.id + "-layout-tree" });
+  if (chapter.slotDiagram) outline.push({ label: "Slot 图", target: chapter.id + "-slot-diagram" });
+  if (chapter.panelTree) outline.push({ label: "面板结构", target: chapter.id + "-panel-tree" });
+  chapter.codeBlocks?.forEach((block, index) => outline.push({ label: block.title, target: chapter.id + "-code-" + index }));
+  if (chapter.takeaways?.length > 0) outline.push({ label: "阅读结论", target: chapter.id + "-takeaways" });
+  return outline;
+}
+
+function WebArticleContent({ chapter }) {
+  return (
+    <article className="workspace-chapter web-single-article" id={chapter.id} key={chapter.id}>
+      <div className="workspace-chapter-head">
+        <h3>{chapter.title}</h3>
+        <p>{chapter.summary}</p>
+      </div>
+      <div className="workspace-source-list" id={chapter.id + "-source"}>
+        <strong>源码入口</strong>
+        {chapter.sourceRefs.map((ref) => <code key={ref}>{ref}</code>)}
+      </div>
+      {chapter.bullets?.length > 0 && (
+        <ul className="workspace-bullets" id={chapter.id + "-overview"}>
+          {chapter.bullets.map((item) => <li key={item}>{item}</li>)}
+        </ul>
+      )}
+      {chapter.layoutTree && <div id={chapter.id + "-layout-tree"}><WebTreeDiagram diagram={chapter.layoutTree} /></div>}
+      {chapter.slotDiagram && <div id={chapter.id + "-slot-diagram"}><WebSlotDiagram diagram={chapter.slotDiagram} /></div>}
+      {chapter.panelTree && <div id={chapter.id + "-panel-tree"}><WebTreeDiagram diagram={chapter.panelTree} /></div>}
+      {chapter.codeBlocks?.length > 0 && (
+        <div className="workspace-code-list">
+          {chapter.codeBlocks.map((block, index) => (
+            <div id={chapter.id + "-code-" + index} key={block.title}>
+              <CodeBlock block={block} />
+            </div>
+          ))}
+        </div>
+      )}
+      {chapter.takeaways?.length > 0 && (
+        <div className="web-takeaways" id={chapter.id + "-takeaways"}>
+          <strong>阅读结论</strong>
+          <ul>{chapter.takeaways.map((item) => <li key={item}>{item}</li>)}</ul>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function WebTreeDiagram({ diagram }) {
+  return (
+    <section className="web-diagram-card">
+      <h4>{diagram.title}</h4>
+      <div className="web-tree-shell">
+        <WebTreeNode node={diagram.root} depth={0} />
+      </div>
+    </section>
+  );
+}
+
+function WebTreeNode({ node, depth }) {
+  return (
+    <div className="web-tree-node" style={{ "--depth": depth }}>
+      <div className="web-node-box">
+        <div>
+          <strong>{node.label}</strong>
+          {node.meta && <p>{node.meta}</p>}
+        </div>
+        {node.file && <code>{node.file}</code>}
+      </div>
+      {node.children?.length > 0 && (
+        <div className="web-node-children">
+          {node.children.map((child) => <WebTreeNode key={child.label + child.file} node={child} depth={depth + 1} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WebSlotDiagram({ diagram }) {
+  return (
+    <section className="web-diagram-card">
+      <h4>{diagram.title}</h4>
+      <div className="web-layout-list">
+        {diagram.layouts.map((layout) => (
+          <div className="web-layout-card" key={layout.name}>
+            <div className="web-layout-head">
+              <strong>{layout.name}</strong>
+              <code>{layout.file}</code>
+            </div>
+            <div className="web-slot-row" style={{ gridTemplateColumns: "repeat(" + layout.columns.length + ", minmax(0, 1fr))" }}>
+              {layout.columns.map((col) => (
+                <div className={col.apps.includes("chat") ? "web-slot-card hot" : "web-slot-card"} key={col.slot}>
+                  <span>{col.width}</span>
+                  <strong>{col.slot}</strong>
+                  <p>{col.note}</p>
+                  <div>{col.apps.map((app) => <code key={app}>{app}</code>)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WorkspaceModule() {
+  return (
+    <div className="workspace-explain-layout">
+      <aside className="workspace-explain-nav">
+        <div className="mini-title">Workspace 源码导读</div>
+        <div className="workspace-explain-links">
+          {workspaceExplainData.chapters.map((chapter) => (
+            <a key={chapter.id} href={"#" + chapter.id}>{chapter.title}</a>
+          ))}
+        </div>
+      </aside>
+      <section className="workspace-explain-reader">
+        <div className="module-title">
+          <Server size={22} />
+          <div>
+            <h2>{workspaceExplainData.title}</h2>
+            <p>{workspaceExplainData.intro}</p>
+          </div>
+        </div>
+        <div className="workspace-chapters">
+          {workspaceExplainData.chapters.map((chapter) => (
+            <article className="workspace-chapter" id={chapter.id} key={chapter.id}>
+              <div className="workspace-chapter-head">
+                <h3>{chapter.title}</h3>
+                <p>{chapter.summary}</p>
+              </div>
+              <div className="workspace-source-list">
+                <strong>源码入口</strong>
+                {chapter.sourceRefs.map((ref) => <code key={ref}>{ref}</code>)}
+              </div>
+              {chapter.bullets?.length > 0 && (
+                <ul className="workspace-bullets">
+                  {chapter.bullets.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              )}
+              {chapter.codeBlocks?.length > 0 && (
+                <div className="workspace-code-list">
+                  {chapter.codeBlocks.map((block) => <CodeBlock key={block.title} block={block} />)}
+                </div>
+              )}
+              {chapter.tools?.length > 0 && (
+                <div className="workspace-tool-grid">
+                  {chapter.tools.map((tool) => (
+                    <div key={tool.group} className="workspace-tool-card">
+                      <strong>{tool.group}</strong>
+                      <p>{tool.purpose}</p>
+                      <div>{tool.names.map((name) => <code key={name}>{name}</code>)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {chapter.diagram && <CodeBlock block={{ title: "业务时序图", code: chapter.diagram }} />}
+              {chapter.examples?.length > 0 && (
+                <div className="workspace-example-list">
+                  {chapter.examples.map((example) => (
+                    <section className="workspace-example" key={example.title}>
+                      <h4>{example.title}</h4>
+                      <p><strong>交互：</strong>{example.request}</p>
+                      <div className="workspace-example-grid">
+                        <div>
+                          <strong>发送内容</strong>
+                          <pre>{JSON.stringify(example.payload, null, 2)}</pre>
+                        </div>
+                        <div>
+                          <strong>响应/结果</strong>
+                          <pre>{JSON.stringify(example.response, null, 2)}</pre>
+                        </div>
+                      </div>
+                      {example.notes?.length > 0 && <ul>{example.notes.map((note) => <li key={note}>{note}</li>)}</ul>}
+                    </section>
+                  ))}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -481,6 +779,237 @@ function Marker({ marker }) {
   return <span className={`marker ${kind}`}>{marker}</span>;
 }
 
+function CodeBlock({ block }) {
+  const hasSequence = block.code.includes("sequenceDiagram");
+  const hasFlowchart = block.code.includes("flowchart TD");
+  return (
+    <div className="code-block sql-block">
+      <strong>{block.title}</strong>
+      {hasSequence && <SequenceDiagramView source={block.code} />}
+      {hasFlowchart && <FlowchartView source={block.code} title={block.title} />}
+      <pre>{block.code}</pre>
+    </div>
+  );
+}
+
+function SequenceDiagramView({ source }) {
+  const diagrams = parseSequenceDiagrams(source);
+  if (diagrams.length === 0) return null;
+  return (
+    <div className="sequence-diagrams">
+      {diagrams.map((diagram, index) => <SwimlaneDiagram key={diagram.title + index} diagram={diagram} index={index} />)}
+    </div>
+  );
+}
+
+function SwimlaneDiagram({ diagram, index }) {
+  const laneWidth = 190;
+  const leftPad = 56;
+  const rightPad = 34;
+  const headerHeight = 70;
+  const rowHeight = 64;
+  const bottomPad = 24;
+  const width = leftPad + rightPad + Math.max(1, diagram.participants.length) * laneWidth;
+  const height = headerHeight + bottomPad + Math.max(1, diagram.messages.length) * rowHeight;
+  const xOf = (id) => {
+    const idx = Math.max(0, diagram.participants.findIndex((p) => p.id === id));
+    return leftPad + idx * laneWidth + laneWidth / 2;
+  };
+  const labelOf = (id) => diagram.labels[id] ?? id;
+
+  return (
+    <section className="sequence-card swimlane-card">
+      <div className="sequence-title">{diagram.title}</div>
+      <div className="swimlane-scroll">
+        <svg className="swimlane-svg" viewBox={`0 0 ${width} ${height}`} width={width} height={height} role="img" aria-label={diagram.title}>
+          <defs>
+            <marker id={`arrow-call-${index}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" />
+            </marker>
+            <marker id={`arrow-return-${index}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" />
+            </marker>
+          </defs>
+
+          {diagram.participants.map((participant) => {
+            const x = xOf(participant.id);
+            return (
+              <g key={participant.id}>
+                <rect className="swimlane-head" x={x - 78} y="12" width="156" height="38" rx="7" />
+                {splitSvgText(participant.label, 18).map((line, lineIndex) => (
+                  <text key={lineIndex} className="swimlane-head-text" x={x} y={30 + lineIndex * 13}>{line}</text>
+                ))}
+                <line className="swimlane-line" x1={x} y1="58" x2={x} y2={height - 12} />
+              </g>
+            );
+          })}
+
+          {diagram.messages.map((message, msgIndex) => {
+            const y = headerHeight + msgIndex * rowHeight + 28;
+            const fromX = xOf(message.from);
+            const toX = xOf(message.to);
+            const isSelf = message.from === message.to;
+            const isReturn = message.kind === "return";
+            const lines = splitSvgText(message.text, isSelf ? 24 : 42).slice(0, 3);
+            if (isSelf) {
+              return (
+                <g key={msgIndex} className="swimlane-message self">
+                  <text className="swimlane-step-no" x="20" y={y + 4}>{msgIndex + 1}</text>
+                  <rect className="swimlane-self-box" x={fromX + 14} y={y - 22} width="138" height="44" rx="7" />
+                  {lines.map((line, lineIndex) => (
+                    <text key={lineIndex} className="swimlane-msg-text" x={fromX + 83} y={y - 5 + lineIndex * 13}>{line}</text>
+                  ))}
+                </g>
+              );
+            }
+            const x1 = fromX < toX ? fromX + 34 : fromX - 34;
+            const x2 = fromX < toX ? toX - 34 : toX + 34;
+            const textX = (x1 + x2) / 2;
+            const textY = y - 10;
+            return (
+              <g key={msgIndex} className={isReturn ? "swimlane-message return" : "swimlane-message call"}>
+                <text className="swimlane-step-no" x="20" y={y + 4}>{msgIndex + 1}</text>
+                <line className={isReturn ? "swimlane-arrow return" : "swimlane-arrow"} x1={x1} y1={y} x2={x2} y2={y} markerEnd={`url(#${isReturn ? 'arrow-return' : 'arrow-call'}-${index})`} />
+                <rect className="swimlane-msg-bg" x={textX - 112} y={textY - 18} width="224" height={Math.max(26, lines.length * 14 + 8)} rx="6" />
+                {lines.map((line, lineIndex) => (
+                  <text key={lineIndex} className="swimlane-msg-text" x={textX} y={textY + lineIndex * 13}>{line}</text>
+                ))}
+                <text className="swimlane-end-label from" x={fromX} y={y + 18}>{labelOf(message.from)}</text>
+                <text className="swimlane-end-label to" x={toX} y={y + 18}>{labelOf(message.to)}</text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </section>
+  );
+}
+
+function splitSvgText(text, maxChars) {
+  const normalized = String(text).replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxChars) return [normalized];
+  const parts = normalized.split(" ");
+  const lines = [];
+  let current = "";
+  for (const part of parts) {
+    const next = current ? current + " " + part : part;
+    if (next.length > maxChars && current) {
+      lines.push(current);
+      current = part;
+    } else {
+      current = next;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [normalized];
+}
+
+function parseSequenceDiagrams(source) {
+  const lines = source.split("\n");
+  const diagrams = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i].trim() !== "sequenceDiagram") continue;
+    let title = "时序图";
+    for (let j = i - 1; j >= 0; j -= 1) {
+      const candidate = lines[j].trim();
+      if (!candidate || candidate.startsWith("─") || candidate === "参与方：") continue;
+      if (/^[AB]\./.test(candidate) || candidate.endsWith("发布")) {
+        title = candidate;
+        break;
+      }
+    }
+
+    const participants = [];
+    const labels = {};
+    const messages = [];
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const line = lines[j].trim();
+      if (!line) continue;
+      if (line === "sequenceDiagram") break;
+      if (line.startsWith("──") || line.startsWith("这里的") || line.startsWith("共同结论")) break;
+
+      const participant = line.match(/^participant\s+(\w+)\s+as\s+(.+)$/);
+      if (participant) {
+        const [, id, label] = participant;
+        participants.push({ id, label });
+        labels[id] = label;
+        continue;
+      }
+
+      const message = line.match(/^(\w+)\s*(-{0,2}>>)\s*(\w+):\s*(.+)$/);
+      if (message) {
+        const [, from, arrow, to, text] = message;
+        messages.push({ from, to, text, kind: arrow.startsWith("--") ? "return" : "call" });
+      }
+    }
+    diagrams.push({ title, participants, labels, messages });
+  }
+  return diagrams;
+}
+
+function FlowchartView({ source, title }) {
+  const charts = parseFlowcharts(source);
+  if (charts.length === 0) return null;
+  return (
+    <div className="flowchart-diagrams">
+      {charts.map((chart, index) => (
+        <section className="sequence-card flowchart-card" key={title + index}>
+          <div className="sequence-title">{title}</div>
+          <div className="flowchart-steps" role="img" aria-label={title}>
+            {chart.edges.map((edge, edgeIndex) => (
+              <div className="flowchart-row" key={edgeIndex}>
+                <div className={edge.fromShape === "decision" ? "flowchart-node decision" : "flowchart-node"}>{edge.fromLabel}</div>
+                <div className="flowchart-arrow">
+                  {edge.label && <span>{edge.label}</span>}
+                </div>
+                <div className={edge.toShape === "decision" ? "flowchart-node decision" : "flowchart-node"}>{edge.toLabel}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function parseFlowcharts(source) {
+  const lines = source.split("\n");
+  const charts = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i].trim() !== "flowchart TD") continue;
+    const labels = {};
+    const shapes = {};
+    const edges = [];
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const line = lines[j].trim();
+      if (!line) continue;
+      if (line === "flowchart TD" || line === "sequenceDiagram") break;
+      const edge = line.match(/^(\w+)(?:\[([^\]]+)\]|\{([^}]+)\})?\s*-->\s*(?:\|([^|]+)\|\s*)?(\w+)(?:\[([^\]]+)\]|\{([^}]+)\})?/);
+      if (!edge) continue;
+      const [, from, fromBox, fromDecision, arrowLabel, to, toBox, toDecision] = edge;
+      if (fromBox || fromDecision) {
+        labels[from] = fromBox || fromDecision;
+        shapes[from] = fromDecision ? "decision" : "box";
+      }
+      if (toBox || toDecision) {
+        labels[to] = toBox || toDecision;
+        shapes[to] = toDecision ? "decision" : "box";
+      }
+      edges.push({
+        from,
+        to,
+        label: arrowLabel || "",
+        fromLabel: labels[from] || from,
+        toLabel: labels[to] || to,
+        fromShape: shapes[from] || "box",
+        toShape: shapes[to] || "box",
+      });
+    }
+    if (edges.length > 0) charts.push({ edges });
+  }
+  return charts;
+}
+
 function ExampleStrip() {
   return (
     <div className="example-strip">
@@ -491,9 +1020,13 @@ function ExampleStrip() {
   );
 }
 
-function WalkthroughModule({ title, intro, steps, selected, setSelected, showAllFields, setShowAllFields, kind }) {
-  const domain = kind === "oauth" ? "oauth" : kind === "mcp" ? "mcp" : kind === "skills" ? "skills" : "config";
-  const involved = new Set(steps.flatMap((s) => s.db.map((d) => d.table)).filter(Boolean));
+function WalkthroughModule({ title, intro, steps, selected, setSelected, showAllFields, setShowAllFields, kind, quickLinks = [], onNavigate }) {
+  const domain = kind === "oauth" ? "oauth" : kind === "mcp" ? "mcp" : kind === "skills" ? "skills" : kind === "memory" ? "memory" : kind === "afs" ? "afs" : kind === "runtime" ? "runtime" : kind === "question" ? "runtime" : kind === "serviceToken" ? "runtime" : "config";
+  const involved = new Set(steps.flatMap((s) => {
+    const dbTables = Array.isArray(s.db) ? s.db.map((d) => d.table) : [];
+    const relatedTables = Array.isArray(s.relatedTables) ? s.relatedTables : [];
+    return [...dbTables, ...relatedTables];
+  }).filter(Boolean));
   const first = Array.from(involved)[0] || selected;
   const current = involved.has(selected) ? selected : first;
 
@@ -507,9 +1040,10 @@ function WalkthroughModule({ title, intro, steps, selected, setSelected, showAll
             <p>{intro}</p>
           </div>
         </div>
+        <ContentIndex kind={kind} steps={steps} quickLinks={quickLinks} onNavigate={onNavigate} />
         <div className="timeline">
           {steps.map((step, idx) => (
-            <StepCard key={step.title} step={step} index={idx + 1} onPickTable={setSelected} />
+            <StepCard key={step.title} id={`${kind}-step-${idx + 1}`} step={step} index={idx + 1} onPickTable={setSelected} />
           ))}
         </div>
       </section>
@@ -521,6 +1055,27 @@ function WalkthroughModule({ title, intro, steps, selected, setSelected, showAll
         setShowAllFields={setShowAllFields}
       />
     </div>
+  );
+}
+
+function ContentIndex({ kind, steps, quickLinks, onNavigate }) {
+  return (
+    <nav className="content-index" aria-label="内容索引">
+      <strong>内容索引</strong>
+      <div className="index-links">
+        {steps.map((step, idx) => (
+          <a key={step.title} href={"#" + kind + "-step-" + (idx + 1)}>{idx + 1}. {step.title}</a>
+        ))}
+      </div>
+      {quickLinks.length > 0 && (
+        <div className="quick-links">
+          <strong>相关章节</strong>
+          {quickLinks.map((link) => (
+            <button key={link.label} type="button" onClick={() => onNavigate?.(link)}>{link.label}</button>
+          ))}
+        </div>
+      )}
+    </nav>
   );
 }
 
@@ -638,9 +1193,14 @@ function McpOauthModule({ selected, setSelected, showAllFields, setShowAllFields
     />
   );
 }
-function StepCard({ step, index, onPickTable }) {
+function StepCard({ step, index, onPickTable, id }) {
+  const action = describeStepAction(step);
+  const { rows: paramRows, extraNotes: paramExtraNotes } = step.hideParams ? { rows: [], extraNotes: [] } : buildParamRows(step.params, step.paramNotes);
+  const dbRows = Array.isArray(step.db) ? step.db : [];
+  const relatedTables = Array.isArray(step.relatedTables) ? step.relatedTables : [];
+
   return (
-    <article className="step-card">
+    <article className="step-card" id={id}>
       <div className="step-index">{index}</div>
       <div className="step-body">
         <h3>{step.title}</h3>
@@ -648,30 +1208,42 @@ function StepCard({ step, index, onPickTable }) {
           <span><Route size={14} />{step.actor}</span>
           <span><Network size={14} />{step.request}</span>
         </div>
-        {step.url && (
-          <div className="url-block">
-            <strong>请求 URL</strong>
-            <code>{step.url}</code>
-          </div>
-        )}
+        <div className="url-block">
+          <strong>{action.label}</strong>
+          <code><span className="method-pill">{action.method}</span>{action.target}</code>
+        </div>
         {step.redirectTo && (
           <div className="url-block redirect">
             <strong>跳转目标</strong>
             <code>{step.redirectTo}</code>
           </div>
         )}
-        {step.params && (
-          <div className="code-block">
-            <strong>观察参数</strong>
-            <pre>{JSON.stringify(step.params, null, 2)}</pre>
-          </div>
-        )}
-        {step.paramNotes && (
-          <div className="impl-block param-notes">
-            <strong>参数作用</strong>
-            <ul>
-              {step.paramNotes.map((item) => <li key={item}>{item}</li>)}
-            </ul>
+        {step.codeBlocks?.map((block) => <CodeBlock key={block.title} block={block} />)}
+        {(paramRows.length > 0 || paramExtraNotes.length > 0) && (
+          <div className="param-table-block">
+            <strong>参数和值</strong>
+            {paramRows.length > 0 && (
+              <div className="param-table">
+                <div className="param-row param-head">
+                  <strong>参数</strong>
+                  <strong>值</strong>
+                  <strong>说明</strong>
+                </div>
+                {paramRows.map((row) => (
+                  <div className="param-row" key={row.name}>
+                    <code>{row.name}</code>
+                    <pre>{row.value !== undefined ? JSON.stringify(row.value, null, 2) : ""}</pre>
+                    <p>{row.note}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {paramExtraNotes.length > 0 && (
+              <div className="param-extra-notes">
+                <strong>补充说明</strong>
+                <ul>{paramExtraNotes.map((note) => <li key={note}>{note}</li>)}</ul>
+              </div>
+            )}
           </div>
         )}
         {step.response && (
@@ -696,19 +1268,143 @@ function StepCard({ step, index, onPickTable }) {
         )}
         <div className="db-changes">
           <strong>数据库变化</strong>
-          {step.db.length === 0 ? <p className="hint">无数据库写入或读取，主要是浏览器跳转/本地内存状态。</p> : (
-            step.db.map((change, i) => (
-              <button key={`${change.table}-${i}`} onClick={() => onPickTable(change.table)}>
+          {dbRows.length === 0 && relatedTables.length === 0 ? <p className="hint">无数据库写入或读取，主要是浏览器跳转/本地内存状态。</p> : (
+            dbRows.map((change, i) => (
+              <button key={change.table + "-" + i} onClick={() => onPickTable(change.table)}>
                 <span className="op">{change.op}</span>
                 <code>{change.table}</code>
                 <pre>{JSON.stringify(change.values, null, 2)}</pre>
               </button>
             ))
           )}
+          {dbRows.length === 0 && relatedTables.length > 0 && relatedTables.map((table) => (
+            <button key={table} onClick={() => onPickTable(table)}>
+              <span className="op">RELATED</span>
+              <code>{table}</code>
+              <pre>{JSON.stringify(tables[table]?.sample ?? {}, null, 2)}</pre>
+            </button>
+          ))}
         </div>
         <p className="note">{step.note}</p>
       </div>
     </article>
+  );
+}
+
+function describeStepAction(step) {
+  const request = step.request || "";
+  const url = step.url || "";
+  const methodMatch = (request + " " + url).match(/\b(GET|POST|PUT|PATCH|DELETE)\b/i);
+  const sqlMatch = request.match(/^(SELECT|INSERT|UPDATE|DELETE|LEFT JOIN)\b/i);
+  const method = methodMatch?.[1]?.toUpperCase() ?? (sqlMatch ? "SQL" : url.startsWith("file://") ? "FILE" : url.startsWith("k8s://") ? "K8S" : url.startsWith("postgres://") ? "DB" : request.toLowerCase().includes("local") || request.toLowerCase().includes("write then") || request.toLowerCase().startsWith("cat ") ? "LOCAL" : "ACTION");
+  const cleanedUrl = url.replace(/^(GET|POST|PUT|PATCH|DELETE)\s+/i, "");
+  return {
+    label: methodMatch ? "请求 URL" : "请求/动作",
+    method,
+    target: cleanedUrl || request,
+  };
+}
+
+function buildParamRows(params, notes = []) {
+  const extraNotes = [];
+  if (!params && !notes?.length) return { rows: [], extraNotes };
+  const rows = [];
+  const used = new Set();
+  const noteMap = new Map();
+  for (const note of notes || []) {
+    const idx = note.indexOf("：") >= 0 ? note.indexOf("：") : note.indexOf(":");
+    if (idx > 0) {
+      const key = note.slice(0, idx).trim();
+      noteMap.set(key, note.slice(idx + 1).trim());
+    } else {
+      extraNotes.push(note);
+    }
+  }
+  if (params && typeof params === "object" && !Array.isArray(params)) {
+    for (const [name, value] of Object.entries(params)) {
+      rows.push({ name, value, note: noteMap.get(name) || "示例值。具体含义见实现处理。" });
+      used.add(name);
+    }
+  } else if (params !== undefined) {
+    rows.push({ name: "value", value: params, note: "该步骤的关键输入。" });
+  }
+  for (const note of notes || []) {
+    const idx = note.indexOf("：") >= 0 ? note.indexOf("：") : note.indexOf(":");
+    if (idx <= 0) continue;
+    const key = note.slice(0, idx).trim();
+    if (!used.has(key)) extraNotes.push(note);
+  }
+  return { rows, extraNotes };
+}
+
+function PlatformPromptModule() {
+  const [selectedPath, setSelectedPath] = useState(platformPromptExplainData.files[0]?.path);
+  const selectedFile = platformPromptExplainData.files.find((file) => file.path === selectedPath) ?? platformPromptExplainData.files[0];
+
+  return (
+    <div className="prompt-layout">
+      <aside className="prompt-tree-card">
+        <div className="mini-title">提示词目录</div>
+        <p>根目录：<code>{platformPromptExplainData.root}</code></p>
+        <PromptTree nodes={platformPromptExplainData.tree} selectedPath={selectedFile.path} onSelect={setSelectedPath} />
+      </aside>
+      <section className="prompt-reader">
+        <div className="module-title">
+          <BookOpen size={22} />
+          <div>
+            <h2>平台提示词解析</h2>
+            <p><code>prompt.md</code> 和 <code>skills</code> 同级展示。点击左侧文件后，中间看英文原版，右侧看中文直译；如有需要，补充解释会单独放在翻译后面。</p>
+          </div>
+        </div>
+        <div className="prompt-file-head">
+          <div>
+            <strong>{selectedFile.title}</strong>
+            <code>{selectedFile.path}</code>
+          </div>
+          <span>{selectedFile.sections.length} 个片段</span>
+        </div>
+        <div className="translation-list">
+          {selectedFile.sections.map((section) => (
+            <article className="translation-card" key={section.range + section.title}>
+              <div className="translation-card-head">
+                <h3>{section.title}</h3>
+                <code>{section.range}</code>
+              </div>
+              <div className="translation-columns">
+                <div>
+                  <strong>English original</strong>
+                  <pre>{section.original}</pre>
+                </div>
+                <div>
+                  <strong>中文翻译</strong>
+                  <pre className="translation-text">{section.zh}</pre>
+                  {section.notes && <div className="translation-notes"><strong>补充解释</strong><pre className="translation-text translation-note-text">{section.notes}</pre></div>}
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PromptTree({ nodes, selectedPath, onSelect, depth = 0 }) {
+  return (
+    <div className="prompt-tree" style={{ "--depth": depth }}>
+      {nodes.map((node) => (
+        <div key={node.path}>
+          {node.kind === "file" ? (
+            <button className={selectedPath === node.path ? "active" : ""} onClick={() => onSelect(node.path)}>
+              <span>{node.label}</span>
+            </button>
+          ) : (
+            <div className="tree-dir"><span>{node.label}</span></div>
+          )}
+          {node.children && <PromptTree nodes={node.children} selectedPath={selectedPath} onSelect={onSelect} depth={depth + 1} />}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -757,7 +1453,9 @@ function buildGraphLayout(names, domain) {
     mcp: [["mcp_catalog"], ["workspace_config", "mcp_oauth_clients"], ["mcp_oauth_tokens"], ["users"]],
     skills: [["skill_sources"], ["skills"], ["skill_versions", "workspace_skills", "template_version_skills"], ["workspaces"]],
     credentials: [["users"], ["user_credentials"], ["user_credential_workspaces"], ["workspaces"]],
-    runtime: [["workspaces"], ["session_tokens", "workspace_usage_events"], ["workspace_usage_cursor"]],
+    runtime: [["workspaces"], ["sessions", "session_tokens"], ["messages", "session_events", "workspace_usage_events"], ["workspace_usage_cursor"]],
+    memory: [["users", "workspaces"], ["memory_stores", "workspace_memory_attachments"], ["memories", "memory_versions"]],
+    afs: [["workspaces"], ["afs_shares"], ["afs_share_members"], ["afs_controller_filesystems", "afs_controller_dirs", "afs_controller_sessions"]],
     all: [
       ["users", "oauth_clients", "oauth_authorization_codes", "oauth_refresh_tokens"],
       ["workspaces", "workspace_config", "templates", "template_versions", "model_providers", "prompts", "prompt_versions"],

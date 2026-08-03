@@ -34,6 +34,8 @@ class WorkspaceConfigPayload(TypedDict, total=False):
     system_prompt: str
     agent_settings: str
     mcp_config: JsonValue
+    user_display_name: str
+    memory_attachments: list[JsonObject]
 
 
 class McpServerConfig(TypedDict, total=False):
