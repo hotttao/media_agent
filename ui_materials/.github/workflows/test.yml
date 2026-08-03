@@ -1,0 +1,45 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Check layer boundaries
+        run: yarn dep-check
+
+      - name: Check unused exports & dependencies
+        run: yarn knip
+
+      - name: Check i18n translations
+        run: node tools/i18n-tracker.cjs
+
+      - name: Check i18n key references
+        run: node tools/check-i18n-keys.cjs
+
+      - name: Run tests
+        run: yarn test:coverage
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
