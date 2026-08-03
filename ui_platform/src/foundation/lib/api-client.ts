@@ -68,10 +68,10 @@ class ApiClient {
   }
 
   async login(username: string, password: string): Promise<User> {
-    return this.request<User>("/auth/login", {
+    return this.request<{ user: User }>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
-    });
+    }).then((response) => response.user);
   }
 
   async register(data: {
