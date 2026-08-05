@@ -1,3 +1,7 @@
+import { callAgentChapter } from "./callAgentExplainData.js";
+
+import { teamworkChapter } from "./teamworkExplainData.js";
+
 export const workspaceExplainData = {
   "title": "Workspace：control-plane 平台能力实现",
   "intro": "这一章从 workspace 的视角解释 control-plane 如何把平台能力暴露给 agent。先看抽象：agent 看到的是 tos-platform MCP tools；control-plane 根据 workspace、session token 和 X-Builder header 注册工具；真正执行时再转发到 browser-service、sandbox-service、数据库或 agent pod。",
@@ -213,9 +217,11 @@ export const workspaceExplainData = {
         }
       ]
     },
+    callAgentChapter,
+    teamworkChapter,
     {
       "id": "browser-flow",
-      "title": "2. Browser：agent-browser 驱动远程 Chrome",
+      "title": "4. Browser：agent-browser 驱动远程 Chrome",
       "summary": "Browser 能力的抽象是：agent 不在自己容器里启动 Chrome，而是让 CP 代表 workspace owner 调 browser-service 创建远程浏览器。agent 拿到 connect_command 后，用本地预装的 agent-browser CLI 连接远程浏览器。下载文件仍在远程 browser sandbox，必须通过 list_browser_files 和 get_browser_file_url 取回。",
       "sourceRefs": [
         "internal/agent-skills/platform/__platform__/reference/browser.md：agent 使用约定。",
@@ -270,7 +276,7 @@ export const workspaceExplainData = {
     },
     {
       "id": "sandbox-flow",
-      "title": "3. Sandbox：临时隔离容器，不污染 workspace",
+      "title": "5. Sandbox：临时隔离容器，不污染 workspace",
       "summary": "Sandbox 能力的抽象是：agent 需要一个临时运行环境时，不在当前 workspace 安装一堆依赖，而是让 CP 调 sandbox-service 创建容器。sandbox 容器默认 cwd 是 /，没有 /workspace；需要你显式创建 /home/user 或传 cwd。",
       "sourceRefs": [
         "internal/agent-skills/platform/__platform__/reference/sandbox.md：agent 使用约定。",
@@ -319,7 +325,7 @@ export const workspaceExplainData = {
     },
     {
       "id": "builder-flow",
-      "title": "4. Builder Mode：把配置修改变成用户审批卡片",
+      "title": "6. Builder Mode：把配置修改变成用户审批卡片",
       "summary": "Builder Mode 的抽象是 human-in-the-loop 配置修改。agent 不能直接改 workspace 配置；它只能 propose，一个 pending agent_request 让 UI 展示审批卡。用户 Approve 后，agent 再 apply，CP 用 CAS 抢占这条 request 并执行真正的业务修改。",
       "sourceRefs": [
         "internal/agent-skills/platform/__platform__/reference/builder-mode.md：agent 使用约定。",
@@ -327,14 +333,44 @@ export const workspaceExplainData = {
         "control-plane/src/mcp/tools/builder-mode/define-action.ts：propose/apply 通用协议。",
         "control-plane/src/mcp/tools/builder-mode/workspace.ts：workspace scope actions。",
         "control-plane/src/mcp/tools/builder-mode/actions/config.ts：workspace config/prompt 修改。",
-        "control-plane/src/mcp/tools/builder-mode/actions/schedule.ts：schedule 创建/更新/删除。"
+        "control-plane/src/mcp/tools/builder-mode/actions/schedule.ts：schedule 创建/更新/删除。",
+        "control-plane/src/routes/workspaces/agent-requests.ts：Approve/Reject REST 接口只处理用户决策和 ownership 校验。",
+        "control-plane/src/services/db/agent-requests.ts：pending -> approved/rejected 与 approved -> applied 两次 CAS。",
+        "web/src/components/chat/tool-renderers/mcp/agent-request.tsx：Approve 后发送 <agent-sys> 消息，启动 Agent 的 apply turn。"
       ],
       "bullets": [
         "X-Builder 决定 tools 是否出现：没有 cap 时，连 read tools 都不注册；cap=workspace 注册 workspace_* tools；cap=global 注册 prompt library tools。",
         "读工具始终先用：list_prompts/get_prompt/list_schedules/get_workspace_config 等只读工具帮助 agent 基于现实设计 diff。",
         "propose 阶段只写 agent_requests，状态是 pending；不会改 workspace_config、schedules、prompts。",
-        "approve 是 UI/用户动作；apply 必须拿真实 request_id，且 request status 必须是 approved。markAgentRequestApplied 是 CAS，防止并发重复 apply。",
-        "真正业务修改在 action.apply：例如 workspace_prompt_apply 调 applyWorkspaceConfigUpdate；schedule_apply 调 createSchedule 并 enqueue pg-boss timer。"
+        "approved 不等于完成。它只表示用户已经授权；真正业务变更尚未发生。只有对应 *_apply tool 运行 action.apply 后，才算进入执行完成阶段。",
+        "Approve REST route 是通用 human-in-the-loop 原语，只认识 agent_request 的 workspace、owner、status、kind 和 payload；它没有 Builder Action Registry，也拿不到注册 MCP tool 时形成的 action.apply 闭包，所以当前架构下不能直接调用 action.apply。",
+        "Approve 成功后，Web 并非静默结束：它立即向当前会话发送 <agent-sys>Request ... approved. Please call the matching apply tool...</agent-sys>。这会启动 Agent 新一轮 turn，让 Agent 调对应 *_apply(request_id)。",
+        "让 Agent 再发起 apply 不只是为了同步状态。它同时把所有实际修改统一放在 MCP handler 内，复用 workspace/kind/status 校验、payload Zod 重解析、CAS 防重复，并让 Agent 拿到 tool result 后在对话里向用户说明结果。",
+        "apply 必须拿真实 request_id，request 必须属于当前 workspace、kind 必须匹配且 status=approved。markAgentRequestApplied 用 approved -> applied CAS 抢占执行权，并发调用只有一个能继续。",
+        "真正业务修改在 action.apply：例如 workspace_prompt_apply 调 applyWorkspaceConfigUpdate；schedule_apply 调 createSchedule 并 enqueue pg-boss timer。",
+        "当前协议有失败窗口：Approve 后 sendMessage 失败会留下 approved；Agent 也可能没有正确调用 apply。更重要的是当前实现先标记 applied 再执行 action.apply，若业务操作抛错，状态仍可能显示 applied。这是防重复 claim，不是真正的 exactly-once。",
+        "用户批准时的 pending -> approved CAS 失败，REST 返回 409 Request already resolved；前端不会发送 apply 指令。一般表示重复点击或另一个请求已经先完成决策。",
+        "*_apply 内 approved -> applied CAS 返回 false 时，handler 直接返回 Error: request is no longer approved (already applied?)，不会运行 payload parse 和 action.apply；调用这次 apply 的 Agent 会看到该 tool result。",
+        "CAS SQL 自身抛出数据库异常时，外层 catch 返回 Error 文本；若 UPDATE 没有提交，request 通常仍是 approved，可以再次调用 apply。它与 CAS 正常返回 false 是两种情况。",
+        "如果产品语义要求“点击 Approve 就保证执行”，更可靠的方案是 CP 在批准事务中 enqueue execution job，由后端 Action Registry/worker 执行，并使用 approved -> applying -> applied/failed 状态机；Agent 只接收结果通知和解释结果。"
+      ],
+      "codeBlocks": [
+        {
+          "title": "Approve 之后到底发生了什么：approved 只是授权态",
+          "code": "// 1. 用户点击 Approve：REST route 只做决策 CAS\nUPDATE agent_requests\nSET status = 'approved', resolved_at = now()\nWHERE id = :request_id AND status = 'pending';\n\n// 2. Web 主动给同一会话发送系统消息\nactions.sendMessage(\n  '<agent-sys>Request ' + requestId +\n  ' has been approved. Please call the matching apply tool ' +\n  'with request_id=\\\"' + requestId + '\\\" to finalize.</agent-sys>'\n)\n\n// 3. Agent 新一轮 turn 调 MCP\nworkspace_prompt_apply({ request_id })\n\n// 4. MCP apply handler 校验并抢占\nrequest.workspace_id === currentWorkspace\nrequest.kind === action.kind\nrequest.status === 'approved'\nmarkAgentRequestApplied(request_id) // CAS: approved -> applied\naction.payload.parse(request.payload)\nawait action.apply({ workspaceId, userId, payload })\n\n// 结论\napproved = 用户授权，可以执行\napplied  = apply handler 已抢占并尝试执行业务动作\n业务资源真正变化发生在 action.apply 内"
+        },
+        {
+          "title": "为什么 REST Approve 不能在当前代码里直接 action.apply",
+          "code": "resolve route\n  └─ 通用 agent_request API\n     ├─ 校验登录用户拥有 workspace\n     ├─ 校验 request 属于 workspace\n     └─ pending -> approved/rejected\n\nregisterBuilderAction(...)\n  └─ MCP 注册阶段持有具体 BuilderAction\n     ├─ action.kind\n     ├─ action.payload (Zod schema)\n     └─ action.apply (具体业务闭包)\n\nREST route 没有 kind -> BuilderAction 的 registry，\n也不处于 registerBuilderAction 创建的闭包上下文中。\n因此“Approve 直接执行”不是多调用一行函数就能完成，\n需要先把 action descriptor/executor 抽成 CP service 层的统一 registry。"
+        },
+        {
+          "title": "更强执行保证的可选演进",
+          "code": "当前对话驱动：\npending -> approved -> Agent turn -> MCP apply -> applied + business effect\n\n主要风险：\n- approved 后 Web sendMessage 失败：无人触发 apply\n- 模型未调用或调用错 apply tool：停在 approved\n- 先 applied 后 action.apply：业务失败但状态可能已 applied\n\n后端执行驱动：\npending\n  -> approved + enqueue（同一数据库事务）\n  -> applying（worker claim）\n  -> action registry execute\n  -> applied | failed\n  -> 通知 UI/Agent\n\n这种方案中，Agent 负责设计 proposal 和解释执行结果，\n后端负责保证审批后的确定性执行、重试和失败可观察性。"
+        },
+        {
+          "title": "CAS 或 action.apply 失败时，当前代码如何处理",
+          "code": "场景 A：用户批准 CAS 失败\nresolveAgentRequest: UPDATE ... WHERE status='pending' 没有返回行\n-> REST 409 Request already resolved\n-> api.resolveAgentRequest reject\n-> Web 不执行后面的 actions.sendMessage(<agent-sys>...)\n-> 不会触发新的 Agent apply turn\n\n场景 B：apply claim CAS 正常返回 false\nmarkAgentRequestApplied: UPDATE ... WHERE status='approved' rowCount=0\n-> MCP 返回 Error: request is no longer approved (already applied?)\n-> payload parse 与 action.apply 都不会执行\n-> Agent 从 tool result 得知失败；通用层不自动重试\n\n场景 C：CAS SQL 抛数据库异常\n-> 外层 catch 返回 Error: <database message>\n-> 若 UPDATE 未提交，状态通常仍是 approved\n-> 可以由 Agent/用户重新触发 apply，但当前没有自动 retry policy\n\n场景 D：claim 成功后 payload.parse 失败\napproved -> applied 已经提交\n-> Zod error 被 catch 成 Error 文本\n-> action.apply 不执行\n-> request 仍是 applied，不能拿同一个 request 重试\n\n场景 E：action.apply 抛错\napproved -> applied 已经提交\n-> catch 返回 Error: <action message> 给 Agent\n-> 通用层不回滚 applied，不自动补偿、不自动重试\n-> 业务数据是否回滚，取决于具体 action 自己是否使用事务/补偿\n\n例如 schedule create 的部分失败路径会自行删除刚创建的 schedule，\n但这属于具体 action 的补偿，不是 Builder 通用协议的保证。\n\n结论：CAS 只保证同一 approved request 最多一个调用方获得执行权；\n它不保证 action 成功，也不提供 exactly-once business effect。"
+        }
       ],
       "diagram": "Builder Mode propose -> approve -> apply\nsequenceDiagram\n  participant Agent as Agent\n  participant MCP as Builder MCP tool\n  participant DB as PostgreSQL\n  participant UI as Web UI\n  participant User as User\n  participant Biz as CP business service\n\n  Agent->>MCP: get_workspace_config/list_prompts\n  MCP->>DB: read current state\n  DB-->>MCP: current config/prompts\n  MCP-->>Agent: text report\n  Agent->>MCP: workspace_prompt_propose(payload)\n  MCP->>DB: INSERT agent_requests(status=pending)\n  DB-->>MCP: request_id\n  MCP-->>Agent: pending request envelope\n  UI->>DB: read pending agent_request\n  UI-->>User: render approval card\n  User->>UI: Approve\n  UI->>DB: UPDATE agent_requests status=approved\n  UI-->>Agent: system message: call *_apply(request_id)\n  Agent->>MCP: workspace_prompt_apply({request_id})\n  MCP->>DB: verify approved + CAS mark applied\n  MCP->>Biz: action.apply(payload)\n  Biz->>DB: update workspace_config/schedules/...\n  MCP-->>Agent: user-facing result text",
       "examples": [
@@ -389,3 +425,4 @@ export const workspaceExplainData = {
     }
   ]
 }
+

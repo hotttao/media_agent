@@ -11,9 +11,20 @@ import {
   Share2,
   Workflow,
 } from "lucide-react";
-import { domains, edges, tables, walkthroughs } from "./schemaData.js";
+import {
+  domains as schemaDomains,
+  edges as schemaEdges,
+  tables as schemaTables,
+  walkthroughs,
+} from "./schemaData.js";
+import { teamworkDomain, teamworkEdges, teamworkTables } from "./teamworkSchemaData.js";
+
+const domains = [...schemaDomains, teamworkDomain];
+const tables = { ...schemaTables, ...teamworkTables };
+const edges = [...schemaEdges, ...teamworkEdges];
 import { platformPromptExplainData } from "./platformPromptData.js";
 import { workspaceExplainData } from "./workspaceExplainData.js";
+import { afsExplainData } from "./afsExplainData.js";
 import { webExplainData } from "./webExplainData.js";
 
 const GRAPH_NODE_WIDTH = 185;
@@ -176,7 +187,7 @@ export function App() {
     if (moduleId === "configLoad") return <WalkthroughModule kind="agent" title={walkthroughs.workspaceConfigLoad.title} intro={walkthroughs.workspaceConfigLoad.intro} steps={walkthroughs.workspaceConfigLoad.steps} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
     if (moduleId === "skillUpdates") return <WalkthroughModule kind="skills" title={walkthroughs.skillUpdates.title} intro={walkthroughs.skillUpdates.intro} steps={walkthroughs.skillUpdates.steps} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
     if (moduleId === "memorySystem") return <WalkthroughModule kind="memory" title={walkthroughs.memorySystem.title} intro={walkthroughs.memorySystem.intro} steps={walkthroughs.memorySystem.steps} quickLinks={walkthroughs.memorySystem.quickLinks} onNavigate={jumpTo} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
-    if (moduleId === "afsSharedFiles") return <WalkthroughModule kind="afs" title={walkthroughs.afsSharedFiles.title} intro={walkthroughs.afsSharedFiles.intro} steps={walkthroughs.afsSharedFiles.steps} quickLinks={walkthroughs.afsSharedFiles.quickLinks} onNavigate={jumpTo} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
+    if (moduleId === "afsSharedFiles") return <WalkthroughModule kind="afs" title={afsExplainData.title} intro={afsExplainData.intro} steps={afsExplainData.steps} quickLinks={afsExplainData.quickLinks} primer={afsExplainData.volumePrimer} onNavigate={jumpTo} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
     if (moduleId === "usageParsing") return <WalkthroughModule kind="runtime" title={walkthroughs.usageParsing.title} intro={walkthroughs.usageParsing.intro} steps={walkthroughs.usageParsing.steps} quickLinks={walkthroughs.usageParsing.quickLinks} onNavigate={jumpTo} selected={selected} setSelected={setSelected} showAllFields={showAllFields} setShowAllFields={setShowAllFields} />;
     if (moduleId === "platformPrompt") return <PlatformPromptModule />;
     if (moduleId === "reading") return <ReadingModule />;
@@ -415,6 +426,223 @@ function WebSlotDiagram({ diagram }) {
   );
 }
 
+function CallAgentUiJourney({ data }) {
+  const preview = data.preview;
+  return (
+    <section className="call-agent-ui-journey">
+      <header className="call-agent-ui-intro">
+        <span>{data.eyebrow}</span>
+        <h4>{data.title}</h4>
+        <p>{data.intro}</p>
+      </header>
+
+      <div className="call-agent-preview" aria-label="call_agent 聊天交互示意">
+        <div className="call-agent-preview-bar">
+          <div><i /><i /><i /></div>
+          <strong>{preview.workspace}</strong>
+          <span>Agent chat</span>
+        </div>
+        <div className="call-agent-preview-body">
+          <aside>
+            <small>当前会话</small>
+            <strong>发布前审阅</strong>
+            <div className="call-agent-target-card">
+              <span>目标 Agent</span>
+              <b>@agent/{preview.target}</b>
+              <em>running · user</em>
+            </div>
+            <div className="call-agent-file-card"><span>共享输入</span><code>{preview.path}</code></div>
+          </aside>
+          <main>
+            <div className="call-agent-user-message"><small>你</small><p>{preview.userMessage}</p></div>
+            <div className="call-agent-tool-card">
+              <div className="call-agent-tool-head"><strong>call_agent</strong><span>completed</span></div>
+              <div className="call-agent-tool-params">
+                <code>slug = {preview.target}</code><code>mode = foreground</code>
+              </div>
+              <p>{preview.firstResult}</p>
+              <div className="call-agent-session-handle"><span>session_id</span><code>{preview.sessionId}</code><b>已保存</b></div>
+            </div>
+            <div className="call-agent-followup">
+              <small>下一轮用户消息</small>
+              <p>{preview.followup}</p>
+              <div><span>继续 reviewer 会话</span><code>{preview.sessionId}</code></div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <div className="call-agent-journey-heading">
+        <span>从界面开始的完整调用过程</span>
+        <p>先理解用户操作和可见反馈；后端细节按需展开。</p>
+      </div>
+      <div className="call-agent-journey-steps">
+        {data.steps.map((step, index) => (
+          <article className="call-agent-journey-step" key={step.title}>
+            <div className="call-agent-step-index"><span>{index + 1}</span><small>{step.screen}</small></div>
+            <div className="call-agent-step-copy">
+              <h5>{step.title}</h5>
+              <p>{step.action}</p>
+              <div><strong>界面反馈</strong><span>{step.visible}</span></div>
+              <details><summary>系统内部发生了什么</summary><p>{step.backend}</p></details>
+            </div>
+          </article>
+        ))}
+      </div>
+      <footer className="call-agent-ui-conclusion"><strong>一句话记住</strong><p>{data.conclusion}</p></footer>
+    </section>
+  );
+}
+
+
+function TeamworkUiJourney({ data }) {
+  const preview = data.preview;
+  return (
+    <section className="teamwork-ui-journey">
+      <header className="teamwork-ui-intro">
+        <span>{data.eyebrow}</span>
+        <h4>{data.title}</h4>
+        <p>{data.intro}</p>
+      </header>
+
+      <div className="teamwork-ui-preview" aria-label="Teamwork 任务详情界面示意">
+        <div className="teamwork-preview-bar">
+          <div className="teamwork-window-dots"><i /><i /><i /></div>
+          <strong>{preview.task}</strong>
+          <span>Teamwork</span>
+        </div>
+        <div className="teamwork-preview-body">
+          <aside className="teamwork-preview-sidebar">
+            <div className="teamwork-preview-section">
+              <small>任务简介</small>
+              <p>{preview.brief}</p>
+            </div>
+            <div className="teamwork-preview-section">
+              <small>团队成员</small>
+              <div className="teamwork-member-row lead"><b>♛</b><span>{preview.coordinator}</span><em>Coordinator</em></div>
+              {preview.members.map((member) => (
+                <div className="teamwork-member-row" key={member}><b>●</b><span>{member}</span></div>
+              ))}
+            </div>
+            <div className="teamwork-preview-section teamwork-files">
+              <small>共享文件</small>
+              <code>{preview.folder}</code>
+              {preview.files.map((file) => <div key={file}>▤ {file}</div>)}
+            </div>
+          </aside>
+          <main className="teamwork-preview-chat">
+            <div className="teamwork-lanes">
+              <span className="active">lead</span>
+              {preview.members.map((member) => <span key={member}>{member}</span>)}
+            </div>
+            <div className="teamwork-chat-thread">
+              <div className="teamwork-chat-bubble user"><small>你</small><p>{preview.userMessage}</p></div>
+              <div className="teamwork-agent-activity">
+                <span>lead 正在协调团队</span>
+                <div><i /> writer 已完成文档</div>
+                <div><i /> reviewer 已返回审阅</div>
+              </div>
+              <div className="teamwork-chat-bubble agent"><small>lead</small><p>{preview.coordinatorReply}</p></div>
+            </div>
+            <div className="teamwork-chat-input">继续给 coordinator 下达任务… <b>发送</b></div>
+          </main>
+        </div>
+      </div>
+
+      <div className="teamwork-journey-heading">
+        <span>完整交互流程</span>
+        <p>每一步先看用户操作和界面反馈；展开“系统内部发生了什么”再对应后端实现。</p>
+      </div>
+      <div className="teamwork-journey-steps">
+        {data.steps.map((step, index) => (
+          <article className="teamwork-journey-step" key={step.title}>
+            <div className="teamwork-step-number">{String(index + 1).padStart(2, "0")}</div>
+            <div className="teamwork-step-content">
+              <span className="teamwork-screen-label">{step.screen}</span>
+              <h5>{step.title}</h5>
+              <p>{step.action}</p>
+              <div className="teamwork-visible-state"><strong>用户看到</strong><span>{step.visible}</span></div>
+              <details>
+                <summary>系统内部发生了什么</summary>
+                <p>{step.backend}</p>
+              </details>
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="teamwork-ui-conclusion"><strong>完成后的理解</strong><p>{data.conclusion}</p></div>
+    </section>
+  );
+}
+
+
+function CallAgentWalkthrough({ data }) {
+  return (
+    <section className="workspace-example">
+      <h4>{data.title}</h4>
+      <p>{data.intro}</p>
+      <div className="workspace-tool-grid">
+        {data.actors.map((actor) => (
+          <div className="workspace-tool-card" key={actor}>
+            <code>{actor}</code>
+          </div>
+        ))}
+      </div>
+      <div className="workspace-example-list">
+        {data.steps.map((step) => (
+          <section className="workspace-example" key={step.title}>
+            <h4>{step.title}</h4>
+            <p>{step.text}</p>
+            <pre>{step.wire}</pre>
+          </section>
+        ))}
+      </div>
+      <div className="web-takeaways">
+        <strong>执行过程结论</strong>
+        <p>{data.conclusion}</p>
+      </div>
+    </section>
+  );
+}
+
+function CallAgentTranslations({ data }) {
+  return (
+    <section className="workspace-example">
+      <h4>{data.descriptionTitle}</h4>
+      <div className="translation-columns">
+        <div>
+          <strong>英文原文</strong>
+          <pre>{data.original}</pre>
+        </div>
+        <div>
+          <strong>中文翻译</strong>
+          <pre className="translation-text">{data.chinese}</pre>
+        </div>
+      </div>
+      <div className="param-table-block">
+        <strong>参数逐项翻译</strong>
+        <div className="param-table">
+          <div className="param-row param-head">
+            <strong>参数 / 类型</strong>
+            <strong>英文 description</strong>
+            <strong>中文解释</strong>
+          </div>
+          {data.params.map((param) => (
+            <div className="param-row" key={param.name}>
+              <div>
+                <code>{param.name}</code>
+                <pre>{param.schema}</pre>
+              </div>
+              <p>{param.original}</p>
+              <p>{param.chinese}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function WorkspaceModule() {
   return (
     <div className="workspace-explain-layout">
@@ -441,6 +669,10 @@ function WorkspaceModule() {
                 <h3>{chapter.title}</h3>
                 <p>{chapter.summary}</p>
               </div>
+              {chapter.callAgentJourney && <CallAgentUiJourney data={chapter.callAgentJourney} />}
+              {chapter.uiJourney && <TeamworkUiJourney data={chapter.uiJourney} />}
+              {chapter.walkthrough && <CallAgentWalkthrough data={chapter.walkthrough} />}
+              {chapter.translations && <CallAgentTranslations data={chapter.translations} />}
               <div className="workspace-source-list">
                 <strong>源码入口</strong>
                 {chapter.sourceRefs.map((ref) => <code key={ref}>{ref}</code>)}
@@ -1020,7 +1252,99 @@ function ExampleStrip() {
   );
 }
 
-function WalkthroughModule({ title, intro, steps, selected, setSelected, showAllFields, setShowAllFields, kind, quickLinks = [], onNavigate }) {
+function AfsVolumePrimer({ data }) {
+  return (
+    <section className="afs-primer">
+      <header className="afs-primer-head">
+        <span>FIRST PRINCIPLES</span>
+        <h3>{data.title}</h3>
+        <p>{data.intro}</p>
+        <div className="afs-primer-invariant"><strong>永远成立</strong><span>{data.invariant}</span></div>
+      </header>
+
+      <div className="afs-primer-stages">
+        <article className="afs-primer-stage">
+          <AfsPrimerStageHead stage={data.stages[0]} />
+          <div className="afs-isolation-demo">
+            <div><small>agent container</small><code>/mnt/afs</code><span>目录 A</span></div>
+            <b>≠</b>
+            <div><small>afs-fuse container</small><code>/mnt/afs</code><span>目录 B</span></div>
+          </div>
+          <AfsPrimerExplanation stage={data.stages[0]} />
+        </article>
+
+        <article className="afs-primer-stage">
+          <AfsPrimerStageHead stage={data.stages[1]} />
+          <div className="afs-volume-demo">
+            <div className="afs-pod-boundary">
+              <span>同一个 Pod</span>
+              <div className="afs-container-node"><small>agent</small><code>/mnt/afs</code></div>
+              <div className="afs-volume-node"><small>Pod volume</small><strong>afs-mnt · emptyDir</strong></div>
+              <div className="afs-container-node"><small>sidecar</small><code>/mnt/afs</code></div>
+            </div>
+          </div>
+          <p className="afs-demo-caption">两条 <b>volumeMount</b> 接到同一个 volume；共享的是这个底座，不是两个容器进程。</p>
+          <AfsPrimerExplanation stage={data.stages[1]} />
+        </article>
+
+        <article className="afs-primer-stage afs-primer-wide">
+          <AfsPrimerStageHead stage={data.stages[2]} />
+          <div className="afs-overlay-demo">
+            <div className="afs-before-after">
+              <small>Mount 之前</small>
+              <code>/mnt/afs/</code>
+              <span>emptyDir 中没有 review 的共享内容</span>
+            </div>
+            <div className="afs-overlay-action"><b>afs-fuse</b><span>spawn_mount2</span><i>→</i></div>
+            <div className="afs-before-after mounted">
+              <small>Mount 之后</small>
+              <code>/mnt/afs/<b>review</b>/</code>
+              <span>review 成为 FUSE mountpoint</span>
+            </div>
+          </div>
+          <div className="afs-path-rule"><code>/mnt/afs</code><span>仍然是 emptyDir</span><b>但</b><code>/mnt/afs/review</code><span>进入另一个 FUSE 文件系统</span></div>
+          <AfsPrimerExplanation stage={data.stages[2]} />
+        </article>
+
+        <article className="afs-primer-stage afs-primer-wide">
+          <AfsPrimerStageHead stage={data.stages[3]} />
+          <div className="afs-io-demo">
+            <div><small>Agent 程序</small><code>ls /mnt/afs/review</code></div>
+            <i>1</i><span>syscall</span>
+            <div><small>Linux 内核</small><strong>发现 FUSE mount</strong></div>
+            <i>2</i><span>READDIR</span>
+            <div><small>afs-fuse</small><strong>dir_id → backend</strong></div>
+            <i>3</i><span>read storage</span>
+            <div><small>共享存储</small><code>/data/afs/…/dir_id</code></div>
+          </div>
+          <p className="afs-demo-caption">Controller 不在这条文件 IO 路径中；它只在 mount 前验证 capability，并管理在线 session。</p>
+          <AfsPrimerExplanation stage={data.stages[3]} />
+        </article>
+
+        <article className="afs-primer-stage afs-primer-wide">
+          <AfsPrimerStageHead stage={data.stages[4]} />
+          <div className="afs-crosspod-demo">
+            <div className="afs-pod-card"><small>Pod A · 自己的一套</small><span>emptyDir A</span><span>afs-fuse A</span><span>inode table A</span><code>/mnt/afs/review</code></div>
+            <div className="afs-shared-bytes"><small>两边只在这里相遇</small><strong>RWX PVC</strong><code>同一个 dir_id 目录</code><b>同一份 spec.md 字节</b></div>
+            <div className="afs-pod-card"><small>Pod B · 自己的一套</small><span>emptyDir B</span><span>afs-fuse B</span><span>inode table B</span><code>/mnt/afs/review</code></div>
+          </div>
+          <AfsPrimerExplanation stage={data.stages[4]} />
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function AfsPrimerStageHead({ stage }) {
+  return <div className="afs-primer-stage-head"><span>{stage.number}</span><small>{stage.label}</small><h4>{stage.title}</h4></div>;
+}
+
+function AfsPrimerExplanation({ stage }) {
+  return <div className="afs-primer-explanation"><strong>{stage.question}</strong><p>{stage.answer}</p></div>;
+}
+
+
+function WalkthroughModule({ title, intro, steps, selected, setSelected, showAllFields, setShowAllFields, kind, quickLinks = [], onNavigate, primer }) {
   const domain = kind === "oauth" ? "oauth" : kind === "mcp" ? "mcp" : kind === "skills" ? "skills" : kind === "memory" ? "memory" : kind === "afs" ? "afs" : kind === "runtime" ? "runtime" : kind === "question" ? "runtime" : kind === "serviceToken" ? "runtime" : "config";
   const involved = new Set(steps.flatMap((s) => {
     const dbTables = Array.isArray(s.db) ? s.db.map((d) => d.table) : [];
@@ -1040,6 +1364,7 @@ function WalkthroughModule({ title, intro, steps, selected, setSelected, showAll
             <p>{intro}</p>
           </div>
         </div>
+        {primer && <AfsVolumePrimer data={primer} />}
         <ContentIndex kind={kind} steps={steps} quickLinks={quickLinks} onNavigate={onNavigate} />
         <div className="timeline">
           {steps.map((step, idx) => (
@@ -1198,6 +1523,7 @@ function StepCard({ step, index, onPickTable, id }) {
   const { rows: paramRows, extraNotes: paramExtraNotes } = step.hideParams ? { rows: [], extraNotes: [] } : buildParamRows(step.params, step.paramNotes);
   const dbRows = Array.isArray(step.db) ? step.db : [];
   const relatedTables = Array.isArray(step.relatedTables) ? step.relatedTables : [];
+  const implementationRows = Array.isArray(step.implementation) ? step.implementation : step.implementation ? [step.implementation] : [];
 
   return (
     <article className="step-card" id={id}>
@@ -1252,11 +1578,11 @@ function StepCard({ step, index, onPickTable, id }) {
             <pre>{typeof step.response === "string" ? step.response : JSON.stringify(step.response, null, 2)}</pre>
           </div>
         )}
-        {step.implementation && (
+        {implementationRows.length > 0 && (
           <div className="impl-block">
             <strong>实现处理</strong>
             <ul>
-              {step.implementation.map((item) => <li key={item}>{item}</li>)}
+              {implementationRows.map((item) => <li key={item}>{item}</li>)}
             </ul>
           </div>
         )}
