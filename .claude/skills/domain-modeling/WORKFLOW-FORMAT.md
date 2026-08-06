@@ -1,85 +1,95 @@
-# Workflow 文档规范格式
-所有工作流（workflow）统一存放于 `docs/<service>/0001-<workflow>/<workflow>.md`，采用连续数字编号命名：`0001-标识名.md`、`0002-标识名.md`，以此类推。
+# Workflow 文档规范
 
-采用懒创建机制，仅在需要时创建。
+服务内 Workflow 位于 `docs/<service>/workflow/0001-<workflow>/<workflow>.md`；跨服务 Workflow 位于 `docs/workflow/0001-<workflow>/`。
+
+Workflow 是应用层编排：协调多个聚合、事务或服务，并明确外部副作用、幂等、重试和补偿。它不拥有业务事实表。单聚合状态机、普通 CRUD、只读查询和 DTO 转换不创建 Workflow。
+
+## 必须创建的情形
+
+- 协调两个及以上聚合或 Domain；
+- 调用外部服务、对象存储或第三方系统并处理失败；
+- 包含多次事务、异步执行、重试、超时、补偿或恢复；
+- 本地事实提交后还要可靠触发外部副作用。
 
 ## 标准模板
 
-下面是可供参考的示例:
-
-``````md
+```md
 ---
-1. name: Job Scheduler Execution
-2. desc: 单个 job 的端到端处理——业务方
+name: workflow 名称
+description: 一句话目标
+participants:
+  - service/domain
+domains:
+  - domain1
 ---
-
 
 ## 一句话说明
 
-单个 AI 生成 job 的跨服务协作——materials 提交 + scheduler 调度 + browser-extension 执行 + **SSE 状态回流 + NEED_CONFIRM 多图选图**。**v3 起 001 仅描述单 job 链路；workflow 提交逻辑在 002**。
+说明触发者、业务目标和最终可观察结果。
 
+## 触发与结果
 
-## 执行时间线（**每个接口内嵌内部处理**）
+| 项目 | 内容 |
+|:---|:---|
+| 触发 | 命令、事件或定时条件 |
+| 前置条件 | 必须成立的事实 |
+| 成功结果 | 提交的业务事实与副作用 |
+| 失败结果 | 可重试、已补偿或人工处理状态 |
 
-```text
-business              materials                              scheduler                          browser
-   |                     |                                       |                                 |
-   |-- POST /jobs ------>|                                       |                                 |
-   |                     | 1. CreateJob                          |                                 |
-   |                     |    ├─ 012 ResolveWorkflowBindings     |                                 |
-   |                     |    │    (input + binding 合并 vs input_schema 校验)
-   |                     |    ├─ 017 user_team_auth 校验          |                                 |
-   |                     |    │    (workflow + binding 资源 team 访问权)
-   |                     |    ├─ 009 CreateGeneratedAsset         |                                 |
-   |                     |    │    (job_id=exec_id, run_time, index=1, is_primary=true)
-   |                     |    ├─ 写 GenerationJob 表               |                                 |
-   |                     |    │    (status=PENDING, input=合并后值, workflow_id, run_time)
-   |                     |    └─ 返回 job 对象 + asset (index=1)   |                                 |
-   |<-- 201 Created -----|                                       |                                 |
-   |                     |                                       |                                 |
-   |                     |-- SubmitJob RPC ---------------------->|                                 |
-   |                     |    ├─ 校验 job_id 存在 + status=PENDING  |                                 |
-   |                     |    │    (**幂等**: 重复提交同 job_id 直接返回当前 status)
-   |                     |    ├─ 写 scheduler 内部 queue           |                                 |
-   |                     |    │    (job_id 作为 scheduler 内部 key, submitter 自保证不重复)
-   |                     |    └─ 返回 accepted (bool)              |                                 |
-   |                     |      (**不返回 submit_id**——scheduler 不创建 id,  |                                 |
-   |                     |       job_id 由 CreateJob 分配, submit_id 概念不存在) |                                |
-   |                     |                                       |                                 |
-   |                     |<=========== SSE 长连接建立（materials 启动/发第一个 job 时） ===========>|
-   |                     |                                       |                                 |
+## 执行时间线
+
+使用 Mermaid `sequenceDiagram` 或等价的多参与者文本时序，必须列出：
+
+- 触发者、编排方、参与 Domain、外部系统和异步消费者；
+- 命令、返回结果、领域事件或任务消息；
+- 每次本地事务的开始/提交边界，以及外部副作用相对事务的位置；
+- 成功、失败、取消、超时或断线等重要分支。
+
+禁止只写 `鉴权 -> 写库 -> 调服务 -> 完成` 一类步骤摘要。时序图后增加“步骤说明”，解释事务顺序、状态所有者以及最容易被错误实现的语义。
+
+## 状态与不变量
+
+涉及持久化生命周期时，使用状态图或转换表说明：
+
+- 初始态、允许的转换和终态；
+- 状态转换由哪个 Domain/聚合决定；
+- 并发命令、重复事件和晚到结果如何处理；
+- 网络连接、后台执行状态是否影响业务状态。
+
+不涉及状态流转时写“无持久化状态流转”，不要编造状态机。
+
+## 关键参数
+
+| 参数 | 产生方 | 使用方 | 语义 |
+|:---|:---|:---|:---|
+| idempotency_key | 调用方 | 编排方 | 同一业务尝试的稳定标识 |
+
+## 一致性边界
+
+- 使用表格列出每次本地事务原子提交的事实，以及明确不包含的外部副作用。
+- 说明跨事务如何通过 Outbox/Inbox、任务队列或补偿达到最终一致。
+- 明确某一步已经提交但下一步失败时，系统保留什么状态以及如何继续。
+
+## 幂等、重试与补偿
+
+| 步骤 | 幂等键 | 重试策略 | 补偿/恢复 |
+|:---|:---|:---|:---|
+| 调用下游 | business_id | 指数退避，有限次数 | 查询结果后继续或进入人工处理 |
+
+## 权限与失败
+
+- 说明用户、Workspace、Session、服务身份和凭证如何取得与传递，以及资源归属在哪一步校验。
+- 使用表格列出不可重试错误、可重试错误、结果不明确、取消和晚到消息的处理方式。
+
+## 结果事件
+
+| 事件 | 产生条件 | 消费方 |
+|:---|:---|:---|
+| WorkflowCompleted | 全部步骤成功 | 订阅方 |
 ```
 
-## 关键流程参数传递
+## 编号与变更
 
-列出时序图中，关键流程的，参数传递。特别是跨服务的参数传递说明。包括上游服务必须传递的参数，这些参数在下游服务起到什么作用。
+编号只在对应 `workflow/` 内递增。废弃 Workflow 在目录名后加 `-del` 并说明替代方案。
 
-
-## 状态流转（**NEED_CONFIRM 重点**）
-
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING: CreateJob
-    PENDING --> RUNNING: scheduler claim (CompleteJob 接收前)
-    RUNNING --> COMPLETED: scheduler SSE 推 (N=1 单图)
-    RUNNING --> FAILED: scheduler SSE 推
-    RUNNING --> NEED_CONFIRM: scheduler SSE 推 (N>1 多图待选主)
-    NEED_CONFIRM --> PENDING: user 调 009.SelectVariant + scheduler.ResumeJob
-    PENDING --> BLOCKED: 依赖未 ready (单 job 不常见, workflow 拆 step 后可能出现)
-    BLOCKED --> PENDING: 依赖 output resolved (scheduler 推进)
-    FAILED --> REQUEUED: 业务方 Requeue
-    REQUEUED --> PENDING: scheduler 重新调度
-    COMPLETED --> [*]
-    FAILED --> [*]
-```
-
-## 幂等设计
-请求重复执行下的幂等设计。
-
-``````
-
-## 编号规则
-遍历 `docs/<service>` 目录，读取当前已存在 workflow 目录的最大编号，在此基础上加一作为新 workflow 的编号。如果 Workflow 已经废弃，直接在目录名后添加 -del 即可。
-
-## 何时需要创建 change.md
-除了 bug 和 简单的错误处理，其他变更都需要创建 change.md 记录变更历史。
+除纯文字修正和不改变语义的错误处理外，流程步骤、参与者、一致性或失败语义变化时更新 `change.md`；首次建模无需记录“创建文档”。
