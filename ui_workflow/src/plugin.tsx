@@ -12,13 +12,26 @@
  * by the rules of hooks).
  */
 import type { ComponentType } from "react";
+import i18n from "@/foundation/lib/i18n";
+import {
+  type PluginPanelProps,
+  registerPanel,
+} from "@/foundation/lib/plugin-host";
 import { QueryProvider } from "@/foundation/providers/query-provider";
-import "@/foundation/lib/i18n"; // side-effect: initialize i18next + subscribe to lang.change
-import { registerPanel, type PluginPanelProps } from "@/foundation/lib/plugin-host";
 import { MaterialsApp } from "@/pages/materials/app";
 import { WorkflowApp } from "@/pages/workflow/app";
+import pluginCss from "./index.css?inline";
 
 type PanelComp = ComponentType<PluginPanelProps>;
+const STYLE_ID = "media-workflow-plugin-styles";
+
+function installStyles(): void {
+  if (document.getElementById(STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = STYLE_ID;
+  style.textContent = pluginCss;
+  document.head.appendChild(style);
+}
 
 /** Wrap a panel component with the plugin-local QueryProvider. */
 function withQueryProvider(Comp: PanelComp): PanelComp {
@@ -31,14 +44,16 @@ function withQueryProvider(Comp: PanelComp): PanelComp {
   };
 }
 
+installStyles();
+
 registerPanel({
   id: "media_materials",
-  label: () => "Materials",
+  label: () => i18n.t("pages.materials.title", { defaultValue: "Materials" }),
   component: withQueryProvider(MaterialsApp),
 });
 
 registerPanel({
   id: "media_workflow",
-  label: () => "Workflow",
+  label: () => i18n.t("pages.workflow.title", { defaultValue: "Workflow" }),
   component: withQueryProvider(WorkflowApp),
 });

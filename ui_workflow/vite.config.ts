@@ -14,19 +14,24 @@ const analyze = process.env.ANALYZE === "true";
 //    Provider per §4.3 方案 C).
 const target = process.env.VITE_TARGET ?? "standalone";
 
-const plugins = [react(), ...(analyze ? [visualizer({ filename: "stats.html", sourcemap: true })] : [])];
+const plugins = [
+  react(),
+  ...(analyze ? [visualizer({ filename: "stats.html", sourcemap: true })] : []),
+];
 const alias = { "@": resolve(__dirname, "./src") };
 
 const pluginConfig: UserConfig = {
   plugins,
+  publicDir: false,
   worker: { format: "es" },
   resolve: { alias },
   build: {
+    outDir: "dist/plugin",
     lib: {
       entry: resolve(__dirname, "src/plugin.tsx"),
       formats: ["iife"],
-      name: "MediaPlugin",
-      fileName: () => "media-plugin.js",
+      name: "MediaWorkflowPlugin",
+      fileName: () => "media-workflow.js",
     },
     rollupOptions: {
       external: ["react", "react-dom", "react-dom/client", "react/jsx-runtime"],
@@ -49,6 +54,7 @@ const standaloneConfig: UserConfig = {
   worker: { format: "es" },
   resolve: { alias },
   build: {
+    outDir: "dist/standalone",
     sourcemap: analyze,
     chunkSizeWarningLimit: 1024,
   },
@@ -57,19 +63,45 @@ const standaloneConfig: UserConfig = {
     port: 5173,
     proxy: {
       // media_materials (8003): materials resources CRUD
-      "/api/v1/materials": { target: "http://localhost:8003", changeOrigin: true },
-      "/api/v1/products": { target: "http://localhost:8003", changeOrigin: true },
-      "/api/v1/virtual-ips": { target: "http://localhost:8003", changeOrigin: true },
-      "/api/v1/asset-kinds": { target: "http://localhost:8003", changeOrigin: true },
-      "/api/v1/generated-assets": { target: "http://localhost:8003", changeOrigin: true },
+      "/api/v1/materials": {
+        target: "http://localhost:8003",
+        changeOrigin: true,
+      },
+      "/api/v1/products": {
+        target: "http://localhost:8003",
+        changeOrigin: true,
+      },
+      "/api/v1/virtual-ips": {
+        target: "http://localhost:8003",
+        changeOrigin: true,
+      },
+      "/api/v1/asset-kinds": {
+        target: "http://localhost:8003",
+        changeOrigin: true,
+      },
+      "/api/v1/generated-assets": {
+        target: "http://localhost:8003",
+        changeOrigin: true,
+      },
       // media_workflow (8002): workflow/template/job + auth (OAuth via media_auth 8001)
-      "/api/v1/workflows": { target: "http://localhost:8002", changeOrigin: true },
-      "/api/v1/templates": { target: "http://localhost:8002", changeOrigin: true },
+      "/api/v1/workflows": {
+        target: "http://localhost:8002",
+        changeOrigin: true,
+      },
+      "/api/v1/templates": {
+        target: "http://localhost:8002",
+        changeOrigin: true,
+      },
       "/api/v1/jobs": { target: "http://localhost:8002", changeOrigin: true },
-      "/api/v1/step-runs": { target: "http://localhost:8002", changeOrigin: true },
+      "/api/v1/step-runs": {
+        target: "http://localhost:8002",
+        changeOrigin: true,
+      },
       "/api/v1/auth": { target: "http://localhost:8002", changeOrigin: true },
     },
   },
 };
 
-export default defineConfig(target === "plugin" ? pluginConfig : standaloneConfig);
+export default defineConfig(
+  target === "plugin" ? pluginConfig : standaloneConfig,
+);

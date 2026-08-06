@@ -1,6 +1,6 @@
 # ui_workflow 前端实现方案
 
-> 为 media_workflow / media_materials 两个后端微服务开发前端。工程 `ui_workflow` 既要能作为独立项目发布，也要能作为 `agent-platform/web` 的外部 plugin 嵌入使用。两种模式都要符合 agent-platform/web 的样式。
+> 为 media_workflow / media_materials 两个后端微服务开发组合前端。`ui_workflow` 是唯一 canonical UI 工程，以同一版本同时发布 standalone 与 `agent-platform/web` plugin。两种模式都要符合 agent-platform/web 的样式。
 >
 > 本文是调研结论 + 实现设计的存档，作为后续编码依据。
 
@@ -8,8 +8,9 @@
 
 | 决策 | 结论 |
 |---|---|
-| 工程位置 | 合并到 `ui_workflow` 单工程（media_workflow + media_materials 共用 foundation/布局/跨域跳转） |
+| 工程位置 | 合并到 `ui_workflow` 单工程；`ui_materials` 不作为正式发布工程 |
 | plugin 嵌入粒度 | 拆成多个 panel tab（按资源大类聚合，非每实体一 panel） |
+| plugin 发布粒度 | 一个 `media-workflow` 插件 bundle，贡献 Materials 与 Workflow 两个 panel |
 | 首期范围 | 先 materials（CRUD 为主），再 workflow（DAG 编辑器 + SSE 执行监控） |
 | 目录规范 | 严格遵循 `ui_workflow/contributing/architecture.md` 的 L0-L3 分层与 foundation 6 子目录 |
 | 认证 | materials 与 workflow 共享 `JWT_SECRET` + 同 cookie 域 `mw_token`；standalone 走 OAuth via media_auth，plugin 复用宿主态 |
@@ -297,7 +298,8 @@ const target = process.env.VITE_TARGET ?? 'standalone'
 if (target === 'plugin') {
   return {
     build: {
-      lib: { entry: 'src/plugin.tsx', formats: ['iife'], name: 'MediaPlugin', fileName: () => 'media-plugin.js' },
+      outDir: 'dist/plugin',
+      lib: { entry: 'src/plugin.tsx', formats: ['iife'], name: 'MediaWorkflowPlugin', fileName: () => 'media-workflow.js' },
       rollupOptions: {
         external: ['react', 'react-dom', 'react-dom/client'],
         // 若 §4.3 方案 A/B 落地，追加 external '@tanstack/react-query','i18next','react-i18next' + globals
@@ -306,24 +308,23 @@ if (target === 'plugin') {
     },
   }
 }
-// standalone：默认 SPA build（index.html -> main.tsx）+ dev proxy /api -> materials/workflow 网关
+// standalone：outDir=dist/standalone（index.html -> main.tsx）+ dev proxy 分发 materials/workflow
 ```
 
 > **external 只 react/react-dom**：agent-platform 是 react-router v6，ui_workflow 是 v7，版本不兼容不能共享，router 等打进 plugin bundle 自带，只 React 必须用宿主单例（rules of hooks）。
+>
+> **单 JS 交付**：plugin 入口以 `?inline` 导入 `index.css` 并注入稳定 style id；plugin config 设置 `publicDir=false`，最终只交付 `dist/plugin/media-workflow.js`。
 
-## 5. Panel 拆分清单（按资源大类聚合）
+## 5. Panel 拆分清单（按后端领域聚合）
 
 每个 panel `id` 需后端在 `mcp_catalog.ui_panel` 登记。
 
-**materials 域（首期）**：
-- `media_materials_assets` - Material + GeneratedAsset（panel 内 tab 切换）
-- `media_materials_containers` - VirtualIp + Product（绑定容器）
-- `media_materials_registry` - AssetKind（类别注册表）
+同一 plugin bundle 注册两个 panel：
 
-**workflow 域（下期）**：
-- `media_workflow_templates` - 模板 CRUD + 版本
-- `media_workflow_editor` - DAG 可视化编辑器
-- `media_workflow_jobs` - Job 列表 + 执行实时监控（SSE）
+- `media_materials`：Material、Generated Asset、Virtual IP、Product、Asset Kind。
+- `media_workflow`：Template、Workflow、Execution。
+
+panel 内按资源切换，panel 间按后端领域隔离。对应的 `mcp_catalog.ui_panel` 必须分别登记这两个稳定 id。
 
 ## 6. 首期路线图（materials 先行）
 

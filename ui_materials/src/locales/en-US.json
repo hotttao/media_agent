@@ -1,1 +1,45 @@
-{}
+{
+	"app": { "eyebrow": "Media", "title": "Materials" },
+	"navigation": {
+		"label": "Materials navigation",
+		"choose": "Choose a section",
+		"materials": "Source materials",
+		"generatedAssets": "Generated assets",
+		"virtualIps": "Virtual IPs",
+		"products": "Products",
+		"assetKinds": "Asset kinds"
+	},
+	"pageModes": {
+		"list": "Browse",
+		"create": "Create",
+		"edit": "Edit",
+		"show": "Details"
+	},
+	"actions": { "create": "Create", "backToList": "Back to list" },
+	"architecture": {
+		"title": "UI architecture is ready",
+		"description": "This page is intentionally disconnected from business APIs. Resource queries, forms and mutations will be implemented in a later phase."
+	},
+	"resources": {
+		"material": {
+			"title": "Source materials",
+			"description": "Curated and reusable image, video and text inputs."
+		},
+		"generatedAsset": {
+			"title": "Generated assets",
+			"description": "Read-only outputs produced by workflow executions."
+		},
+		"virtualIp": {
+			"title": "Virtual IPs",
+			"description": "Managed virtual identities and their visual references."
+		},
+		"product": {
+			"title": "Products",
+			"description": "Scope-level products and their content guidance."
+		},
+		"assetKind": {
+			"title": "Asset kinds",
+			"description": "The global registry that describes resource and media kinds."
+		}
+	}
+}

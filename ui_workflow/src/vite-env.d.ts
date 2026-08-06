@@ -2,7 +2,7 @@
 
 interface ImportMetaEnv {
   /** Build target: 'standalone' (default) or 'plugin'. */
-  readonly VITE_TARGET?: string;
+  readonly VITE_TARGET?: "standalone" | "plugin";
   /** Dev proxy target for /api (materials/workflow gateway). */
   readonly VITE_DEV_API_TARGET?: string;
 }

@@ -3,8 +3,9 @@
  * One panel, resource Tabs switches Template / Workflow / Job. Job is
  * submit+monitor (no edit); Template/Workflow have full CRUD + Validate.
  */
-import { createPortal } from "react-dom";
+
 import { Plus } from "lucide-react";
+import { createPortal } from "react-dom";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { hostShim } from "@/foundation/lib/host-shim";
 import { JobCreate } from "./job/create";
@@ -29,20 +30,28 @@ const RESOURCES: { id: Resource; label: string }[] = [
 ];
 
 export function WorkflowApp({ instanceId }: { instanceId: string }) {
-  const { useAppHeaderSlot, AppHeaderButton, useInstancePersistentState, useInstanceState } =
-    hostShim;
+  const {
+    useAppHeaderSlot,
+    AppHeaderButton,
+    useInstancePersistentState,
+    useInstanceState,
+  } = hostShim;
   const headerSlot = useAppHeaderSlot();
   const [resource, setResource] = useInstancePersistentState<Resource>(
     instanceId,
-    "resource",
+    "workflow_resource",
     () => "template",
   );
   const [selectedId, setSelectedId] = useInstancePersistentState<string | null>(
     instanceId,
-    "selectedId",
+    "workflow_selectedId",
     () => null,
   );
-  const [view, setView] = useInstanceState<View>(instanceId, "view", () => "list");
+  const [view, setView] = useInstanceState<View>(
+    instanceId,
+    "workflow_view",
+    () => "list",
+  );
 
   function changeResource(r: Resource) {
     setResource(r);
@@ -72,7 +81,10 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
         )}
       <div className="flex h-full flex-col">
         <div className="border-b border-foreground/[0.06] px-3 py-2">
-          <Tabs value={resource} onValueChange={(v) => changeResource(v as Resource)}>
+          <Tabs
+            value={resource}
+            onValueChange={(v) => changeResource(v as Resource)}
+          >
             <TabsList>
               {RESOURCES.map((r) => (
                 <TabsTrigger key={r.id} value={r.id}>
@@ -83,9 +95,15 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
           </Tabs>
         </div>
         <div className="min-h-0 flex-1">
-          {resource === "template" && view === "list" && <TemplateList onSelect={select} />}
+          {resource === "template" && view === "list" && (
+            <TemplateList onSelect={select} />
+          )}
           {resource === "template" && view === "show" && selectedId && (
-            <TemplateShow id={selectedId} onBack={() => setView("list")} onEdit={() => setView("edit")} />
+            <TemplateShow
+              id={selectedId}
+              onBack={() => setView("list")}
+              onEdit={() => setView("edit")}
+            />
           )}
           {resource === "template" && view === "create" && (
             <TemplateCreate onDone={() => setView("list")} />
@@ -94,9 +112,15 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
             <TemplateEdit id={selectedId} onDone={() => setView("show")} />
           )}
 
-          {resource === "workflow" && view === "list" && <WorkflowList onSelect={select} />}
+          {resource === "workflow" && view === "list" && (
+            <WorkflowList onSelect={select} />
+          )}
           {resource === "workflow" && view === "show" && selectedId && (
-            <WorkflowShow id={selectedId} onBack={() => setView("list")} onEdit={() => setView("edit")} />
+            <WorkflowShow
+              id={selectedId}
+              onBack={() => setView("list")}
+              onEdit={() => setView("edit")}
+            />
           )}
           {resource === "workflow" && view === "create" && (
             <WorkflowCreate onDone={() => setView("list")} />
@@ -105,7 +129,9 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
             <WorkflowEdit id={selectedId} onDone={() => setView("show")} />
           )}
 
-          {resource === "job" && view === "list" && <JobList onSelect={select} />}
+          {resource === "job" && view === "list" && (
+            <JobList onSelect={select} />
+          )}
           {resource === "job" && view === "show" && selectedId && (
             <JobShow id={selectedId} onBack={() => setView("list")} />
           )}

@@ -1,4 +1,12 @@
 {
+	"pages": {
+		"materials": {
+			"title": "Materials"
+		},
+		"workflow": {
+			"title": "Workflow"
+		}
+	},
 	"components": {
 		"shell": {
 			"slot": {

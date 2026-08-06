@@ -3,15 +3,45 @@
 	"paths": {
 		"@/*": ["src/*"]
 	},
+	"entry": ["src/plugin.tsx", "e2e/auth/auth.setup.ts", "e2e/fixtures/base.ts"],
 	"ignoreDependencies": [
-		"@tanstack/react-table",
-		"@tanstack/react-query",
-		"@vitest/coverage-v8"
+		"@radix-ui/react-alert-dialog",
+		"@radix-ui/react-checkbox",
+		"@radix-ui/react-collapsible",
+		"@radix-ui/react-dialog",
+		"@radix-ui/react-dropdown-menu",
+		"@radix-ui/react-hover-card",
+		"@radix-ui/react-icons",
+		"@radix-ui/react-label",
+		"@radix-ui/react-popover",
+		"@radix-ui/react-progress",
+		"@radix-ui/react-scroll-area",
+		"@radix-ui/react-select",
+		"@radix-ui/react-separator",
+		"@radix-ui/react-slider",
+		"@radix-ui/react-slot",
+		"@radix-ui/react-tabs",
+		"@radix-ui/react-tooltip",
+		"@testing-library/dom",
+		"@testing-library/react",
+		"@types/js-yaml",
+		"@vitest/coverage-v8",
+		"class-variance-authority",
+		"clipboard-polyfill",
+		"cmdk",
+		"dayjs",
+		"i18next-browser-languagedetector",
+		"lucide-react",
+		"react-hook-form",
+		"react-router",
+		"sonner",
+		"zod"
 	],
 	"ignoreExportsUsedInFile": false,
-	"project": ["src/**/*.{ts,tsx}"],
+	"project": ["src/**/*.{ts,tsx}", "e2e/**/*.{ts,tsx}", "*.config.ts"],
 	"ignoreIssues": {
 		"src/components/ui/**": ["exports", "types"],
-		"src/foundation/lib/api/api-gen.ts": ["exports", "types"]
+		"src/foundation/lib/api/api-gen.ts": ["exports", "types"],
+		"e2e/**": ["files", "exports", "types"]
 	}
 }

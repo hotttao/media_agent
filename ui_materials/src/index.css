@@ -67,11 +67,18 @@
 }
 
 @layer base {
+	html,
+	body,
+	#root {
+		height: 100%;
+	}
+
 	* {
 		@apply border-border;
 	}
 	body {
 		@apply bg-background text-foreground;
+		min-width: 320px;
 		font-feature-settings:
 			"rlig" 1,
 			"calt" 1;
