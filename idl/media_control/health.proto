@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package media_control.health;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/health";
+
+service HealthService {
+  rpc Health(HealthRequest) returns (HealthResponse) {
+    option (api.get) = "/health";
+    option (google.api.http) = { get: "/health" };
+  }
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+}
