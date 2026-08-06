@@ -59,8 +59,8 @@ Workflow 不是步骤标题清单。仅写成 `鉴权 -> 写库 -> 调服务 -> 
 
 ```
 /
-├── CONTEXT-MAP.md                                  # 全局业务术语路由表，标注每个业务域的存放路径
 ├── docs/
+|   ├──CONTEXT-MAP.md                               # 全局业务术语路由表，标注每个业务域的存放路径
 │   ├── adr/                                        # 全局系统级架构决策记录
 │   ├── workflow/                                   # 全系统跨服务工作流
 │   │   ├── 0001-event-sourced-orders.md 
