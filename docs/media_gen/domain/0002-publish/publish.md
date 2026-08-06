@@ -1,140 +1,115 @@
 ---
 name: publish
-description: 视频发布域--把已生成的 generated_asset 发布到目标平台（mock：返回假发布 url + SUCCEEDED）
-dependencies: []
+description: 视频发布任务、平台结果与生命周期
+dependencies:
+  - media_materials/asset
 related_workflow:
-    - video-publish
+  - video-publish
 ---
 
 ## 一句话职责
-publish 域负责接收一个已生成的视频 `generated_asset_id` + `publish_target`，把视频发布到目标平台（本期 mock：直接返回假发布 url + `SUCCEEDED` 状态，不实际调平台 API）；维护发布状态机 `PENDING -> PUBLISHING -> (SUCCEEDED | FAILED)`（本期 mock 直接跳到 SUCCEEDED）。不读写 `media_materials`，不修改 `generated_asset` 本身。
+
+Publish 持有一次视频向目标平台发布的业务任务、稳定平台请求标识和最终发布结果。
 
 ## 边界
 
 ### 做什么
-- 接收 `PublishVideo(asset_id, target, metadata?)` 请求，校验 asset_id 非空、target 在支持列表内。
-- mock：构造发布结果 `PublishResult{state: SUCCEEDED, publish_url: "mock://publish/{target}/{asset_id}", platform_publish_id: "mock-{asset_id}-{timestamp}"}`。
-- 返回结果给调用方（BFF / 编排层），不持久化。
-- 状态机概念：`PENDING -> PUBLISHING -> (SUCCEEDED | FAILED)`。本期 mock 跳过 PUBLISHING 异步阶段，直接 SUCCEEDED。
+- 创建、查询和取消 Publish Task。
+- 维护发布状态、attempt、平台发布 ID、URL 和错误分类。
+- 根据稳定幂等键防止同一发布意图重复执行。
 
 ### 不做什么
-- 不实际调平台 API（小红书 / 抖音 / B 站等）--本期 mock，留 stub 接口。
-- 不持久化发布记录--发布状态查询由调用方在 BFF 层用调用返回的 `platform_publish_id` 自行轮询平台（真实实现需异步轮询 + 状态存储，本期不做）。
-- 不修改 `generated_asset` --发布动作只读 asset，不改 asset 状态。
-- 不发布非视频类型 asset --本期校验仅判 asset_id 非空；真实实现需调 `media_materials.AssetRead` 校验 media_type=VIDEO。
-- 不触发 generation --发布是独立的下游动作，调用方负责串 generation -> publish。
+- 不拥有视频 Asset 或二进制对象，归 `media_materials` 和 `media_storage`。
+- 不自动从 Generation 触发发布，必须由用户或上层 Workflow 显式提交。
+- 不把平台 API 调用放入数据库事务。
+- 不委托 `media_crawler` 发布；目标平台 Adapter 是 media_gen 的基础设施实现。
 
 ## 能力清单
 
 | 能力 | 说明 | 对外接口/函数 |
 |:---|:---|:---|
-| PublishVideo | 接收 asset_id + target，mock 发布到平台，返回 publish_url + 状态 | `POST /api/v1/publish:video` |
-| GetSupportedTargets | 返回当前支持的 publish_target 列表（mock 静态列表） | `GET /api/v1/publish/targets` |
-| Publish | service 层方法：执行单次发布（mock） | `service.Publish(ctx, cmd)` |
+| 创建发布任务 | 校验视频引用并持久化发布意图 | 待 IDL 定义 |
+| 查询发布任务 | 返回状态和平台结果 | 待 IDL 定义 |
+| 取消发布任务 | 取消尚未进入不可逆发布阶段的任务 | 待 IDL 定义 |
+| 提交平台结果 | Worker 幂等提交成功、失败或未知结果 | 待 IDL 定义 |
+
+## 聚合与不变量
+
+| 聚合根 | 包含对象 | 一致性边界 | 核心不变量 |
+|:---|:---|:---|:---|
+| PublishTask | PublishAttempt | 单次发布意图及尝试 | 终态不可覆盖；同一 attempt 只绑定一个 platform_request_id |
+
+- `user_id + asset_id + target + idempotency_key` 唯一。
+- `asset_id`、`workspace_id`、`target` 创建后不可改变。
+- `result_unknown` 必须先查询平台结果，不能直接重新发布。
+
+## 领域事件
+
+| 事件 | 产生条件 | 关键载荷 | 消费方 |
+|:---|:---|:---|:---|
+| VideoPublished | Task 进入 succeeded | task_id, asset_id, target, platform_publish_id, publish_url | 调用方、Notification |
+| VideoPublishFailed | Task 进入 failed | task_id, error_class | 调用方、Notification |
+| VideoPublishResultUnknown | 平台结果无法确定 | task_id, platform_request_id | 协调 Worker、运维 |
 
 ## 数据模型
 
-**无表**。本域不持久化，发布结果一次性返回给调用方。
+### `publish_tasks`
 
-> 设计决策：本期 mock 阶段不持久化。真实实现需新增 `publishes` 表（asset_id, target, platform_publish_id, state, ...）+ 异步轮询平台状态，到时再建表。当前不预建表，避免空表维护成本。
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text PK | Publish Task ID |
+| workspace_id | text | Workspace ID |
+| user_id | text | 发起用户 |
+| asset_id | text | VIDEO Asset ID，仅逻辑引用 |
+| object_path_snapshot | text | 提交时解析的视频对象路径快照 |
+| target | text | 发布目标 |
+| metadata | jsonb | 标题、标签等平台参数 |
+| idempotency_key | text | 调用方稳定幂等键 |
+| status | text | pending/publishing/succeeded/failed/result_unknown/cancelled |
+| attempt | integer | 当前尝试编号 |
+| platform_request_id | text nullable | 平台侧稳定请求标识 |
+| platform_publish_id | text nullable | 平台发布 ID |
+| publish_url | text nullable | 发布成功 URL |
+| error_class | text nullable | 稳定错误分类 |
+| error_detail | text nullable | 脱敏错误详情 |
+| created_at | timestamptz | 创建时间 |
+| updated_at | timestamptz | 更新时间 |
 
-## 实体与值对象
+#### 约束与索引
 
-```go
-// PublishTarget -- 发布目标平台
-type PublishTarget string
-const (
-    PublishTargetXHS     PublishTarget = "xhs"
-    PublishTargetDouyin  PublishTarget = "douyin"
-    PublishTargetBili    PublishTarget = "bilibili"
-)
-
-// PublishState -- 发布状态机
-type PublishState string
-const (
-    PublishStatePending    PublishState = "PENDING"
-    PublishStatePublishing PublishState = "PUBLISHING"
-    PublishStateSucceeded  PublishState = "SUCCEEDED"
-    PublishStateFailed     PublishState = "FAILED"
-)
-
-// PublishCommand -- PublishVideo 入参
-type PublishCommand struct {
-    AssetID  string            // 已生成的 generated_asset id（视频）
-    Target   PublishTarget
-    Metadata map[string]string // 平台特定元数据（标题、标签等），可选
-}
-
-// PublishResult -- PublishVideo 出参
-type PublishResult struct {
-    AssetID           string
-    Target            PublishTarget
-    State             PublishState
-    PublishURL        string            // 平台上的发布 url（mock）
-    PlatformPublishID string            // 平台返回的发布 id（mock），供后续轮询用
-    PublishedAt       int64             // 发布时间戳
-}
-```
-
-## 状态机
-
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING: PublishVideo
-    PENDING --> PUBLISHING: 真实实现：异步提交到平台
-    PUBLISHING --> SUCCEEDED: 平台返回成功
-    PUBLISHING --> FAILED: 平台返回失败 / 超时
-    SUCCEEDED --> [*]
-    FAILED --> [*]
-```
-
-> 本期 mock：`PENDING -> SUCCEEDED`（跳过 PUBLISHING 异步阶段）。真实实现需引入异步 worker + 平台轮询。
+- `PRIMARY KEY (id)`
+- `UNIQUE (user_id, asset_id, target, idempotency_key)`
+- `UNIQUE (target, platform_request_id)`，允许 NULL。
+- 按 `status, updated_at` 建协调任务索引。
 
 ## 能力详细说明
 
-### PublishVideo
-```
-入参：asset_id, target, metadata?
-1. 校验 asset_id != ""（否则 400）
-2. 校验 target ∈ {xhs, douyin, bilibili}（否则 400）
-3. 校验 metadata 可选，无 metadata 不报错
-4. mock 执行：
-   publish_url = "mock://publish/{target}/{asset_id}"
-   platform_publish_id = "mock-{asset_id}-{unix_ms}"
-   state = SUCCEEDED
-   published_at = now()
-5. return PublishResult
-异常：
-- 真实实现可能返回 PUBLISHING（异步），调用方用 platform_publish_id 轮询
-- 真实实现可能返回 FAILED（平台拒绝），调用方决定是否重试
-- 本期 mock 不会失败
-```
+### 创建发布任务
 
-### GetSupportedTargets
-```
-return ["xhs", "douyin", "bilibili"]
-注：本期静态列表，真实实现可由配置驱动。
-```
+1. 使用可信 Principal 调 Materials 解析 Asset，要求 Workspace 一致、用户可访问且媒体类型为 VIDEO。
+2. 生成稳定 `platform_request_id`，创建 pending Task 与 Outbox。
+3. 命中业务唯一键时返回既有 Task。
 
-## 跨服务 RPC 列表
+### 提交平台结果
 
-本期无跨服务 RPC 调用（mock 不调 `media_materials` / `media_crawler`）。
-
-> 真实实现预期：
-> - `media_gen` -> `media_materials` `AssetRead`：校验 asset_id 存在 + media_type=VIDEO + 拿 url。
-> - `media_gen` -> `media_crawler`：调平台 API 发布（具体 RPC 待 crawler 暴露发布接口）。
-> - 本期不预建 client，留 TODO。
+1. 按 `task_id + attempt + expected_status` compare-and-set。
+2. 成功保存 platform_publish_id/URL；永久错误保存脱敏分类；超时且无法查询时进入 result_unknown。
+3. cancelled 或其他终态收到晚到结果时只记录审计，不覆盖终态。
 
 ## 关联关系
 
-### 依赖的 domain
-- 无本服务内 domain 依赖（与 generation 不直接互依，调用方在 BFF 串接）。
+### 依赖的 Domain
+- `media_materials/asset` - 解析 Asset、媒体类型和访问权。
 
-### 被依赖的 domain
+### 被依赖的 Domain
 - 无。
 
-### 参与的 workflow
-- [video-publish](../../workflow/0002-video-publish/video-publish.md) - 视频发布流程，调用本域 Publish
+平台发布 Adapter 位于 media_gen 基础设施层，依赖 Publish 定义的命令与结果契约，但不是独立 Domain。
+
+### 参与的 Workflow
+- [video-publish](../../workflow/0002-video-publish/video-publish.md) - 协调平台调用和结果恢复。
 
 ### 关联术语
-[Publish](../../CONTEXT.md)、[Publish Target](../../CONTEXT.md)、[Publish State](../../CONTEXT.md)。
+- `Publish Task`
+- `Publish Target`
+- `Publish State`

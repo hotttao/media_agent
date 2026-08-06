@@ -13,3 +13,6 @@
 - §3「输入可达性校验」由"media_workflow 调 AssetReachability / Check*Accessible"改为"职责在 caller，media_workflow 不调"；闸 1 仅校验 slot.kind 注册（BatchGetAssetKind），闸 2 校验 bundle ↔ input_schema。
 - frontmatter dependencies 由 `media_materials.reachability` 改为 `media_materials.asset_kind`（media_workflow 仅依赖 BatchGetAssetKind）。
 - 可达性规则定义保留在 media_materials reachability workflow，由 caller 调用。
+# 2026-08-06
+
+- 输入可达性校验由 media_workflow 在 SubmitJob 内编排，不再信任 BFF 预先组装的 bundle。

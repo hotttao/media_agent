@@ -31,6 +31,6 @@
 ## 来自业务规则的强约束
 1. scope 不可改。理由同 template / workflow 域：版本化与可达性验证都依赖稳定语义。
 2. scope 正交于 visibility，不要把"私有工作空间"用 scope 区分，而用 visibility。
-3. 第三轮反馈：Asset / VirtualIp / Template / Workflow 的可见性统一为 `private / team / public`（去掉原本的 `workspace` 档位）——见 [media_auth §资源级 ACL](../../media_auth/CONTEXT.md#资源级-acl-所有媒体资源通用)。scope 保持 1:1 严格相等的业务线隔离。
+3. 第三轮反馈：Asset / VirtualIp / Template / Workflow 的可见性统一为 `private / team / public`（去掉原本的 `workspace` 档位）——见 [media_auth §资源级 ACL](../../../media_auth/CONTEXT.md#资源级-acl-所有媒体资源通用)。scope 保持 1:1 严格相等的业务线隔离。
 4. user 不持 scope；scope 是资源属性。创建不限 scope（暂不限制）。
 5. asset_kind 全局注册，不绑 scope；scope domain 不再校验 asset_kind。

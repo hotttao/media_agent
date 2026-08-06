@@ -32,3 +32,7 @@
 3. Visibility 与 scope 正交：scope 管业务归属，visibility（private/team/public）管受众。
 4. generated_asset 的生成记录字段（job_id / step_run_id / template_id / template_version）由 execution 填入不可改。
 5. SoftDelete 不级联删 material_bindings，保留历史追溯。
+# 2026-08-06
+
+- Material 与 Generated Asset 增加 `workspace_id`。
+- 文件位置由完整 URL 改为 Storage `object_path`；job/step 引用不再声明跨服务外键。

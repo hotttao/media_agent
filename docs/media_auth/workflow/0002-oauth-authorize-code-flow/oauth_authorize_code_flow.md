@@ -45,7 +45,7 @@ client(3rd)        browser(资源owner)        media_auth                       
    |                    |                        |                               |
    |-- GET /oauth/userinfo (Bearer access) -------->|                            |
    |   oauth.GetUserInfo                                                          |
-   |   ├─ 本地 HS256 验签 access_token; 失败→401                                  |
+   |   ├─ 按 issuer/audience/type 使用 Auth JWKS 验签；失败→401                    |
    |   └─ {sub, username, name, email}                                            |
    |<-- {sub,...} --|                                                             |
 ```
@@ -55,7 +55,7 @@ client(3rd)        browser(资源owner)        media_auth                       
 - `redirect_uri`：authorize 与 token 两阶段都校验，须与 client 白名单精确匹配、且两次一致。
 - `state`：authorize 原样回传 client，media_auth 不解析、不校验（防 CSRF 由 client 自行负责）。
 - token-exchange 的 `subject_token`：经外部 RS `/introspect` 解析为 user，再签 media_auth 自己的 access_token；`resource` 必须是合法 URL，其 origin 即 RS。
-- access_token：HS256 JWT（与 session cookie 同 `JWT_SECRET`），1h TTL，自包含 sub/role；refresh_token：opaque，DB 仅存 hash。
+- access_token：由 media_auth 私钥签发的短时 JWT，通过 JWKS 验证，并包含独立 audience/type；refresh_token 为 opaque，数据库仅存 Hash。Cookie JWT 与 OAuth Access Token 不共享用途或 audience。
 
 ## 状态流转
 authorization_code 一次性消费：
@@ -74,3 +74,27 @@ refresh_token 轮转：每次使用旧 token 删除、签新 token，无状态�
 - refresh_token 轮转非幂等：重复提交旧 refresh_token（已被删）返回 invalid_grant，client 须用最新 refresh_token。
 - token-exchange 可重复：同一 subject_token 可多次换 access_token（每次新签 1h access），无幂等约束。
 - userinfo 纯读，天然幂等。
+
+## 一致性边界
+
+授权确认在本地事务中创建一次性 Authorization Code；兑换使用 `DELETE ... RETURNING` 原子消费 Code 并创建 Refresh Token。外部 subject-token introspection 在事务外执行，成功后才签发本平台 Access Token。JWT 签名失败不得提交 Refresh Token。
+
+## 权限与失败
+
+- Authorize 必须验证已登录用户、client、精确 redirect URI、允许的 scope 和 PKCE S256。
+- Token Endpoint 通过 client 认证或公共客户端 PKCE 识别调用方，不信任请求体中的 user_id。
+- Code/Refresh Token 无效、已消费、过期或 redirect URI 不一致返回 `invalid_grant`，不自动重试。
+- 外部 introspection 超时发生在写事务前，可以有限重试；外部 Subject 不得覆盖本地 client 和 resource 限制。
+- Refresh Token 轮转响应丢失可能使客户端失去最新 Token；实现应保留短时 reuse detection/grace 记录，而不是重新激活旧 Token。
+
+## 一致性边界
+
+授权确认在本地事务中创建一次性 Authorization Code；兑换使用 `DELETE ... RETURNING` 原子消费 Code 并创建 Refresh Token。外部 subject-token introspection 在事务外执行，成功后才签发本平台 Access Token。JWT 签名失败不得提交 Refresh Token。
+
+## 权限与失败
+
+- Authorize 必须验证已登录用户、client、精确 redirect URI、允许的 scope 和 PKCE S256。
+- Token Endpoint 通过 client 认证或公共客户端 PKCE 识别调用方，不信任请求体中的 user_id。
+- Code/Refresh Token 无效、已消费、过期或 redirect URI 不一致返回 `invalid_grant`，不自动重试。
+- 外部 introspection 超时属于结果未知前的纯读失败，可以有限重试；外部 Subject 不得覆盖本地 client 和 resource 限制。
+- Refresh Token 轮转响应丢失可能使客户端失去最新 Token；实现应保留短时 reuse detection/grace 记录，而不是重新激活旧 Token。

@@ -10,4 +10,4 @@ media_materials 的 `AssetReachability` 等跨域可达性 RPC 从 asset domain 
 
 **衍生影响**：asset / virtual_ip / product domain 的能力清单移除上述跨域 RPC，仅保留各自 CRUD + 只读查询能力供 reachability workflow 调用。
 
-**调用方**：reachability workflow 的调用方是 **caller（BFF / 编排层）**，在 SubmitJob 前校验可达性 + 组装 JobInput bundle（含 url/content）；media_workflow 不调本 workflow（采用 bundle 模式，execution 用 bundle 渲染，仅 `BatchGetAssetKind` + `UpsertGeneratedAsset` 由 media_workflow 直接调 asset_kind / generated_asset domain）。
+**调用方**：reachability workflow 作为 media_materials 的内部能力，由 media_workflow 等受信编排服务调用；Principal 来自认证上下文，返回资源 ID、Object Path 和 metadata，不返回二进制或完整 URL。该调整不改变“workflow + policy 承担跨 domain 决策”的核心 ADR。

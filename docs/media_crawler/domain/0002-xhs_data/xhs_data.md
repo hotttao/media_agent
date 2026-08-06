@@ -6,7 +6,7 @@ related_workflow: []
 ---
 
 ## 一句话职责
-xhs_data 负责跨库只读查询 Python 爬虫落库的 MySQL 中小红书内容数据（笔记/评论），DTO 直接对齐 xhs_note 真实表字段。是 media_crawler 读路径在小红书平台的落地。
+xhs_data 负责按已授权 Crawl Result 映射只读查询 Python 爬虫落库的 MySQL 小红书内容数据。它是内部平台数据适配器，不直接定义 Workspace 可见性。
 
 ## 边界
 

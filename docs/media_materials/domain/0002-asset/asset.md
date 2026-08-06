@@ -14,7 +14,7 @@ asset domain 管理**两类物理资源**，分落两张表：
 - **material**（`materials` 表，resource_type=MATERIAL）：curated 原料（scene/pose/makeup/movement/music/caption），用户上传/策展，**无生成记录**。
 - **generated_asset**（`generated_assets` 表，resource_type=ASSET）：workflow 执行产物（model_image/style_image/first_frame/ai_video），**持生成记录**（job_id / step_run_id / template_id / template_version）。
 
-两者都引用 [asset_kind](../0005-asset_kind/asset_kind.md) 注册表（`asset_kind` 字段 -> `asset_kinds.name`）；都持 scope / owner / visibility / team_id；可见性沿用 [资源级 ACL](../../media_auth/CONTEXT.md#资源级-acl-所有媒体资源通用) 的 `private/team/public` 三档（无 grants 表）。
+两者都引用 [asset_kind](../0005-asset_kind/asset_kind.md) 注册表；都持 Workspace、Scope、owner 和 visibility；可见性沿用 [共享资源访问语言](../../../resource_access/CONTEXT.md) 的 `private/team/public` 三档。
 
 跨域可达性校验（`AssetReachability` / `ResolveAssetByKind` / `AssetRead` 等）**不在本 domain**--归 [reachability workflow](../../workflow/0001-reachability/reachability.md) 编排 + policy 决策（见 [ADR 0006](../../../adr/0006-reachability-layering.md)）。
 
@@ -32,7 +32,7 @@ asset domain 管理**两类物理资源**，分落两张表：
 - 对 reachability workflow 暴露 material / generated_asset 的**只读查询**（scope / visibility / owner / team / bindings / source_*_id）。
 
 ### 不做什么
-- 不做 user 级创建授权（创建不限 scope，见 [Scope](../../media_auth/CONTEXT.md#scope业务范围)）。
+- 不做 user 级 Scope 创建授权（见 [Scope](../../../resource_access/CONTEXT.md#scope业务范围)）。
 - 不管理 publication_plan。
 - 不暴露跨服务可达性 RPC（归 reachability workflow）。
 
@@ -56,41 +56,43 @@ asset domain 管理**两类物理资源**，分落两张表：
 
 ### Tables - `materials`
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| id | 主键 | bigserial | - |
-| scope | 业务范围 | text not null | 1:1；校验 `IsKnownScope`（service 调 `shared/scope`） |
-| asset_kind | 素材类别 | text not null | 引用 `asset_kinds.name`，且其 resource_type=MATERIAL；校验已注册未停用 |
-| name | 素材名 | text not null | (scope, asset_kind, name) 唯一 |
-| url | 文件位置 | text not null | - |
-| metadata | 渲染 hint | jsonb | default '{}' |
-| owner_user_id | 创建者 | text not null | - |
-| visibility | 可见性 | text not null | private / team / public；默认 private |
-| team_id | 可见 team | text nullable | 仅 visibility=team 时使用 |
-| created_at / updated_at / deleted_at | 时间戳 | timestamptz | - |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | bigserial | 主键 |
+| workspace_id | text not null | 所属 Workspace；跨服务 ID，不建外键 |
+| scope | text not null | 业务范围；1:1；校验 `IsKnownScope`（service 调 `shared/scope`） |
+| asset_kind | text not null | 素材类别；引用 `asset_kinds.name`，且其 resource_type=MATERIAL；校验已注册未停用 |
+| name | text not null | 素材名；(scope, asset_kind, name) 唯一 |
+| object_path | text not null | Storage 对象路径；域名无关，不保存完整 URL |
+| metadata | jsonb | 渲染 hint；default '{}' |
+| owner_user_id | text not null | 创建者 |
+| visibility | text not null | 可见性；private / team / public；默认 private |
+| team_id | text nullable | 可见 team；仅 visibility=team 时使用 |
+| created_at / updated_at / deleted_at | timestamptz | 时间戳 |
 
 约束：UNIQUE `(scope, asset_kind, name)` WHERE `deleted_at IS NULL`；INDEX `(scope, asset_kind, updated_at desc)`；INDEX `(owner_user_id)`。
 
 ### Tables - `generated_assets`
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| id | 主键 | bigserial | - |
-| scope | 业务范围 | text not null | 沿用 job.workflow.scope |
-| asset_kind | 产物类别 | text not null | 引用 `asset_kinds.name`，且其 resource_type=ASSET；= 产出该 asset 的 template.output_asset_kind |
-| name | 产物名 | text not null | (scope, asset_kind, name) 唯一；语义见下「UpsertGeneratedAsset 与 retry 的 name 语义」 |
-| url | 文件位置 | text not null | - |
-| metadata | 渲染 hint | jsonb | default '{}' |
-| owner_user_id | 提交者 | text not null | = job.submitted_by |
-| visibility | 可见性 | text not null | 默认 private（产物默认仅提交者可见） |
-| team_id | 可见 team | text nullable | - |
-| job_id | 生成 job | bigint not null | FK -> media_workflow.jobs.id |
-| step_run_id | 生成 step | bigint not null | FK -> media_workflow.step_runs.id；生成记录详情在 step_run |
-| template_id | 产出模板 | bigint not null | - |
-| template_version | 产出模板版本 | int not null | 不可变快照 |
-| source_virtual_ip_id | 源虚拟形象 | bigint nullable | job 输入里的 virtual_ip（若有），用于可达性 |
-| source_product_id | 源产品 | bigint nullable | job 输入里的 product（若有） |
-| created_at / updated_at / deleted_at | 时间戳 | timestamptz | - |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | bigserial | 主键 |
+| workspace_id | text not null | 所属 Workspace；跨服务 ID，不建外键 |
+| scope | text not null | 业务范围；沿用 job.workflow.scope |
+| asset_kind | text not null | 产物类别；引用 `asset_kinds.name`，且其 resource_type=ASSET；= 产出该 asset 的 template.output_asset_kind |
+| name | text not null | 产物名；(scope, asset_kind, name) 唯一；语义见下「UpsertGeneratedAsset 与 retry 的 name 语义」 |
+| object_path | text not null | Storage 对象路径；域名无关，不保存完整 URL |
+| metadata | jsonb | 渲染 hint；default '{}' |
+| owner_user_id | text not null | 提交者；= job.submitted_by |
+| visibility | text not null | 可见性；默认 private（产物默认仅提交者可见） |
+| team_id | text nullable | 可见 team |
+| job_id | bigint not null | 生成 job；跨服务引用，不建外键 |
+| step_run_id | bigint not null | 生成 step；跨服务引用，不建外键；生成记录详情在 step_run |
+| template_id | bigint not null | 产出模板 |
+| template_version | int not null | 产出模板版本；不可变快照 |
+| source_virtual_ip_id | bigint nullable | 源虚拟形象；job 输入里的 virtual_ip（若有），用于可达性 |
+| source_product_id | bigint nullable | 源产品；job 输入里的 product（若有） |
+| created_at / updated_at / deleted_at | timestamptz | 时间戳 |
 
 约束：UNIQUE `(scope, asset_kind, name)` WHERE `deleted_at IS NULL`；INDEX `(scope, asset_kind, created_at desc)`；INDEX `(job_id)`；INDEX `(source_virtual_ip_id)`；INDEX `(source_product_id)`。
 
@@ -100,14 +102,14 @@ asset domain 管理**两类物理资源**，分落两张表：
 
 material ↔ virtual_ip / material ↔ product 的 N:N 绑定。
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| material_id | FK materials | bigint not null | 复合 PK 一段 |
-| owner_kind | virtual_ip / product | text not null | 复合 PK 二段 |
-| owner_id | vip_id 或 product_id | bigint not null | 复合 PK 三段 |
-| bound_by | 谁绑定 | text not null | - |
-| bound_at | 绑定时间戳 | timestamptz | - |
-| bindings_end_at | 失效时间戳 | timestamptz nullable | 默认 NULL=生效中；owner（vip/product）软删时置 `now()`，绑定即时失效但保留可查 |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| material_id | bigint not null | FK materials；复合 PK 一段 |
+| owner_kind | text not null | virtual_ip / product；复合 PK 二段 |
+| owner_id | bigint not null | vip_id 或 product_id；复合 PK 三段 |
+| bound_by | text not null | 谁绑定 |
+| bound_at | timestamptz | 绑定时间戳 |
+| bindings_end_at | timestamptz nullable | 失效时间戳；默认 NULL=生效中；owner（vip/product）软删时置 `now()`，绑定即时失效但保留可查 |
 
 约束：PK `(material_id, owner_kind, owner_id)`；INDEX `(owner_kind, owner_id)`；PARTIAL INDEX `(owner_kind, owner_id) WHERE bindings_end_at IS NULL`（生效绑定查询）。INSERT 前 service 校验 `IsSameScope(material.scope, owner.scope)`。
 

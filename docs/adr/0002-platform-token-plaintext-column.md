@@ -3,7 +3,7 @@
 `service_tokens` 表对 `is_platform=true` 的 Platform Token 保留明文 `token` 列（非 platform token 仅存 `token_hash`）。敲定保留该列，原因是 agent 进程需用明文 Platform Token 回调 control_plane，而 agent 无法访问 DB、也拿不到哈希反推的明文；若不存明文则每次 agent 启动都要重新签发并同步，破坏"每用户至多一个 active platform token"不变量。核心理由：这是凭证托管场景下"必须可读明文"的硬约束，哈希存储在此不适用。
 
 ## 状态元数据
-accepted
+superseded by ADR-0007
 
 ## 备选方案考量
 - **所有 token 一律仅存 hash**：被否决，agent 无法用 hash 回调。

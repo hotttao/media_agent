@@ -1,6 +1,6 @@
 ---
 name: mcp_oauth
-description: media_auth 反向作为 OAuth client 连接第三方 MCP 服务器的发现/授权/回调/断开
+description: 外部 MCP OAuth 授权状态与加密凭据托管
 dependencies:
     - auth
 related_workflow:
@@ -8,7 +8,7 @@ related_workflow:
 ---
 
 ## 一句话职责
-mcp_oauth 负责 media_auth 反向作为 OAuth client 连接第三方 MCP 服务器：发现 OAuth metadata、动态注册 client、发起授权 popup、回调换 token 并按用户存储、刷新与失败宽限、断开连接。
+mcp_oauth 负责外部 MCP 的 OAuth Discovery、授权回调、加密凭据托管、刷新与撤销；Plugin 负责 MCP Definition、Workspace Binding、连接投影和外部 MCP 请求代理。
 
 ## 边界
 
@@ -23,8 +23,8 @@ mcp_oauth 负责 media_auth 反向作为 OAuth client 连接第三方 MCP 服务
 
 ### 不做什么
 - 不做 media_auth 作为 Authorization Server（角色相反，归 [oauth](../0005-oauth/oauth.md)）。
-- 不解析 token 内容（access/refresh token 对 media_auth 不透明，明文存）。
-- 不负责 MCP 协议本身的消息转发（归 control_plane mcp-proxy）。
+- 不解析 token 内容；access/refresh token 对业务语义不透明并加密保存。
+- 不负责 MCP 协议消息转发（归 `media_plugin` External OAuth MCP Proxy）。
 - 不在 HTTP 层暴露 client 注册 CRUD（动态注册内部完成）。
 
 ## 能力清单
@@ -36,34 +36,53 @@ mcp_oauth 负责 media_auth 反向作为 OAuth client 连接第三方 MCP 服务
 | 发起授权 | 重定向到第三方 authorize（popup） | `StartAuthorization` `GET /api/mcp-oauth/authorize` |
 | 回调换 token | 换 token 存库，返回 HTML postMessage | `HandleCallback` `GET /api/mcp-oauth/callback` |
 | 断开 | 删除用户对该 server 的 token | `Disconnect` `DELETE /api/mcp-oauth/:server_origin` |
-| 取有效 token（内部） | 供 control_plane mcp-proxy 取 access_token（含刷新） | `getValidAccessToken(userID, serverOrigin, forceRefresh?)` |
+| 取有效 token（内部） | 仅供 allowlist 中的 media_plugin Proxy 取得短暂可用 access token | `GetUsableCredential(credentialRef)` |
 
 ## 数据模型
 
 ### Tables — `mcp_oauth_clients`
 
-| 字段 | 描述 | 类型 | 关联表 | 关联说明 |
-|:---|:---|:---|:---|:---|
-| server_origin | MCP server origin | text PK | — | — |
-| metadata | 缓存的 OAuth metadata（authorize/token/registration endpoint） | jsonb | — | — |
-| client_id | 动态注册所得 client_id | text | — | — |
-| client_secret | 动态注册所得 secret（原值，可空） | text | — | — |
-| created_at / updated_at | 时间 | timestamptz | — | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| server_origin | text PK | MCP server origin |
+| metadata | jsonb | 缓存的 OAuth metadata（authorize/token/registration endpoint） |
+| client_id | text | 动态注册所得 client_id |
+| client_secret_ciphertext | bytea nullable | 动态注册所得 secret 的 AEAD 密文 |
+| nonce | bytea nullable | client secret 加密 nonce |
+| key_version | text nullable | 加密密钥版本 |
+| created_at / updated_at | timestamptz | 时间 |
+
+### Tables — `mcp_oauth_authorization_intents`
+
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| state_hash | bytea PK | 随机 state 的 SHA-256 Hash |
+| user_id | text | 发起授权的用户 |
+| workspace_id | text | 发起授权的 Workspace |
+| server_origin | text | 外部 MCP Origin |
+| code_verifier_ciphertext | bytea | PKCE verifier 的 AEAD 密文 |
+| nonce | bytea | 加密 nonce |
+| key_version | text | 加密密钥版本 |
+| expires_at | timestamptz | 过期时间 |
+| consumed_at | timestamptz nullable | callback 原子消费时间 |
+| created_at | timestamptz | 创建时间 |
 
 ### Tables — `mcp_oauth_tokens`
 
-| 字段 | 描述 | 类型 | 关联表 | 关联说明 |
-|:---|:---|:---|:---|:---|
-| user_id | 用户 | text | users (CASCADE) | 复合 PK |
-| server_origin | MCP server | text | mcp_oauth_clients (CASCADE) | 复合 PK |
-| access_token | 第三方 access token（明文） | text | — | 对 media_auth 不透明 |
-| refresh_token | 第三方 refresh token | text | — | 可空 |
-| token_type | 默认 Bearer | text | — | — |
-| scope | scope | text | — | 可空 |
-| expires_at | access 过期 | timestamptz | — | 可空，回退 updated_at+1800s |
-| refresh_fail_count | 刷新失败次数 | integer | — | 默认 0 |
-| refresh_fail_first_at | 首次失败时间 | timestamptz | — | 可空 |
-| created_at / updated_at | 时间 | timestamptz | — | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| user_id | text | 用户；关联 `users (CASCADE)`（复合 PK） |
+| server_origin | text | MCP server；关联 `mcp_oauth_clients (CASCADE)`（复合 PK） |
+| access_token_ciphertext | bytea | 第三方 access token 密文 |
+| refresh_token_ciphertext | bytea | 第三方 refresh token 密文 |
+| nonce | bytea | AEAD nonce |
+| key_version | text | 密钥版本 |
+| token_type | text | 默认 Bearer |
+| scope | text | scope |
+| expires_at | timestamptz | access 过期 |
+| refresh_fail_count | integer | 刷新失败次数 |
+| refresh_fail_first_at | timestamptz | 首次失败时间 |
+| created_at / updated_at | timestamptz | 时间 |
 
 ### UUID 生成规则
 无独立 id；PK `(user_id, server_origin)`。`code_verifier` = base64url(32 bytes)，`code_challenge` = base64url(sha256(verifier))（S256）；`state` = base64url(16 bytes)。
@@ -92,19 +111,19 @@ mcp_oauth 负责 media_auth 反向作为 OAuth client 连接第三方 MCP 服务
 1. 入参：server_origin, workspace_id
 2. 缺参 → 400；未 discover → 400
 3. code_verifier = rand(32); code_challenge = S256; state = rand(16)
-4. pendingAuths[state] = { user_id=sub, server_origin, code_verifier, workspace_id, created_at=now }（10min TTL，内存）
+4. 持久化 `state_hash`、加密 `code_verifier`、user/workspace/origin 与 10 分钟过期时间，支持多副本 callback
 5. c.Redirect 到 {authorize_endpoint}?...&code_challenge=&state=
 ```
 
 ### HandleCallback
 ```
 1. 入参：code, state, error?
-2. 缺 code/state → 400；pendingAuths[state] 不存在/过期 → 400
+2. 缺 code/state → 400；按 state_hash 查询授权意图，不存在、过期或已消费 → 400
 3. pending.user_id != session.sub → 403
 4. 换 token：POST {token_endpoint} (code, code_verifier, redirect_uri) → access/refresh/expires_in
 5. upsertToken(user_id, server_origin, tokens)：ON CONFLICT DO UPDATE，重置 refresh_fail_count=0 / refresh_fail_first_at=NULL
    - expires_at = now + expires_in（无 expires_in 则 +1800s）
-6. notifyAgentReload(workspace_id, ['config'])  ← 跨服务通知 control_plane（见 workflow）
+6. 通过 Outbox 发布非敏感 Credential 状态变化，由 Plugin 更新 Connection 与 Snapshot
 7. 返回 HTML：window.opener.postMessage(...) + window.close()
 ```
 

@@ -1,58 +1,48 @@
 ---
 name: service_token_verification
-desc: control_plane 作为网关验证 Bearer service token 的跨服务流程——经 media_auth internal VerifyToken RPC 解析主体
+description: Edge 通过 Auth introspection 将 opaque 用户 Service Token 解析为 User Principal
 ---
 
 ## 一句话说明
-control_plane 收到带 `Authorization: Bearer tos_xxx` 的自有路由请求时，因 service token 为 opaque 无法本地验，经 mTLS 调 media_auth internal `VerifyToken` RPC 解析为 Subject；cookie JWT 与 bearer JWT 仍由 control_plane 本地 HS256 验（见 ADR-0001）。
 
-## 执行时间线（每个接口内嵌内部处理）
+CLI/B2B 请求携带 opaque 用户 Service Token 到 Edge；Edge 通过 mTLS 调用 media_auth introspection，获得受 scope 约束的 User Principal，再以 mTLS 和受控内部身份 Header 调业务服务。
 
-```text
-client(B2B)            control_plane(网关)                         media_auth
-   |                        |                                          |
-   |-- POST /api/workspaces (Bearer tos_xxx) -->|                     |
-   |   middleware 鉴权                                                  |
-   |   ├─ 取 Authorization: Bearer <token>                             |
-   |   ├─ 1) 先尝试本地 HS256 验签(token 非 JWT) → 失败               |
-   |   ├─ 2) 调 media_auth VerifyToken(token, hint=service_token) ---→|
-   |   │      media_auth internal token service:                      |
-   |   │        service_token.getServiceTokenByHash(sha256(token))    |
-   |   │        ├─ 命中且 revoked_at IS NULL                           |
-   |   │        │   → {active:true, sub=created_by, username=svc:name,|
-   |   │        │      name, role=user, token_type=service_token}     |
-   |   │        └─ 未命中/已撤销 → {active:false}                      |
-   |   │<-- {active, sub,...} ---------------------------------------|
-   |   ├─ active=false → 401                                           |
-   |   ├─ 注入 ctx.user = Subject{sub,...}                             |
-   |   └─ next() → 业务 handler(以 sub 为 caller)                      |
-   |<-- 200/4xx --|                                                    |
-```
+## 执行时间线
 
-> 鉴权解析顺序（control_plane 中间件，见 ADR-0001）：
-> 1. plugin-admin 旁路（`x-plugin-admin-token`，自留，不进本流程）
-> 2. Bearer：先 `VerifyToken` RPC（service token），失败再本地 HS256 验签（OAuth access JWT）
-> 3. Cookie：本地 HS256 验签 + 滑动续期（session JWT）
->
-> 即 service token 走 RPC、JWT 全本地验。control_plane 不再直读 media_auth 任何表。
-
-## 关键流程参数传递
-- `token`（opaque `tos_xxx`）：control_plane 原样传给 media_auth `VerifyToken`；media_auth 内部 `sha256(token)` 查 `service_tokens.token_hash`，明文 token 永不出 media_auth 边界。
-- `token_type_hint`：可选，`service_token`；预留未来 JWT 也可经此 RPC 统一校验。
-- 返回 `Subject`：`{ active, sub, username, name, role, token_type, exp? }`；`sub = service_tokens.created_by`，control_plane 据此识别调用方。
-- mTLS：control_plane ↔ media_auth 走内网 mTLS，`VerifyToken` 不挂网关路由、不出 OpenAPI，仅内部可达。
-
-## 状态流转
-无状态机；`service_tokens.revoked_at` 决定 active：
 ```mermaid
-stateDiagram-v2
-    [*] --> Active: 创建 token(revoked_at=NULL)
-    Active --> Inactive: RevokeServiceToken(revoked_at=now)
-    Active --> Active: VerifyToken 返回 active=true
-    Inactive --> Inactive: VerifyToken 返回 active=false
+sequenceDiagram
+    participant C as CLI Client
+    participant E as Edge
+    participant A as media_auth
+    participant B as Business Service
+    C->>E: API request, Bearer tos_xxx
+    E->>E: 删除客户端伪造的内部身份 Header
+    E->>A: IntrospectServiceToken(raw token)
+    A->>A: SHA-256 查询、检查 revoked/expiry/scope
+    A-->>E: active + user_id/token_id/scopes
+    E->>B: mTLS + User Principal + request_id
+    B->>B: 校验 Edge caller allowlist 和资源 action
+    B-->>C: result
 ```
 
-## 幂等设计
-- `VerifyToken` 纯读，天然幂等；同一 token 多次校验结果一致（直至被撤销）。
-- 撤销即时生效：`revoked_at` 一旦写入，后续 `getServiceTokenByHash` 因 `revoked_at IS NULL` 过滤即返回未命中。
-- 性能：control_plane 可对近期 VerifyToken 结果做短 TTL 本地缓存（按 token hash），但缓存须在撤销后能及时失效——本批次不强制，留 P1 评估。
+## 关键参数
+
+- 原始 Token 仅在 Client、Edge 和 Auth 请求内存中出现，不进入业务服务、日志或 Trace。
+- Edge 覆盖内部 Principal Header；业务服务只在 mTLS caller 为 Edge 时信任。
+- Auth 返回身份与 scope，不返回 Token 明文，也不替业务服务做资源授权。
+
+## 状态与一致性边界
+
+验证流程是只读操作，无持久化状态机。Service Token 的 active/revoked/expired 状态归 Auth Service Token 聚合决定。业务服务的资源事务发生在 introspection 成功之后，与验证不构成分布式事务。
+
+## 幂等、缓存与失败
+
+Introspection 纯读且幂等。Edge 可按 Token Hash 正缓存最多 60 秒、负缓存最多 5 秒；cache miss 且 Auth 不可用时 fail closed。active=false、过期、撤销或 scope 不足不重试。缓存中不得保存原始 Token。
+
+## 权限与信任边界
+
+Edge 验证“谁在调用”和入口 scope；业务服务从真实资源读取 workspace_id/owner 并执行最终 action 授权。Edge 到 Auth、Edge 到业务服务均使用可配置 mTLS；公共 Edge 拒绝 Session Token 和 Platform Token。
+
+## 结果
+
+成功形成 `Principal{Kind=user, AuthMethod=service_token, UserID, TokenID, Scopes}`；失败返回 401/403，不向客户端区分不存在、撤销或过期细节。

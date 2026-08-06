@@ -5,7 +5,7 @@ created: 2026-07-07T09:50:59Z
 updated: 2026-07-18T06:30:00Z
 ---
 
-> 配套阅读：[docs/wiki/workspace/teamwork.md](teamwork.md)（产品视角，使用文档）。
+> 产品视角使用文档尚未迁移到本目录。
 
 本文先带你走一个**具体示例**，让你直观感受 teamwork 在做什么、解决了什么问题；示例走完后，我们再回头拆背后的数据模型与四个核心实现抓手。
 
@@ -480,7 +480,7 @@ DELETE /api/teamwork/:id
 
 ## 接下来
 
-- 想读产品视角，先看 [docs/wiki/workspace/teamwork.md](teamwork.md)
+- 产品视角使用文档尚未迁移到本目录。
 - 想理解共享目录的底层 gRPC/AFS，看 [control-plane/src/services/afs.ts](../../control-plane/src/services/afs.ts) 与 `proto/afs.proto`
 - 想跟一次端到端，建议本地开一个两 workspace 的账号，从建任务 -> 加成员 -> call_agent 走一遍，看 [TeamworkSection.tsx](../../web/src/components/teamwork/TeamworkSection.tsx) 里三层 React 渲染
 - 想做修改，先确认改动是否触及 §四.抓手 4 的「不订阅成员 session」原则 -- 这条破坏了就回退不了

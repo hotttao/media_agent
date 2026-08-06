@@ -43,22 +43,24 @@ crawl_job 负责单个抓取任务的持久化、状态流转、全局串行调�
 
 #### jobs（自治 PG）
 
-| 字段 | 描述 | 类型 | 关联表 | 关联说明 |
-|:---|:---|:---|:---|:---|
-| job_id | 主键 | varchar(pk) | — | `job_{ts}_{rand}` |
-| platform | 目标平台 | varchar | — | xhs/dy/ks/bili/wb/tieba/zhihu |
-| crawler_type | 抓取类型 | varchar | — | search/detail/creator/homefeed/hot_search |
-| params | 入参回显 | jsonb | — | keywords/urls/enable_comments/max_notes_count 等 |
-| status | 状态 | varchar | — | queued/running/completed/failed/cancelled/rejected |
-| pid | 子进程 pid | int | — | running 时有，终态置 null |
-| checkpoint_id | 断点 id | varchar | — | 运行时回填，续爬透传 |
-| progress | 进度快照 | jsonb | — | crawled_count/total_target/current_keyword/current_page/percent |
-| result_summary | CRAWL_SUMMARY | jsonb | — | platform/crawler_type/status/error |
-| error | 失败原因 | text | — | failed 时 |
-| stdout_tail | 日志尾部 | text | — | get_crawl_status 带 include_logs_tail 时 |
-| queued_at | 入队时间 | timestamptz | — | — |
-| started_at | 开始时间 | timestamptz | — | — |
-| finished_at | 结束时间 | timestamptz | — | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| job_id | varchar(pk) | 主键 |
+| workspace_id | text | 所属 Workspace |
+| requested_by | text | 发起用户 |
+| platform | varchar | 目标平台 |
+| crawler_type | varchar | 抓取类型 |
+| params | jsonb | 入参回显 |
+| status | varchar | 状态 |
+| pid | int | 子进程 pid |
+| checkpoint_id | varchar | 断点 id |
+| progress | jsonb | 进度快照 |
+| result_summary | jsonb | CRAWL_SUMMARY |
+| error | text | 失败原因 |
+| stdout_tail | text | 日志尾部 |
+| queued_at | timestamptz | 入队时间 |
+| started_at | timestamptz | 开始时间 |
+| finished_at | timestamptz | 结束时间 |
 
 ### UUID 生成规则
 `job_id = job_{YYYYMMDDHHMMSS}_{6位随机}`，全局唯一，作为跨 tool 传递主键。

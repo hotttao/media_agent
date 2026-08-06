@@ -1,10 +1,11 @@
 ---
 name: auth
-description: 本地账号 + LDAP 登录、会话(JWT cookie)签发与校验、当前用户档案与偏好
+description: 用户账号生命周期、登录、Cookie JWT 与当前用户档案
 dependencies:
     - identity
 related_workflow:
     - wecom_login_bind
+    - user_soft_delete
 ---
 
 ## 一句话职责
@@ -14,11 +15,12 @@ auth 负责平台账号的本地密码 / LDAP 双路登录、会话（JWT cookie
 
 ### 做什么
 - 本地密码（argon2）与 LDAP 双路登录，LDAP 首次登录自动 upsert 用户。
-- 签发 / 清除 / 半程滑动续期 httpOnly cookie `token`（HS256 JWT，24h）。
+- 使用 media_auth 私钥签发、清除和续期 httpOnly Cookie JWT，并通过 JWKS 发布验证公钥。
 - 读取当前用户档案 `GetMe`（id/username/role/auth_source/default_prompt_id/auto_evolution）。
 - 本地账号改密（仅 `password_hash` 非空）。
 - 设置 / 清除 `default_prompt_id`，开关 `auto_evolution`。
-- 登录成功后 ensure Platform Token（委托 `service_token` domain 的内部能力）。
+- 登录成功后可 ensure Platform Token（委托 `platform_token` domain 的内部能力）。
+- 软删除 User：禁止新登录，撤销全部凭证并保留历史 user_id。
 
 ### 不做什么
 - 不签发 OAuth Access/Refresh Token（归 [oauth](../0005-oauth/oauth.md)）。
@@ -39,23 +41,54 @@ auth 负责平台账号的本地密码 / LDAP 双路登录、会话（JWT cookie
 | 设置默认 prompt | 设/清新 workspace 默认 prompt（opaque id） | `SetDefaultPrompt` `PUT /api/auth/me/default-prompt` |
 | 签发 Session | 内部：登录/企微登录成功后签 JWT 并下 cookie | `issueSession(userID)` |
 | 校验 Session | 内部：middleware 本地验 cookie JWT + 滑动续期 | `verifySession(cookie)` |
+| 软删除用户 | 管理员将用户标记 deleted 并撤销全部访问能力 | 待 IDL 定义 |
+
+## 聚合与不变量
+
+| 聚合根 | 包含对象 | 一致性边界 | 核心不变量 |
+|:---|:---|:---|:---|
+| User | 用户档案、登录状态 | 单个用户生命周期 | deleted 不可恢复为 active；历史 user_id 永不复用 |
+
+- User 状态为 `active/disabled/deleted`；disabled 可由管理员恢复，deleted 为终态。
+- disabled/deleted User 不能登录、续期 Cookie JWT、创建新 Service/Platform Token 或发起新的代表调用。
+- 软删除不级联删除历史 Session、Task、Workspace、Team 审计记录；跨服务保留稳定 user_id。
+- 删除事务递增 `auth_version` 并发布 `UserAccessRevoked`，供 Edge 立即拒绝尚未过期的旧 Cookie JWT。
 
 ## 数据模型
 
-### Tables — `users`
+### `users`
 
-| 字段 | 描述 | 类型 | 关联表 | 关联说明 |
-|:---|:---|:---|:---|:---|
-| id | 用户 id，应用层生成短随机串 | text PK | — | 全局唯一 |
-| username | 登录名，LDAP 派生账号用 LDAP attr | text UNIQUE | — | 登录主键 |
-| display_name | 展示名 | text | — | JWT `name` |
-| email | 邮箱，可空 | text | — | JWT `email` |
-| password_hash | argon2 哈希；空=LDAP/企微派生，不可改密 | text | — | 决定 auth_source |
-| role | `user \| admin \| system`；system 禁止登录 | text | — | JWT `role` |
-| default_prompt_id | 默认 prompt；opaque，不校验 FK | text | control_plane.prompts | 网关补 name |
-| auto_evolution | 偏好开关 | boolean | — | — |
-| created_at | 创建时间 | timestamptz | — | — |
-| last_login_at | 最近本地登录时间 | timestamptz | — | 仅本地登录更新 |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text PK | 稳定 User ID，删除后不复用 |
+| username | text UNIQUE | 登录名，删除后不释放 |
+| display_name | text | 展示名 |
+| email | text nullable | 邮箱 |
+| password_hash | text nullable | Argon2 Hash；空表示外部身份账号 |
+| role | text | user/admin/system；system 禁止交互登录 |
+| status | text | active/disabled/deleted |
+| auth_version | bigint | 凭证撤销版本，初始为 1 |
+| default_prompt_id | text nullable | Control Prompt 的逻辑引用 |
+| auto_evolution | boolean | 用户偏好开关 |
+| disabled_at | timestamptz nullable | 禁用时间 |
+| deleted_at | timestamptz nullable | 软删除时间 |
+| deleted_by | text nullable | 执行删除的管理员 User ID |
+| created_at | timestamptz | 创建时间 |
+| last_login_at | timestamptz nullable | 最近登录时间 |
+
+#### 约束与索引
+
+- `CHECK (status IN ('active','disabled','deleted'))`
+- `status='deleted'` 时 `deleted_at` 非空。
+- username 和 id 不因软删除释放或复用。
+
+## 领域事件
+
+| 事件 | 产生条件 | 关键载荷 | 消费方 |
+|:---|:---|:---|:---|
+| UserDisabled | active -> disabled | user_id, auth_version | Edge、Token 撤销 Worker |
+| UserSoftDeleted | active/disabled -> deleted | user_id, deleted_by, auth_version | 审计、资源所有服务 |
+| UserAccessRevoked | disabled/deleted 提交 | user_id, auth_version | Edge 撤销缓存、Auth Token Domains |
 
 ### UUID 生成规则
 `users.id` 由应用层 `generateId()` 产生短随机字符串，非自增、非 ulid；与 control_plane 现状一致以兼容存量数据。
@@ -72,12 +105,13 @@ auth 负责平台账号的本地密码 / LDAP 双路登录、会话（JWT cookie
    - LDAP bind + search（LDAP_URL / BIND_DN / SEARCH_BASE / SEARCH_FILTER）
    - 命中 → upsertUser(ldap attrs)：已存在更新 last_login_at，不存在则创建（password_hash 留空）
 4. 两者皆失败 → 401 invalid_credentials
-5. role == 'system' → 403（"This account cannot be used for login"）
-6. issueSession(user)：
-   - JWT claims = { sub, username, name, email?, role, exp=now+86400 }，HS256 签
+5. user.status 必须为 active；disabled/deleted 一律拒绝且不签发 Cookie。
+6. role == 'system' → 403（"This account cannot be used for login"）
+7. issueSession(user)：
+   - JWT claims = { sub, username, name, role, auth_version, type=cookie, aud=edge, exp }，由 media_auth 私钥签名
    - Set-Cookie token（httpOnly, sameSite=Lax, maxAge=86400, path=/）
-7. fire-and-forget ensurePlatformToken(user.id)（失败仅日志）
-8. 返回 ApiUser{ id, username, role, auth_source, default_prompt_id, auto_evolution }
+8. fire-and-forget ensurePlatformToken(user.id)（失败仅日志）
+9. 返回 ApiUser{ id, username, role, auth_source, default_prompt_id, auto_evolution }
 ```
 
 ### auth_source 推导（修正点，见 change.md）
@@ -114,12 +148,20 @@ password_hash 非空            → 'password'
 
 ### issueSession / verifySession（内部）
 ```
-issueSession(user): 签 JWT + Set-Cookie（见 Login §6）
+issueSession(user): 仅 active User 可签 JWT + Set-Cookie（见 Login §6）
 verifySession(cookie):
-  - 解析验签 HS256；过期/非法 → 清 cookie，返回 invalid
-  - 剩余 < 12h → 重签 24h 并替换 cookie（滑动续期）
-  - 返回 JwtPayload{ sub, username, name, email?, role, exp }
+  - Edge 通过 JWKS 校验签名、issuer/audience/type/exp
+  - 检查 UserAccessRevoked 缓存中的 auth_version；旧版本立即拒绝
+  - 续期必须回到 Auth 并重新检查 User status/auth_version
 ```
+
+### SoftDeleteUser
+
+1. 要求管理员身份，禁止删除最后一个有效平台管理员。
+2. 在 User 本地事务中将 status 置为 deleted、写 deleted_at/deleted_by、递增 auth_version，并写 Outbox。
+3. Token Worker 幂等撤销该用户全部 Service Token、Platform Token 和 MCP OAuth Credential。
+4. Edge 消费 `UserAccessRevoked`，按 user_id 记录最低 auth_version，立即拒绝旧 Cookie JWT。
+5. 已开始请求允许自然结束；删除提交后禁止新请求和后台长期委托启动。
 
 ## 关联关系
 

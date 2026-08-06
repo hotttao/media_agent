@@ -8,6 +8,29 @@ dependencies:
 ---
 
 ## 一句话职责
+
+> 边界修正：资产实例可达性由调用方先通过 Materials Reachability 解析；本流程不再次访问资产实例，只校验可信解析结果与 Workflow 输入契约。下文“资产可达性校验”均指该契约校验。
+
+## 执行时间线
+
+```mermaid
+sequenceDiagram
+    participant C as Create/Update/Submit Handler
+    participant V as Workflow Validator
+    participant T as Template Domain
+    participant M as Materials AssetKind
+    C->>V: Validate(principal, workflow, resolved_inputs?)
+    V->>V: 校验 DAG 不变量
+    V->>T: 批量加载 Template 版本、状态与 grants
+    V->>M: BatchGetAssetKind(names)
+    V->>V: 校验 scope、binding、input schema
+    V-->>C: ValidationResult
+    alt Valid
+        C->>C: 在调用方事务中保存 Workflow/Job
+    else Invalid
+        C-->>C: 不写业务事实
+    end
+```
 对一次 Create/Update/Submit 提交做"实际落库前的安全闸"：依次完成 DAG 结构校验 → Template 状态校验 → 资产可达性与 scope 校验。任一环节失败 → 给调用方返回 reject 原因 + 错误码**全局一致**，不写库。
 
 ## 触发点
@@ -30,7 +53,7 @@ dependencies:
 > 这一阶段阻止"draft 模板被 workflow bind 后被 archive"的情况：用户 archive 一个 template 时，本 service 需异步扫一遍 workflow / job 中活跃 binding；本期先实现"保存时校验"，后续引入 offline scan。
 
 ### 3. 输入可达性校验（职责在 caller，不在 media_workflow）
-media_workflow 采用 bundle 模式（见 [media_workflow spec](../../spec/media_workflow/impl.md) §6）：caller（BFF）在 SubmitJob 前调 [media_materials reachability workflow](../../../media_materials/workflow/0001-reachability/reachability.md) 校验输入可达性 + 组装 JobInput bundle（含 url/content）。media_workflow 不做可达性校验，不调 reachability。
+SubmitJob 由 media_workflow 调用 [media_materials reachability workflow](../../../media_materials/workflow/0001-reachability/reachability.md)，校验输入属于同一 Workspace/Scope 并解析为资源 ID 与 Object Path；调用方不负责组装可信 bundle。
 
 - **workflow 保存时（闸 1）**：只校验 slot.kind 注册（`BatchGetAssetKind`），不校验 asset 可达性（workflow 是定义，无 asset 实例）。
 - **SubmitJob 时（闸 2）**：校验 bundle ↔ input_schema（required 覆盖、material/asset name 唯一、无多余类型、product/virtual_ip 非空如 required）；不调 reachability（caller 已校验可达性）。
@@ -72,9 +95,17 @@ type RejectReason struct {
 ## 失败处理
 任何 RejectReason → workflow / job 不写库；调用方拿到的是 ValidationResult 整体，可视化展示给前端。
 
+## 状态、一致性与权限
+
+本流程是同步只读决策，无持久化状态机。Validator 不开启覆盖远程调用的数据库事务；最终 Create/Update/Submit 必须在写事务内重新检查乐观版本，防止校验后 Template/Workflow 已变化。Principal 来自可信入口，Template Domain 执行引用权限判断；Materials 只返回 Asset Kind 定义。依赖不可用返回 unavailable，不得降级为校验通过。
+
+## 幂等与重试
+
+相同输入和相同依赖版本产生相同 ValidationResult。纯读依赖的瞬时错误可以有限重试；校验拒绝不可重试，必须修改输入或权限。调用方重试最终写入时仍使用原 idempotency_key，并重新执行版本检查。
+
 ## 与 media_materials 契约
 
-media_workflow 采用 bundle 模式（见 [media_workflow spec](../../spec/media_workflow/impl.md) §6），不直读 materials 库；caller（BFF）在 SubmitJob 前调 [media_materials reachability workflow](../../../media_materials/workflow/0001-reachability/reachability.md) 校验可达性 + 组装 bundle。media_workflow 仅调：
+media_workflow 不直读 Materials 数据库；它通过内部接口调用：
 
 - `BatchGetAssetKind(names) -> (kinds, invalid)`--Workflow 校验期校验 slot.kind / output_asset_kind 已注册、resource_type / media_type 匹配（§2）。
 - `UpsertGeneratedAsset(...)`--StepRun SUCCEEDED 时落产物（归 execution，见 [workflow_execution](../0002-workflow_execution/workflow_execution.md)）。
@@ -87,4 +118,4 @@ media_workflow 采用 bundle 模式（见 [media_workflow spec](../../spec/media
 - [execution](../../domain/0003-execution/execution.md)（Submit 阶段复用）
 
 ## 关联术语
-[Workflow Validation](../../CONTEXT.md)、[Asset Reachability](../../media_materials/CONTEXT.md)。
+[Workflow Validation](../../CONTEXT.md)、[Asset Reachability](../../../media_materials/CONTEXT.md)。

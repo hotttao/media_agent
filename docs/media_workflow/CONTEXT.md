@@ -4,21 +4,27 @@
 
 ## 业务术语词典
 
+### 租户边界
+
+**Workspace（工作空间）**:
+Template、Workflow 和 Execution 的租户归属；同一 Execution 的输入与产物必须属于同一 Workspace。
+_禁用替代词_：Scope（Scope 是业务线分类，不是租户）
+
 ### 范围
 
 **Scope（业务范围）**:
-见 [media_auth/CONTEXT.md §业务划分与归属](../media_auth/CONTEXT.md#业务划分与归属)。本服务所有 Template / Workflow 强制绑定 1 个 scope；跨 scope 引用 → 拒绝。
+见 [共享资源访问语言](../resource_access/CONTEXT.md)。本服务所有 Template / Workflow 强制绑定一个 Scope；跨 Scope 引用拒绝。
 
 ### 资源权限（Template / Workflow 通用）
 
-资源级 ACL 统一模型见 [media_auth §资源级 ACL](../media_auth/CONTEXT.md#资源级-acl-所有媒体资源通用)。
+资源级 ACL 统一语义见 [共享资源访问语言](../resource_access/CONTEXT.md)，Grant 数据和最终授权仍归本服务。
 
 **My Permission On Resource（资源访问权限）**:
 本服务在每次读写 Template / Workflow 前推导 `MyPermission(user, resource)`，遵循全局规则。
 _禁用替代词_：role、claim。
 
 **Visibility On Resource（资源可见性档位）**:
-Template / Workflow 均支持 `private | team | public`，与 grants 联动派生 [My Permission](../media_auth/CONTEXT.md#my-permission资源访问权限)。
+Template / Workflow 均支持 `private | team | public`，与 grants 联动派生 [My Permission](../resource_access/CONTEXT.md#my-permission有效资源权限)。
 
 **Template Grant / Workflow Grant（资源授权）**:
 `(template_id | workflow_id, team_id) → permission ∈ {viewer, editor}` 显式授权。本表由 owner / editor 调用 service 写入。

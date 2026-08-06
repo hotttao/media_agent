@@ -34,14 +34,14 @@ identity 负责用户外部身份绑定（`(provider, external_id) → user_id`�
 
 ### Tables — `user_identities`
 
-| 字段 | 描述 | 类型 | 关联表 | 关联说明 |
-|:---|:---|:---|:---|:---|
-| user_id | 所属用户 | text | users.id (CASCADE) | 复合 PK 一段 |
-| provider | 身份提供方标识（如 wecom） | text | — | 复合 PK 一段 |
-| external_id | provider 侧用户 id | text | — | 复合 PK 一段 |
-| display_name | provider 侧展示名 | text | — | 可空 |
-| metadata | provider-specific 字段（avatar/email 等） | jsonb | — | 默认 '{}' |
-| created_at | 创建时间 | timestamptz | — | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| user_id | text | 所属用户；关联 `users.id (CASCADE)`（复合 PK 一段） |
+| provider | text | 身份提供方标识（如 wecom） |
+| external_id | text | provider 侧用户 id |
+| display_name | text | provider 侧展示名 |
+| metadata | jsonb | provider-specific 字段（avatar/email 等） |
+| created_at | timestamptz | 创建时间 |
 
 约束：PK `(provider, external_id)`；UNIQUE `(user_id, provider)`；INDEX `(user_id)`。
 

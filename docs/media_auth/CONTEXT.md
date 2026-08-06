@@ -7,8 +7,12 @@ media 平台统一的认证 / 鉴权微服务，承担所有身份认证、会�
 ### 身份与账号
 
 **User（用户）**:
-平台账号主体，一条 `users` 记录；由本地密码、LDAP 或企微派生创建。`role ∈ {user, admin, system}`，其中 `system` 仅作系统账号、禁止登录。
+平台账号主体，一条 `users` 记录；由本地密码、LDAP 或企微派生创建。`role ∈ {user, admin, system}`，其中 `system` 仅作系统账号、禁止登录。User 使用软删除，历史 ID 永不复用。
 _禁用替代词_：Account（账户——指凭证而非人）、Member、Profile
+
+**User Status（用户状态）**:
+User 的访问生命周期：`active` 可正常使用，`disabled` 暂停且可恢复，`deleted` 为不可恢复软删除终态；后两者均撤销新访问能力。
+_禁用替代词_：Token Status、Online Status、Hard Delete
 
 **Auth Source（认证来源）**:
 一个 User 的凭证来源，取值 `password | ldap | wecom`；由 `password_hash` 是否非空与身份绑定推导，前端据此判断能否改密。
@@ -24,25 +28,25 @@ _禁用替代词_：vendor、channel（channel 语义留给登录通道）
 
 ### 会话与凭证
 
-**Session（会话）**:
-登录成功后下发的 httpOnly cookie `token`，承载 HS256 签名的 JWT（sub/username/name/email/role/exp）；24h 有效、半程滑动续期。归 `auth` domain。
-_禁用替代词_：login state、JWT session（JWT 是载体不是会话本身）
+**Web Session（Web 会话）**:
+用户登录后由 Cookie JWT 表达的浏览器会话；与 Agent Gateway 的 Agent Session 是不同概念。归 `auth` domain。
+_禁用替代词_：Agent Session、login state、JWT session（JWT 是载体不是会话本身）
 
 **Service Token（服务令牌）**:
 B2B API 调用凭证，`tos_` 前缀 + 32 随机字节；DB 仅存 SHA-256 `token_hash`，明文仅创建时返回一次。归 `service_token` domain。
 _禁用替代词_：API key、access key、bearer token（bearer 是传输方式不是凭证类型）
 
 **Platform Token（平台令牌）**:
-特殊 Service Token，`is_platform=true`、`name='__platform__'`，登录后自动 ensure，每用户至多一个 active；**单独落明文 `token` 列**（ADR-0002；存留待复核）。归 `service_token` domain。
+代表用户执行长期离线委托的特殊 Service Token，每用户至多一个 active；数据库保存 hash 与加密密文，只有 Gateway 和 Control Schedule Worker 可按固定 purpose 获取。归 `platform_token` domain（ADR-0007）。
 _禁用替代词_：agent token、internal token
 
-**VerifyToken（令牌校验）**:
-media_auth 暴露给下游服务的 mTLS 内部 RPC，把 opaque Service Token 解析为 Subject；下游服务据此完成自有路由鉴权，不直读 media_auth 库。
-_禁用替代词_：introspect（introspect 是 OAuth2 RFC 7662 标准端点，语义不同）
+**Service Token Introspection（服务令牌内省）**:
+media_auth 暴露给 Edge 和受信服务的内部能力，把 opaque Service Token 解析为 Principal；下游服务不直读 media_auth 数据库。
+_禁用替代词_：VerifyToken（旧实现名）、Token Exchange
 
-**Subject（鉴权主体）**:
-token 校验后得到的鉴权身份快照（sub/username/name/role 等），由调用方（下游服务中间件）注入请求上下文。
-_禁用替代词_：principal（保留给 OAuth2 RFC 8693 token-exchange 语义）、claim
+**Principal（被代表主体）**:
+一次请求代表的用户、Workspace 或 Agent Session 身份；与 mTLS 证明的 CallerService 分开处理。
+_禁用替代词_：Subject、CallerService、claim
 
 ### OAuth Provider（media_auth 作为 Authorization Server）
 
@@ -59,7 +63,7 @@ OAuth2 `refresh_token` grant 凭证，30 天 TTL，DB 存 SHA-256 `token_hash`�
 _禁用替代词_：renew token
 
 **Access Token（OAuth 访问令牌）**:
-OAuth2 签发的 JWT（HS256，1h TTL），供第三方 RS 访问 `/api/oauth/userinfo`；与 Session 的 cookie JWT 同算法同密钥、用途不同。归 `oauth` domain。
+OAuth2 签发的短时 JWT，供第三方 RS 访问 `/api/oauth/userinfo`；与 Cookie JWT 使用不同 audience/type 声明，由 media_auth 私钥签发并通过 JWKS 发布公钥。归 `oauth` domain。
 _禁用替代词_：bearer、JWT token
 
 **Token Exchange（令牌交换）**:
@@ -73,7 +77,7 @@ media_auth 反向作为 OAuth client 连接第三方 MCP 服务器时的注册�
 _禁用替代词_：mcp registration、mcp app
 
 **MCP OAuth Token（MCP 连接令牌）**:
-某用户对某 MCP server 的 access/refresh token，`mcp_oauth_tokens`，主键 `(user_id, server_origin)`，明文存（对 media_auth 不透明）。归 `mcp_oauth` domain。
+某用户对某 MCP server 的 access/refresh token，`mcp_oauth_tokens`，主键 `(user_id, server_origin)`；使用 KMS/Secret 管理密钥加密保存，对 media_auth 业务语义不透明。归 `mcp_oauth` domain。
 _禁用替代词_：mcp credential、mcp session
 
 **Refresh Failure Grace（刷新失败宽限）**:
@@ -85,9 +89,9 @@ MCP OAuth Token refresh 持续失败时的保留策略：`refresh_fail_count ≥
 基于企微 corp OAuth 的登录/绑定流程；`wecom` domain 承载 corp 凭证获取、扫码 URL、callback，编排 `auth`(session) 与 `identity`(绑定)。归 `wecom` domain。
 _禁用替代词_：wecom sso、wxwork auth
 
-### 业务划分与归属
+### 迁移提示
 
-**Scope（业务范围）**:
+**Scope（业务范围，已迁移）**:
 标识一个业务线的字符串标签，例如 `ai_clothing` / `ai_guoxue`。
 - 为什么需要：同一套服务要支撑多条互不相干的业务线。"AI 服装"的模板不能拿"AI 国学"的素材做合成——一旦允许，业务边界就糊了。scope 就是给每个业务线贴标签，运行期跨 scope 引用一律拒绝。
 - **scope 是资源属性，不是 user 属性**：user **不直接持 scope**。user 通过拥有的 [Virtual IP](#virtual-ip虚拟形象) 间接关联 scope——virtual_ip 带 scope，一个 user 可拥有多个不同 scope 的 virtual_ip，从而跨业务线。
@@ -96,15 +100,7 @@ _禁用替代词_：wecom sso、wxwork auth
 - 跨 service 共享的术语；具体取值在本仓库 `media_materials/biz/policy/scope` 与 `media_workflow/biz/policy/scope` 同步引用同一份常量。
 _禁用替代词_：tenant（保留给多租户隔离）、business（保留给 umbrella 业务名）、area。
 
-**Product（业务产品）**:
-一个可被视频带货的产品。`product` 归属于某个 scope，**没有 user 归属**；product 在 `media_materials` 服务落库。
-_禁用替代词_：goods（保留给 SKU 层）、SKU、item。
-
-**Virtual IP（虚拟形象）**:
-一个 AI 形象（模特 / IP），归属于某个 scope，归属 user；一个 user 可拥有多个 VirtualIp，可见性规则遵循 [资源权限模型 §资源级 ACL](#资源级-acl-所有媒体资源通用)。在 `media_materials` 服务落库。
-_禁用替代词_：character、avatar、figure。
-
-### 资源级 ACL（所有媒体资源通用）
+### 资源级 ACL（共享语言，已迁移）
 
 适用于所有"需要被引用 / 共享"的可写媒体资源：`Template`、`Workflow`、`VirtualIp`。Asset 因只读元数据，沿用 `visibility ∈ {private, team, public}` + 单值 `team_id`，不开放 grants 表。
 
@@ -130,8 +126,10 @@ _禁用替代词_：share、ACL。
 `owner` 含全部操作（编辑、归档、删除、改 visibility / grant、提交执行）；`editor` 含编辑、提交执行、改 visibility / grant 之外的子集操作；`viewer` 仅读 + 提交执行；`public` 仅读。
 _禁用替代词_：role、claim。
 
+### 团队
+
 **Team（团队）**:
-一组 user 的命名集合，用于 [Resource Grant](#resource-grant资源共享授权) 范围内的资源共享；team 不是多租户隔离边界，也不是 billing 单位。归 `team` domain。
+一组 user 的命名集合，可被资源服务的 Resource Grant 引用；team 不是多租户隔离边界，也不是 billing 单位。归 `team` domain。
 _禁用替代词_：group、org、tenant。
 
 **Team Membership（团队成员关系）**:

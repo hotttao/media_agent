@@ -66,7 +66,7 @@
      "pose_in":  {"material_id": pose_1.id}
    }
    ```
-   触发 [workflow_validation](../../../media_workflow/workflow/0001-workflow_validation/workflow_validation.md)：
+   触发 [workflow_validation](../media_workflow/workflow/0001-workflow_validation/workflow_validation.md)：
    - DAG 校验 ✓。
    - Template 校验：scope 严格相等 ✓，未 archive ✓。
    - **AssetReachability**：scope_match(material.scope==workflow.scope==ai_clothing) ✓；visibility=public ✓；material_bindings(V1) + V1 对 Alice 可见（owner）✓ → reachable。
@@ -87,7 +87,7 @@
 - Alice 创建模板 T2（scope=ai_clothing），引用 V2 上传过的素材 X（scope=ai_guoxue，asset_kind=illustration）。
 - Alice 创建 Workflow W2，把 T2 与 X 拼起来。
 
-**触点**：[workflow_validation](../../../media_workflow/workflow/0001-workflow_validation/workflow_validation.md) → AssetReachability：
+**触点**：[workflow_validation](../media_workflow/workflow/0001-workflow_validation/workflow_validation.md) → AssetReachability：
 - scope_match(ai_clothing vs ai_guoxue) → reject `SCOPE_MISMATCH`。
 - 不写库。
 

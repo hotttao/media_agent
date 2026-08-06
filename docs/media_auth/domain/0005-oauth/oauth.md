@@ -41,37 +41,37 @@ oauth 负责媒体平台作为 OAuth2 Authorization Server 的全部能力：第
 
 ### Tables — `oauth_clients`
 
-| 字段 | 描述 | 类型 | 关联表 | 关联说明 |
-|:---|:---|:---|:---|:---|
-| id | client id | text PK | — | — |
-| name | client 名（consent 展示） | text | — | — |
-| secret_hash | SHA-256(client_secret)；空=公开 client | text | — | 仅 token-exchange 校验 |
-| redirect_uris | 允许回调，精确匹配 | text[] | — | — |
-| homepage_url / description | consent 展示 | text | — | 可空 |
-| created_by | 创建者 | text | users.id | — |
-| created_at / updated_at | 时间 | timestamptz | — | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text PK | client id |
+| name | text | client 名（consent 展示） |
+| secret_hash | text | SHA-256(client_secret)；空=公开 client |
+| redirect_uris | text[] | 允许回调，精确匹配 |
+| homepage_url / description | text | consent 展示 |
+| created_by | text | 创建者；关联 `users.id` |
+| created_at / updated_at | timestamptz | 时间 |
 
 ### Tables — `oauth_authorization_codes`
 
-| 字段 | 描述 | 类型 | 关联表 | 关联说明 |
-|:---|:---|:---|:---|:---|
-| code | 一次性码，32 字节 hex | text PK | — | 消费即删 |
-| client_id | 所属 client | text | oauth_clients (CASCADE) | — |
-| user_id | 授权用户 | text | users (CASCADE) | — |
-| redirect_uri | 回调 | text | — | 消费时校验一致 |
-| code_challenge | PKCE S256 challenge | text | — | 可空 |
-| scope | 默认 profile | text | — | — |
-| expires_at | 10min TTL | timestamptz | — | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| code | text PK | 一次性码，32 字节 hex |
+| client_id | text | 所属 client；关联 `oauth_clients (CASCADE)` |
+| user_id | text | 授权用户；关联 `users (CASCADE)` |
+| redirect_uri | text | 回调 |
+| code_challenge | text | PKCE S256 challenge |
+| scope | text | 默认 profile |
+| expires_at | timestamptz | 10min TTL |
 
 ### Tables — `oauth_refresh_tokens`
 
-| 字段 | 描述 | 类型 | 关联表 | 关联说明 |
-|:---|:---|:---|:---|:---|
-| token_hash | SHA-256(refresh_token) | text PK | — | — |
-| client_id | 所属 client | text | oauth_clients (CASCADE) | — |
-| user_id | 所属用户 | text | users (CASCADE) | — |
-| expires_at | 30d TTL | timestamptz | — | — |
-| created_at | 创建时间 | timestamptz | — | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| token_hash | text PK | SHA-256(refresh_token) |
+| client_id | text | 所属 client；关联 `oauth_clients (CASCADE)` |
+| user_id | text | 所属用户；关联 `users (CASCADE)` |
+| expires_at | timestamptz | 30d TTL |
+| created_at | timestamptz | 创建时间 |
 
 > Access Token 不落库：HS256 JWT，自包含。
 

@@ -10,8 +10,8 @@
 | `media_plugin` | MCPDefinition、WorkspacePluginBinding、ExternalMCPConnection |
 | `media_storage` | StoredObject |
 | `media_notification` | Notification、Delivery |
-| `media_materials` | Material |
-| `media_workflow` | Workflow、WorkflowRun |
+| `media_materials` | Material、GeneratedAsset |
+| `media_workflow` | Workflow、Job |
 | `media_gen` | GenerationTask、TranscriptionTask |
 | `media_crawler` | CrawlTask、CrawlResult |
 

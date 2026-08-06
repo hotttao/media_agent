@@ -631,7 +631,7 @@ sink StepRun SUCCEEDED → Job SUCCEEDED → SSE: ET_JOB_STATUS(succeeded)
 
 ### 4.5 单步能力 + Publish
 
-- `RetryStepRun`（`POST /api/v1/step-runs/:step_run_id/retry`）：`failed/skipped -> pending` + `retry_count+1`，重跑该 step + 下游；`input_override` 可选覆盖 bundle 部分值。与 `RetryJob` 边界：前者单步+下游，后者整 Job。与 `RegenerateStepRun` 边界：前者 failed/skipped 修复重跑，后者 need_confirm 重新生成候选。详见 [workflow_execution](../../docs/media_workflow/workflow/0002-workflow_execution/workflow_execution.md) §8。
+- `RetryStepRun`（`POST /api/v1/step-runs/:step_run_id/retry`）：`failed/skipped -> pending` + `retry_count+1`，重跑该 step + 下游；`input_override` 可选覆盖 bundle 部分值。与 `RetryJob` 边界：前者单步+下游，后者整 Job。与 `RegenerateStepRun` 边界：前者 failed/skipped 修复重跑，后者 need_confirm 重新生成候选。详见 [workflow_execution](../../media_workflow/workflow/0002-workflow_execution/workflow_execution.md) §8。
 - `GetStepRun`（`GET /api/v1/step-runs/:step_run_id`）：只读返回单条 step_run 状态 + resolved_inputs + rendered_prompt + output_asset_id + failure_reason。
 - `PublishTemplate` / `PublishWorkflow`（`POST /:id/publish`）：`draft -> published`，owner；补全状态机 `draft ↔ published -> archived` 中 published 的产生路径。
 

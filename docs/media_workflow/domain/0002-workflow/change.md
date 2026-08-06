@@ -23,7 +23,7 @@
 - 加 `visibility ∈ {private, team, public}` 与 `workflow_grants (workflow_id, team_id, permission)`，与 template / virtual_ip / skill 一致。
 - 加 GrantWorkflow / RevokeWorkflow / ChangeVisibility；SubmitJob 要求 viewer+ on workflow。
 - **跨资源权限一致性**：UpdateWorkflow 时若 step 引用 (template_id, version)，调用方必须 viewer+ on each template；否则 workflow_validation 拒 `TEMPLATE_INACCESSIBLE`。
-- permission 推导统一走 [media_auth §My Permission](../../media_auth/CONTEXT.md#my-permission资源访问权限)。
+- permission 推导统一走 [media_auth §My Permission](../../../media_auth/CONTEXT.md#my-permission资源访问权限)。
 
 ### 2026-07-03 · Review 反馈：product / virtual_ip 可作 workflow 输入
 - 纠正前期"workflow 输入统一是 asset slot"的表述：workflow_input 的 `type ∈ {asset, product, virtual_ip}`——product / virtual_ip 是合法的 workflow 顶层输入。

@@ -14,7 +14,7 @@
 | `media_auth` | 用户、登录身份、Web Session、Cookie JWT、Service Token、Platform Token、团队成员关系、MCP OAuth 凭据 | 业务资源 ACL、业务请求代理 |
 | `media_control` | Workspace、运行环境与放置、Agent 配置、Prompt、模板、Skill、Provider、凭据引用、Memory Store、Schedule、Teamwork 拓扑、平台侧 AFS 记录、Tag、管理配置 | Agent 对话热路径、媒体数据、AFS 实现 |
 | `media_agent_gateway` | Agent Session、Session Token、Turn、Message、Event、Agent Request、Agent Task、Batch Run、Teamwork Session Link、Platform MCP | Workspace 配置所有权、通用业务代理 |
-| `media_plugin` | 受控 MCP 定义、Workspace 启用关系、外部 OAuth MCP 连接状态与令牌托管 | Agent 请求中转、任意代码上传、业务 ACL |
+| `media_plugin` | 受控 MCP 定义、Workspace 启用关系、外部 OAuth MCP 连接状态与凭据使用编排 | Agent 请求中转、OAuth Token 持久化、任意代码上传、业务 ACL |
 | `media_storage` | 对象读写、元数据、后端驱动、URL 暴露、来源服务校验 | 业务归属、分享策略、业务删除规则 |
 | `media_notification` | 通知、偏好、投递、已读状态、重试与死信 | 业务事件所有权 |
 
@@ -25,8 +25,8 @@
 | `media_agents` | Agent Runtime、模型调用、工具执行与运行时状态 |
 | `media_workflow` | 媒体工作流定义、执行与同进程 MCP Adapter |
 | `media_materials` | 素材元数据、素材归属、引用与生命周期 |
-| `media_gen` | 图片、音视频生成，以及 ASR/转写能力 |
-| `media_crawler` | 抓取任务、抓取结果和来源记录 |
+| `media_gen` | 图片、音视频生成、ASR/转写、视频发布任务及平台发布 Adapter |
+| `media_crawler` | 抓取任务、抓取结果和来源记录；不承担外部平台发布 |
 
 ## 4. 外部依赖
 

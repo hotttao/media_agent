@@ -14,3 +14,7 @@
 - `AssetReachability` / `ResolveAssetByKind` / `AssetRead` 等规则不变，仅调用方变更。
 - media_workflow 仅直接调 `BatchGetAssetKind`（asset_kind domain）+ `UpsertGeneratedAsset`（generated_asset domain），不经本 workflow。
 - 与上一条"初始建立"的关系：初始建立时假设由 media_workflow 调用，本次按现有 spec/实现的 bundle 决策校正调用方。
+# 2026-08-06
+
+- 调用方改为 media_workflow 等受信内部编排服务；Principal 来自认证上下文，不再信任 BFF 传入 user ID。
+- 返回 Storage Object Path，不再组装包含完整 URL/content 的客户端 bundle。

@@ -11,7 +11,7 @@ related_workflow:
 ---
 
 ## 一句话职责
-product domain 管理**业务产品**：一个可被视频带货的产品。product 持 `scope` + 业务元数据，**无 user 归属、无 visibility、无 grants**--是 scope 级共享资源。通过 `material_bindings(owner_kind=product)` 绑定同 scope 的 material（绑定操作收口在 [asset](../0002-asset/asset.md) domain 的 `AddMaterialBinding`）。product 可作为 workflow 的顶层输入（`workflow_input.type=product`），执行时按所绑 template slot 的 `kind` 解析出具体 material/generated_asset 参与渲染（见 [media_workflow §workflow_execution](../../media_workflow/workflow/0002-workflow_execution/workflow_execution.md)）。
+product domain 管理**业务产品**：一个可被视频带货的产品。product 持 `scope` + 业务元数据，**无 user 归属、无 visibility、无 grants**--是 scope 级共享资源。通过 `material_bindings(owner_kind=product)` 绑定同 scope 的 material（绑定操作收口在 [asset](../0002-asset/asset.md) domain 的 `AddMaterialBinding`）。product 可作为 workflow 的顶层输入（`workflow_input.type=product`），执行时按所绑 template slot 的 `kind` 解析出具体 material/generated_asset 参与渲染（见 [media_workflow §workflow_execution](../../../media_workflow/workflow/0002-workflow_execution/workflow_execution.md)）。
 
 ### 不做什么
 - **不直接作为 step_binding 的 source**：step 要用 product，必须在 workflow 顶层声明为 `workflow_input(type=product)`，再用 `source=workflow_input` 引用。step_binding source 仍是 `workflow_input / step_output / const` 三选一。
@@ -52,17 +52,17 @@ product domain 管理**业务产品**：一个可被视频带货的产品。prod
 
 ### Tables - `products`
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| id | 主键 | bigserial | - |
-| scope | 业务范围 | text not null | 1:1；不可改；校验 `IsKnownScope`（service 调 `shared/scope`） |
-| name | 产品名 | text not null | (scope, name) 唯一 |
-| description | 说明 | text nullable | - |
-| metadata | 业务元数据 | jsonb not null | default '{}'；含 targetAudience / productDetails / displayActions / tags / isSellable / category 等 |
-| status | active / archived | text not null | default active |
-| created_by | 创建者（审计） | text not null | **仅审计，不参与 ACL** |
-| updated_by | 最近修改者（审计） | text nullable | - |
-| created_at / updated_at / deleted_at | 时间戳 | timestamptz | - |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | bigserial | 主键 |
+| scope | text not null | 业务范围；1:1；不可改；校验 `IsKnownScope`（service 调 `shared/scope`） |
+| name | text not null | 产品名；(scope, name) 唯一 |
+| description | text nullable | 说明 |
+| metadata | jsonb not null | 业务元数据；default '{}'；含 targetAudience / productDetails / displayActions / tags / isSellable / category 等 |
+| status | text not null | active / archived；default active |
+| created_by | text not null | 创建者（审计）；**仅审计，不参与 ACL** |
+| updated_by | text nullable | 最近修改者（审计） |
+| created_at / updated_at / deleted_at | timestamptz | 时间戳 |
 
 约束：UNIQUE `(scope, name)` WHERE `deleted_at IS NULL`；INDEX `(scope, status)`；INDEX `(created_by)`。
 
@@ -106,8 +106,8 @@ product 可作为 `workflow_input(type=product)`，调用方在 SubmitJob 时传
 
 ### 被依赖的 domain / workflow
 - [reachability workflow](../../workflow/0001-reachability/reachability.md) - `CheckProductAccessible` / product 路径可达性
-- [`media_workflow` workflow_validation](../../media_workflow/workflow/0001-workflow_validation/workflow_validation.md) - SubmitJob 期间经 reachability 校验
-- [`media_workflow` workflow_execution](../../media_workflow/workflow/0002-workflow_execution/workflow_execution.md) - 经 reachability 解析 product 输入
+- [`media_workflow` workflow_validation](../../../media_workflow/workflow/0001-workflow_validation/workflow_validation.md) - SubmitJob 期间经 reachability 校验
+- [`media_workflow` workflow_execution](../../../media_workflow/workflow/0002-workflow_execution/workflow_execution.md) - 经 reachability 解析 product 输入
 
 ### 关联术语
-[Product](../../media_auth/CONTEXT.md#product业务产品)、[Scope](../../media_auth/CONTEXT.md#scope业务范围)、[Asset Binding](../../CONTEXT.md)、[Asset Reachability](../../CONTEXT.md)、[Resource Type](../../CONTEXT.md)。
+[Product](../../CONTEXT.md#product产品)、[Scope](../../../resource_access/CONTEXT.md#scope业务范围)、[Asset Binding](../../CONTEXT.md)、[Asset Reachability](../../CONTEXT.md)、[Resource Type](../../CONTEXT.md)。

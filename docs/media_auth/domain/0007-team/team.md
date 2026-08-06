@@ -49,32 +49,32 @@ team domain 维护 team 的创建/查询/更新/删除、user↔team 的成员�
 ## 数据模型
 
 ### Tables — `teams`
-| 字段 | 描述 | 类型 | 关联表 | 关联说明 |
-|:---|:---|:---|:---|:---|
-| id | team id，应用层 `generateId()` 短随机串 | text PK | — | 全局唯一 |
-| name | team 名 | text | — | 必填 |
-| description | 描述，可空 | text | — | — |
-| created_by | 创建者 user id | text NOT NULL | `users.id` | 创建者不级联删除；删 user 时由应用层处理（user 删除本身尚未建模） |
-| created_at | 创建时间 | timestamptz | — | — |
-| updated_at | 更新时间 | timestamptz | — | UpdateTeam 时刷新 |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text PK | team id，应用层 `generateId()` 短随机串 |
+| name | text | team 名 |
+| description | text | 描述，可空 |
+| created_by | text NOT NULL | 创建者 user id；关联 ``users.id``（创建者不级联删除；删 user 时由应用层处理（user 删除本身尚未建模）） |
+| created_at | timestamptz | 创建时间 |
+| updated_at | timestamptz | 更新时间 |
 
 ### Tables — `team_members`
-| 字段 | 描述 | 类型 | 关联表 | 关联说明 |
-|:---|:---|:---|:---|:---|
-| team_id | team id | text NOT NULL | `teams.id` ON DELETE CASCADE | team 删则成员清 |
-| user_id | user id | text NOT NULL | `users.id` ON DELETE CASCADE | user 删则成员清 |
-| role | `admin` 或 `member` | text NOT NULL | — | DB CHECK 约束 |
-| joined_at | 入团时间 | timestamptz | — | — |
-| 复合主键 | `(team_id, user_id)` | — | — | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| team_id | text NOT NULL | team id；关联 ``teams.id` ON DELETE CASCADE`（team 删则成员清） |
+| user_id | text NOT NULL | user id；关联 ``users.id` ON DELETE CASCADE`（user 删则成员清） |
+| role | text NOT NULL | `admin` 或 `member` |
+| joined_at | timestamptz | 入团时间 |
+| 复合主键 | — | `(team_id, user_id)` |
 
 ### Tables — `team_invites`
-| 字段 | 描述 | 类型 | 关联表 | 关联说明 |
-|:---|:---|:---|:---|:---|
-| token | `tinv_<base64url>` 邀请 token；PK | text PK | — | 一次性（接受成功后保留供溯源；不删除；如要"一次性"语义须由额外字段实现——当前 control-plane 仅按过期/撤销判失效） |
-| team_id | 所属 team | text NOT NULL | `teams.id` ON DELETE CASCADE | team 删则邀请清 |
-| created_by | 签发人 user id | text NOT NULL | `users.id` | 不级联删除（删 user 历史邀请留痕） |
-| expires_at | 过期时间，可空（空=不过期） | timestamptz | — | 应用层判 expired |
-| created_at | 签发时间 | timestamptz | — | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| token | text PK | `tinv_<base64url>` 邀请 token；PK |
+| team_id | text NOT NULL | 所属 team；关联 ``teams.id` ON DELETE CASCADE`（team 删则邀请清） |
+| created_by | text NOT NULL | 签发人 user id；关联 ``users.id``（不级联删除（删 user 历史邀请留痕）） |
+| expires_at | timestamptz | 过期时间，可空（空=不过期） |
+| created_at | timestamptz | 签发时间 |
 
 ### UUID 生成规则
 - `teams.id` = `generateId()` 短随机字符串（与 `users.id` / `service_tokens.id` 同机制），非自增 / 非 ulid / 兼容存量。

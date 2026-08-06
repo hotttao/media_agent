@@ -9,7 +9,7 @@ related_workflow:
 ---
 
 ## 一句话职责
-virtual_ip domain 管理一类可写、可共享的媒体资源：**VirtualIp**。一个 VirtualIp 是一个 AI 形象（模特 / IP），归属 1 个 scope、归属 1 个 owner_user_id；带 `visibility` + `grants` 显式授权；一个 user 可拥有多个 VirtualIp，可见性按 [My Permission](../../media_auth/CONTEXT.md#my-permission资源访问权限) 推导。对 [reachability workflow](../../workflow/0001-reachability/reachability.md) 暴露 vip 可见性只读查询。
+virtual_ip domain 管理可写、可共享的 AI 形象，归属一个 Workspace、Scope 和 owner；带 visibility + grants，按 [My Permission](../../../resource_access/CONTEXT.md#my-permission有效资源权限) 推导。对 [reachability workflow](../../workflow/0001-reachability/reachability.md) 暴露可见性只读查询。
 
 ### 不做什么
 - 不存 IP 形象二进制（基础图 avatarUrl / fullBodyUrl / threeViewUrl / nineViewUrl 等仅作 URL 字段存储；产物落 media_materials.Asset，IP 表只持引用）。
@@ -21,7 +21,7 @@ virtual_ip domain 管理一类可写、可共享的媒体资源：**VirtualIp**�
 
 ### 做什么
 - VirtualIp 增删改查（含基础图片 URL 元数据）；强制 1:1 scope 且 scope 不可改（service 调 `shared/scope.IsKnownScope`）。
-- VirtualIp 的资源权限（visibility + grants + derived my_permission）；权限规则同 [Template / Workflow 的统一资源权限模型](../../media_auth/CONTEXT.md#资源级-acl-所有媒体资源通用)。
+- VirtualIp 的资源权限（visibility + grants + derived my_permission）遵循 [共享资源访问语言](../../../resource_access/CONTEXT.md)。
 - VirtualIp 名单可见性查询（`ListVirtualIpsVisibleTo(userID)`）。
 - 对 reachability workflow 暴露 vip 可见性只读查询（供 `ResolveVirtualIpForReachability` / `CheckVirtualIPAccessible` 编排）。
 
@@ -49,38 +49,38 @@ virtual_ip domain 管理一类可写、可共享的媒体资源：**VirtualIp**�
 
 ### Tables - `virtual_ips`
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| id | 主键 | bigserial | - |
-| scope | 业务范围 | text not null | 1:1；不可改 |
-| name | IP 名 | text not null | - |
-| description | 说明 | text nullable | - |
-| avatar_url / full_body_url / three_view_url / nine_view_url | 基础图 URL | text nullable | IP 唯一身份信息 |
-| metadata | 扩展字段 | jsonb default '{}' | - |
-| status | active / archived | text not null | default active |
-| visibility | private / team / public | text not null | default private |
-| owner_user_id | 拥有者 | text not null | - |
-| created_at / updated_at / deleted_at | 时间戳 | timestamptz | - |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | bigserial | 主键 |
+| scope | text not null | 业务范围；1:1；不可改 |
+| name | text not null | IP 名 |
+| description | text nullable | 说明 |
+| avatar_url / full_body_url / three_view_url / nine_view_url | text nullable | 基础图 URL；IP 唯一身份信息 |
+| metadata | jsonb default '{}' | 扩展字段 |
+| status | text not null | active / archived；default active |
+| visibility | text not null | private / team / public；default private |
+| owner_user_id | text not null | 拥有者 |
+| created_at / updated_at / deleted_at | timestamptz | 时间戳 |
 
 约束：UNIQUE `(scope, name)` WHERE `deleted_at IS NULL`；INDEX `(scope, status)`；INDEX `(owner_user_id)`。
 
 ### Tables - `virtual_ip_grants`
 
-`(virtual_ip_id, team_id) -> permission`，与 [Resource Grant](../../media_auth/CONTEXT.md#resource-grant资源共享授权) 模型一致。
+`(virtual_ip_id, team_id) -> permission`，与 [Resource Grant](../../../resource_access/CONTEXT.md#resource-grant资源授权) 语义一致。
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| virtual_ip_id | FK | bigint not null | 复合 PK；ON DELETE CASCADE |
-| team_id | 团队 id | text not null | 复合 PK |
-| permission | viewer / editor | text not null | CHECK in ('viewer','editor') |
-| granted_by | 授权者 | text not null | 仅 owner 可写 |
-| granted_at | 时间戳 | timestamptz | - |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| virtual_ip_id | bigint not null | FK；复合 PK；ON DELETE CASCADE |
+| team_id | text not null | 团队 id；复合 PK |
+| permission | text not null | viewer / editor；CHECK in ('viewer','editor') |
+| granted_by | text not null | 授权者；仅 owner 可写 |
+| granted_at | timestamptz | 时间戳 |
 
 约束：PK `(virtual_ip_id, team_id)`；INDEX `(team_id)`。
 
 ## 权限规则
 
-按 [My Permission](../../media_auth/CONTEXT.md#my-permission资源访问权限) 推导：
+按 [My Permission](../../../resource_access/CONTEXT.md#my-permission有效资源权限) 推导：
 
 | 操作 | 所需 my_permission |
 |:---|:---|
@@ -114,7 +114,7 @@ virtual_ip 可作为 `workflow_input(type=virtual_ip)`，调用方在 SubmitJob 
 ### 被依赖的 domain / workflow
 - [asset](../0002-asset/asset.md) - material_bindings owner_kind=virtual_ip
 - [reachability workflow](../../workflow/0001-reachability/reachability.md) - 提供 vip 可见性只读查询供 `ResolveVirtualIpForReachability` / `CheckVirtualIPAccessible` 编排
-- [`media_workflow` workflow_validation](../../media_workflow/workflow/0001-workflow_validation/workflow_validation.md) - SubmitJob 期间经 reachability 校验
+- [`media_workflow` workflow_validation](../../../media_workflow/workflow/0001-workflow_validation/workflow_validation.md) - SubmitJob 期间经 reachability 校验
 
 ### 关联术语
-[Virtual IP](../../media_auth/CONTEXT.md#业务划分与归属)、[Asset Binding](../../CONTEXT.md)、[Asset Reachability](../../CONTEXT.md)、[Visibility On Resource](../../media_auth/CONTEXT.md)。
+[Virtual IP](../../CONTEXT.md#virtual-ip虚拟形象)、[Asset Binding](../../CONTEXT.md)、[Asset Reachability](../../CONTEXT.md)、[Resource Visibility](../../../resource_access/CONTEXT.md#resource-visibility资源可见性)。

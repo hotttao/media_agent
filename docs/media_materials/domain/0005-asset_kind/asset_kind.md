@@ -42,16 +42,16 @@ asset_kind domain 管理**全平台资源类别的注册表**：每条 `asset_ki
 
 ### Tables — `asset_kinds`
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| id | 主键 | bigserial | — |
-| name | 资源名（业务主键） | text not null | 全局唯一；如 `pose`/`scene`/`model_image`/`product_image` |
-| resource_type | 物理资源类别 | text not null | CHECK in ('MATERIAL','ASSET','PRODUCT','VIRTUAL_IP','TEXT') |
-| media_type | 媒体形态 | text not null | CHECK in ('IMAGE','TEXT','VIDEO')；锁定不可改。注意与 resource_type 的 `TEXT`（无表 inline 常量）**正交**：`media_type=TEXT` 指内容形态，`resource_type=TEXT` 指不落表（见 [CONTEXT §Media Type](../../CONTEXT.md)） |
-| source_table | 落表名 | text not null | 见下表；锁定不可改 |
-| description | 业务描述 | text nullable | — |
-| status | 状态 | text not null | CHECK in ('SYSTEM','ENABLED','DISABLED')；default ENABLED |
-| created_at / updated_at | 时间戳 | timestamptz | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | bigserial | 主键 |
+| name | text not null | 资源名（业务主键）；全局唯一；如 `pose`/`scene`/`model_image`/`product_image` |
+| resource_type | text not null | 物理资源类别；CHECK in ('MATERIAL','ASSET','PRODUCT','VIRTUAL_IP','TEXT') |
+| media_type | text not null | 媒体形态；CHECK in ('IMAGE','TEXT','VIDEO')；锁定不可改。注意与 resource_type 的 `TEXT`（无表 inline 常量）**正交**：`media_type=TEXT` 指内容形态，`resource_type=TEXT` 指不落表（见 [CONTEXT §Media Type](../../CONTEXT.md)） |
+| source_table | text not null | 落表名；见下表；锁定不可改 |
+| description | text nullable | 业务描述 |
+| status | text not null | 状态；CHECK in ('SYSTEM','ENABLED','DISABLED')；default ENABLED |
+| created_at / updated_at | timestamptz | 时间戳 |
 
 约束：UNIQUE `(name)`；INDEX `(resource_type, status)`；INDEX `(media_type)`。
 

@@ -4,3 +4,6 @@
 - 数据模型：自治 PG `jobs` 表。
 - 能力：start_crawler / get_crawl_status / stop_crawler / list_checkpoints / delete_checkpoint / list_platforms / get_config / health_check / ListJobs / GetJob。
 - 对齐 [ADR-0003](../../../adr/0003-crawler-subprocess-isolation.md)（子进程隔离）。
+# 2026-08-06
+
+- Crawl Job 增加 `workspace_id` 与 `requested_by`，作为结果授权边界。

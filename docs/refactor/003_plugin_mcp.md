@@ -34,9 +34,9 @@ mcp_endpoint: /mcp
 | Platform MCP | Agent → `media_agent_gateway` | `session_token` |
 | 平台内第三方 MCP | Agent → 业务服务 MCP | `session_token`，服务解析用户与 Workspace |
 | 外部无认证 MCP | Agent → 外部 MCP | 无平台凭据 |
-| 外部 OAuth MCP | Agent → `media_plugin` → 外部 MCP | `session_token` + `media_plugin` 托管的 OAuth 凭据 |
+| 外部 OAuth MCP | Agent → `media_plugin` → 外部 MCP | `session_token` + `media_auth` 托管的 OAuth 凭据 |
 
-Platform MCP 属于 `media_agent_gateway`。平台内第三方 MCP 与业务服务同进程，不通过 Plugin 代理；外部 OAuth MCP 才由 `media_plugin` 完成凭据选择、刷新和转发。
+Platform MCP 属于 `media_agent_gateway`。平台内第三方 MCP 与业务服务同进程，不通过 Plugin 代理；外部 OAuth MCP 才由 `media_plugin` 编排连接并转发，凭据持久化与刷新归 `media_auth`。
 
 ## 4. 变更规则
 

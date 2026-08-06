@@ -1,150 +1,83 @@
 ---
 name: generation
-description: 单次 StepRun 生成执行域--作为 media_workflow 外部 worker，按 platform/gen_way claim StepRun、产候选、回写 Complete/Fail
+description: 图片、音频和视频生成任务及候选产物
 dependencies:
-    - media_workflow.execution
+    - media_storage/stored_object
 related_workflow:
     - job-execution-loop
+    - media_workflow_execution
 ---
 
 ## 一句话职责
-generation 域负责单次 StepRun 的执行：调 `media_workflow.ClaimStepRun` 按 `(platform, gen_way, gen_type)` 匹配领取 -> 本地执行生成（本期 mock 产假候选 url/content）-> 调 `media_workflow.CompleteStepRun` 回写候选（`needs_confirm=true` 产 N 候选，否则产 1 个 `is_primary=true` 主候选）或 `FailStepRun` 回写失败原因。本身**不持久化**任何状态，job 状态机归 `media_workflow`。
+
+Generation 负责一次媒体生成任务的持久化、执行、重试和候选对象路径，是生成状态的唯一事实源。
 
 ## 边界
 
 ### 做什么
-- 调 `media_workflow.ClaimStepRun` 按 `(platform, gen_way, gen_type, worker_id)` 领取 pending StepRun，拿到 `rendered_prompt` + `input_assets` + `candidate_count`。
-- 执行生成（本期 mock：按 `candidate_count` 产 N 个假候选 url/content，url 形如 `mock://generated/{step_run_id}/{index}`）。
-- 按 `candidate_count` 决定产出形态：
-  - `candidate_count > 1`：产 N 候选，`is_primary=false`（交用户选）。
-  - `candidate_count == 1`：产 1 候选，`is_primary=true`（直接主图）。
-- 调 `media_workflow.CompleteStepRun` 回写候选，或 `FailStepRun` 回写失败原因（mock 不会失败，除非 Claim 返回空）。
-- Claim 返回空（无待领 StepRun）时静默返回，不报错。
+- 按幂等键创建 Generation Task。
+- 调用具体 Provider，写候选对象到 Storage。
+- 管理取消、重试、候选确认和结果事件。
 
 ### 不做什么
-- 不持久化候选产物、worker 状态、执行历史（全部状态归 `media_workflow.jobs` / `step_runs` 表）。
-- 不实际调下游生成器（GPT / 即梦 / 其他）--本期 mock，留 stub 接口。
-- 不落地产物到 `media_materials.generated_assets`--产物落地由 `media_workflow` 在 `CompleteStepRun` 内调 `UpsertGeneratedAsset` 完成（见 [workflow_execution](../../media_workflow/workflow/0002-workflow_execution/workflow_execution.md)）。
-- 不管理 StepRun 状态机--仅触发转移（claimed -> succeeded/failed），状态机归属 `media_workflow.execution`。
-- 不渲染 prompt--`rendered_prompt` 由 `media_workflow` 在 Claim 时已渲染完成，本域直接消费。
+- 不拥有 Workflow StepRun 或 Material 记录。
+- 不保存完整存储 URL，不把 River Job 当业务事实。
 
 ## 能力清单
 
 | 能力 | 说明 | 对外接口/函数 |
 |:---|:---|:---|
-| ExecuteOnce | 单次 Claim -> 生成(mock) -> Complete/Fail 循环；幂等可重复调用 | `service.ExecuteOnce(ctx, workerID)` |
-| GenerateCandidates | 本地生成(mock) 候选：按 candidate_count 产 N 个假候选 | `service.GenerateCandidates(stepRunID, renderedPrompt, count)` |
-| ClaimFromWorkflow | 调 `media_workflow.ClaimStepRun` RPC 领取 StepRun | `service.ClaimFromWorkflow(ctx, q)` |
-| CompleteToWorkflow | 调 `media_workflow.CompleteStepRun` RPC 回写候选 | `service.CompleteToWorkflow(ctx, stepRunID, candidates)` |
-| FailToWorkflow | 调 `media_workflow.FailStepRun` RPC 回写失败 | `service.FailToWorkflow(ctx, stepRunID, reason)` |
-
-> 本域不直接暴露 HTTP RPC：worker loop 由 `worker.proto` 的 StartWorker/StopWorker/WorkerStatus 控制，loop 内部调用本域 service 方法。`media_workflow` 的 Claim/Complete/Fail RPC 由本域 service 通过 `hertz_gen/media_workflow/job_service` client 调用。
+| 创建生成任务 | 保存输入快照与路由 | `GenerationService.CreateTask` |
+| 查询生成任务 | 返回状态和候选路径 | `GetTask/ListTasks` |
+| 取消任务 | 取消未完成执行 | `CancelTask` |
+| 确认候选 | 选定一个候选结果 | `ConfirmCandidate` |
+| 执行任务 | Worker 调 Provider 与 Storage | `ExecuteGenerationTask` |
 
 ## 数据模型
 
-**无表**。本域不持久化，全部状态归 `media_workflow` 的 `jobs` / `step_runs` 表（见 [media_workflow execution](../../media_workflow/domain/0003-execution/execution.md#tables---step_runs)）。
+### `generation_tasks`
 
-> 设计决策：media_gen 是无状态执行单元，避免与 `media_workflow` 维护的 job 状态机重复。优点：worker 可水平扩缩、进程崩溃不丢状态（Claim 超时由 `media_workflow` scanner 回收）；缺点：每次执行需 RPC 往返 `media_workflow`。回退成本（如改为本地持久化）不高，未达 ADR 阈值。
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text PK | Generation Task ID |
+| workspace_id | text | 所属 Workspace |
+| requested_by | text | 发起用户 ID |
+| source | text | workflow/manual 等来源 |
+| source_resource_id | text | 来源 Step Run 或业务记录 ID |
+| idempotency_key | text | 来源内幂等键 |
+| media_type | text | image/audio/video |
+| provider_id | text | 生成 Provider ID |
+| input | jsonb | Prompt、输入 Object Path 和生成参数 |
+| status | text | pending/running/needs_confirm/succeeded/failed/cancelled |
+| attempt | integer | 当前执行次数 |
+| selected_candidate_id | text nullable | 最终候选 ID |
+| error_code | text nullable | 稳定错误码 |
+| created_at | timestamptz | 创建时间 |
+| finished_at | timestamptz nullable | 终态时间 |
 
-## 实体与值对象
+### `generation_candidates`
 
-```go
-// ClaimQuery -- 调 media_workflow.ClaimStepRun 的入参（对齐 ClaimStepRunReq）
-type ClaimQuery struct {
-    WorkerID string
-    Platform string
-    GenWay   string
-    GenType  string
-}
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text PK | Candidate ID |
+| task_id | text | 所属 Generation Task |
+| object_path | text | Storage 中的结果路径 |
+| candidate_index | integer | Task 内候选序号 |
+| metadata | jsonb | 尺寸、时长、Provider 信息等 |
+| status | text | available/selected/rejected/deleted |
+| created_at | timestamptz | 创建时间 |
 
-// ClaimResult -- Claim 返回的 StepRun 执行上下文（对齐 ClaimStepRunResp）
-type ClaimResult struct {
-    StepRunID      string
-    JobID          string
-    RenderedPrompt string
-    InputAssets    []InputAsset
-    Platform       string
-    GenWay         string
-    GenType        string
-    AssetKind      string
-    CandidateCount int
-}
+状态：`pending -> running -> needs_confirm | succeeded | failed | cancelled`。`(source, source_resource_id, idempotency_key)` 唯一。
 
-type InputAsset struct {
-    Label   string
-    URL     string
-    Content string
-}
+### UUID 生成规则
 
-// Candidate -- 产物候选，对齐 media_workflow.job.Candidate
-type Candidate struct {
-    Index     int
-    URL       string
-    Content   string
-    IsPrimary bool
-}
-```
+Task 与 Candidate 使用 ULID；Storage 路径由 `generation/{workspace_id}/{task_id}/{candidate_id}` 派生。
 
 ## 能力详细说明
 
-### ExecuteOnce
-```
-入参：workerID, platform, gen_way, gen_type
-1. ClaimFromWorkflow(workerID, platform, gen_way, gen_type)
-   - 调 media_workflow.ClaimStepRun RPC
-   - 若返回 step_run_id == "" -> 无待领，return nil（非错误）
-2. GenerateCandidates(stepRunID, renderedPrompt, candidateCount)
-   - mock: 按 count 产 N 个 Candidate{
-       index: i,
-       url:   "mock://generated/{stepRunID}/{i}",
-       content: "mock content for {stepRunID}#{i}",
-       is_primary: count == 1   // count==1 -> 主候选；count>1 -> 全 false
-     }
-3. CompleteToWorkflow(stepRunID, candidates)
-   - 调 media_workflow.CompleteStepRun RPC
-   - 若失败 -> FailToWorkflow(stepRunID, "complete failed: " + err)
-4. return nil
-异常：
-- Claim RPC 失败 -> 直接 return err（不 Fail，因为没拿到 stepRunID）
-- Generate 失败 -> FailToWorkflow(stepRunID, reason)
-- Complete RPC 失败 -> 不再 retry（media_workflow scanner 会回收 claimed 超时的 step_run）
-```
+### ExecuteGenerationTask
 
-### GenerateCandidates（mock）
-```
-入参：stepRunID, renderedPrompt, count
-1. count <= 0 -> 默认 1
-2. for i in [0, count):
-     candidates[i] = Candidate{
-       Index: i,
-       URL: "mock://generated/{stepRunID}/{i}",
-       Content: "mock content for {stepRunID}#{i}",
-       IsPrimary: count == 1
-     }
-3. return candidates
-注：本期 mock 不消费 renderedPrompt（真实实现会调下游生成器）。
-```
-
-## 跨服务 RPC 列表
-
-| RPC 方向 | 目的 |
-|:---|:---|
-| `media_gen` -> `media_workflow` `ClaimStepRun` | worker loop 拉取待执行 StepRun |
-| `media_gen` -> `media_workflow` `CompleteStepRun` | 回写候选产物 |
-| `media_gen` -> `media_workflow` `FailStepRun` | 回写执行失败原因 |
-
-> client stub 位置：`hertz_gen/media_workflow/job_service/`（由根 `make hz-client` 生成）。本服务通过 `biz/shared/client/` 装配实例，service 层不直接 import client stub。
-
-## 关联关系
-
-### 依赖的 domain
-- 无本服务内 domain 依赖。
-
-### 被依赖的 domain
-- [publish](../0002-publish/publish.md) - 不直接依赖 generation，但发布动作的输入 asset 通常来自 generation 产物（由调用方在 BFF 层组装 asset_id）。
-
-### 参与的 workflow
-- [job-execution-loop](../../workflow/0001-job-execution-loop/job-execution-loop.md) - worker 轮询循环，调用本域 ExecuteOnce
-
-### 关联术语
-[Generation Worker](../../CONTEXT.md)、[Candidate](../../CONTEXT.md)、[Claim / Complete / Fail](../../CONTEXT.md)。
+1. 原子领取 pending Task，记录 attempt；事务外调用 Provider。
+2. 每个候选流式写 Storage，数据库只保存 object_path。
+3. 单候选直接 succeeded；多候选进入 needs_confirm。
+4. 本地状态与完成/失败 Outbox 同事务，重复执行按 Task/attempt 幂等。

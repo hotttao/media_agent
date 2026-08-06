@@ -9,7 +9,7 @@ related_workflow:
 ---
 
 ## 一句话职责
-Template 域负责存储「声明型」提示词模板：每个 Template 用 inputs[] 显式描述所需的输入资源槽位（每槽位引用一个 [asset_kind](../../media_materials/domain/0005-asset_kind/asset_kind.md)），用单一 `output_asset_kind` 声明产出的资源类别，并把 prompt_body 作为可渲染正文；携带 `platform` / `gen_way` / `gen_type` 供下游生成器分发；维护 status/version 生命周期；提供渲染入口（resolve inputs → prompt + output）。
+Template 域负责存储「声明型」提示词模板：每个 Template 用 inputs[] 显式描述所需的输入资源槽位（每槽位引用一个 [asset_kind](../../../media_materials/domain/0005-asset_kind/asset_kind.md)），用单一 `output_asset_kind` 声明产出的资源类别，并把 prompt_body 作为可渲染正文；携带 `platform` / `gen_way` / `gen_type` 供下游生成器分发；维护 status/version 生命周期；提供渲染入口（resolve inputs → prompt + output）。
 _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 域）、管理 asset 实体（归 `media_materials`）、校验 workflow 结构（归 [workflow_validation](../../workflow/0001-workflow_validation/workflow_validation.md)）。
 
 ## 边界
@@ -25,7 +25,7 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 - 校验 input slot.kind 与 output_asset_kind 在 asset_kind 注册表中已注册且未停用（调 `media_materials.BatchGetAssetKind`）。
 
 ### 不做什么
-- 不加载 / 不存储 Asset（仅引用 asset_kind name）；asset 可达性由 workflow_validation 委托 [media_materials](../../media_materials/CONTEXT.md) 的 `AssetReachability`。
+- 不加载 / 不存储 Asset（仅引用 asset_kind name）；asset 可达性由 workflow_validation 委托 [media_materials](../../../media_materials/CONTEXT.md) 的 `AssetReachability`。
 - 不持久化 Template 的执行记录（归 [execution](../0003-execution/execution.md)）。
 - 不管理 Workflow 的 DAG；只供 Workflow 的 [step](../0002-workflow/workflow.md) 引用其 ID。
 
@@ -50,38 +50,38 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 
 ### Tables — `templates`
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| id | 主键 | bigserial | — |
-| scope | 业务范围 | text not null | 1:1；与 `config.SupportedScopes` 一致；不可改 |
-| name | 模板名 | text not null | (scope, name, version) 唯一 |
-| description | 模板说明 | text nullable | — |
-| prompt_body | 渲染正文 | text not null | 占位符 `{{.name}}` 引用 inputs.name |
-| output_asset_kind | 产出资源类别 | text not null | 引用 `asset_kinds.name`，且 resource_type=ASSET；必填 |
-| platform | 生成平台 | text not null | 如 `gpt` / `jimeng`；下游生成器分发用 |
-| gen_way | 生成方式 | text not null | 如 `t2i` / `i2i` / `i2v` |
-| gen_type | 生成类型 | text nullable | 平台细分类型 |
-| status | 草稿/已发布/归档 | text not null | draft / published / archived |
-| visibility | 可见性档位 | text not null | private / team / public；默认 private |
-| version | 不可变版本号 | int not null | 默认 1；update 自增；同 (scope, name) 内单调递增 |
-| created_by | 拥有者 user_id | text not null | 拥有 owner 权限 |
-| created_at | 创建时间 | timestamptz | — |
-| updated_at | 更新时间 | timestamptz | — |
-| deleted_at | 软删时间戳 | timestamptz nullable | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | bigserial | 主键 |
+| scope | text not null | 业务范围；1:1；与 `config.SupportedScopes` 一致；不可改 |
+| name | text not null | 模板名；(scope, name, version) 唯一 |
+| description | text nullable | 模板说明 |
+| prompt_body | text not null | 渲染正文；占位符 `{{.name}}` 引用 inputs.name |
+| output_asset_kind | text not null | 产出资源类别；引用 `asset_kinds.name`，且 resource_type=ASSET；必填 |
+| platform | text not null | 生成平台；如 `gpt` / `jimeng`；下游生成器分发用 |
+| gen_way | text not null | 生成方式；如 `t2i` / `i2i` / `i2v` |
+| gen_type | text nullable | 生成类型；平台细分类型 |
+| status | text not null | 草稿/已发布/归档；draft / published / archived |
+| visibility | text not null | 可见性档位；private / team / public；默认 private |
+| version | int not null | 不可变版本号；默认 1；update 自增；同 (scope, name) 内单调递增 |
+| created_by | text not null | 拥有者 user_id；拥有 owner 权限 |
+| created_at | timestamptz | 创建时间 |
+| updated_at | timestamptz | 更新时间 |
+| deleted_at | timestamptz nullable | 软删时间戳 |
 
 约束：UNIQUE `(scope, name, version)` WHERE `deleted_at IS NULL`；INDEX `(scope, status)`；INDEX `(created_by)`；INDEX `(output_asset_kind)`。
 
 ### Tables — `template_grants`
 
-`(template_id, team_id) → permission` 显式授权，对应 [Resource Grant](../../media_auth/CONTEXT.md#resource-grant资源共享授权)。
+`(template_id, team_id) → permission` 显式授权，对应 [Resource Grant](../../../resource_access/CONTEXT.md#resource-grant资源授权)。
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| template_id | FK | bigint not null | 复合 PK 一段；ON DELETE CASCADE |
-| team_id | 团队 id（media_auth.teams.id） | text not null | 复合 PK 二段 |
-| permission | viewer / editor | text not null | CHECK in ('viewer','editor') |
-| granted_by | 授权者 | text not null | 仅 owner 或 editor 可写 |
-| granted_at | 时间戳 | timestamptz | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| template_id | bigint not null | FK；复合 PK 一段；ON DELETE CASCADE |
+| team_id | text not null | 团队 id（media_auth.teams.id）；复合 PK 二段 |
+| permission | text not null | viewer / editor；CHECK in ('viewer','editor') |
+| granted_by | text not null | 授权者；仅 owner 或 editor 可写 |
+| granted_at | timestamptz | 时间戳 |
 
 约束：PK `(template_id, team_id)`；INDEX `(team_id)`。
 
@@ -89,15 +89,15 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 
 Template 的输入槽位。每行一个 input slot；output 已提升为 `templates.output_asset_kind` 单字段，不在此表。
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| id | 主键 | bigserial | — |
-| template_id | 所属 template | bigint not null, FK | ON DELETE CASCADE |
-| version | 模板版本号 | int not null | 与 templates.version 联动 |
-| name | slot 名 | text not null | 同 template+version 内唯一；在 prompt_body 中作为 `{{.name}}` 占位符 |
-| kind | asset_kind 名 | text not null | 引用 `asset_kinds.name`；决定该槽位的 resource_type / media_type / 落表 |
-| required | 是否必填 | bool not null | default false |
-| display_order | 渲染顺序 | int not null | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | bigserial | 主键 |
+| template_id | bigint not null, FK | 所属 template；ON DELETE CASCADE |
+| version | int not null | 模板版本号；与 templates.version 联动 |
+| name | text not null | slot 名；同 template+version 内唯一；在 prompt_body 中作为 `{{.name}}` 占位符 |
+| kind | text not null | asset_kind 名；引用 `asset_kinds.name`；决定该槽位的 resource_type / media_type / 落表 |
+| required | bool not null | 是否必填；default false |
+| display_order | int not null | 渲染顺序 |
 
 约束：UNIQUE `(template_id, version, name)`；INDEX `(template_id, version)`。
 
@@ -151,11 +151,11 @@ const (
 )
 ```
 
-`Visibility` 与全局规则一致（[media_auth §资源级 ACL](../../media_auth/CONTEXT.md#资源级-acl-所有媒体资源通用)）。
+`Visibility` 与 [共享资源访问语言](../../../resource_access/CONTEXT.md) 一致。
 
 ## 权限规则
 
-按 [My Permission](../../media_auth/CONTEXT.md#my-permission资源访问权限) 推导，操作权限如下：
+按 [My Permission](../../../resource_access/CONTEXT.md#my-permission有效资源权限) 推导，操作权限如下：
 
 | 操作 | 所需 my_permission |
 |:---|:---|
@@ -235,4 +235,4 @@ Template 域**不直接访问** Asset/material；仅引用 asset_kind name。校
 - [workflow_execution](../../workflow/0002-workflow_execution/workflow_execution.md) — 渲染环节
 
 ### 关联术语
-[Scope](../../CONTEXT.md)、[Template Slot](../../CONTEXT.md)、[Template Version](../../CONTEXT.md)、[Asset Kind](../../media_materials/CONTEXT.md)、[Resource Type](../../../media_materials/CONTEXT.md)。
+[Scope](../../CONTEXT.md)、[Template Slot](../../CONTEXT.md)、[Template Version](../../CONTEXT.md)、[Asset Kind](../../../media_materials/CONTEXT.md)、[Resource Type](../../../media_materials/CONTEXT.md)。

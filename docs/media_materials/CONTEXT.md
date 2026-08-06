@@ -4,15 +4,21 @@
 
 ## 业务术语词典
 
+### 租户边界
+
+**Workspace（工作空间）**:
+所有 Material、Generated Asset、Virtual IP 和 Product 的租户归属；资源读取与写入必须限定 `workspace_id`。
+_禁用替代词_：Scope（Scope 是业务线分类，不是租户）
+
 ### 业务范围
 
 **Scope（业务范围）**:
-见 [media_auth/CONTEXT.md §业务划分与归属](../media_auth/CONTEXT.md#业务划分与归属)。本服务所有资源都强制绑定 1 个 scope；跨 scope 的资源引用视为不合法。
+见 [共享资源访问语言](../resource_access/CONTEXT.md)。本服务所有资源都强制绑定一个 Scope；跨 Scope 引用不合法。
 
 ### 素材与素材类别
 
 **Material（原料）**:
-一份 curated 可复用资源实体（scene/pose/makeup/movement/music/caption 等），以 `material_id` 标识，落 `materials` 表（asset_kind.resource_type=MATERIAL）；归属 1 个 scope、1 个 owner_user_id、声明 1 个 asset_kind；可见性遵循 [资源级 ACL](../media_auth/CONTEXT.md#资源级-acl-所有媒体资源通用) 的 `private/team/public` 三档（无 grants 表）。通过 `material_bindings` 绑定到 virtual_ip / product。
+一份 curated 可复用资源实体（scene/pose/makeup/movement/music/caption 等），以 `material_id` 标识；归属一个 Workspace、Scope 和 owner，声明一个 Asset Kind；可见性遵循 [共享资源访问语言](../resource_access/CONTEXT.md)。
 _禁用替代词_：raw asset、input asset。
 
 **Generated Asset（生成产物）**:
@@ -42,10 +48,10 @@ _禁用替代词_：relation、link、attach。
 ### 虚拟形象 / 产品
 
 **Virtual IP（虚拟形象）**:
-见 [media_auth/CONTEXT.md](../media_auth/CONTEXT.md#业务划分与归属)；在 `media_materials` 服务中建模，归 [virtual_ip](domain/0003-virtual_ip/virtual_ip.md) domain。VirtualIp 是 user 间接关联 scope 的唯一桥梁——user 不持 scope，通过拥有的 VirtualIp 进入对应 scope。
+一个归属 Workspace、Scope 和 owner 的 AI 形象（模特/IP），由 [virtual_ip](domain/0003-virtual_ip/virtual_ip.md) domain 管理。
 
 **Product（产品）**:
-见 [media_auth/CONTEXT.md](../media_auth/CONTEXT.md#业务划分与归属)；在 `media_materials` 服务中建模，归 [product](domain/0004-product/product.md) domain。Product 无 user 归属、无 visibility/grants，是 scope 级共享资源；其绑定的 material 在执行时按 scope 匹配使用（无 user 校验）。
+一个归属 Workspace 和 Scope、可用于媒体生产的业务产品，由 [product](domain/0004-product/product.md) domain 管理。
 
 ### 跨域
 

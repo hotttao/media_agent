@@ -48,7 +48,7 @@ Workflow 域负责存储「一组有序 Step 通过 StepBinding 串联而成的 
 
 ## 权限规则
 
-按 [My Permission](../../media_auth/CONTEXT.md#my-permission资源访问权限) 推导：
+按 [My Permission](../../../resource_access/CONTEXT.md#my-permission有效资源权限) 推导：
 
 | 操作 | 所需 my_permission |
 |:---|:---|
@@ -71,32 +71,33 @@ Workflow 域负责存储「一组有序 Step 通过 StepBinding 串联而成的 
 
 ### Tables — `workflows`
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| id | 主键 | bigserial | — |
-| scope | 业务范围 | text not null | 1:1；不可改 |
-| name | 工作流名 | text not null | (scope,name,version) 唯一 |
-| description | 描述 | text nullable | — |
-| status | draft/published/archived | text not null | — |
-| visibility | 可见性 | text not null | private / team / public；默认 private |
-| version | 版本号 | int not null | 默认 1，update 自增 |
-| output_step_key | 唯一 sink 的 step.key | text not null | — |
-| created_by | 拥有者 user_id | text not null | 拥有 owner 权限 |
-| created_at / updated_at / deleted_at | 时间戳 | timestamptz | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | bigserial | 主键 |
+| workspace_id | text not null | 所属 Workspace；跨服务 ID，不建外键 |
+| scope | text not null | 业务范围；1:1；不可改 |
+| name | text not null | 工作流名；(scope,name,version) 唯一 |
+| description | text nullable | 描述 |
+| status | text not null | draft/published/archived |
+| visibility | text not null | 可见性；private / team / public；默认 private |
+| version | int not null | 版本号；默认 1，update 自增 |
+| output_step_key | text not null | 唯一 sink 的 step.key |
+| created_by | text not null | 拥有者 user_id；拥有 owner 权限 |
+| created_at / updated_at / deleted_at | timestamptz | 时间戳 |
 
 约束：UNIQUE `(scope, name, version)` WHERE `deleted_at IS NULL`；INDEX `(scope, status, updated_at)`；INDEX `(created_by)`。
 
 ### Tables — `workflow_grants`
 
-`(workflow_id, team_id) → permission`，对应 [Resource Grant](../../media_auth/CONTEXT.md#resource-grant资源共享授权)。
+`(workflow_id, team_id) → permission`，对应 [Resource Grant](../../../resource_access/CONTEXT.md#resource-grant资源授权)。
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| workflow_id | FK | bigint not null | 复合 PK 一段；ON DELETE CASCADE |
-| team_id | 团队 id | text not null | 复合 PK 二段 |
-| permission | viewer / editor | text not null | CHECK in ('viewer','editor') |
-| granted_by | 授权者 | text not null | 仅 owner 可写 |
-| granted_at | 时间戳 | timestamptz | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| workflow_id | bigint not null | FK；复合 PK 一段；ON DELETE CASCADE |
+| team_id | text not null | 团队 id；复合 PK 二段 |
+| permission | text not null | viewer / editor；CHECK in ('viewer','editor') |
+| granted_by | text not null | 授权者；仅 owner 可写 |
+| granted_at | timestamptz | 时间戳 |
 
 约束：PK `(workflow_id, team_id)`；INDEX `(team_id)`。
 
@@ -104,29 +105,29 @@ Workflow 域负责存储「一组有序 Step 通过 StepBinding 串联而成的 
 
 Workflow 顶部声明的入口参数。每个 workflow_input 是一个**资源引用**，`type` 决定调用方在 SubmitJob 时传哪种 id；具体的 resource_type / media_type 约束由所绑定的 template slot 的 `kind` 承担（slot.kind 还充当 product / virtual_ip 输入的解析选择器，见 [workflow_execution](../../workflow/0002-workflow_execution/workflow_execution.md)）。
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| id | 主键 | bigserial | — |
-| workflow_id | FK | bigint not null | ON DELETE CASCADE |
-| version | 版本号 | int not null | — |
-| name | 入口参数名 | text not null | 同 workflow+version 内唯一 |
-| type | 引用类型 | text not null | CHECK in ('material','asset','product','virtual_ip')；asset=generated_asset |
-| required | 是否必填 | bool not null | — |
-| display_order | 排序 | int not null | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | bigserial | 主键 |
+| workflow_id | bigint not null | FK；ON DELETE CASCADE |
+| version | int not null | 版本号 |
+| name | text not null | 入口参数名；同 workflow+version 内唯一 |
+| type | text not null | 引用类型；CHECK in ('material','asset','product','virtual_ip')；asset=generated_asset |
+| required | bool not null | 是否必填 |
+| display_order | int not null | 排序 |
 
 约束：UNIQUE `(workflow_id, version, name)`。
 
 ### Tables — `workflow_steps`
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| id | 主键 | bigserial | — |
-| workflow_id | FK | bigint not null | ON DELETE CASCADE |
-| version | 版本号 | int not null | — |
-| step_key | 节点名 | text not null | 同 workflow+version 唯一；与 output_step_key 关联 |
-| step_order | 渲染顺序 | int not null | 1..N |
-| template_id | 引用的 Template | bigint not null | 必须存在于同 scope |
-| template_version | 引用的 Template 版本 | int not null | 不可变快照；语义同 `Job` 携带的 template_version |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | bigserial | 主键 |
+| workflow_id | bigint not null | FK；ON DELETE CASCADE |
+| version | int not null | 版本号 |
+| step_key | text not null | 节点名；同 workflow+version 唯一；与 output_step_key 关联 |
+| step_order | int not null | 渲染顺序；1..N |
+| template_id | bigint not null | 引用的 Template；必须存在于同 scope |
+| template_version | int not null | 引用的 Template 版本；不可变快照；语义同 `Job` 携带的 template_version |
 
 约束：UNIQUE `(workflow_id, version, step_key)`；UNIQUE `(workflow_id, version, step_order)`；INDEX `(template_id, template_version)`。
 
@@ -134,16 +135,16 @@ Workflow 顶部声明的入口参数。每个 workflow_input 是一个**资源�
 
 `StepBinding` 与 step 同生命周期。一个 step 可有多条 binding（多输入）。
 
-| 字段 | 描述 | 类型 | 备注 |
-|:---|:---|:---|:---|
-| id | 主键 | bigserial | — |
-| step_id | FK | bigint not null | ON DELETE CASCADE |
-| to_input | 消费侧槽名 | text not null | 引用对应 Template 的 inputs[].name |
-| source | workflow_input / step_output / const | text not null | CHECK in 三选一 |
-| ref_workflow_input_id | 当 source=workflow_input | bigint nullable | FK → workflow_inputs.id |
-| ref_step_key | 当 source=step_output | text nullable | 引用同 workflow 内更靠前的 step.step_key；该 step 产出单一 asset，无需指定 output 槽位 |
-| const_value | 当 source=const | jsonb nullable | 字面值；类型与 target slot.resource_type 对齐由 Render 层校验 |
-| display_order | 排序 | int not null | — |
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | bigserial | 主键 |
+| step_id | bigint not null | FK；ON DELETE CASCADE |
+| to_input | text not null | 消费侧槽名；引用对应 Template 的 inputs[].name |
+| source | text not null | workflow_input / step_output / const；CHECK in 三选一 |
+| ref_workflow_input_id | bigint nullable | 当 source=workflow_input；FK → workflow_inputs.id |
+| ref_step_key | text nullable | 当 source=step_output；引用同 workflow 内更靠前的 step.step_key；该 step 产出单一 asset，无需指定 output 槽位 |
+| const_value | jsonb nullable | 当 source=const；字面值；类型与 target slot.resource_type 对齐由 Render 层校验 |
+| display_order | int not null | 排序 |
 
 约束：CHECK `(source, ref_* , const_value)` 三选一互斥；UNIQUE `(step_id, to_input)`。
 

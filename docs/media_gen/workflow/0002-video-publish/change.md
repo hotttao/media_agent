@@ -1,5 +1,11 @@
 # video-publish workflow 变更记录
 
+## 2026-08-06 · 改为异步发布编排
+
+- 创建持久化 Publish Task，由 River 唤醒 Worker。
+- 资源授权由 Materials 执行，平台 API 由 media_gen Publish Adapter 调用。
+- 明确事务边界、幂等键、结果不明确恢复和撤回边界。
+
 ## 2026-07-21 · 初始建模（media_gen v1）
 
 - 新建 video-publish workflow：PublishVideo RPC -> publish 域 mock 执行 -> 返回 PublishResult。

@@ -17,3 +17,6 @@
 - §3 解析改为从 bundle 取 slot 值（caller 组装 bundle 时已调 reachability 解析 product/vip 输入 + 拿 url/content）。
 - `RetryStepRun` 的 `input_override` 覆盖 bundle 部分值；可达性由 caller 在 retry 时重新校验或信任原 bundle。
 - 与上一条的关系：上一条假设 execution 调 reachability，本次按现有 spec/实现的 bundle 决策校正（media_workflow 不调 reachability）。
+# 2026-08-06
+
+- Workflow 执行改为 Outbox 下发幂等任务命令并消费结果事件，不再暴露 Claim/Complete/Fail Worker Pull 协议。

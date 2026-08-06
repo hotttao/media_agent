@@ -68,4 +68,15 @@ stateDiagram-v2
 - **并发接受**：两个 tab 同时 Accept → 两边都过 `existing` 检查后都走 `addTeamMember`，ON CONFLICT 保证一行；两边都返回 `already_member=false` 但 DB 只多一行（无副作用）。
 - **过期竞态**：`Preview` 通过后、`Accept` 触发前 token 刚过期 → Accept 内部重检 `expires_at` → 返回 410；不会写入半状态。
 - **team 已删**：invite 因 `ON DELETE CASCADE` 已被清，`getInviteByToken` 返回 null → 404；不会指向幽灵 team。
+
+## 一致性边界
+
+Accept 在一个本地事务中重新读取并锁定 Invite、检查有效期与 Team 状态、插入 Team Membership。Preview 是非授权只读提示，不能替代 Accept 内的检查。通知或审计发布通过 Outbox，失败不回滚已建立的成员关系。
+
+## 权限与失败
+
+- 当前模型是 capability link：持有 Invite Token 的任意已登录用户可以接受，Token 不代表创建者身份。
+- Cookie JWT 或用户 Service Token 决定接受者，body/path 不允许覆盖 user_id；角色固定为 member。
+- Invite 不存在、撤销、过期或 Team 已删除不可重试；并发接受由唯一约束收敛为同一 Membership。
+- Token 不得进入访问日志和 Trace；目标实现只保存高强度随机 Token 的 Hash，预览/接受时 Hash 查询。
 - **invite 无一次性消费**：control-plane 现状是接受后 token 仍留痕（审计 / 防止合法邀请被反复 retry）。如业务要求"一次接受即失效"，需在 invite 上加 `consumed_at` 字段 + 接受时 UPDATE；当前不引入，留待按需建模。

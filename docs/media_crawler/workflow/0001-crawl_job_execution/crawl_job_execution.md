@@ -67,3 +67,15 @@ stateDiagram-v2
 - **start_crawler 不幂等**：每次调用生成新 job_id。续爬靠传 checkpoint_id，而非重复提交同一 job。
 - **get_crawl_status 幂等**：纯读，多次调用返回当前状态。
 - **stop_crawler 幂等**：对已终态 job 调 stop 返回当前状态，不重复 kill。
+
+## 一致性边界
+
+创建 Job、认领串行锁、提交终态分别是独立本地事务；启动/终止子进程和扫描 checkpoint 均在事务外。Worker 在启动进程前提交 running 与 attempt；终态用 `job_id + attempt + expected_status` compare-and-set，旧进程结果不能覆盖新 attempt 或 cancelled。
+
+## 权限与失败
+
+- Agent 调 MCP 时使用 Session Token 解析 user/workspace/session；Crawler 以这些固定事实创建 Job，不接受参数覆盖 owner。
+- Worker 使用服务身份处理 Job，不携带用户 Platform Token；对象写入 Storage 使用可配置 mTLS 和 Crawler namespace。
+- 子进程启动失败可在确认未启动后有限重试；进程状态不明确时先按 pid/attempt 协调，不能启动第二个实例。
+- stop 超时先 SIGTERM，超过宽限期再 SIGKILL；晚到 summary 只作诊断，不能覆盖 cancelled。
+- checkpoint 发现失败不应把成功抓取误标为 failed，应记录结果不完整并允许独立恢复索引。

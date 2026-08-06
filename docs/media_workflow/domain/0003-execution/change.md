@@ -34,3 +34,7 @@
 3. Output asset 落 `media_materials.Asset`，仅持 asset_id；产物二进制不在 execution 库，避免大对象影响 DB。
 4. retry 时同一 StepRun 行的 `output_asset_id` 会被覆盖；旧 attempt 产物存放在 `retry_history` 与 audit log（不在本 spec 范围）。
 5. **单一产出**：StepRun 持 `output_asset_id`（单值），与 Template 单一 `output_resource_type` 对齐；不再支持多产出列表。
+# 2026-08-06
+
+- 外部 Worker Pull 改为下游任务命令 + 完成事件；StepRun 只保存下游 service/task ID。
+- Job/StepRun 增加 Workspace 边界，删除跨服务数据库外键。
