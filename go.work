@@ -1,6 +1,7 @@
 go 1.26.3
 
 use (
+	./media_agent_gateway
 	./media_gen
 	./media_materials
 	./media_crawler

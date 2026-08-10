@@ -1,0 +1,18 @@
+services:
+  media_agent_gateway:
+    build:
+      context: ..
+      dockerfile: media_agent_gateway/Dockerfile
+    ports:
+      - "8006:8006"
+    env_file:
+      - ../docker-compose/.env.${INFRA:-e2e}
+    environment:
+      SERVER_ADDR: ":8006"
+      POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-agent-gateway?sslmode=disable
+      LOG_DIR: /media_logs/media-agent-gateway
+    volumes:
+      - ../media_logs/media-agent-gateway:/media_logs/media-agent-gateway
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
