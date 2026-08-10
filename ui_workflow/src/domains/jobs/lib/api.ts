@@ -4,7 +4,7 @@
  * ApiClient.
  *
  * Routes per idl/media_workflow/job.proto (JobService) +
- * docs/media_workflow/domain/0003-execution:
+ * docs/ddd/media_workflow/domain/0003-execution:
  *   POST   /jobs                       -> SubmitJob (body: {workflow_id, input})
  *   GET    /jobs/:id                   -> GetJobResp { job, step_runs }
  *   GET    /jobs                       -> ListJobsResp { items, total }

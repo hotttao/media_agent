@@ -9,7 +9,7 @@
 - `AssetReachability` 确立为对 media_workflow 的唯一可达性契约；删除 workflow_validation.md 原先另设的 `BatchGetAssetForValidation`（返回完整 `*Asset` 实体、与不直读 materials 库原则冲突）。
 
 ### 2026-07-21 · 调用方对齐 bundle 模式
-- 确认 media_workflow 采用 **bundle 模式**（见 [media_workflow spec](../../../spec/media_workflow/impl.md) §6）：caller（BFF）在 SubmitJob 前调本 workflow 校验可达性 + 组装 JobInput bundle（含 url/content）；media_workflow 不调本 workflow。
+- 确认 media_workflow 采用 **bundle 模式**（见 [media_workflow spec](../../../../spec/media_workflow/impl.md) §6）：caller（BFF）在 SubmitJob 前调本 workflow 校验可达性 + 组装 JobInput bundle（含 url/content）；media_workflow 不调本 workflow。
 - 本 workflow 调用方由 media_workflow 改为 **caller（BFF）**。
 - `AssetReachability` / `ResolveAssetByKind` / `AssetRead` 等规则不变，仅调用方变更。
 - media_workflow 仅直接调 `BatchGetAssetKind`（asset_kind domain）+ `UpsertGeneratedAsset`（generated_asset domain），不经本 workflow。

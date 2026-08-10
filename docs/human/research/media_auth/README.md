@@ -2,7 +2,7 @@
 
 > media 平台统一的认证 / 鉴权服务。当前为**设计产物阶段**:Protobuf IDL + 初始化 SQL + 设计文档已落盘,后续 hz 工具链生成的 Go handler/router 骨架见 P1。
 >
-> 配套领域模型与实现 spec 在 `docs/media_auth/`(CONTEXT / 6 domain / 4 workflow / spec);架构决策在 `docs/adr/`。
+> 配套领域模型与实现 spec 在 `docs/ddd/media_auth/`(CONTEXT / 6 domain / 4 workflow / spec);架构决策在 `docs/ddd/adr/`。
 
 ## 目录
 
@@ -37,4 +37,4 @@ docs/prd/media_auth/
 
 ## 后续动作
 
-详见 `design.md` §6 收敛路径,以及 `docs/media_auth/spec/spec.md`。
+详见 `design.md` §6 收敛路径,以及 `docs/ddd/media_auth/spec/spec.md`。

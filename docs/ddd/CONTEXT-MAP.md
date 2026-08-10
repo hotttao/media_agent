@@ -2,17 +2,17 @@
 
 ## 限界上下文
 
-- [认证上下文](docs/media_auth/CONTEXT.md) — 用户身份、Web 会话、服务凭证、团队与 OAuth 凭据
-- [控制上下文](docs/media_control/CONTEXT.md) — Workspace、运行环境、Agent 配置、定时计划与 Teamwork 拓扑
-- [Agent 网关上下文](docs/media_agent_gateway/CONTEXT.md) — Agent Session、交互记录、执行任务与 Platform MCP
-- [Plugin 上下文](docs/media_plugin/CONTEXT.md) — 受控 MCP 目录、Workspace 启用关系与外部 OAuth MCP 连接
-- [存储上下文](docs/media_storage/CONTEXT.md) — 对象路径、对象读写、URL 解析与物理回收
-- [通知上下文](docs/media_notification/CONTEXT.md) — 用户通知、投递偏好和渠道投递
-- [共享资源访问语言](docs/resource_access/CONTEXT.md) — Scope、Visibility、Grant 与有效权限的跨服务统一语义
-- [工作流上下文](docs/media_workflow/CONTEXT.md) — 媒体工作流定义、校验与执行
-- [素材上下文](docs/media_materials/CONTEXT.md) — Material、Generated Asset、Product 与 Virtual IP
-- [生成上下文](docs/media_gen/CONTEXT.md) — 媒体生成执行、转写与发布
-- [抓取上下文](docs/media_crawler/CONTEXT.md) — 抓取任务、断点与平台数据
+- [认证上下文](media_auth/CONTEXT.md) — 用户身份、Web 会话、服务凭证、团队与 OAuth 凭据
+- [控制上下文](media_control/CONTEXT.md) — Workspace、运行环境、Agent 配置、定时计划与 Teamwork 拓扑
+- [Agent 网关上下文](media_agent_gateway/CONTEXT.md) — Agent Session、交互记录、执行任务与 Platform MCP
+- [Plugin 上下文](media_plugin/CONTEXT.md) — 受控 MCP 目录、Workspace 启用关系与外部 OAuth MCP 连接
+- [存储上下文](media_storage/CONTEXT.md) — 对象路径、对象读写、URL 解析与物理回收
+- [通知上下文](media_notification/CONTEXT.md) — 用户通知、投递偏好和渠道投递
+- [共享资源访问语言](resource_access/CONTEXT.md) — Scope、Visibility、Grant 与有效权限的跨服务统一语义
+- [工作流上下文](media_workflow/CONTEXT.md) — 媒体工作流定义、校验与执行
+- [素材上下文](media_materials/CONTEXT.md) — Material、Generated Asset、Product 与 Virtual IP
+- [生成上下文](media_gen/CONTEXT.md) — 媒体生成执行、转写与发布
+- [抓取上下文](media_crawler/CONTEXT.md) — 抓取任务、断点与平台数据
 - `media_agents` — Agent Runtime、模型调用和工具执行；运行状态由 Runtime 管理，持久化交互归 Agent 网关
 
 Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存其引用或状态投影，不复制其内部模型。

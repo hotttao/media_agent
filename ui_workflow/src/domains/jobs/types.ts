@@ -10,7 +10,7 @@
  * Status enums union the proto wire values (pending/running/need_confirm/
  * succeeded/failed/cancelled for Job; pending/running/succeeded/failed/
  * skipped/blocked/claimed/need_confirm for StepRun) with the doc's text state
- * machine (docs/media_workflow/domain/0003-execution/execution.md).
+ * machine (docs/ddd/media_workflow/domain/0003-execution/execution.md).
  */
 
 // ── JobInput bundle (self-contained; proto message JobInput) ─────────────

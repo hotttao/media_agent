@@ -2,7 +2,7 @@
 
 > 本 doc 用具体场景依次走完 `media_materials` + `media_workflow` 主流程，逐条验证业务规则在端到端上是否漏点。每条场景以"动作序列 → 规则触点 → 期望输出"呈现。
 >
-> **权限模型**：以第三轮反馈为准——Template / Workflow / VirtualIp 都按 [media_auth §资源级 ACL](../media_auth/CONTEXT.md#资源级-acl-所有媒体资源通用) 走 `visibility ∈ {private, team, public}` + `grants (resource_id, team_id, permission)` + 推导 `my_permission`，Asset 仅 `visibility + team_id`。
+> **权限模型**：以第三轮反馈为准——Template / Workflow / VirtualIp 都按 [media_auth §资源级 ACL](../../ddd/media_auth/CONTEXT.md#资源级-acl-所有媒体资源通用) 走 `visibility ∈ {private, team, public}` + `grants (resource_id, team_id, permission)` + 推导 `my_permission`，Asset 仅 `visibility + team_id`。
 >
 > **Job**：状态机由 v1 的"failed 终态"扩为可 in-place retry（retry_count 上限默认 3）。
 
@@ -66,7 +66,7 @@
      "pose_in":  {"material_id": pose_1.id}
    }
    ```
-   触发 [workflow_validation](../media_workflow/workflow/0001-workflow_validation/workflow_validation.md)：
+   触发 [workflow_validation](../../ddd/media_workflow/workflow/0001-workflow_validation/workflow_validation.md)：
    - DAG 校验 ✓。
    - Template 校验：scope 严格相等 ✓，未 archive ✓。
    - **AssetReachability**：scope_match(material.scope==workflow.scope==ai_clothing) ✓；visibility=public ✓；material_bindings(V1) + V1 对 Alice 可见（owner）✓ → reachable。
@@ -87,7 +87,7 @@
 - Alice 创建模板 T2（scope=ai_clothing），引用 V2 上传过的素材 X（scope=ai_guoxue，asset_kind=illustration）。
 - Alice 创建 Workflow W2，把 T2 与 X 拼起来。
 
-**触点**：[workflow_validation](../media_workflow/workflow/0001-workflow_validation/workflow_validation.md) → AssetReachability：
+**触点**：[workflow_validation](../../ddd/media_workflow/workflow/0001-workflow_validation/workflow_validation.md) → AssetReachability：
 - scope_match(ai_clothing vs ai_guoxue) → reject `SCOPE_MISMATCH`。
 - 不写库。
 
@@ -286,7 +286,7 @@ T1 的 inputs：`model_image`(asset_kind=model_image) + `product_image`(asset_ki
 |:---|:---|:---|
 | scope 不可改 | 各域 change.md | 创建后 Scope 只读字段 |
 | 跨 scope 引用 reject | scope/asset/workflow | IsSameScope RPC + multi-layer enforce |
-| AssetKind 注册实体校验 | [asset_kind](../media_materials/domain/0005-asset_kind/asset_kind.md) Register/Get/List；Template 引用 kind 时 BatchGetAssetKind 校验 | 全局注册表，无 scope |
+| AssetKind 注册实体校验 | [asset_kind](../../ddd/media_materials/domain/0005-asset_kind/asset_kind.md) Register/Get/List；Template 引用 kind 时 BatchGetAssetKind 校验 | 全局注册表，无 scope |
 | visibility ∈ {private, team, public} | resource-acl 全局 | template/workflow/virtual_ip 的 visibility 字段 + grants |
 | 资源权限统一走 my_permission | 各域 §权限规则 | 每入口 `LoadMyPermission` 校验 |
 | const 满足 required | workflow.md §4 + template.md Render | 已允许 |

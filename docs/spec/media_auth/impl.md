@@ -2,7 +2,7 @@
 
 > 本文是 media_auth 微服务的**自包含**实现规格：研发只看本文即可完成实现。
 > 依据 `harness/contributing`（idl / architecture / server / config）+ DDD 编写。
-> 详细领域语义见领域模型 [`docs/media_auth/`](../../media_auth/)（CONTEXT / 7 domain / 4 workflow）；架构决策见 [ADR-0001](../../adr/0001-media-auth-extraction-and-token-verification.md)、[ADR-0002](../../adr/0002-platform-token-plaintext-column.md)。
+> 详细领域语义见领域模型 [`docs/ddd/media_auth/`](../../ddd/media_auth/)（CONTEXT / 7 domain / 4 workflow）；架构决策见 [ADR-0001](../../ddd/adr/0001-media-auth-extraction-and-token-verification.md)、[ADR-0002](../../ddd/adr/0002-platform-token-plaintext-column.md)。
 > 落地计划见 [plan/media_auth/rollout.md](../../plan/media_auth/rollout.md)。
 
 ---

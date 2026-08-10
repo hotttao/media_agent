@@ -14,7 +14,7 @@ option go_package = "media_gen/worker";
 // Claim 循环（select { <-ctx.Done() }），避免无 media_workflow 时空转报错。
 // 真实实现需把 stub 替换为 Claim -> ExecuteOnce -> Complete/Fail 循环。
 //
-// 详见 docs/media_gen/workflow/0001-job-execution-loop/job-execution-loop.md。
+// 详见 docs/ddd/media_gen/workflow/0001-job-execution-loop/job-execution-loop.md。
 service WorkerService {
   // StartWorker -- 启动 worker goroutine。
   rpc StartWorker(StartWorkerReq) returns (WorkerInfo) {

@@ -2,7 +2,7 @@
  * media_materials API client. Wraps foundation/lib/api-client (cookie auth,
  * onUnauthorized). Base path /api/v1 is prepended by the ApiClient.
  *
- * Routes per docs/media_materials/domain/* + media_materials/biz/router.
+ * Routes per docs/ddd/media_materials/domain/* + media_materials/biz/router.
  */
 import { api } from "@/foundation/lib/api-client";
 import type {

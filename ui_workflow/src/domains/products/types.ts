@@ -1,7 +1,7 @@
 /**
  * media_materials Product domain types.
  *
- * Field shapes from docs/media_materials/domain/0004-product/product.md
+ * Field shapes from docs/ddd/media_materials/domain/0004-product/product.md
  * (idl/media_materials/product.proto is stale - it still has flat
  * target_audience / product_details / display_actions strings; per the
  * 2026-07-03 change log those were consolidated into a single `metadata`

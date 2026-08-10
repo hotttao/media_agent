@@ -107,7 +107,7 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 }
 
 // validateBundle 闸2: bundle vs input_schema。
-// 校验（按 docs/media_workflow/workflow/0002-workflow_execution/workflow_execution.md §1 + impl.md §4.2）：
+// 校验（按 docs/ddd/media_workflow/workflow/0002-workflow_execution/workflow_execution.md §1 + impl.md §4.2）：
 //   - required 全覆盖（含 PRODUCT/VIRTUAL_IP 非空）
 //   - material[]/asset[] name 唯一
 //   - 无多余类型：bundle 中每个 material/asset name 必须能在 input_schema 中找到同 resource_type 的 entry

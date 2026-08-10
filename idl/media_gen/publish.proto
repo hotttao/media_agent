@@ -15,8 +15,8 @@ option go_package = "media_gen/publish";
 //   2. 调 media_crawler 暴露的平台发布 API（待 crawler 增加发布接口）。
 //   3. 异步轮询平台状态（PUBLISHING -> SUCCEEDED/FAILED）+ 持久化到 publishes 表。
 //
-// 详见 docs/media_gen/workflow/0002-video-publish/video-publish.md
-//   + docs/media_gen/domain/0002-publish/publish.md。
+// 详见 docs/ddd/media_gen/workflow/0002-video-publish/video-publish.md
+//   + docs/ddd/media_gen/domain/0002-publish/publish.md。
 service PublishService {
   // PublishVideo -- 发布视频到目标平台（mock：同步返回 SUCCEEDED + 假 url）。
   rpc PublishVideo(PublishVideoReq) returns (PublishResult) {

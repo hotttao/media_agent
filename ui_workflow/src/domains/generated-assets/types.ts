@@ -5,7 +5,7 @@
  * execution via the internal `UpsertGeneratedAsset` RPC; UI only list/show/delete.
  *
  * Field shapes from idl/media_materials/generated_asset.proto. `updated_at` is
- * present in the generated_assets table (see docs/media_materials/domain/0002-asset/asset.md)
+ * present in the generated_assets table (see docs/ddd/media_materials/domain/0002-asset/asset.md)
  * and is exposed by the API even though the proto message omits it; typed as
  * string (int64 serialized as string to preserve precision, matching the
  * Material convention).

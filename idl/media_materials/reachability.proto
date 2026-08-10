@@ -13,7 +13,7 @@ import "api.proto";
 // 供 caller（BFF / 编排层）在 SubmitJob 前组装 JobInput bundle 时调用：校验可达性 + 解析 asset。
 // media_workflow 不调本服务（bundle 模式，见 docs/spec/media_workflow/impl.md §6）。
 // 网络隔离 / mTLS 由部署层负责。
-// 见 docs/media_materials/workflow/0001-reachability/reachability.md + docs/adr/0006-reachability-layering.md。
+// 见 docs/ddd/media_materials/workflow/0001-reachability/reachability.md + docs/ddd/adr/0006-reachability-layering.md。
 option go_package = "media_materials/reachability";
 
 service ReachabilityService {

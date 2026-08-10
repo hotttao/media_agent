@@ -72,11 +72,11 @@
 | Workflow | CRUD + Validate/Archive/Publish/Grant/Revoke/ChangeVisibility | **高（DAG 可视化编辑器）** |
 | Execution(Job+StepRun) | SubmitJob/Get/List/Cancel/Retry + ConfirmStepRun/RegenerateStepRun + Claim/Complete/Fail | **高（SSE 实时监控 `/api/v1/jobs/:id/events` + 候选确认）** |
 
-**跨服务聚合**（后端 RPC 对前端不可见，前端只发 id）：提交 Job 时从 materials 选素材组装 bundle；查看产物时拿 `output_asset_id` 反查 materials。参考 `docs/adr/0006-reachability-layering.md`。
+**跨服务聚合**（后端 RPC 对前端不可见，前端只发 id）：提交 Job 时从 materials 选素材组装 bundle；查看产物时拿 `output_asset_id` 反查 materials。参考 `docs/ddd/adr/0006-reachability-layering.md`。
 
 ### 1.4 认证链路（关键修正）
 
-来源：`media_workflow/biz/shared/auth/middleware.go`、`docs/media_auth/domain/0005-oauth/oauth.md`、ADR 0001/0002。
+来源：`media_workflow/biz/shared/auth/middleware.go`、`docs/ddd/media_auth/domain/0005-oauth/oauth.md`、ADR 0001/0002。
 
 1. **前端不能拿 media_auth 的 OAuth access_token 直接调 materials/workflow**：后端 Bearer 路径验证的是 service token（`tos_xxx`，查表），OAuth access_token 是 JWT，走 Bearer 会被当 service token 查表 -> 401。
 2. **正确路径是 cookie**：前端经 OAuth 登录后，**materials/workflow 后端给前端发自己的 session cookie `mw_token`（JWT，本地 HS256 验签）**，后续请求靠 cookie。

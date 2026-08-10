@@ -3,7 +3,7 @@
 //
 // 禁止 import Hertz / hertz_gen / biz/dal / biz/infra / logger / config / ORM。
 // team 是 user 之上组织 user 的命名分组，仅作 Resource Grant ACL 基础数据；
-// 不承担多租户隔离、不承担 billing（详见 docs/media_auth/domain/0007-team/team.md）。
+// 不承担多租户隔离、不承担 billing（详见 docs/ddd/media_auth/domain/0007-team/team.md）。
 package team
 
 import (

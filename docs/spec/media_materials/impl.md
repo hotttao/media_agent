@@ -4,7 +4,7 @@
 >
 > media_workflow 不再调 materials 做"解析"——bundle 自包含，由 caller（编排层 / BFF）从本服务查数据组装。本服务只暴露 CRUD + List + `BatchGetAssetKind` + `UpsertGeneratedAsset`。
 >
-> 领域规则见 `docs/media_materials/domain/*`。
+> 领域规则见 `docs/ddd/media_materials/domain/*`。
 
 ## 1. 边界
 
@@ -324,7 +324,7 @@ service ReachabilityService {
 }
 ```
 
-> reachability RPC 供 caller（BFF）组装 JobInput bundle 时调用；media_workflow 不调（bundle 模式）。归 `biz/workflow/reachability` + `biz/policy/reachability`（[ADR 0006](../../adr/0006-reachability-layering.md)）。
+> reachability RPC 供 caller（BFF）组装 JobInput bundle 时调用；media_workflow 不调（bundle 模式）。归 `biz/workflow/reachability` + `biz/policy/reachability`（[ADR 0006](../../ddd/adr/0006-reachability-layering.md)）。
 
 ## 3. 数据库
 
@@ -457,7 +457,7 @@ CREATE INDEX idx_virtual_ip_grants_team ON virtual_ip_grants (team_id);
 ## 4. 关键行为
 
 ### 4.1 visibility 校验（resource ACL）
-material / generated_asset / virtual_ip 的每次读写，service 入口推导 `MyPermission(user, resource)`（owner ∨ grants ∨ public），按 `docs/media_auth/CONTEXT.md#资源级-acl` 决定 viewer/editor/owner 可执行的操作。product 不做 user 校验。
+material / generated_asset / virtual_ip 的每次读写，service 入口推导 `MyPermission(user, resource)`（owner ∨ grants ∨ public），按 `docs/ddd/media_auth/CONTEXT.md#资源级-acl` 决定 viewer/editor/owner 可执行的操作。product 不做 user 校验。
 
 ### 4.2 asset_kind 校验
 - UpsertMaterial：asset_kind 须已注册、resource_type=MATERIAL、status∈{SYSTEM,ENABLED}。

@@ -37,7 +37,7 @@ func init() {
 }
 
 // runSubmitJob caller 组装 JobInput bundle 并提交。
-// 流程（bundle 模式，见 docs/media_materials/workflow/0001-reachability/reachability.md）：
+// 流程（bundle 模式，见 docs/ddd/media_materials/workflow/0001-reachability/reachability.md）：
 //  1. GetWorkflow 拿 scope（可达性锚点）
 //  2. CheckProductAccessible / CheckVirtualIPAccessible 校验容器可达
 //  3. GetProduct / GetVirtualIp 填 ProductData / VirtualIpData（reachability 不返回结构化字段）

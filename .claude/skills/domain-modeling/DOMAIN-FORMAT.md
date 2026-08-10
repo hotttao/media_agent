@@ -1,6 +1,6 @@
 # Domain 文档规范
 
-Domain 文档位于 `docs/<service>/domain/0001-<domain>/<domain>.md`。Domain 表达同一变化原因下的一组业务能力与规则，不等同于服务、数据库表或单个聚合。
+Domain 文档位于 `docs/ddd/<service>/domain/0001-<domain>/<domain>.md`。Domain 表达同一变化原因下的一组业务能力与规则，不等同于服务、数据库表或单个聚合。
 
 ## 编写原则
 
@@ -94,6 +94,6 @@ related_workflow:
 
 ## 编号与变更
 
-编号只在 `docs/<service>/domain/` 内递增。废弃 Domain 在目录名后加 `-del` 并说明替代方案。
+编号只在 `docs/ddd/<service>/domain/` 内递增。废弃 Domain 在目录名后加 `-del` 并说明替代方案。
 
 接口、数据模型或重要业务规则变化时更新 `change.md`；首次建模无需为“创建文档”记录变更。

@@ -19,8 +19,8 @@ option go_package = "media_auth/token";
 // 背景:control_plane 抽离认证后仍需验 Authorization: Bearer <tos_xxx>。
 // service token 是 opaque(仅存 SHA-256 hash),无法本地验,故经 mTLS 调本 RPC。
 // cookie / bearer JWT 仍由 control_plane 用共享 JWT_SECRET 本地 HS256 验,
-// 不走本 RPC。详见 docs/adr/0001-media-auth-extraction-and-token-verification.md
-// 与 docs/workflow/0001-service-token-verification.md。
+// 不走本 RPC。详见 docs/ddd/adr/0001-media-auth-extraction-and-token-verification.md
+// 与 docs/ddd/workflow/0001-service-token-verification.md。
 service TokenService {
   // POST /internal/token/verify —— 校验 token 并解析为鉴权主体
   rpc VerifyToken(VerifyTokenRequest) returns(VerifyTokenResponse) {

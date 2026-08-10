@@ -1,6 +1,6 @@
 # Workflow 质量审查
 
-审查范围：`docs/**/workflow/` 与 `docs/workflow/` 下 26 份权威 Workflow。标准来自 `domain-modeling` Skill：时序与参与者、事务边界、状态所有权、幂等恢复、身份传递和失败结果必须足以指导实现。
+审查范围：`docs/**/workflow/` 与 `docs/ddd/workflow/` 下 26 份权威 Workflow。标准来自 `domain-modeling` Skill：时序与参与者、事务边界、状态所有权、幂等恢复、身份传递和失败结果必须足以指导实现。
 
 ## 结果
 

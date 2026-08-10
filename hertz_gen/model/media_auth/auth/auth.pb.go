@@ -663,7 +663,7 @@ func (x *SetDefaultPromptResponse) GetSuccess() bool {
 // 注意:default_prompt_id 为 opaque id(prompts 表留在 control_plane),
 //
 //	不校验 FK;default_prompt_name 不在此返回,由网关层补,见
-//	docs/adr/0001-media-auth-extraction-and-token-verification.md
+//	docs/ddd/adr/0001-media-auth-extraction-and-token-verification.md
 type ApiUser struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

@@ -4,7 +4,7 @@
 -- 范围:team domain 三张表(teams / team_members / team_invites)。
 -- 来源:控制面 migrations/001_init.sql 中 team 三表段(teamwork 不迁)。
 -- 语义:team 是 user 之上组织 user 的命名分组,仅作 Resource Grant ACL 基础数据;
---      不承担多租户隔离、不承担 billing。详见 docs/media_auth/domain/0007-team/team.md。
+--      不承担多租户隔离、不承担 billing。详见 docs/ddd/media_auth/domain/0007-team/team.md。
 -- =====================================================================
 
 BEGIN;

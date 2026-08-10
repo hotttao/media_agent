@@ -1,8 +1,8 @@
 # 领域模型对齐落地计划
 
-> 基于 [ADR 0006](../adr/0006-reachability-layering.md) + 领域文档修订（2026-07-21）。把领域模型对齐（bundle 模式 + 可达性归层 + 单步能力 + Publish + bindings_end_at + scope 降级）落地到实现。
+> 基于 [ADR 0006](../ddd/adr/0006-reachability-layering.md) + 领域文档修订（2026-07-21）。把领域模型对齐（bundle 模式 + 可达性归层 + 单步能力 + Publish + bindings_end_at + scope 降级）落地到实现。
 > 依据 spec：[media_materials/impl.md](../spec/media_materials/impl.md)、[media_workflow/impl.md](../spec/media_workflow/impl.md)。
-> 领域文档：`docs/media_materials/`、`docs/media_workflow/`（含 [reachability workflow](../media_materials/workflow/0001-reachability/reachability.md)）。
+> 领域文档：`docs/ddd/media_materials/`、`docs/ddd/media_workflow/`（含 [reachability workflow](../ddd/media_materials/workflow/0001-reachability/reachability.md)）。
 
 ## 总览
 
@@ -53,7 +53,7 @@ P2 依赖 P1（`bindings_end_at` + `shared/scope`）；P3 独立（可与 P2 并
 ### Checklist
 - [ ] IDL `idl/media_materials/reachability.proto`（spec §2.6）：`AssetReachability` / `CheckProductAccessible` / `CheckVirtualIPAccessible` / `ResolveVirtualIpForReachability` / `ResolveAssetByKind` / `AssetRead`；`make hz-model` + `make -C media_materials hz-update`。
 - [ ] `biz/policy/reachability`：纯决策（scope ∧ visibility ∧ 容器可达）；接收 service 加载的事实，返回 `ReachabilityResult`；不查 DB。
-- [ ] `biz/workflow/reachability`：编排 asset / virtual_ip / product service 只读查询加载事实 -> 调 policy 决策；跨 domain 编排唯一合法入口（[ADR 0006](../adr/0006-reachability-layering.md)）。
+- [ ] `biz/workflow/reachability`：编排 asset / virtual_ip / product service 只读查询加载事实 -> 调 policy 决策；跨 domain 编排唯一合法入口（[ADR 0006](../ddd/adr/0006-reachability-layering.md)）。
 - [ ] handler 内部 RPC（不暴露 HTTP，供 caller 调用）。
 - [ ] `fetchTeams` 接入 media_auth（team 可见性；当前 stub 返 nil--前置依赖，见风险）。
 - [ ] arch-check（验证 workflow -> 多 service、policy 纯决策无 DB、domain 同层隔离）。

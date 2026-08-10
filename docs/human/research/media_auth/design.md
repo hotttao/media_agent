@@ -3,7 +3,7 @@
 > 目标:把 `control_plane` 中所有认证 / 鉴权相关能力抽出,沉淀为独立的 `media_auth` 服务。
 > 落地形态:Hertz + Protobuf IDL(遵循 `harness/contributing/idl.md`) + 自治数据库。
 >
-> 配套:领域模型与实现 spec 见 `docs/media_auth/`(CONTEXT / 6 domain / 4 workflow / spec);架构决策见 `docs/adr/`。
+> 配套:领域模型与实现 spec 见 `docs/ddd/media_auth/`(CONTEXT / 6 domain / 4 workflow / spec);架构决策见 `docs/ddd/adr/`。
 
 ---
 

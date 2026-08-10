@@ -1,7 +1,7 @@
 /**
  * media_materials domain types.
  *
- * Field shapes from docs/media_materials/domain/* (confirm against
+ * Field shapes from docs/ddd/media_materials/domain/* (confirm against
  * idl/media_materials/*.proto during integration - some response wrappers may
  * differ). Metadata/Spec/Status pattern is not forced: materials entities are
  * flat rows, not k8s-style objects.

@@ -663,7 +663,7 @@ components:
 
                  注意:default_prompt_id 为 opaque id(prompts 表留在 control_plane),
                       不校验 FK;default_prompt_name 不在此返回,由网关层补,见
-                      docs/adr/0001-media-auth-extraction-and-token-verification.md
+                      docs/ddd/adr/0001-media-auth-extraction-and-token-verification.md
         ApproveAuthorizationRequest:
             type: object
             properties:
@@ -939,7 +939,7 @@ tags:
            * 登录成功下发 httpOnly cookie `token`(JWT),后续走 Cookie 鉴权
            * 内部 RPC 入口:无,所有能力均通过 HTTP 暴露给前端
 
-         与 control_plane 的边界(见 docs/media_auth/design.md §4):
+         与 control_plane 的边界(见 docs/ddd/media_auth/design.md §4):
            * GET /api/auth/me 后续会被 control_plane 网关注销,统一改走 RPC VerifyToken
            * 登录接口在本服务内闭环,control_plane 不再承载用户态
     - name: IdentityService

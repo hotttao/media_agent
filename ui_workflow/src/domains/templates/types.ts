@@ -2,7 +2,7 @@
  * media_workflow.template domain types.
  *
  * Field shapes from idl/media_workflow/template.proto +
- * docs/media_workflow/domain/0001-template/template.md. Flat row (no
+ * docs/ddd/media_workflow/domain/0001-template/template.md. Flat row (no
  * Metadata/Spec/Status wrapping): template is a versioned prompt config, not a
  * k8s-style object.
  *

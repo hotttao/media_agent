@@ -2,7 +2,7 @@
  * media_materials Product API client. Wraps foundation/lib/api-client (cookie
  * auth, onUnauthorized). Base path /api/v1 is prepended by the ApiClient.
  *
- * Routes per docs/media_materials/domain/0004-product + media_materials/biz/router:
+ * Routes per docs/ddd/media_materials/domain/0004-product + media_materials/biz/router:
  *   POST   /products            -> Product
  *   GET    /products/:id        -> Product
  *   GET    /products            -> ProductsPage

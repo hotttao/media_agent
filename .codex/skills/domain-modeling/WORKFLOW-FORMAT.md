@@ -1,6 +1,6 @@
 # Workflow 文档规范
 
-服务内 Workflow 位于 `docs/<service>/workflow/0001-<workflow>/<workflow>.md`；跨服务 Workflow 位于 `docs/workflow/0001-<workflow>/`。
+服务内 Workflow 位于 `docs/ddd/<service>/workflow/0001-<workflow>/<workflow>.md`；跨服务 Workflow 位于 `docs/ddd/workflow/0001-<workflow>/`。
 
 Workflow 是应用层编排：协调多个聚合、事务或服务，并明确外部副作用、幂等、重试和补偿。它不拥有业务事实表。单聚合状态机、普通 CRUD、只读查询和 DTO 转换不创建 Workflow。
 

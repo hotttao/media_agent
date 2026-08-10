@@ -35,7 +35,7 @@ export function JobCreate({
   const [parseError, setParseError] = useState<string | null>(null);
 
   // scope is intentionally not a form field - the server copies it from the
-  // workflow (docs/media_workflow/domain/0003-execution: scope "沿用
+  // workflow (docs/ddd/media_workflow/domain/0003-execution: scope "沿用
   // workflow.scope"). submitted_by is inferred from auth.
 
   function handleSubmit() {

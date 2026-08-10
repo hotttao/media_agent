@@ -1,7 +1,7 @@
 // Package reachability 是可达性纯决策逻辑（无副作用、不查 DB）。
 //
 // 归 biz/policy（ADR 0006）：接收 workflow 加载好的事实，返回决策结果。
-// 规则定义见 docs/media_materials/workflow/0001-reachability/reachability.md。
+// 规则定义见 docs/ddd/media_materials/workflow/0001-reachability/reachability.md。
 package reachability
 
 // Reason 不可达原因。
@@ -29,7 +29,7 @@ type AssetFact struct {
 }
 
 // VisibilityRule 推导 asset 对 user 可见（public ∨ private(owner) ∨ team(user∈team)）。
-// 对齐 docs/media_auth/CONTEXT.md#资源级-acl 的 private/team/public 三档。
+// 对齐 docs/ddd/media_auth/CONTEXT.md#资源级-acl 的 private/team/public 三档。
 func VisibilityRule(visibility, ownerUserID, userID, teamID string, userTeams []string) bool {
 	switch visibility {
 	case "public":

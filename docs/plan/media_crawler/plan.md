@@ -1,6 +1,6 @@
 # media_crawler 实现规划
 
-基于 [架构规范](../../../harness/contributing/architecture.md) + 已对齐的领域模型（`docs/media_crawler/`）与 IDL（`idl/media_crawler/`）。
+基于 [架构规范](../../../harness/contributing/architecture.md) + 已对齐的领域模型（`docs/ddd/media_crawler/`）与 IDL（`idl/media_crawler/`）。
 
 ## 目标与约束
 

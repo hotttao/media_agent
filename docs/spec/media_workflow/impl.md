@@ -2,7 +2,7 @@
 
 > 模板执行引擎。存储 Template / Workflow / Job，接收自包含的 JobInput bundle，渲染 prompt，由外部 worker pull StepRun 执行。**不依赖 media_materials**——execution 只读 bundle + step 产出，零 materials 调用（仅 StepRun 产出时调一次 UpsertGeneratedAsset）。
 >
-> 领域规则见 `docs/media_workflow/domain/*` 与 `docs/media_workflow/workflow/*`；本文是落地规格（IDL + DB + 关键行为）。
+> 领域规则见 `docs/ddd/media_workflow/domain/*` 与 `docs/ddd/media_workflow/workflow/*`；本文是落地规格（IDL + DB + 关键行为）。
 
 ## 1. 边界
 
@@ -575,7 +575,7 @@ CREATE INDEX idx_step_runs_job_status ON step_runs (job_id, status);
 ## 4. 关键行为
 
 ### 4.1 Workflow 校验（闸 1，Create/Update/Validate）
-按 `docs/media_workflow/workflow/0001-workflow_validation.md` 的 A–E 阶段执行：DAG 结构 → slot/binding → input_schema 派生快照 → template 引用 + 跨资源 ACL → scope → asset_kind 注册（调 media_materials.BatchGetAssetKind）。失败 → 不写库，返回 reject_reasons。
+按 `docs/ddd/media_workflow/workflow/0001-workflow_validation.md` 的 A–E 阶段执行：DAG 结构 → slot/binding → input_schema 派生快照 → template 引用 + 跨资源 ACL → scope → asset_kind 注册（调 media_materials.BatchGetAssetKind）。失败 → 不写库，返回 reject_reasons。
 
 ### 4.2 SubmitJob 校验（闸 2）
 bundle ↔ workflow.input_schema：required 全覆盖、material[]/asset[] name 唯一、无多余类型、PRODUCT/VIRTUAL_IP 非空（如 required）。通过后创建 Job（PENDING）+ StepRuns：root step = PENDING，非 root = BLOCKED。Job → RUNNING。
@@ -631,7 +631,7 @@ sink StepRun SUCCEEDED → Job SUCCEEDED → SSE: ET_JOB_STATUS(succeeded)
 
 ### 4.5 单步能力 + Publish
 
-- `RetryStepRun`（`POST /api/v1/step-runs/:step_run_id/retry`）：`failed/skipped -> pending` + `retry_count+1`，重跑该 step + 下游；`input_override` 可选覆盖 bundle 部分值。与 `RetryJob` 边界：前者单步+下游，后者整 Job。与 `RegenerateStepRun` 边界：前者 failed/skipped 修复重跑，后者 need_confirm 重新生成候选。详见 [workflow_execution](../../media_workflow/workflow/0002-workflow_execution/workflow_execution.md) §8。
+- `RetryStepRun`（`POST /api/v1/step-runs/:step_run_id/retry`）：`failed/skipped -> pending` + `retry_count+1`，重跑该 step + 下游；`input_override` 可选覆盖 bundle 部分值。与 `RetryJob` 边界：前者单步+下游，后者整 Job。与 `RegenerateStepRun` 边界：前者 failed/skipped 修复重跑，后者 need_confirm 重新生成候选。详见 [workflow_execution](../../ddd/media_workflow/workflow/0002-workflow_execution/workflow_execution.md) §8。
 - `GetStepRun`（`GET /api/v1/step-runs/:step_run_id`）：只读返回单条 step_run 状态 + resolved_inputs + rendered_prompt + output_asset_id + failure_reason。
 - `PublishTemplate` / `PublishWorkflow`（`POST /:id/publish`）：`draft -> published`，owner；补全状态机 `draft ↔ published -> archived` 中 published 的产生路径。
 

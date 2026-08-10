@@ -14,8 +14,8 @@ description: 搭建并完善项目领域模型。适用于用户需要明确领�
 
 | 层次 | 回答的问题 | 文档位置 |
 |:---|:---|:---|
-| 限界上下文（Bounded Context） | 哪套统一语言和模型在什么边界内有效 | `CONTEXT-MAP.md`、`docs/<service>/CONTEXT.md` |
-| Domain | 同一变化原因下的一组业务能力和规则 | `docs/<service>/domain/<nnnn-domain>/<domain>.md` |
+| 限界上下文（Bounded Context） | 哪套统一语言和模型在什么边界内有效 | `docs/ddd/CONTEXT-MAP.md`、`docs/ddd/<service>/CONTEXT.md` |
+| Domain | 同一变化原因下的一组业务能力和规则 | `docs/ddd/<service>/domain/<nnnn-domain>/<domain>.md` |
 | 聚合（Aggregate） | 哪些实体和值对象必须在一个一致性边界内修改 | Domain 文档“聚合与不变量” |
 | 实体/值对象 | 什么有身份和生命周期；什么只由值定义 | Domain 文档数据模型之前 |
 | Domain Event | 聚合已经发生且其他能力需要知道的业务事实 | Domain 文档“领域事件” |
@@ -60,36 +60,38 @@ Workflow 不是步骤标题清单。仅写成 `鉴权 -> 写库 -> 调服务 -> 
 ```
 /
 ├── docs/
-|   ├──CONTEXT-MAP.md                               # 全局业务术语路由表，标注每个业务域的存放路径
-│   ├── adr/                                        # 全局系统级架构决策记录
-│   ├── workflow/                                   # 全系统跨服务工作流
-│   │   ├── 0001-event-sourced-orders.md 
-│   │   └── 0002-postgres-for-write-model.md
-│   ├── <service>/                                  # 服务层文档
-│   │   ├── CONTEXT.md                              # 服务层业务术语
-│   │   ├── domain/                                 # 服务层领域文档归档，0001- 仅在 domain 内编号
-│   │   │   └── 0001-<domain>/
-│   │   │       ├── <domain>.md                     # 服务层领域文档
-│   │   │       └── change.md                       # 服务层领域变更记录
-│   │   └── workflow/                               # 服务层工作流文档归档，0001- 仅在 workflow 内编号
-│   │       └── 0001-<workflow>/
-│   │           ├── <workflow>.md                   # 服务层工作流文档
-│   │           └── change.md                      # 服务层工作流变更记录
-│   ├── plan/                                       # 落地计划：跨服务放顶层，服务级按 <service>/ 分目录
+│   ├── ddd/                                        # 领域驱动设计文档统一根目录
+│   │   ├── CONTEXT-MAP.md                          # 全局业务术语路由表，标注每个业务域的存放路径
+│   │   ├── adr/                                    # 全局系统级架构决策记录
+│   │   ├── workflow/                               # 全系统跨服务工作流
+│   │   │   ├── 0001-event-sourced-orders.md
+│   │   │   └── 0002-postgres-for-write-model.md
+│   │   └── <service>/                              # 服务层 DDD 文档
+│   │       ├── CONTEXT.md                          # 服务层业务术语
+│   │       ├── domain/                             # 服务层领域文档归档，0001- 仅在 domain 内编号
+│   │       │   └── 0001-<domain>/
+│   │       │       ├── <domain>.md                 # 服务层领域文档
+│   │       │       └── change.md                   # 服务层领域变更记录
+│   │       └── workflow/                           # 服务层工作流文档归档，0001- 仅在 workflow 内编号
+│   │           └── 0001-<workflow>/
+│   │               ├── <workflow>.md               # 服务层工作流文档
+│   │               └── change.md                   # 服务层工作流变更记录
+│   ├── plan/                                       # 落地计划（不属于 ddd 目录）：跨服务放顶层，服务级按 <service>/ 分目录
 │   │   ├── <topic>.md                              # 跨服务计划（顶层，单文件）
 │   │   └── <service>/                              # 服务级计划（一服务一目录）
 │   │       └── <milestone>.md                      # 按里程碑/主题拆分
-│   └── spec/                                       # 实现规格：跨服务放顶层，服务级按 <service>/ 分目录
-│       ├── <topic>.md                              # 跨服务规格（顶层，单文件）
-│       └── <service>/                              # 服务级规格（一服务一目录）
-│           └── <milestone>.md                      # 按里程碑/主题拆分
+│   ├── spec/                                       # 实现规格（不属于 ddd 目录）：跨服务放顶层，服务级按 <service>/ 分目录
+│   │   ├── <topic>.md                              # 跨服务规格（顶层，单文件）
+│   │   └── <service>/                              # 服务级规格（一服务一目录）
+│   │       └── <milestone>.md                      # 按里程碑/主题拆分
+│   └── review/                                     # 设计与实现一致性审查（不属于 ddd 目录）
 ```
 
 > `<service>/` 下通过 `domain/` 与 `workflow/` 两个子目录区分领域与工作流：`0001-` 数字编号仅在各自子目录内计数，互不干扰。这样 `0001-auth`（domain）与 `0001-wecom-login-bind`（workflow）分属不同目录，无需打开文件即可辨别类型。
 
 文件采用懒创建机制：仅在有内容需要记录时新建文件。
 - 若无 `CONTEXT.md`，敲定第一个业务术语后再创建；
-- 若无 `docs/adr/` 目录，需要撰写第一条架构决策记录时再创建。
+- 若无 `docs/ddd/adr/` 目录，需要撰写第一条架构决策记录时再创建。
 
 ## 工作执行细则
 ### 校验术语词典冲突
@@ -182,7 +184,7 @@ Workflow 不是步骤标题清单。仅写成 `鉴权 -> 写库 -> 调服务 -> 
 
 ### 目标
 
-在 `docs/review/` 目录下，按照 `<service>/` 的目录层级创建 domian 和 workflow 的review 文档，文件名同 domain 和 workflow 文档名。里面记录所有实现与设计文档不一致的地方。
+在 `docs/review/` 目录下，按照 `docs/ddd/<service>/` 的目录层级创建 domain 和 workflow 的 review 文档，文件名同 domain 和 workflow 文档名。里面记录所有实现与设计文档不一致的地方。`review` 是审查产物，保留在 `docs/review/`，不迁入 `docs/ddd/`。
 
 ### 输入
 
@@ -208,36 +210,112 @@ review --workflow workflow_name
 
 ## Command: rebuild
 
-当用户希望从**当前代码实现**反向重建领域模型文档时，使用 `rebuild` 命令。它以代码为事实来源，生成或刷新 domain 与 workflow 文档，适用于：
-- 老项目已有实现但缺少 domain/workflow 文档
-- 代码与文档长期脱节，文档已不可信，需要从代码重新对齐
-- 大规模重构后，文档需要重新生成
+当用户希望从**当前实现**反向恢复可信的领域模型时，使用 `rebuild`。它适用于缺少文档、文档长期失真或大型重构后的重新基线化；不用于把新需求直接写成目标设计，新设计仍遵循正常的文档更新流程。
 
-### 目标
-基于当前项目代码实现，生成两类文档：
-1. 符合 `DOMAIN-FORMAT.md` 总分结构的 `<domain>.md`。
-2. 符合 `WORKFLOW-FORMAT.md` 的 service 级 `<workflow>.md`——覆盖该 service 内跨 domain 协作的关键业务流程。
+### 输出目标
 
-rebuild **只生成文档，不写 `change.md`**——change 用于人工设计变更追溯，机器重建不应污染变更历史。
+在 `docs/ddd/<service>/` 下生成或刷新：
+
+1. `CONTEXT.md`：仅收录能由实现和业务入口证实的统一语言；
+2. `domain/<nnnn-domain>/<domain>.md`：符合 `DOMAIN-FORMAT.md`；
+3. `workflow/<nnnn-workflow>/<workflow>.md`：符合 `WORKFLOW-FORMAT.md`，只为确实存在的跨聚合、跨事务、跨服务或外部副作用流程创建；
+4. 本次分析报告：事实来源、能力覆盖矩阵、候选边界、冲突与未决项。分析报告在响应中输出，不写入 DDD 文档。
+
+`rebuild` **不得创建或修改 `change.md`、ADR、spec 和 plan**。它记录当前实现，不伪造设计变更历史，也不替实现推断历史决策理由。
+
+### 事实与证据规则
+
+事实来源按以下优先级交叉验证，不能只看某一层：
+
+1. 数据库约束、事务代码、状态转换与实际持久化行为；
+2. 对外 IDL/路由、命令、事件消费者、定时任务和管理入口；
+3. application/domain service、仓储、外部客户端、消息与任务代码；
+4. 测试用例、fixture 和运行配置；
+5. 现有 CONTEXT、Domain、Workflow、ADR、spec 与 Harness 文档。
+
+代码注释、类型名、目录名和旧文档只能作为线索，不能单独证明业务规则。每条重要能力、不变量、状态转换、事务边界和失败语义必须能定位到至少一个实现证据；涉及跨层语义时应有两个相互印证的来源。无法证实的内容标记为“未确认”，不得补全成确定事实。
+
+现有文档与实现冲突时：
+
+- `--dry-run` 中同时列出“文档声明、实现行为、证据位置和影响”；
+- 普通执行只按实现刷新可观察行为，不擅自解释哪一方是目标设计；
+- 若冲突涉及术语含义、Domain 归属、不可逆数据语义或安全边界，暂停对应部分写入并向用户确认；其他无冲突部分继续处理。
 
 ### 输入
-- `--service <service_name>`：指定服务，必填（rebuild 需要明确作用域）。
-- `--domain <domain_name>`：可选，仅重建指定 domain；省略则重建该 service 下所有 domain。
-- `--workflow <workflow_name>`：可选，仅重建指定 workflow；省略则基于代码自动识别并重建该 service 所有关键 workflow。
-- `--dry-run`：可选，仅输出分析结果不写文件。
 
-Examples:
+- `--service <service_name>`：必填，必须能映射到实际服务目录和 `docs/ddd/<service>/`；名称不确定时先通过仓库结构解析，不猜测。
+- `--domain <domain_name>`：可选，仅重建指定 Domain；仍须扫描该服务全部入口，以发现对它的调用和相关 Workflow。
+- `--workflow <workflow_name>`：可选，仅重建指定 Workflow；仍须读取所有参与 Domain 和外部适配器。
+- `--dry-run`：可选，只输出分析报告和拟变更文件，不修改文件。
+
+`--domain` 与 `--workflow` 可以同时使用，表示重建二者及其关联关系；都不指定时重建整个服务。局部重建不得删除、重编号或顺带重写未选中的 Domain/Workflow。
+
 ```text
-rebuild --service media-materials
-rebuild --service media-materials --domain generation_job
-rebuild --service media-materials --workflow job_submission
-rebuild --service media-materials --dry-run
+rebuild --service media_materials --dry-run
+rebuild --service media_materials
+rebuild --service media_materials --domain asset
+rebuild --service media_materials --workflow reachability
+rebuild --service media_materials --domain asset --workflow reachability
 ```
 
 ### 执行过程
-1. 读取 CONTEXT、IDL、数据库 migration、路由/handler、application service、领域对象、后台任务和事件消费者。
-2. 从写入路径和持久化事实识别聚合根、生命周期、不变量和事务边界；不得按文件大小或函数行数划分 Domain。
-3. 从跨聚合调用、外部副作用、重试/补偿和事件链识别 Workflow。
-4. 用公开接口、定时任务和事件入口反查能力覆盖，确保每项都有 Domain 或外部所有者。
-5. 最后再用复杂函数作为补充线索，检查是否存在未显式建模的业务规则。
+
+#### 1. 确定作用域与架构映射
+
+- 定位服务目录、IDL、migration、测试、Harness 架构规范及现有 DDD 文档；
+- 按 Harness 规则建立 `入口 -> application/workflow -> domain -> repository/adapter` 映射；
+- 记录缺失的事实来源。缺少 Harness 文档不阻止分析，但必须报告采用的代码分层依据。
+
+#### 2. 枚举全部能力入口
+
+枚举 HTTP/RPC 路由、公开方法、CLI、定时任务、队列/事件消费者、后台 worker、管理入口和数据库迁移脚本，先建立能力覆盖矩阵：
+
+```text
+入口 -> 用例 -> 写入事实/读模型 -> 候选 Domain -> 聚合 -> Workflow -> 证据 -> 状态
+```
+
+状态沿用 `covered`、`external-owner`、`deprecated-with-reason`、`missing`。不得从现有文档反推能力清单后就停止扫描。
+
+#### 3. 沿写路径恢复 Domain
+
+从每个写入口追踪到事务和持久化结果，识别：
+
+- 业务事实的所有者及同一变化原因；
+- 聚合根、实体、值对象、生命周期和原子不变量；
+- 命令校验、授权位置、唯一约束、并发控制和错误语义；
+- 领域事件及其真实生产、持久化和消费方式。
+
+数据库表不是 Domain，repository 目录不是聚合，函数复杂度不是业务重要性。纯 CRUD 且没有独立业务规则的能力可以归入已有 Domain，不为每张表创建 Domain。
+
+#### 4. 沿跨边界调用恢复 Workflow
+
+对每个写能力、后台任务和领域事件执行 Workflow 判定，追踪完整调用链，明确参与者、每次本地事务、外部调用时机、状态所有者、幂等键、重试、超时、补偿、取消、晚到消息、身份与凭证传递。只读组合和单聚合事务不创建 Workflow。
+
+#### 5. 反向校验与命名
+
+- 从表、事件、任务和外部客户端反查是否存在未覆盖入口；
+- 用测试和错误分支校验正常路径之外的边界行为；
+- 将实现中的同义词和歧义词汇总，与 `CONTEXT.md` 核对；
+- Domain/Workflow 名称使用业务语言，不直接照搬 handler、表名或技术组件名；
+- 新目录编号取对应 `domain/` 或 `workflow/` 下下一个可用编号；已有对象保持原编号，禁止重排。
+
+#### 6. 先报告，再写入
+
+在修改文件前先给出精简分析摘要：扫描范围、识别出的 Domain/Workflow、能力覆盖状态、文档冲突、未确认项和拟变更文件。没有需要用户裁决的高风险冲突时可继续写入；存在高风险冲突时仅暂停受影响文件。
+
+写入顺序为 `CONTEXT.md -> Workflow -> Domain`。仅写当前可证明的实现，不把候选项或分析过程写进正式文档。更新已有文件时保留仍被实现证实的人工说明和稳定编号，禁止整篇覆盖导致有效信息丢失。现有 Domain/Workflow 若已找不到实现证据，只标记为“疑似失效”并请求确认；`rebuild` 不自动删除文档或添加 `-del`。
+
+### 完成门禁
+
+只有同时满足以下条件才能宣称 rebuild 完成：
+
+1. 作用域内全部入口都进入能力覆盖矩阵，且没有 `missing`；
+2. 每个 Domain 都能映射到写入口、聚合/读模型和实现证据；
+3. 每个写能力、后台任务和领域事件均完成 Workflow 判定；
+4. 每个 Workflow 满足本 skill 的时序、事务、一致性、失败恢复和身份传递质量要求；
+5. CONTEXT、Domain、Workflow 互相引用一致，并与 Harness 分层可映射；
+6. 没有把未确认推断写成事实，没有修改 `change.md`、ADR、spec 或 plan；
+7. 最终报告列出修改文件、未修改原因、外部所有者、废弃能力和仍需人工确认的事项。
+
+存在 `missing` 或高风险未决项时，结果只能标记为“部分完成”，并明确下一步所需证据或用户决策。
 
