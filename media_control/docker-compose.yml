@@ -9,10 +9,13 @@ services:
       - ../docker-compose/.env.${INFRA:-e2e}
     environment:
       SERVER_ADDR: ":8007"
+      CONSUL_ENABLED: "false"
+      CONSUL_KV_ENABLED: "false"
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-control?sslmode=disable
       LOG_DIR: /media_logs/media-control
     volumes:
       - ../media_logs/media-control:/media_logs/media-control
+      - ./conf:/app/conf:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

@@ -9,6 +9,11 @@ import (
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_control/biz/dal"
+	repo "media_agent/media_control/biz/dal/repo/workspace"
+	workspacehandler "media_agent/media_control/biz/handler/workspace"
+	"media_agent/media_control/biz/middleware"
+	workspaceservice "media_agent/media_control/biz/service/workspace"
+	"media_agent/media_control/biz/shared/secret"
 )
 
 func main() {
@@ -47,7 +52,11 @@ func main() {
 	if err := dal.Migrate("migrations", dbCfg); err != nil {
 		log.Fatalf("db migrate: %v", err)
 	}
-	_ = db
+	if db == nil {
+		log.Fatal("database must be enabled")
+	}
+	middleware.Configure(cfg.GetAuth().GetJwtSecret())
+	workspacehandler.Configure(workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret()))))
 
 	h := suite.NewServer()
 	register(h)
@@ -64,6 +73,13 @@ func main() {
 
 	log.Printf("media-control: listening on %s", cfg.GetServer().GetAddress())
 	h.Spin()
+}
+
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func resolveDefaultLogDir(appName string) string {

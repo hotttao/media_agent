@@ -19,6 +19,5 @@ COPY --from=builder /out/media_control /app/media_control
 COPY media_control/migrations/ /app/migrations/
 COPY media_control/conf/ /app/conf/
 COPY media_control/.env /app/.env
-EXPOSE media_control
-ENTRYPOINT ["/app/8007"]
-%!(EXTRA string=media_control)
+EXPOSE 8007
+ENTRYPOINT ["/app/media_control"]

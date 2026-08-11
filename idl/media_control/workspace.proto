@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package media_control.workspace;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/workspace";
+
+service WorkspaceService {
+  rpc CreateWorkspace(CreateWorkspaceRequest) returns (WorkspaceResponse) {
+    option (api.post) = "/api/v1/workspaces";
+    option (google.api.http) = { post: "/api/v1/workspaces" body: "*" };
+  }
+
+  rpc ListWorkspaces(ListWorkspacesRequest) returns (ListWorkspacesResponse) {
+    option (api.get) = "/api/v1/workspaces";
+    option (google.api.http) = { get: "/api/v1/workspaces" };
+  }
+
+  rpc GetWorkspace(GetWorkspaceRequest) returns (WorkspaceResponse) {
+    option (api.get) = "/api/v1/workspaces/:workspace_id";
+    option (google.api.http) = { get: "/api/v1/workspaces/{workspace_id}" };
+  }
+
+  rpc UpdateWorkspace(UpdateWorkspaceRequest) returns (WorkspaceResponse) {
+    option (api.put) = "/api/v1/workspaces/:workspace_id";
+    option (google.api.http) = { put: "/api/v1/workspaces/{workspace_id}" body: "*" };
+  }
+
+  rpc GetRuntimeContext(GetRuntimeContextRequest) returns (RuntimeContextResponse) {
+    option (api.get) = "/api/v1/workspaces/:workspace_id/runtime-context";
+    option (google.api.http) = { get: "/api/v1/workspaces/{workspace_id}/runtime-context" };
+  }
+}
+
+message CreateWorkspaceRequest {
+  string name = 1 [(api.body) = "name"];
+  string agent_type = 2 [(api.body) = "agent_type"];
+  string api_key = 3 [(api.body) = "api_key"];
+}
+
+message ListWorkspacesRequest {}
+
+message GetWorkspaceRequest {
+  string workspace_id = 1 [(api.path) = "workspace_id"];
+}
+
+message UpdateWorkspaceRequest {
+  string workspace_id = 1 [(api.path) = "workspace_id"];
+  string name = 2 [(api.body) = "name"];
+  string agent_type = 3 [(api.body) = "agent_type"];
+  string api_key = 4 [(api.body) = "api_key"];
+}
+
+message GetRuntimeContextRequest {
+  string workspace_id = 1 [(api.path) = "workspace_id"];
+}
+
+message WorkspaceResponse {
+  string id = 1;
+  string name = 2;
+  string agent_id = 3;
+  string agent_type = 4;
+  bool api_key_configured = 5;
+  int64 configuration_version = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
+}
+
+message ListWorkspacesResponse {
+  repeated WorkspaceResponse workspaces = 1;
+}
+
+message RuntimeContextResponse {
+  string workspace_id = 1;
+  string agent_id = 2;
+  string agent_type = 3;
+  string api_key = 4;
+  int64 context_version = 5;
+}

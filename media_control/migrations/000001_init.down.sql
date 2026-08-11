@@ -1,1 +1,2 @@
-DROP SCHEMA IF EXISTS media-control CASCADE;
+DROP TABLE IF EXISTS agent_configurations;
+DROP TABLE IF EXISTS workspaces;
