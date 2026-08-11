@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncContextManager, AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from typing import AsyncContextManager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

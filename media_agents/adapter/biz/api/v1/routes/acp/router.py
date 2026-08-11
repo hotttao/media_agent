@@ -39,8 +39,6 @@ def build_acp_router() -> APIRouter:
 
     @router.get("/health", response_model=HealthResponse)
     async def health(cfg: AdapterConfigDep, sm: AcpServerDep) -> HealthResponse:
-        if len(sm) == 0 and cfg.workspace_id is None:
-            return HealthResponse(status="error", reason="bridge factory not initialized")
         return HealthResponse(status="ok")
 
     @router.get("/info", response_model=AgentInfo)

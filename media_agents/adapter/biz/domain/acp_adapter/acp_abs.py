@@ -8,7 +8,7 @@ from adapter.biz.domain.acp_adapter.bridge import AcpBridge
 class BridgeFactory(Protocol):
     """bridge 工厂：每个 session 独立 bridge，避免 SQLite contention。"""
 
-    def __call__(self, session_id: str) -> AcpBridge:
+    def __call__(self, session_id: str, api_key: str | None = None) -> AcpBridge:
         """接收 platform session id（draft UUID），返回启动好的 bridge。"""
         ...
 

@@ -24,11 +24,12 @@ class CodexAcpBridge(AcpBridge):
         cwd: str = "/workspace",
         initial_agent_mode: str = DEFAULT_INITIAL_AGENT_MODE,
         session_id: str = "",
+        api_key: str | None = None,
     ) -> None:
         super().__init__(
             program=program,
             args=args,
             cwd=cwd,
-            env={"INITIAL_AGENT_MODE": initial_agent_mode},
+            env={"INITIAL_AGENT_MODE": initial_agent_mode, **({"OPENAI_API_KEY": api_key} if api_key else {})},
             session_id=session_id,
         )

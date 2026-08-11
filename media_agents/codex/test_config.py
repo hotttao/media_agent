@@ -118,3 +118,24 @@ async def test_codex_hook_writes_shared_workspace_files_and_mcp(tmp_path: Path) 
     assert "ANTHROPIC_API_KEY" not in os.environ
     assert os.environ["OPENAI_API_KEY"] == "sk-test"
     assert os.environ["OPENAI_BASE_URL"] == "http://llm.test/v1"
+
+
+@pytest.mark.asyncio
+async def test_mock_control_preserves_image_auth_and_disables_mcp(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    codex_dir = tmp_path / ".codex"
+    codex_dir.mkdir()
+    auth = codex_dir / "auth.json"
+    auth.write_text('{"existing":"login"}', encoding="utf-8")
+    hooks = CodexHooks(
+        workspace_dir=workspace,
+        codex_config_dir=codex_dir,
+        mock_control=True,
+    )
+
+    assert await hooks.load_config() is True
+    assert await hooks.load_credentials() is True
+    assert hooks.load_mcp_servers(None) == []
+    assert auth.read_text(encoding="utf-8") == '{"existing":"login"}'
+    runtime = json.loads((workspace / "runtime.json").read_text(encoding="utf-8"))
+    assert runtime["model"] == "default"

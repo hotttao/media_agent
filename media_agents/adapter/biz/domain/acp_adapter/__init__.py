@@ -83,7 +83,7 @@ class AcpServer:
                 logger.warning("Bridge dead for session=%s, replacing", session_id)
                 self._destroy(session_id)
                 # 走 load 路径重新加载
-                session = await self.load_session(session_id, chat.session_token)
+                session = await self.load_session(session_id, chat.session_token, chat.api_key)
                 session.open_stream()
                 await session.emit_started()
                 return session, False
@@ -93,14 +93,14 @@ class AcpServer:
             return session, False
 
         if session_id:
-            session = await self.load_session(session_id, chat.session_token)
+            session = await self.load_session(session_id, chat.session_token, chat.api_key)
             session.open_stream()
             # 加载已持久化的 session（rollout / SQLite）
             await session.emit_started()
             return session, False
 
         # 全新 session
-        session = await self.create_session(chat.session_token)
+        session = await self.create_session(chat.session_token, chat.api_key)
         session.open_stream()
         await session.emit_started()
         return session, True
@@ -258,10 +258,10 @@ class AcpServer:
 
     # ── 内部：session 创建/加载 ──────────────────────────────
 
-    async def create_session(self, session_token: str | None) -> AcpSession:
+    async def create_session(self, session_token: str | None, api_key: str | None = None) -> AcpSession:
         """创建新 session：bridge.start -> wait_for_mcp_ready -> create_session。"""
         draft_id = new_session_id()
-        bridge = self.factory(draft_id)
+        bridge = self._make_bridge(draft_id, api_key)
         try:
             await bridge.start()
             mcp_servers = self.hooks.load_mcp_servers(session_token)
@@ -277,9 +277,9 @@ class AcpServer:
         logger.info("acp session created: session=%s", session.session_id)
         return session
 
-    async def load_session(self, session_id: str, session_token: str | None) -> AcpSession:
+    async def load_session(self, session_id: str, session_token: str | None, api_key: str | None = None) -> AcpSession:
         """加载已持久化的 session：bridge.start -> load_session。"""
-        bridge = self.factory(session_id)
+        bridge = self._make_bridge(session_id, api_key)
         try:
             await bridge.start()
             mcp_servers = self.hooks.load_mcp_servers(session_token)
@@ -302,6 +302,12 @@ class AcpServer:
         session = self.sessions.get(session_id)
         if session:
             session.last_active = self.clock.now()
+
+    def _make_bridge(self, session_id: str, api_key: str | None) -> AcpBridge:
+        try:
+            return self.factory(session_id, api_key)
+        except TypeError:
+            return self.factory(session_id)
 
     def _destroy(self, session_id: str) -> None:
         session = self.sessions.pop(session_id, None)

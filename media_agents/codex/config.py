@@ -75,6 +75,7 @@ class CodexHooks:
         workspace_id: str | None = None,
         workspace_dir: str | Path = DEFAULT_WORKSPACE_DIR,
         codex_config_dir: str | Path = HOME / ".codex",
+        mock_control: bool = False,
     ) -> None:
         self._cp_client = cp_client or CpClient(base_url=cp_url, workspace_id=workspace_id)
         self._workspace_dir = Path(workspace_dir)
@@ -83,8 +84,11 @@ class CodexHooks:
         self._user_mcp: McpServerMap = {}
         self._has_mcp = False
         self._user_display_name: str | None = None
+        self._mock_control = mock_control
 
     def load_mcp_servers(self, session_token: str | None) -> list[AcpMcpServerDeclaration]:
+        if self._mock_control:
+            return []
         return build_acp_mcp_servers(
             platform_url=self._cp_client.mcp_url(),
             platform_headers=self._cp_client.mcp_headers(session_token),
@@ -98,6 +102,16 @@ class CodexHooks:
         return self._has_mcp
 
     async def load_config(self) -> bool:
+        if self._mock_control:
+            self._workspace_dir.mkdir(parents=True, exist_ok=True)
+            self._codex_config_dir.mkdir(parents=True, exist_ok=True)
+            # Keep the image's auth.json intact; mock control only supplies
+            # non-secret runtime defaults.
+            write_runtime_config(
+                self._workspace_dir,
+                {"model": "default", "provider_type": "openai", "mcp_config": {}},
+            )
+            return True
         config = await self._cp_client.fetch_workspace_config()
         if config is None:
             return False
@@ -135,6 +149,8 @@ class CodexHooks:
         return True, []
 
     async def load_credentials(self) -> bool:
+        if self._mock_control:
+            return True
         credentials = await self._cp_client.fetch_credentials()
         if credentials is None:
             return False

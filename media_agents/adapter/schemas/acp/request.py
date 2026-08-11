@@ -26,6 +26,7 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     images: list[ChatImageAttachment] | None = None
     session_token: str | None = None
+    api_key: str | None = None
 
 
 class ReloadConfigRequest(BaseModel):

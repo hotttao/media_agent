@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -28,19 +29,28 @@ def create_app() -> FastAPI:
         cp_client=CpClient(base_url=cfg.cp.url, workspace_id=cfg.cp.workspace_id),
         workspace_dir=cfg.workspace.dir,
         codex_config_dir=cfg.codex.config_dir,
+        mock_control=os.environ.get("MOCK_MEDIA_CONTROL", "true").lower()
+        in {"1", "true", "yes"},
     )
 
-    def bridge_factory(session_id: str) -> CodexAcpBridge:
+    def bridge_factory(session_id: str, api_key: str | None = None) -> CodexAcpBridge:
         return CodexAcpBridge(
             program=cfg.codex.program,
             cwd=cfg.workspace.dir,
             initial_agent_mode=cfg.codex.initial_agent_mode,
             session_id=session_id,
+            api_key=api_key,
         )
 
     @asynccontextmanager
     async def codex_lifespan(app: FastAPI) -> AsyncIterator[None]:
-        async with agent_lifespan(app, hooks=hooks, processes=_codex_processes(cfg.workspace.dir)):
+        auxiliary = os.environ.get("CODEX_AUX_PROCESSES", "false").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        processes = _codex_processes(cfg.workspace.dir) if auxiliary else []
+        async with agent_lifespan(app, hooks=hooks, processes=processes):
             yield
 
     app = build_app(
