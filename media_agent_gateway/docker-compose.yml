@@ -9,7 +9,11 @@ services:
       - ../docker-compose/.env.${INFRA:-e2e}
     environment:
       SERVER_ADDR: ":8006"
+      CONSUL_ENABLED: "false"
+      CONSUL_KV_ENABLED: "false"
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-agent-gateway?sslmode=disable
+      CODEX_RUNTIME_URL: http://host.docker.internal:3001
+      MEDIA_CONTROL_URL: http://host.docker.internal:8007
       LOG_DIR: /media_logs/media-agent-gateway
     volumes:
       - ../media_logs/media-agent-gateway:/media_logs/media-agent-gateway

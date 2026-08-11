@@ -19,6 +19,5 @@ COPY --from=builder /out/media_agent_gateway /app/media_agent_gateway
 COPY media_agent_gateway/migrations/ /app/migrations/
 COPY media_agent_gateway/conf/ /app/conf/
 COPY media_agent_gateway/.env /app/.env
-EXPOSE media_agent_gateway
-ENTRYPOINT ["/app/8006"]
-%!(EXTRA string=media_agent_gateway)
+EXPOSE 8006
+ENTRYPOINT ["/app/media_agent_gateway"]

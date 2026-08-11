@@ -64,5 +64,8 @@ pprof:
   prefix: "/debug/pprof"
 
 health:
-  enabled: true
+  enabled: false
   path: "/health"
+
+auth:
+  jwt_secret: ${JWT_SECRET:-dev-shared-secret}
