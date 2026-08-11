@@ -21,6 +21,14 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      "/api/v1/workspaces": {
+        target: "http://127.0.0.1:8007",
+        changeOrigin: true,
+      },
+      "/api/chat": {
+        target: "http://127.0.0.1:8006",
+        changeOrigin: true,
+      },
       "/api": {
         target: "http://127.0.0.1:8001",
         changeOrigin: true,

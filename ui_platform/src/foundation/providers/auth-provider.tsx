@@ -6,9 +6,17 @@
  *
  * Adapted from agent-platform/web/src/contexts/AuthContext.tsx.
  */
+
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { api } from "@/foundation/lib/api-client";
 import type { User } from "@/foundation/types/auth";
-import { type ReactNode, createContext, useCallback, useContext, useEffect, useState } from "react";
 
 interface AuthContextType {
   user: User | null;
@@ -52,7 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, login, logout, refreshUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

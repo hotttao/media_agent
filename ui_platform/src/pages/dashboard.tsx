@@ -3,10 +3,11 @@
  *
  * This is a minimal landing page. Real feature pages will replace this.
  */
+
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/foundation/providers/auth-provider";
-import { useNavigate } from "react-router-dom";
 
 export function DashboardPage() {
   const { user, logout } = useAuth();
@@ -38,10 +39,12 @@ export function DashboardPage() {
               <span className="font-medium">Role:</span> {user?.role}
             </div>
             <div>
-              <span className="font-medium">Auth Source:</span> {user?.auth_source}
+              <span className="font-medium">Auth Source:</span>{" "}
+              {user?.auth_source}
             </div>
             <div>
-              <span className="font-medium">Auto Evolution:</span> {user?.auto_evolution ? "enabled" : "disabled"}
+              <span className="font-medium">Auto Evolution:</span>{" "}
+              {user?.auto_evolution ? "enabled" : "disabled"}
             </div>
           </CardContent>
         </Card>

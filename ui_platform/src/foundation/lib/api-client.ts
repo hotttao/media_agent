@@ -32,7 +32,10 @@ export class ApiClientError extends Error {
 class ApiClient {
   private baseUrl = "/api";
 
-  private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  private async request<T>(
+    endpoint: string,
+    options?: RequestInit,
+  ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
       ...options,
@@ -50,12 +53,18 @@ class ApiClient {
         window.location.href = "/login";
         throw new Error("Session expired");
       }
-      const body: Record<string, unknown> = await response.json().catch(() => ({ error: "Request failed" }));
-      const message = (typeof body.error === "string" && body.error) || "Request failed";
+      const body: Record<string, unknown> = await response
+        .json()
+        .catch(() => ({ error: "Request failed" }));
+      const message =
+        (typeof body.error === "string" && body.error) || "Request failed";
       throw new ApiClientError(message, response.status, body);
     }
 
-    if (response.status === 204 || response.headers.get("Content-Length") === "0") {
+    if (
+      response.status === 204 ||
+      response.headers.get("Content-Length") === "0"
+    ) {
       return undefined as T;
     }
     return response.json();
@@ -87,18 +96,29 @@ class ApiClient {
   }
 
   async logout(): Promise<void> {
-    await this.request<{ success: boolean }>("/auth/logout", { method: "POST" });
+    await this.request<{ success: boolean }>("/auth/logout", {
+      method: "POST",
+    });
   }
 
-  async changeMyPassword(currentPassword: string, newPassword: string): Promise<void> {
+  async changeMyPassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
     await this.request("/auth/me/password", {
       method: "PUT",
-      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
     });
   }
 
   async patchMe(patch: { auto_evolution?: boolean }): Promise<void> {
-    await this.request("/auth/me", { method: "PATCH", body: JSON.stringify(patch) });
+    await this.request("/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
   }
 
   // ── WeCom ─────────────────────────────────────────────────────────
@@ -107,8 +127,12 @@ class ApiClient {
     return this.request<WeComEnabledResponse>("/auth/wecom/enabled");
   }
 
-  async getWeComAuthorizeUrl(mode: "login" | "bind"): Promise<WeComAuthorizeResponse> {
-    return this.request<WeComAuthorizeResponse>(`/auth/wecom/authorize?mode=${mode}`);
+  async getWeComAuthorizeUrl(
+    mode: "login" | "bind",
+  ): Promise<WeComAuthorizeResponse> {
+    return this.request<WeComAuthorizeResponse>(
+      `/auth/wecom/authorize?mode=${mode}`,
+    );
   }
 
   async getIdentities(): Promise<{ identities: Identity[] }> {
@@ -157,8 +181,13 @@ class ApiClient {
     return this.request("/service-tokens");
   }
 
-  async createServiceToken(name: string): Promise<{ id: string; name: string; token: string; created_at: string }> {
-    return this.request("/service-tokens", { method: "POST", body: JSON.stringify({ name }) });
+  async createServiceToken(
+    name: string,
+  ): Promise<{ id: string; name: string; token: string; created_at: string }> {
+    return this.request("/service-tokens", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
   }
 
   async revokeServiceToken(id: string): Promise<void> {
@@ -167,7 +196,13 @@ class ApiClient {
 
   // ── User Management (admin) ───────────────────────────────────────
 
-  async listUsers(params: { q?: string; sort?: string; order?: string; page?: number; page_size?: number }): Promise<UsersPage> {
+  async listUsers(params: {
+    q?: string;
+    sort?: string;
+    order?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<UsersPage> {
     const qs = new URLSearchParams();
     if (params.q) qs.set("q", params.q);
     if (params.sort) qs.set("sort", params.sort);
@@ -184,7 +219,10 @@ class ApiClient {
     email?: string;
     role?: string;
   }): Promise<void> {
-    await this.request("/users", { method: "POST", body: JSON.stringify(data) });
+    await this.request("/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
   async deleteUser(id: string): Promise<void> {
@@ -192,7 +230,10 @@ class ApiClient {
   }
 
   async changeUserPassword(id: string, password: string): Promise<void> {
-    await this.request(`/users/${id}/password`, { method: "PUT", body: JSON.stringify({ password }) });
+    await this.request(`/users/${id}/password`, {
+      method: "PUT",
+      body: JSON.stringify({ password }),
+    });
   }
 }
 

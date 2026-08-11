@@ -7,13 +7,20 @@
  *
  * Adapted from agent-platform/web/src/pages/OAuthAuthorizePage.tsx.
  */
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
-import { api } from "@/foundation/lib/api-client";
+
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
+import { api } from "@/foundation/lib/api-client";
 
 export function OAuthAuthorizePage() {
   const [searchParams] = useSearchParams();
@@ -44,7 +51,12 @@ export function OAuthAuthorizePage() {
     }
 
     api
-      .getOAuthAuthorizeInfo({ client_id: clientId, redirect_uri: redirectUri, response_type: responseType, scope: scopeParam })
+      .getOAuthAuthorizeInfo({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: responseType,
+        scope: scopeParam,
+      })
       .then((info) => {
         setClientName(info.client_name);
         setScope(info.scope || "profile");
@@ -65,7 +77,9 @@ export function OAuthAuthorizePage() {
         response_type: responseType,
         ...(state ? { state } : {}),
         ...(codeChallenge ? { code_challenge: codeChallenge } : {}),
-        ...(codeChallengeMethod ? { code_challenge_method: codeChallengeMethod } : {}),
+        ...(codeChallengeMethod
+          ? { code_challenge_method: codeChallengeMethod }
+          : {}),
         ...(scopeParam ? { scope: scopeParam } : {}),
       });
       window.location.href = res.redirect_uri;
@@ -96,7 +110,9 @@ export function OAuthAuthorizePage() {
         <CardHeader>
           <CardTitle>Authorize Application</CardTitle>
           <CardDescription>
-            {clientName ? `"${clientName}" is requesting access to your account.` : "An application is requesting access."}
+            {clientName
+              ? `"${clientName}" is requesting access to your account.`
+              : "An application is requesting access."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -116,14 +132,25 @@ export function OAuthAuthorizePage() {
                 </div>
                 <div className="text-sm">
                   <span className="font-medium">Redirect URI:</span>{" "}
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded">{redirectUri}</code>
+                  <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                    {redirectUri}
+                  </code>
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button onClick={handleApprove} className="flex-1" disabled={submitting}>
+                <Button
+                  onClick={handleApprove}
+                  className="flex-1"
+                  disabled={submitting}
+                >
                   {submitting ? <Spinner size="sm" /> : "Authorize"}
                 </Button>
-                <Button variant="outline" onClick={handleDeny} className="flex-1" disabled={submitting}>
+                <Button
+                  variant="outline"
+                  onClick={handleDeny}
+                  className="flex-1"
+                  disabled={submitting}
+                >
                   Deny
                 </Button>
               </div>

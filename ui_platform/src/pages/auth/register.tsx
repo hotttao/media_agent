@@ -7,16 +7,23 @@
  *
  * API: POST /api/auth/register
  */
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useAuth } from "@/foundation/providers/auth-provider";
-import { api, ApiClientError } from "@/foundation/lib/api-client";
-import { Spinner } from "@/components/ui/spinner";
+
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
+import { ApiClientError, api } from "@/foundation/lib/api-client";
+import { useAuth } from "@/foundation/providers/auth-provider";
 
 export function RegisterPage() {
   const { user, isLoading: authLoading, refreshUser } = useAuth();
@@ -171,7 +178,10 @@ export function RegisterPage() {
 
           <div className="mt-4 text-center text-sm text-muted-foreground">
             Already have an account?{" "}
-            <Link to="/login" className="font-medium text-primary underline-offset-4 hover:underline">
+            <Link
+              to="/login"
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
               Sign in
             </Link>
           </div>

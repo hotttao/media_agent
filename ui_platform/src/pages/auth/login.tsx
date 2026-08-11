@@ -4,22 +4,30 @@
  * Adapted from agent-platform/web/src/pages/LoginPage.tsx.
  * API: POST /api/auth/login, GET /api/auth/wecom/enabled, GET /api/auth/wecom/authorize
  */
+
+import { MessageSquare } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
-import { useAuth } from "@/foundation/providers/auth-provider";
 import { api } from "@/foundation/lib/api-client";
-import { MessageSquare } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/foundation/providers/auth-provider";
 
 const OAUTH_ERRORS: Record<string, string> = {
   missing_code: "Missing authorization code. Please try again.",
-  not_bound: "Your WeCom account is not bound to any user. Please login first and bind.",
+  not_bound:
+    "Your WeCom account is not bound to any user. Please login first and bind.",
   user_not_found: "User not found. Please contact admin.",
   system_account: "System accounts cannot login.",
   auth_required: "Please login first to bind your WeCom account.",
@@ -43,7 +51,10 @@ export function LoginPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    api.getWeComEnabled().then((res) => setWecomEnabled(res.enabled)).catch(() => {});
+    api
+      .getWeComEnabled()
+      .then((res) => setWecomEnabled(res.enabled))
+      .catch(() => {});
   }, []);
 
   if (authLoading) {
@@ -55,7 +66,8 @@ export function LoginPage() {
   }
 
   const nextParam = searchParams.get("next");
-  const next = nextParam?.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/";
+  const next =
+    nextParam?.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/";
 
   if (user) {
     return <Navigate to={next} replace />;
@@ -69,7 +81,9 @@ export function LoginPage() {
       await login(username, password);
       navigate(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed. Please try again.");
+      setError(
+        err instanceof Error ? err.message : "Login failed. Please try again.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -152,7 +166,11 @@ export function LoginPage() {
                 onClick={handleWeComLogin}
                 disabled={wecomLoading}
               >
-                {wecomLoading ? <Spinner size="sm" /> : <MessageSquare className="h-4 w-4" />}
+                {wecomLoading ? (
+                  <Spinner size="sm" />
+                ) : (
+                  <MessageSquare className="h-4 w-4" />
+                )}
                 Sign in with WeCom
               </Button>
             </>
@@ -160,7 +178,10 @@ export function LoginPage() {
 
           <div className="mt-4 text-center text-sm text-muted-foreground">
             Don't have an account?{" "}
-            <Link to="/register" className="font-medium text-primary underline-offset-4 hover:underline">
+            <Link
+              to="/register"
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
               Register
             </Link>
           </div>

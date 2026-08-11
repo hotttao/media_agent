@@ -14,7 +14,7 @@ const E2E_DIR = dirname(fileURLToPath(import.meta.url));
  * grows (e.g. storage backends, model registries, third-party auth providers).
  */
 export interface E2eConfig {
-  auth: { email: string; password: string };
+  auth: { username: string; password: string };
 }
 
 // ── Profile loading ──
@@ -45,8 +45,12 @@ function buildConfig(raw: Record<string, any>): E2eConfig {
   const auth = raw.auth ?? {};
   return {
     auth: {
-      email: auth.email ?? "admin@example.com",
-      password: auth.password ?? "admin",
+      username:
+        process.env.E2E_USER_USERNAME ??
+        process.env.E2E_USER_EMAIL ??
+        auth.username ??
+        "",
+      password: process.env.E2E_USER_PASSWORD ?? auth.password ?? "",
     },
   };
 }

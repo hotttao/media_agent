@@ -8,9 +8,15 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"]],
   outputDir: "e2e/test-results",
+  webServer: {
+    command: "node_modules/.bin/vite --host 127.0.0.1",
+    url: "http://127.0.0.1:5173",
+    reuseExistingServer: true,
+  },
 
   use: {
     baseURL: process.env.BASE_URL || "http://localhost:5173",
+    channel: "chrome",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     actionTimeout: 10_000,

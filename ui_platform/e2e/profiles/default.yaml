@@ -3,5 +3,5 @@
 # model registries, etc.) and read them from `e2e/config.ts` typed config.
 
 auth:
-  email: "admin@example.com"
-  password: "admin"
+  username: ""
+  password: ""

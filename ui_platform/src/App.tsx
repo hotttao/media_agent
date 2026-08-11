@@ -8,12 +8,13 @@
  *   /                 - DashboardPage (authenticated)
  *   *                 - redirect to /
  */
+
+import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "@/foundation/components/protected-route";
 import { LoginPage } from "@/pages/auth/login";
 import { RegisterPage } from "@/pages/auth/register";
+import { ChatPage } from "@/pages/chat";
 import { OAuthAuthorizePage } from "@/pages/oauth/authorize";
-import { DashboardPage } from "@/pages/dashboard";
-import { Navigate, Route, Routes } from "react-router-dom";
 
 export default function App() {
   return (
@@ -32,7 +33,15 @@ export default function App() {
         path="/"
         element={
           <ProtectedRoute>
-            <DashboardPage />
+            <ChatPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/w/:workspaceId"
+        element={
+          <ProtectedRoute>
+            <ChatPage />
           </ProtectedRoute>
         }
       />
