@@ -1,0 +1,29 @@
+# UI Platform Design
+
+本目录维护 UI 平台的交互与扩展契约。业务术语、不变量和服务工作流仍以相应服务的 DDD 文档为准。
+
+## 当前范围
+
+当前 UI Platform 提供 Workspace Shell，以及 Sessions、Chat、Workspace Settings 三个内置 App。暂不实现 plugin loader、内置工具 App、复杂 Workspace 配置、拖拽布局和弹出窗口。
+
+## 阅读顺序
+
+1. [glossary.md](glossary.md)
+2. [architecture.md](architecture.md)
+3. [app-shell.md](app-shell.md)
+4. [slot-model.md](slot-model.md)
+5. [state-ownership.md](state-ownership.md)
+6. [responsive-layout.md](responsive-layout.md)
+7. [extension-model.md](extension-model.md)
+8. 需求涉及的用户旅程与 `decisions/`
+
+## 设计与验证
+
+| 设计对象 | 主要验证 |
+|:---|:---|
+| Slot 状态转换、Profile 归一化 | 单元测试 |
+| App Window、空态、表单状态 | 组件测试 |
+| 创建/更新 Workspace、切换 Session、Chat | Playwright E2E |
+| HTTP 接口和凭证安全 | `media-cli` HTTP E2E |
+
+计划、实现规格和审查产物分别保留在 `docs/plan`、`docs/spec`、`docs/review`。

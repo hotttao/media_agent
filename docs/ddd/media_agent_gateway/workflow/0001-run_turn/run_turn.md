@@ -7,14 +7,14 @@ domains: [agent_session, session_analytics]
 
 ## 一句话说明
 
-Gateway 在一次本地事务中创建 Turn 和用户消息，随后驱动 Agent Runtime 执行；Runtime 产生的事件被分批持久化，执行自然结束、失败或被显式中断后，Gateway 再提交 Turn 终态并异步更新 Session Analytics。
+Gateway 在本地事务中创建 Turn 和用户消息后，以独立于 HTTP 客户端的后台生命周期驱动 Agent Runtime；Runtime 事件先持久化再广播给 Session 的全部订阅者，终态随后提交并可由 sequence 恢复。
 
 ## 触发与结果
 
 | 项目 | 内容 |
 |:---|:---|
 | 触发 | Web 用户提交消息，或 `agent_task_dispatch` 请求执行一个持久化 Agent Task |
-| 前置条件 | Agent Session 为 active；调用者有权访问该 Session |
+| 前置条件 | 调用者已经登录且有权访问该 Session；首次对话可由 Gateway 使用 Default Agent Context 创建 active Session |
 | 成功结果 | Turn 进入 completed，Message 和 Universal Event 可以按 sequence 完整回放 |
 | 显式中断 | Turn 进入 interrupted；已经提交的 Message 和 Event 保留 |
 | 执行失败 | Turn 进入 failed，并保存稳定错误分类；已经提交的 Message 和 Event 保留 |
@@ -26,14 +26,19 @@ Gateway 在一次本地事务中创建 Turn 和用户消息，随后驱动 Agent
 ```mermaid
 sequenceDiagram
     autonumber
-    participant C as Web / Agent Task
+    participant C as Turn 发起方
+    participant S as 页面 A/B 订阅
     participant G as media_agent_gateway
     participant DB as Gateway DB
     participant R as Agent Runtime
     participant A as Session Analytics
 
     C->>G: RunTurn(session_id, input, idempotency_key)
-    G->>G: 认证调用者并检查 Session 访问权
+    G->>G: 使用共享密钥本地验证 media_auth Cookie JWT，并检查 Session 访问权
+    opt 首次对话且 media_control 返回空配置
+        G->>G: 选择内置 Codex Default Agent Context
+        G->>DB: TX-SESSION: 创建 active Agent Session
+    end
     G->>DB: TX0: 锁定 Session，检查 active_turn_id
     break 已有 active Turn
         G->>DB: 原子写入/合并 pending_message + version
@@ -41,27 +46,33 @@ sequenceDiagram
     end
     G->>DB: TX1: 创建 Turn + User Message，设置 active_turn_id
     DB-->>G: turn_id, context_version, first_sequence
-    G-->>C: turn_id，建立事件流
+    G-->>C: 202 Accepted(turn_id)
+
+    S->>G: SubscribeEvents(session_id, after_sequence)
+    G->>G: 注册 Session subscriber
+    G->>DB: 查询 sequence > after_sequence
+    DB-->>G: 已提交事件
+    G-->>S: 按 sequence 回放
 
     G->>R: StartTurn(turn_id, session context, input)
     R-->>G: RuntimeEvent(sequence, type, payload)
     G->>DB: TX2..N: 幂等追加 Universal Event / Message
     DB-->>G: committed_sequence
-    G-->>C: 推送已提交事件
+    G-->>S: 广播已提交事件（每个页面独立连接）
 
     alt Runtime 自然结束
         R-->>G: TurnFinished(result, usage)
         G->>DB: TX-FINAL: CAS running -> completed，保存最终消息
-        G-->>C: TurnCompleted(final_sequence)
+        G-->>S: TurnCompleted(final_sequence)
     else Runtime 执行失败
         R-->>G: TurnFailed(error_class, detail)
         G->>DB: TX-FINAL: CAS pending/running -> failed
-        G-->>C: TurnFailed(final_sequence)
+        G-->>S: TurnFailed(final_sequence)
     else 用户显式中断
         C->>G: InterruptTurn(turn_id)
         G->>DB: TX-INTERRUPT: CAS pending/running -> interrupted
         G->>R: CancelTurn(turn_id)
-        G-->>C: TurnInterrupted(final_sequence)
+        G-->>S: TurnInterrupted(final_sequence)
     end
 
     G-->>A: Turn 终态事件
@@ -72,9 +83,9 @@ sequenceDiagram
 
 1. **认证与授权**：Web 请求使用 Cookie JWT 或用户 Service Token。Agent Task 是 Gateway 内部执行入口，使用可信服务身份，并携带 Task 已固定的 user/workspace/session 信息。
 2. **创建业务事实**：TX1 原子创建 Turn 和 User Message。只有 TX1 提交成功后才能启动 Runtime，避免出现没有持久化 Turn 的孤儿执行。
-3. **启动 Runtime**：使用 TX1 固定的 `context_version` 构建运行上下文。本轮执行期间配置变化不修改既有 Turn。
-4. **持久化事件**：Gateway 先提交 Runtime Event，再向客户端推送。客户端看到的 sequence 因而一定可以从数据库恢复。
-5. **生成 Message**：会形成会话历史的 assistant/tool 内容写入 Message；只用于运行回放的增量状态写入 Universal Event。同一 Runtime Event 可以在一个本地事务中产生二者。
+3. **启动 Runtime**：使用与发起请求分离的后台 Context 和 TX1 固定的 `context_version` 构建运行上下文。发起请求或任意订阅断开均不取消本轮执行。
+4. **持久化与广播**：Gateway 为事件分配 Session 内 sequence，完整提交 Universal Event 后才发布到 Session broadcaster。订阅者先注册、再回放、最后按游标消费 live event，重叠事件去重。
+5. **生成 Message**：会形成会话历史的 assistant/tool 内容必须完整写入 Message；流式 delta 先进入 Universal Event，`item.completed` 在同一事务中生成最终 Message。不得只保存 UI 已拼接的摘要或最后一段文本。
 6. **提交终态**：Runtime 自然结束、执行失败或用户显式中断是三条不同终止路径。终态使用 compare-and-set，避免晚到的完成事件覆盖 interrupted。
 7. **完成后排空 follow-up**：仅 completed 路径原子 take-and-clear pending message，并创建下一 Turn。派发失败时使用 pending_message_version 做条件恢复；用户更新的新内容优先。
 8. **更新投影**：Turn 终态提交后通过 Outbox 产生事件；Session Analytics 更新失败不回滚 Turn，可以独立重试和重建。
@@ -109,6 +120,7 @@ stateDiagram-v2
 - `completed`、`failed`、`interrupted` 均为终态，不允许互相覆盖。
 - Turn 固定属于一个 Session；`session_id` 和 `context_version` 创建后不可改变。
 - 客户端 SSE/HTTP 连接状态不是 Turn 状态，连接断开不会产生 interrupted。
+- Turn 发起请求不承载 Runtime SSE；Session Event Subscription 是独立只读连接，同一 Session 允许多个订阅者。
 - 同一 Session 最多一个 pending/running Turn；数据库部分唯一索引和 Session `active_turn_id` 双重保证。
 - follow-up 只是待执行输入，不是 Turn；只有当前 Turn 自然 completed 后才转换成新 Turn。
 
@@ -140,6 +152,7 @@ Runtime 失败后不得自动重新执行整个 Turn，因为此前可能已经�
 ## 权限与身份传递
 
 - Web 入口解析 Cookie JWT 或用户 Service Token，并以真实 Session 归属检查 `user_id` 和 `workspace_id`，不信任请求体覆盖身份。
+- 用户没有 Workspace/Agent 配置时，Gateway 可以选择 Default Agent Context；空配置不授予额外资源权限，也不跳过用户身份校验。
 - Agent Task 执行使用服务身份进入本 Workflow，但 Task 中的代表用户和 Workspace 必须来自已持久化任务事实。
 - Runtime 获得本 Session 的 `session_token`，用于直接调用 Platform MCP 和平台内业务 MCP；Gateway 不向 Runtime 暴露 Platform Token。
 - MCP 或业务服务根据 Session Token 解析用户、Workspace、Session，并在资源所有服务内完成最终授权。
@@ -154,6 +167,7 @@ Runtime 失败后不得自动重新执行整个 Turn，因为此前可能已经�
 | Event 重复 | 不需要 | 按 `turn_id + sequence` 忽略 |
 | Event sequence 缺失或冲突 | 否 | 标记协议错误并终止 Turn |
 | 客户端连接断开 | 不适用 | Turn 继续执行，客户端按游标重连 |
+| 订阅慢或广播缓冲溢出 | 不重试内存投递 | 关闭该订阅；客户端使用最后 sequence 建立新订阅并回放 |
 | Analytics 更新失败 | 是 | 独立重试，不影响 Turn 终态 |
 
 ## 结果事件
