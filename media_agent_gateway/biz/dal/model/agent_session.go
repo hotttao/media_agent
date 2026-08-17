@@ -6,9 +6,9 @@ import (
 )
 
 type AgentSession struct {
-	ID, UserID, WorkspaceID, AgentID, AgentType, Title, RuntimeSessionID, Status string
-	ContextVersion                                                               int64
-	CreatedAt, UpdatedAt                                                         time.Time
+	ID, UserID, WorkspaceID, AgentID, AgentType, Title, RuntimeSessionID, Status, ChatStatus string
+	ContextVersion                                                                           int64
+	CreatedAt, UpdatedAt                                                                     time.Time
 }
 
 func (AgentSession) TableName() string { return "media_agent_gateway.agent_sessions" }

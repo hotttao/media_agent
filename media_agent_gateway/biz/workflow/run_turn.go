@@ -14,6 +14,7 @@ import (
 )
 
 const turnTimeout = 24 * time.Hour
+const toolResultCoalesceWindow = 300 * time.Millisecond
 
 type RunTurn struct {
 	sessions *service.Service
@@ -50,29 +51,27 @@ func (w *RunTurn) Start(ctx context.Context, sessionID, userID, authToken, key, 
 func (w *RunTurn) execute(session *domain.Session, turn *domain.Turn, runtimeContext service.AgentContext, runtime client.Runtime, message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), turnTimeout)
 	defer cancel()
-	status := "failed"
-	defer func() {
-		if err := w.sessions.FinishTurn(context.Background(), turn.ID, status); err != nil {
-			log.Printf("finish turn %s: %v", turn.ID, err)
-		}
-	}()
-	err := runtime.Chat(ctx, client.ChatInput{Message: message, SessionID: session.RuntimeSessionID, APIKey: runtimeContext.APIKey}, func(raw json.RawMessage) error {
-		event, err := w.sessions.PersistEvent(ctx, session.ID, turn.ID, raw)
-		if err != nil {
-			return err
-		}
-		w.events.Publish(session.ID, sessionevents.Event{Sequence: event.Sequence, Payload: append([]byte(nil), raw...)})
-		return nil
-	})
+	capabilities := client.PersistenceCapabilities(runtime)
+	sink := newTurnEventSink(ctx, session.ID, turn.ID, w.sessions, w.events, capabilities.MaxToolResultBytes, toolResultCoalesceWindow)
+	err := runtime.Chat(ctx, client.ChatInput{Message: message, SessionID: session.RuntimeSessionID, APIKey: runtimeContext.APIKey}, sink.Accept)
+	if flushErr := sink.Flush(); flushErr != nil && err == nil {
+		err = flushErr
+	}
+	status := "completed"
+	reason := "completed"
 	if err != nil {
+		status = "failed"
+		reason = "error"
 		raw, _ := json.Marshal(map[string]any{"type": "error", "message": err.Error()})
-		event, persistErr := w.sessions.PersistEvent(context.Background(), session.ID, turn.ID, raw)
-		if persistErr != nil {
+		if persistErr := sink.persistAndPublish(raw); persistErr != nil {
 			log.Printf("persist turn %s failure: runtime=%v persist=%v", turn.ID, err, persistErr)
-			return
 		}
-		w.events.Publish(session.ID, sessionevents.Event{Sequence: event.Sequence, Payload: append([]byte(nil), raw...)})
+	}
+	terminalRaw := sink.Terminal(reason)
+	terminalEvent, finalizeErr := w.sessions.FinalizeTurn(context.Background(), session.ID, turn.ID, status, terminalRaw)
+	if finalizeErr != nil {
+		log.Printf("finalize turn %s: %v", turn.ID, finalizeErr)
 		return
 	}
-	status = "completed"
+	w.events.Publish(session.ID, sessionevents.Event{Sequence: terminalEvent.Sequence, Payload: append([]byte(nil), terminalRaw...)})
 }

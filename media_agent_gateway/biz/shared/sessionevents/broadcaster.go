@@ -5,6 +5,8 @@ import "sync"
 const defaultBuffer = 128
 
 type Event struct {
+	// Sequence is zero for a transient live frame. Durable events always have
+	// a positive sequence and can advance a subscriber's replay cursor.
 	Sequence int64
 	Payload  []byte
 }

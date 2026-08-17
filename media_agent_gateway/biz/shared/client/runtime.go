@@ -35,3 +35,21 @@ func envValue(name, fallback string) string {
 type Runtime interface {
 	Chat(context.Context, ChatInput, func(json.RawMessage) error) error
 }
+
+type EventPersistenceCapabilities struct {
+	MaxToolResultBytes int
+}
+
+type EventPersistenceCapabilityProvider interface {
+	EventPersistenceCapabilities() EventPersistenceCapabilities
+}
+
+func PersistenceCapabilities(runtime Runtime) EventPersistenceCapabilities {
+	if provider, ok := runtime.(EventPersistenceCapabilityProvider); ok {
+		capabilities := provider.EventPersistenceCapabilities()
+		if capabilities.MaxToolResultBytes > 0 {
+			return capabilities
+		}
+	}
+	return EventPersistenceCapabilities{MaxToolResultBytes: 32 * 1024}
+}
