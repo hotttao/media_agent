@@ -7,6 +7,7 @@ import {
   Send,
   Settings,
   Sparkles,
+  Square,
 } from "lucide-react";
 import {
   createContext,
@@ -24,6 +25,7 @@ import { MessageBubble } from "@/domains/chat/components/message-bubble";
 import {
   createClientId,
   createSession,
+  interruptTurn,
   itemText,
   listMessages,
   listSessions,
@@ -56,11 +58,13 @@ interface WorkspaceRuntime {
   messages: ChatMessage[];
   loading: boolean;
   streaming: boolean;
+  interrupting: boolean;
   error: string;
   setError(value: string): void;
   selectSession(id: string): Promise<void>;
   addSession(): Promise<void>;
   send(text: string): Promise<void>;
+  interrupt(): Promise<void>;
   openSettings(): void;
 }
 
@@ -133,11 +137,13 @@ function ChatApp() {
     messages,
     loading,
     streaming,
+    interrupting,
     error,
     setError,
     selectSession,
     addSession,
     send,
+    interrupt,
   } = useRuntime();
   const [input, setInput] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
@@ -233,14 +239,27 @@ function ChatApp() {
           rows={1}
           className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm outline-none"
         />
-        <Button
-          type="submit"
-          size="icon"
-          disabled={!input.trim() || streaming || !sessionId}
-          aria-label="Send message"
-        >
-          <Send size={17} />
-        </Button>
+        {streaming ? (
+          <Button
+            type="button"
+            size="icon"
+            variant="destructive"
+            disabled={interrupting || !sessionId}
+            aria-label={interrupting ? "Stopping agent" : "Stop agent"}
+            onClick={() => void interrupt()}
+          >
+            <Square size={15} fill="currentColor" />
+          </Button>
+        ) : (
+          <Button
+            type="submit"
+            size="icon"
+            disabled={!input.trim() || !sessionId}
+            aria-label="Send message"
+          >
+            <Send size={17} />
+          </Button>
+        )}
       </form>
     </div>
   );
@@ -574,6 +593,7 @@ export function ChatPage() {
   const [historyReadySessionId, setHistoryReadySessionId] = useState("");
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
+  const [interrupting, setInterrupting] = useState(false);
   const [error, setError] = useState("");
   const [dialog, setDialog] = useState<"create" | "edit" | null>(null);
   const requestVersion = useRef(0);
@@ -596,6 +616,7 @@ export function ChatPage() {
       setHistoryReadySessionId("");
       setMessages([]);
       setStreaming(false);
+      setInterrupting(false);
       return;
     }
     if (!workspacesLoaded) return;
@@ -608,6 +629,7 @@ export function ChatPage() {
     setMessages([]);
     setHistoryReadySessionId("");
     setStreaming(false);
+    setInterrupting(false);
     setError("");
     listSessions(workspaceId)
       .then(async (values) => {
@@ -653,6 +675,7 @@ export function ChatPage() {
         sessions.find((session) => session.id === nextId)?.chat_status ===
           "agent",
       );
+      setInterrupting(false);
       setSearchParams({ session: nextId }, { replace: true });
       const values = await listMessages(nextId);
       if (version === requestVersion.current) {
@@ -696,6 +719,7 @@ export function ChatPage() {
       if (event.type === "error") {
         setError(event.message ?? "Agent failed");
         setStreaming(false);
+        setInterrupting(false);
       }
       const delta = event.delta?.text;
       if (event.type === "item.delta" && delta) {
@@ -750,6 +774,7 @@ export function ChatPage() {
       }
       if (event.type === "session.ended") {
         setStreaming(false);
+        setInterrupting(false);
         setSessions((current) =>
           current.map((session) =>
             session.id === targetSession
@@ -808,6 +833,7 @@ export function ChatPage() {
     if (!targetSession || streaming) return;
     setError("");
     setStreaming(true);
+    setInterrupting(false);
     setSessions((current) =>
       current.map((session) =>
         session.id === targetSession
@@ -842,6 +868,20 @@ export function ChatPage() {
       }
     }
   }
+  async function interrupt() {
+    const targetSession = activeSessionId.current;
+    if (!targetSession || !streaming || interrupting) return;
+    setError("");
+    setInterrupting(true);
+    try {
+      await interruptTurn(targetSession);
+    } catch (cause) {
+      if (targetSession === activeSessionId.current) {
+        setInterrupting(false);
+        setError(cause instanceof Error ? cause.message : "Stop failed");
+      }
+    }
+  }
   function saved(value: Workspace) {
     setWorkspaces((current) =>
       current.some((item) => item.id === value.id)
@@ -858,11 +898,13 @@ export function ChatPage() {
         messages,
         loading,
         streaming,
+        interrupting,
         error,
         setError,
         selectSession,
         addSession,
         send,
+        interrupt,
         openSettings: () => setDialog("edit"),
       }
     : null;

@@ -50,6 +50,7 @@ type Repository interface {
 	ListOwned(ctx context.Context, userID, workspaceID string) ([]Session, error)
 	CreateSession(ctx context.Context, session *Session) error
 	GetOwned(ctx context.Context, sessionID, userID string) (*Session, error)
+	GetRunningTurn(ctx context.Context, sessionID string) (*Turn, error)
 	ListMessages(ctx context.Context, sessionID string) ([]Message, error)
 	ListEventsAfter(ctx context.Context, sessionID string, sequence int64) ([]Event, error)
 	FindCompletedItemEvent(ctx context.Context, turnID, itemID, itemKind string) (*Event, error)

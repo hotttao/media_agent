@@ -90,6 +90,18 @@ func (s *turnEventSink) Accept(raw json.RawMessage) error {
 
 func (s *turnEventSink) Flush() error { return s.toolResults.Flush() }
 
+func (s *turnEventSink) TerminalReason() string {
+	s.terminalMu.Lock()
+	defer s.terminalMu.Unlock()
+	var envelope struct {
+		Reason string `json:"reason"`
+	}
+	if len(s.terminal) > 0 && json.Unmarshal(s.terminal, &envelope) == nil {
+		return envelope.Reason
+	}
+	return ""
+}
+
 func (s *turnEventSink) Terminal(reason string) json.RawMessage {
 	s.terminalMu.Lock()
 	defer s.terminalMu.Unlock()

@@ -34,6 +34,7 @@ func envValue(name, fallback string) string {
 // Codex, Goose, Claude, and future clients implement only request differences.
 type Runtime interface {
 	Chat(context.Context, ChatInput, func(json.RawMessage) error) error
+	Interrupt(context.Context, string) (bool, error)
 }
 
 type EventPersistenceCapabilities struct {

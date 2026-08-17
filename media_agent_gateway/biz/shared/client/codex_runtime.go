@@ -14,6 +14,34 @@ import (
 type CodexRuntime struct {
 	BaseURL string
 	SSE     *sharedsse.Client
+	HTTP    *http.Client
+}
+
+func (r *CodexRuntime) Interrupt(ctx context.Context, runtimeSessionID string) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(r.BaseURL, "/")+"/sessions/"+runtimeSessionID+"/interrupt", nil)
+	if err != nil {
+		return false, err
+	}
+	httpClient := r.HTTP
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("codex runtime interrupt returned %s", resp.Status)
+	}
+	var result struct {
+		Success     bool `json:"success"`
+		Interrupted bool `json:"interrupted"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false, err
+	}
+	return result.Success && result.Interrupted, nil
 }
 
 func (*CodexRuntime) EventPersistenceCapabilities() EventPersistenceCapabilities {

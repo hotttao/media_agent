@@ -81,6 +81,19 @@ export async function runTurn(
   ).then((response) => response.json());
 }
 
+export async function interruptTurn(
+  sessionId: string,
+): Promise<{ turn_id: string; status: string }> {
+  return checked(
+    await fetch(`/api/chat/sessions/${sessionId}/interrupt`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }),
+  ).then((response) => response.json());
+}
+
 export async function subscribeSessionEvents(
   sessionId: string,
   afterSequence: number,
