@@ -12,6 +12,7 @@ type fakeRepo struct {
 	session  *domain.Session
 	messages []domain.Message
 	events   []domain.Event
+	finished string
 }
 
 func (f *fakeRepo) FindLatestActive(context.Context, string) (*domain.Session, error) {
@@ -51,6 +52,15 @@ func (f *fakeRepo) ListEventsAfter(_ context.Context, _ string, sequence int64) 
 	}
 	return result, nil
 }
+func (f *fakeRepo) FindCompletedItemEvent(_ context.Context, turnID, itemID, itemKind string) (*domain.Event, error) {
+	for i := range f.events {
+		event, err := domain.ParseRuntimeEvent(f.events[i].Payload)
+		if err == nil && f.events[i].TurnID == turnID && event.ItemID == itemID && event.ItemKind == itemKind {
+			return &f.events[i], nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
 func (f *fakeRepo) NextMessageSequence(context.Context, string) (int64, error) {
 	return int64(len(f.messages) + 1), nil
 }
@@ -71,7 +81,10 @@ func (f *fakeRepo) AppendEvent(_ context.Context, e *domain.Event, m *domain.Mes
 	}
 	return nil
 }
-func (f *fakeRepo) FinishTurn(context.Context, string, string) error { return nil }
+func (f *fakeRepo) FinishTurn(_ context.Context, _ string, status string) error {
+	f.finished = status
+	return nil
+}
 
 type directTx struct{}
 
@@ -105,6 +118,39 @@ func TestPersistCompletedItemCreatesFullMessage(t *testing.T) {
 	}
 	if repo.session.RuntimeSessionID != "runtime-1" {
 		t.Fatalf("runtime session id was not saved")
+	}
+}
+
+func TestPersistToolEventsDoNotCreateMessagesAndToolCallIsIdempotent(t *testing.T) {
+	repo := &fakeRepo{session: &domain.Session{ID: "session", UserID: "user"}}
+	service := New(repo, directTx{}, defaultContext{})
+	toolCall := json.RawMessage(`{"type":"item.completed","item":{"item_id":"call-item","kind":"tool_call","content":[{"type":"tool_call","call_id":"call"}]}}`)
+	toolResult := json.RawMessage(`{"type":"item.completed","item":{"item_id":"result-item","kind":"tool_result","content":[{"type":"tool_result","call_id":"call","output":"ok"}]}}`)
+
+	for _, raw := range []json.RawMessage{toolCall, toolCall, toolResult} {
+		if _, err := service.PersistEvent(context.Background(), "session", "turn", raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(repo.events) != 2 {
+		t.Fatalf("events=%d, want one tool call and one result", len(repo.events))
+	}
+	if len(repo.messages) != 0 {
+		t.Fatalf("tool events created %d messages", len(repo.messages))
+	}
+}
+
+func TestFinalizeTurnAppendsTerminalEventBeforeFinishing(t *testing.T) {
+	repo := &fakeRepo{session: &domain.Session{ID: "session", UserID: "user"}}
+	service := New(repo, directTx{}, defaultContext{})
+	raw := json.RawMessage(`{"type":"session.ended","reason":"completed"}`)
+
+	event, err := service.FinalizeTurn(context.Background(), "session", "turn", "completed", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Sequence != 1 || len(repo.events) != 1 || repo.finished != "completed" {
+		t.Fatalf("terminal transaction was incomplete: event=%+v events=%d status=%q", event, len(repo.events), repo.finished)
 	}
 }
 

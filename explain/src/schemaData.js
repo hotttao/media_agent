@@ -39,7 +39,7 @@ export const domains = [
     "label": "AFS",
     "description": "跨 workspace 共享文件、controller capability 和 FUSE sidecar 挂载。"
   }
-]
+];
 
 export const tables = {
   "users": {
@@ -2369,7 +2369,7 @@ export const tables = {
       }
     }
   }
-}
+};
 
 export const edges = [
   [
@@ -2542,7 +2542,7 @@ export const edges = [
     "session_events",
     "sessions.id -> session_events.session_id"
   ]
-]
+];
 
 export const walkthroughs = {
   "oauthLogin": {
@@ -5982,9 +5982,120 @@ export const walkthroughs = {
     ]
   },
   "agentStartup": {
-    "title": "Agent 启动：从 WORKSPACE_ID 到本地文件",
-    "intro": "观察重点是 workspace_config 不会直接交给 Codex 使用，control-plane 会先联表解析成 agent-facing config。另一个重点是 token 边界：agent 启动拉 /_cp/config/skills/credentials 这条链路当前不带 Bearer；chat dispatch 下发的是 session_token，用于 MCP/session 归属；service_token 主要用于 API/服务间调用，不是启动 config 的认证凭据。",
+    "title": "Agent 启动：Manifest 只传身份和入口",
+    "intro": "理解 Agent 启动先抓住一条主线：Kubernetes manifest 只负责让 agent 容器知道自己是谁、去哪里找 control-plane、工作目录在哪里。model、base_url、api_key、prompt_content、skills、credentials、session_token 都不是 agent 容器启动参数；它们是在容器启动后，由 agent 通过 CP_URL + WORKSPACE_ID 再向 /_cp 接口读取，或者在 chat 阶段由 control-plane 下发。",
     "steps": [
+      {
+        "title": "Agent 容器启动参数：只看进程真正收到的 env",
+        "actor": "control-plane/env-runner -> Kubernetes -> agent container",
+        "request": "Apply Pod template and start agent container",
+        "method": "K8S_APPLY",
+        "url": "internal/k8s-provider/workspace-spec.ts:buildWorkspacePodTemplate()",
+        "params": {
+          "image": "agentImageFor(cfg, agentType)",
+          "required_env": {
+            "WORKSPACE_DIR": "/workspace",
+            "CP_URL": "cfg.cpServiceUrl，例如 http://control-plane:30080",
+            "WORKSPACE_ID": "ws_codex_demo"
+          },
+          "optional_env_when_afs_enabled": {
+            "AFS_CONTROLLER": "cfg.afs.controllerAddr",
+            "AFS_FUSE_SERVER": "cfg.afs.fuseServerAddr"
+          },
+          "workspace_mount": "/workspace"
+        },
+        "paramNotes": [
+          "WORKSPACE_ID：agent 知道自己属于哪个 workspace。后续 GET /_cp/workspaces/:id/config、/skills、/credentials 都用这个 id 拼路径。",
+          "CP_URL：agent 容器内访问 control-plane 的基础地址。agent 启动后所有配置加载都从这里发起。",
+          "WORKSPACE_DIR：agent 的工作目录。平台把 workspace PVC 挂到 /workspace，agent 会在这里写 AGENTS.md/CLAUDE.md、配置文件、skills、transcript 等。",
+          "AFS_CONTROLLER / AFS_FUSE_SERVER：只有启用 AFS 时才下发给 agent，用来让平台 AFS tool 找到 AFS controller/fuse server。",
+          "不是 agent 启动参数：model、base_url、api_key、prompt_content、skills、credentials。这些是 agent 启动后从 /_cp 读取的业务配置。",
+          "也不是 agent 启动参数：session_token。它是用户发起 chat 时，control-plane POST /chat 才放进 body 的会话归属 token。"
+        ],
+        "response": {
+          "agent_container_env": {
+            "WORKSPACE_DIR": "/workspace",
+            "CP_URL": "http://control-plane:30080",
+            "WORKSPACE_ID": "ws_codex_demo",
+            "AFS_CONTROLLER": "only when AFS enabled",
+            "AFS_FUSE_SERVER": "only when AFS enabled"
+          },
+          "not_in_agent_startup_env": [
+            "model",
+            "base_url",
+            "api_key",
+            "prompt_content",
+            "skills",
+            "credentials",
+            "session_token"
+          ]
+        },
+        "codeBlocks": [
+          {
+            "title": "源码锚点：agentContainer.env",
+            "code": "internal/k8s-provider/workspace-spec.ts\n\nconst agentContainer = {\n  name: 'agent',\n  image: agentImageFor(cfg, agentType),\n  env: [\n    { name: 'WORKSPACE_DIR', value: '/workspace' },\n    { name: 'CP_URL', value: cfg.cpServiceUrl },\n    { name: 'WORKSPACE_ID', value: workspaceId },\n    ...(cfg.afs.enabled ? [\n      { name: 'AFS_CONTROLLER', value: cfg.afs.controllerAddr },\n      { name: 'AFS_FUSE_SERVER', value: cfg.afs.fuseServerAddr },\n    ] : []),\n  ],\n  volumeMounts: [\n    { name: 'workspace', mountPath: '/workspace' },\n    ...\n  ],\n}"
+          },
+          {
+            "title": "关键边界：Manifest 不承载业务配置",
+            "code": "K8s manifest 只让 agent 进程启动起来，并告诉它：\n1. 我是谁：WORKSPACE_ID\n2. 去哪里找 CP：CP_URL\n3. 工作目录在哪里：WORKSPACE_DIR\n\n业务配置加载发生在下一步：\nGET /_cp/workspaces/:id/config\nGET /_cp/workspaces/:id/skills\nGET /_cp/workspaces/:id/credentials"
+          }
+        ],
+        "implementation": [
+          "buildWorkspacePodTemplate() 生成 agent 容器定义。这里最重要的是 env，不需要把 sidecar、probe、完整 volumes 都当成 agent 启动参数去理解。",
+          "agent 容器启动时只拿到 WORKSPACE_ID、CP_URL、WORKSPACE_DIR，以及可选的 AFS 地址。拿到这些以后，它才有能力向 control-plane 拉业务配置。",
+          "sidecar、probe、mountPropagation 是 Pod 运行环境的一部分，不是 agent 业务配置本身。理解启动主线时先把它们放在旁支。"
+        ],
+        "relatedTables": [
+          "workspaces",
+          "workspace_config"
+        ],
+        "note": "一句话：Manifest 给 agent 下发“身份和入口”，不是下发完整业务配置。"
+      },
+      {
+        "title": "业务时序图：从启动 workspace 到 agent 可接收 chat",
+        "actor": "User / control-plane / DB / env-runner / Kubernetes / agent",
+        "request": "Workspace start + Pod boot + agent config load",
+        "method": "SEQUENCE",
+        "url": "control-plane/src/services/workspace-reconcile.ts + internal/k8s-provider/workspace-spec.ts + agents/*/src/config.ts",
+        "params": {
+          "workspace_id": "ws_codex_demo",
+          "manifest_agent_env": [
+            "WORKSPACE_ID",
+            "CP_URL",
+            "WORKSPACE_DIR",
+            "AFS_* when enabled"
+          ],
+          "loaded_after_boot": [
+            "config",
+            "skills",
+            "credentials"
+          ],
+          "chat_only": [
+            "session_token"
+          ]
+        },
+        "paramNotes": [
+          "workspace_id：贯穿全流程。Manifest 里作为 WORKSPACE_ID，下游 /_cp 路径也使用同一个值。",
+          "manifest_agent_env：Kubernetes 启动 agent 容器时注入的少量环境变量。",
+          "loaded_after_boot：agent 进程启动后主动 GET /_cp 拉取，不在 manifest 里。",
+          "chat_only：session_token 只在用户发消息时出现，POST /chat body 下发，不参与 Pod 启动。"
+        ],
+        "diagram": "Agent Pod 启动主线\nsequenceDiagram\n  participant User as User/Web\n  participant CP as control-plane\n  participant DB as PostgreSQL\n  participant Runner as env-runner\n  participant K8s as Kubernetes\n  participant Agent as agent Pod\n\n  User->>CP: start workspace or first chat\n  CP->>DB: read workspace_config\n  CP->>DB: set desired_phase=running\n  Runner->>DB: watch desired spec\n  Runner->>K8s: apply PVC and workload\n  K8s->>Agent: start container with env\n  Agent->>CP: GET /_cp/workspaces/:id/config\n  CP->>DB: join config/template/provider/prompt\n  CP-->>Agent: model/base_url/prompt/mcp\n  Agent->>CP: GET /_cp/workspaces/:id/skills\n  CP-->>Agent: skill packages\n  Agent->>CP: GET /_cp/workspaces/:id/credentials\n  CP-->>Agent: env/file credentials\n  Agent->>Agent: write local startup files\n  Agent-->>K8s: /health OK\n  K8s-->>CP: Ready -> status running\n  User->>CP: POST /api/workspaces/:id/chat\n  CP->>Agent: POST /chat with session_token",
+        "implementation": [
+          "start/reconcile 阶段：control-plane 改 desired_phase/status，env-runner 根据 desired spec 创建或更新 Kubernetes workload。",
+          "Pod 启动阶段：Kubernetes 只把 agent env 注入容器，让 agent 拿到 WORKSPACE_ID、CP_URL、WORKSPACE_DIR。",
+          "配置加载阶段：agent 用 CP_URL + WORKSPACE_ID 依次读取 config、skills、credentials，并写入容器内本地文件。",
+          "Chat 阶段：workspace Ready 后，用户消息才会触发 control-plane POST agent /chat；session_token 也是这一步才下发。"
+        ],
+        "relatedTables": [
+          "workspaces",
+          "workspace_config",
+          "workspace_skills",
+          "skill_versions",
+          "session_tokens"
+        ],
+        "note": "看图时按四段读：CP 标记要启动、K8s 启动容器、agent 拉配置、chat 才下发 session_token。"
+      },
       {
         "title": "agent 请求 config",
         "actor": "Codex agent -> control-plane",
@@ -7906,4 +8017,4 @@ export const walkthroughs = {
       }
     ]
   }
-}
+};

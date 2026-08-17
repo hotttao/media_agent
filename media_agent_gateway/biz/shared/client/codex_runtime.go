@@ -16,6 +16,10 @@ type CodexRuntime struct {
 	SSE     *sharedsse.Client
 }
 
+func (*CodexRuntime) EventPersistenceCapabilities() EventPersistenceCapabilities {
+	return EventPersistenceCapabilities{MaxToolResultBytes: 32 * 1024}
+}
+
 func (r *CodexRuntime) Chat(ctx context.Context, input ChatInput, consume func(json.RawMessage) error) error {
 	body, err := json.Marshal(input)
 	if err != nil {

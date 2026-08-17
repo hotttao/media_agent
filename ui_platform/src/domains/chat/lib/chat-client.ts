@@ -107,25 +107,41 @@ export async function subscribeSessionEvents(
     const frames = buffer.split(/\r?\n\r?\n/);
     buffer = frames.pop() ?? "";
     for (const frame of frames) {
-      const id = frame
-        .split(/\r?\n/)
-        .find((line) => line.startsWith("id:"))
-        ?.slice(3)
-        .trim();
-      const data = frame
-        .split(/\r?\n/)
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trimStart())
-        .join("\n");
-      const sequence = Number(id);
-      if (data && Number.isSafeInteger(sequence) && sequence > afterSequence) {
-        afterSequence = sequence;
-        onEvent(JSON.parse(data) as UniversalEvent, sequence);
-      }
+      const decoded = decodeSessionEventFrame(frame, afterSequence);
+      if (!decoded) continue;
+      afterSequence = decoded.cursor;
+      onEvent(decoded.event, decoded.cursor);
     }
     if (done) break;
   }
   return afterSequence;
+}
+
+export function decodeSessionEventFrame(
+  frame: string,
+  cursor: number,
+): { event: UniversalEvent; cursor: number } | null {
+  const lines = frame.split(/\r?\n/);
+  const eventName = lines
+    .find((line) => line.startsWith("event:"))
+    ?.slice(6)
+    .trim();
+  if (eventName && eventName !== "message") return null;
+  const data = lines
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart())
+    .join("\n");
+  if (!data) return null;
+  const id = lines
+    .find((line) => line.startsWith("id:"))
+    ?.slice(3)
+    .trim();
+  if (id === undefined || id === "") {
+    return { event: JSON.parse(data) as UniversalEvent, cursor };
+  }
+  const sequence = Number(id);
+  if (!Number.isSafeInteger(sequence) || sequence <= cursor) return null;
+  return { event: JSON.parse(data) as UniversalEvent, cursor: sequence };
 }
 
 export function createClientId(): string {

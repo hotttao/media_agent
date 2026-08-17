@@ -31,7 +31,7 @@ func (r *Repository) FindLatestActive(ctx context.Context, userID string) (*doma
 }
 
 func (r *Repository) CreateSession(ctx context.Context, s *domain.Session) error {
-	return dal.FromContext(ctx, r.db).Create(&model.AgentSession{ID: s.ID, UserID: s.UserID, WorkspaceID: s.WorkspaceID, AgentID: s.AgentID, AgentType: s.AgentType, Title: s.Title, ContextVersion: s.ContextVersion, Status: s.Status, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt}).Error
+	return dal.FromContext(ctx, r.db).Create(&model.AgentSession{ID: s.ID, UserID: s.UserID, WorkspaceID: s.WorkspaceID, AgentID: s.AgentID, AgentType: s.AgentType, Title: s.Title, ContextVersion: s.ContextVersion, Status: s.Status, ChatStatus: s.ChatStatus, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt}).Error
 }
 
 func (r *Repository) ListOwned(ctx context.Context, userID, workspaceID string) ([]domain.Session, error) {
@@ -89,16 +89,50 @@ func (r *Repository) ListEventsAfter(ctx context.Context, sessionID string, sequ
 	return out, nil
 }
 
+func (r *Repository) FindCompletedItemEvent(ctx context.Context, turnID, itemID, itemKind string) (*domain.Event, error) {
+	var row model.UniversalEvent
+	err := dal.FromContext(ctx, r.db).
+		Where("turn_id = ? AND type = ?", turnID, "item.completed").
+		Where("payload -> 'item' ->> 'item_id' = ?", itemID).
+		Where("payload -> 'item' ->> 'kind' = ?", itemKind).
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &domain.Event{ID: row.ID, SessionID: row.SessionID, TurnID: row.TurnID, Type: row.Type, Payload: row.Payload, Sequence: row.Sequence, CreatedAt: row.CreatedAt}, nil
+}
+
 func (r *Repository) NextMessageSequence(ctx context.Context, sessionID string) (int64, error) {
+	if err := r.lockSession(ctx, sessionID); err != nil {
+		return 0, err
+	}
 	var seq int64
 	err := dal.FromContext(ctx, r.db).Raw("SELECT COALESCE(MAX(sequence), 0) + 1 FROM media_agent_gateway.messages WHERE session_id = ?", sessionID).Scan(&seq).Error
 	return seq, err
 }
 
 func (r *Repository) NextEventSequence(ctx context.Context, sessionID string) (int64, error) {
+	if err := r.lockSession(ctx, sessionID); err != nil {
+		return 0, err
+	}
 	var seq int64
 	err := dal.FromContext(ctx, r.db).Raw("SELECT COALESCE(MAX(sequence), 0) + 1 FROM media_agent_gateway.universal_events WHERE session_id = ?", sessionID).Scan(&seq).Error
 	return seq, err
+}
+
+func (r *Repository) lockSession(ctx context.Context, sessionID string) error {
+	var lockedID string
+	result := dal.FromContext(ctx, r.db).Raw("SELECT id FROM media_agent_gateway.agent_sessions WHERE id = ? FOR UPDATE", sessionID).Scan(&lockedID)
+	if result.Error != nil {
+		return result.Error
+	}
+	if lockedID == "" {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repository) CreateTurnAndMessage(ctx context.Context, turn *domain.Turn, msg *domain.Message) error {
@@ -106,7 +140,10 @@ func (r *Repository) CreateTurnAndMessage(ctx context.Context, turn *domain.Turn
 	if err := db.Create(&model.Turn{ID: turn.ID, SessionID: turn.SessionID, IdempotencyKey: turn.IdempotencyKey, Status: turn.Status, StartedAt: turn.StartedAt}).Error; err != nil {
 		return classify(err)
 	}
-	return db.Create(&model.Message{ID: msg.ID, SessionID: msg.SessionID, TurnID: msg.TurnID, Role: msg.Role, Content: msg.Content, Sequence: msg.Sequence, CreatedAt: msg.CreatedAt}).Error
+	if err := db.Create(&model.Message{ID: msg.ID, SessionID: msg.SessionID, TurnID: msg.TurnID, Role: msg.Role, Content: msg.Content, Sequence: msg.Sequence, CreatedAt: msg.CreatedAt}).Error; err != nil {
+		return err
+	}
+	return db.Model(&model.AgentSession{}).Where("id = ?", turn.SessionID).Updates(map[string]any{"chat_status": domain.ChatStatusAgent, "updated_at": time.Now().UTC()}).Error
 }
 
 func (r *Repository) AppendEvent(ctx context.Context, event *domain.Event, msg *domain.Message, runtimeSessionID string) error {
@@ -128,7 +165,15 @@ func (r *Repository) AppendEvent(ctx context.Context, event *domain.Event, msg *
 
 func (r *Repository) FinishTurn(ctx context.Context, turnID, status string) error {
 	now := time.Now().UTC()
-	return dal.FromContext(ctx, r.db).Model(&model.Turn{}).Where("id = ?", turnID).Updates(map[string]any{"status": status, "finished_at": now}).Error
+	db := dal.FromContext(ctx, r.db)
+	var turn model.Turn
+	if err := db.Where("id = ?", turnID).First(&turn).Error; err != nil {
+		return err
+	}
+	if err := db.Model(&model.Turn{}).Where("id = ?", turnID).Updates(map[string]any{"status": status, "finished_at": now}).Error; err != nil {
+		return err
+	}
+	return db.Model(&model.AgentSession{}).Where("id = ?", turn.SessionID).Updates(map[string]any{"chat_status": domain.ChatStatusHuman, "updated_at": now}).Error
 }
 
 func classify(err error) error {
@@ -143,5 +188,5 @@ func classify(err error) error {
 }
 
 func toSession(row model.AgentSession) *domain.Session {
-	return &domain.Session{ID: row.ID, UserID: row.UserID, WorkspaceID: row.WorkspaceID, AgentID: row.AgentID, AgentType: row.AgentType, Title: row.Title, ContextVersion: row.ContextVersion, RuntimeSessionID: row.RuntimeSessionID, Status: row.Status, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
+	return &domain.Session{ID: row.ID, UserID: row.UserID, WorkspaceID: row.WorkspaceID, AgentID: row.AgentID, AgentType: row.AgentType, Title: row.Title, ContextVersion: row.ContextVersion, RuntimeSessionID: row.RuntimeSessionID, Status: row.Status, ChatStatus: row.ChatStatus, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
 }

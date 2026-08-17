@@ -40,3 +40,13 @@ func TestSlowSubscriberIsDroppedWithoutBlockingOthers(t *testing.T) {
 		t.Fatal("slow subscriber should be closed")
 	}
 }
+
+func TestTransientFrameIsBroadcastWithoutDurableSequence(t *testing.T) {
+	hub := New(1)
+	subscription := hub.Subscribe("session")
+	hub.Publish("session", Event{Payload: []byte(`{"type":"item.delta"}`)})
+	got := <-subscription.Events
+	if got.Sequence != 0 || string(got.Payload) != `{"type":"item.delta"}` {
+		t.Fatalf("unexpected transient frame: %+v", got)
+	}
+}

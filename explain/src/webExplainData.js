@@ -1,7 +1,73 @@
 export const webExplainData = {
-  "title": "Web：Chat Component 页面结构",
-  "intro": "这一章从页面嵌套关系理解 web/src 代码。目标不是解释每个 hook 的业务细节，而是先回答一个更基础的问题：用户在 workspace 页面看到的 chat 面板，是怎样从路由、桌面 shell、布局 slot、AppWindow，最终落到 WorkspaceChatPanel 的。",
+  "title": "Web：界面结构与用户交互流程",
+  "intro": "这里同时解释 Web 页面结构和关键用户操作如何进入后端。每篇文章独立说明入口、状态变化、失败分支和实现边界。",
   "chapters": [
+    {
+      "id": "interrupt-agent-turn",
+      "title": "用户中断 Agent：从停止按钮到 Turn 终态",
+      "summary": "中断不是把数据库状态直接改成 interrupted。正确流程是先记录 interrupt_requested，再把取消命令送到 Agent Runtime；只有 Runtime 确认停止或返回 interrupted 终止事件后，Gateway 才提交 Turn 终态。",
+      "sourceRefs": [
+        "目标设计：docs/media_agent_gateway/workflow/0001-run_turn/run_turn.md",
+        "目标领域：docs/media_agent_gateway/domain/0001-agent_session/agent_session.md",
+        "旧平台入口：control-plane/src/routes/workspaces/sessions.ts:221-260",
+        "旧平台转发：control-plane/src/routes/workspaces/_shared.ts:19-39",
+        "旧 Agent 中断：agents/claude-code/src/server.ts:342-348",
+        "旧 Agent AbortController：agents/claude-code/src/agent.ts:69,124-139",
+        "旧平台终止清理：control-plane/src/lib/sse.ts:567-590"
+      ],
+      "outline": [
+        { "label": "核心结论", "target": "interrupt-agent-turn-overview" },
+        { "label": "端到端时序", "target": "interrupt-agent-turn-code-0" },
+        { "label": "Turn 状态机", "target": "interrupt-agent-turn-code-1" },
+        { "label": "接口结果语义", "target": "interrupt-agent-turn-code-2" },
+        { "label": "Pending Message", "target": "interrupt-agent-turn-code-3" },
+        { "label": "事务与幂等", "target": "interrupt-agent-turn-code-4" },
+        { "label": "旧实现对应关系", "target": "interrupt-agent-turn-code-5" },
+        { "label": "阅读结论", "target": "interrupt-agent-turn-takeaways" }
+      ],
+      "bullets": [
+        "用户只能中断自己有权访问的 Session。Edge 验证 Cookie JWT 或用户 Service Token，Gateway 再读取 Session 的真实 owner 和 workspace 做最终判断。",
+        "pending 且尚未启动 Runtime 的 Turn 可以在数据库内直接进入 interrupted；running Turn 必须先进入 interrupt_requested，再通知 Runtime。",
+        "delivered 表示取消请求到达 Runtime；interrupted 表示 Runtime 确实找到并终止了 active Turn。两者不能合并成一个 success。",
+        "Runtime 不可达时，Turn 保持 interrupt_requested。Gateway 后台重试或通过 Runtime 终止事件协调，不能谎报 interrupted。",
+        "中断和自然完成可能并发。若 Runtime 已自然完成，completed 是真实结果，晚到中断不能覆盖它。",
+        "中断只能阻止后续执行，不能撤销已经发生的外部 MCP、消息发送、Browser 创建、生成任务或对象上传。",
+        "同一 Session 不允许并发 Turn。运行期间输入的 follow-up 只是 pending message；中断或失败后不自动执行它。"
+      ],
+      "codeBlocks": [
+        {
+          "title": "端到端时序：请求中断、Runtime 确认、提交终态",
+          "code": "UI                 Edge              media_agent_gateway       Gateway DB             Agent Runtime\n |                  |                         |                    |                       |\n |-- 点击停止 ----->|                         |                    |                       |\n |                  |-- mTLS + Principal ---->|                    |                       |\n |                  |                         |-- 读取 Session --->|                       |\n |                  |                         |   校验 owner/workspace/active_turn_id        |\n |                  |                         |                    |                       |\n |                  |                         |-- TX1: running -> interrupt_requested ------>|\n |                  |                         |-- CancelTurn(turn_id, request_id) ----------->|\n |                  |                         |                    |          AbortController.Cancel()\n |                  |                         |<-- accepted=true -----------------------------|\n |                  |                         |<-- TurnEnded(reason=interrupted) -------------|\n |                  |                         |-- TX2: interrupt_requested -> interrupted --->|\n |<-- delivered=true, interrupted=true -------|                    |                       |\n\n关键顺序：\n  1. 先持久化 interrupt_requested，避免取消请求丢失。\n  2. 再调用 Runtime，数据库事务不覆盖网络调用。\n  3. Runtime 的终止事件才是 interrupted 终态的依据。"
+        },
+        {
+          "title": "Turn 状态机：为什么需要 interrupt_requested",
+          "code": "pending -------------------------------> interrupted\n   |                                      尚未启动 Runtime，可本地结束\n   v\nrunning ---> interrupt_requested ---> interrupted\n   |                 |                     Runtime 确认中断\n   |                 +-------------------> completed\n   |                 |                     中断到达前已经自然完成\n   |                 +-------------------> failed\n   |                                       Runtime 以错误结束\n   +-------------------------------------> completed / failed\n\n终态：completed、failed、interrupted。\n规则：\n  - 终态不能互相覆盖。\n  - interrupt_requested 不是“已经停止”，只是“平台已接受中断意图”。\n  - 晚到的 completed/failed/interrupted 事件使用 expected_status 做 CAS。\n  - 客户端断线不是中断，不改变 Turn 状态。"
+        },
+        {
+          "title": "接口结果语义：delivered 和 interrupted 必须分开",
+          "code": "场景                                  delivered   interrupted   Gateway 行为\n--------------------------------------------------------------------------------\nTurn=pending，尚未启动 Runtime            true        true          本地提交 interrupted\nRuntime 找到 active Turn 并接受取消        true        true          等终止事件后提交终态\nRuntime 已经自然结束                       true        false         协调并返回 completed/failed\nRuntime 收到请求但没有这个 Turn            true        false         查询真实状态，不伪造终态\nRuntime 网络不可达                         false       false         保持 interrupt_requested 并重试\nTurn 已经 interrupted                      true        true          幂等返回既有结果\nTurn 已经 completed/failed                  true        false         返回真实终态\n\nHTTP 请求成功只说明 Gateway 处理了请求，不等于 Agent 已经停止。UI 应依据 delivered、interrupted 和 turn_status 展示结果。"
+        },
+        {
+          "title": "Pending Message：中断后为什么不能自动执行 follow-up",
+          "code": "同一 Session：\n\nTurn A = running\n用户提交 follow-up B\n  -> 不创建并发 Turn\n  -> 保存 session.pending_message = B\n\nTurn A completed\n  -> 原子 take-and-clear B\n  -> 创建 Turn B\n\nTurn A interrupted / failed\n  -> 不消费 B\n  -> B 保留为 pending message\n  -> 用户选择继续、修改或清除\n\n原因：用户刚点击“停止”，系统如果立刻执行排队输入，会产生“明明停止了却又开始运行”的反直觉行为。旧 agent-platform 也是只在 session.ended(reason=completed) 后 drain pending message。"
+        },
+        {
+          "title": "事务、幂等和晚到事件",
+          "code": "TX1（中断意图）\n  条件：turn.status = running\n  写入：status=interrupt_requested, interrupt_request_id, requested_by, requested_at\n\n事务外\n  调用 Runtime.CancelTurn(turn_id, interrupt_request_id)\n\nTX2（终态）\n  条件：status IN (running, interrupt_requested)\n  写入：status=interrupted, finished_at, terminal event + Outbox\n\n幂等键：turn_id + interrupt_request_id\n\n晚到规则：\n  - 重复 CancelTurn：Runtime 返回同一接受结果。\n  - 重复 TurnEnded：Gateway 按 event_id / expected_status 去重。\n  - interrupted 后的普通增量事件：只保留诊断，不生成新的用户可见内容。\n  - completed 已提交后再收到 Cancel：返回 interrupted=false，不覆盖 completed。"
+        },
+        {
+          "title": "旧 agent-platform 如何实现这一语义",
+          "code": "Web route\n  control-plane/src/routes/workspaces/sessions.ts\n  POST /:workspaceId/sessions/:sessionId/interrupt\n\nControl-plane -> Agent\n  interruptAgentSession() 调 Agent /sessions/:id/interrupt\n  返回 { delivered, interrupted }，明确区分“送达”和“真正中断”。\n\nAgent Runtime\n  activeControllers: Map<sessionId, AbortController>\n  interruptSession(sessionId) 找到 controller 后调用 abort()。\n\n终止事件\n  Agent 输出 session.ended(reason=interrupted)。\n  SSE 持久化链清理 active turn，并释放 turn admission slot。\n\nPending follow-up\n  只有 reason=completed 才调用 drainPendingMessage()。\n  error/interrupted 会保留 pending message。\n\n新架构保留这些业务语义，但把状态所有权收回 media_agent_gateway，并增加持久化 interrupt_requested 和 CAS 终态。"
+        }
+      ],
+      "takeaways": [
+        "中断是一个跨 Gateway 与 Runtime 的协作流程，不是一次数据库状态赋值。",
+        "interrupt_requested 表达中断意图，interrupted 表达 Runtime 已经终止执行。",
+        "delivered 与 interrupted 分离后，UI 才能准确展示网络失败、已自然完成和真正中断。",
+        "中断不补偿已经发生的外部副作用，也不会自动执行 Session 的 pending follow-up。",
+        "同一 Session 只有一个 active Turn；不同 Session 仍可以并发执行。"
+      ]
+    },
     {
       "id": "chat-component",
       "title": "Chat Component：从页面结构到代码结构",

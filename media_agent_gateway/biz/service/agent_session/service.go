@@ -3,6 +3,7 @@ package agent_session
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -30,7 +31,7 @@ func (s *Service) Create(ctx context.Context, userID, workspaceID, title, authTo
 		title = "New session"
 	}
 	now := time.Now().UTC()
-	created := &domain.Session{ID: uuid.NewString(), UserID: userID, WorkspaceID: config.WorkspaceID, AgentID: config.AgentID, AgentType: config.AgentType, Title: title, ContextVersion: config.ContextVersion, Status: "active", CreatedAt: now, UpdatedAt: now}
+	created := &domain.Session{ID: uuid.NewString(), UserID: userID, WorkspaceID: config.WorkspaceID, AgentID: config.AgentID, AgentType: config.AgentType, Title: title, ContextVersion: config.ContextVersion, Status: "active", ChatStatus: domain.ChatStatusHuman, CreatedAt: now, UpdatedAt: now}
 	if err := s.repo.CreateSession(ctx, created); err != nil {
 		return nil, err
 	}
@@ -68,7 +69,7 @@ func (s *Service) DefaultSession(ctx context.Context, userID string) (*domain.Se
 		return nil, err
 	}
 	now := time.Now().UTC()
-	created := &domain.Session{ID: uuid.NewString(), UserID: userID, WorkspaceID: config.WorkspaceID, AgentID: config.AgentID, AgentType: config.AgentType, Title: "New session", ContextVersion: config.ContextVersion, Status: "active", CreatedAt: now, UpdatedAt: now}
+	created := &domain.Session{ID: uuid.NewString(), UserID: userID, WorkspaceID: config.WorkspaceID, AgentID: config.AgentID, AgentType: config.AgentType, Title: "New session", ContextVersion: config.ContextVersion, Status: "active", ChatStatus: domain.ChatStatusHuman, CreatedAt: now, UpdatedAt: now}
 	if err := s.repo.CreateSession(ctx, created); err != nil {
 		// A concurrent request may have created the user's default session.
 		if existing, findErr := s.repo.FindLatestActive(ctx, userID); findErr == nil {
@@ -115,23 +116,35 @@ func (s *Service) StartTurn(ctx context.Context, sessionID, userID, key, text st
 }
 
 func (s *Service) PersistEvent(ctx context.Context, sessionID, turnID string, raw json.RawMessage) (*domain.Event, error) {
-	var envelope struct {
-		Type      string          `json:"type"`
-		SessionID string          `json:"session_id"`
-		Item      json.RawMessage `json:"item"`
-	}
-	if err := json.Unmarshal(raw, &envelope); err != nil {
+	runtimeEvent, err := domain.ParseRuntimeEvent(raw)
+	if err != nil {
 		return nil, err
 	}
-	event := &domain.Event{ID: uuid.NewString(), SessionID: sessionID, TurnID: turnID, Type: envelope.Type, Payload: raw, CreatedAt: time.Now().UTC()}
-	err := s.tx.RunInTx(ctx, func(txCtx context.Context) error {
+	event := &domain.Event{ID: uuid.NewString(), SessionID: sessionID, TurnID: turnID, Type: runtimeEvent.Type, Payload: raw, CreatedAt: time.Now().UTC()}
+	err = s.tx.RunInTx(ctx, func(txCtx context.Context) error {
 		sequence, err := s.repo.NextEventSequence(txCtx, sessionID)
 		if err != nil {
 			return err
 		}
+		if runtimeEvent.IsToolCall() && runtimeEvent.ItemID != "" {
+			existing, findErr := s.repo.FindCompletedItemEvent(txCtx, turnID, runtimeEvent.ItemID, runtimeEvent.ItemKind)
+			if findErr == nil {
+				event = existing
+				return nil
+			}
+			if !errors.Is(findErr, domain.ErrNotFound) {
+				return findErr
+			}
+		}
 		event.Sequence = sequence
 		var message *domain.Message
-		if envelope.Type == "item.completed" && len(envelope.Item) > 0 && string(envelope.Item) != "null" {
+		if runtimeEvent.CreatesMessage() {
+			var envelope struct {
+				Item json.RawMessage `json:"item"`
+			}
+			if err := json.Unmarshal(raw, &envelope); err != nil {
+				return err
+			}
 			var item struct {
 				Role any `json:"role"`
 				Kind any `json:"kind"`
@@ -146,7 +159,7 @@ func (s *Service) PersistEvent(ctx context.Context, sessionID, turnID string, ra
 			}
 			message = &domain.Message{ID: uuid.NewString(), SessionID: sessionID, TurnID: turnID, Role: role, Content: envelope.Item, Sequence: seq, CreatedAt: time.Now().UTC()}
 		}
-		return s.repo.AppendEvent(txCtx, event, message, envelope.SessionID)
+		return s.repo.AppendEvent(txCtx, event, message, runtimeEvent.SessionID)
 	})
 	if err != nil {
 		return nil, err
@@ -156,6 +169,29 @@ func (s *Service) PersistEvent(ctx context.Context, sessionID, turnID string, ra
 
 func (s *Service) FinishTurn(ctx context.Context, turnID, status string) error {
 	return s.tx.RunInTx(ctx, func(txCtx context.Context) error { return s.repo.FinishTurn(txCtx, turnID, status) })
+}
+
+func (s *Service) FinalizeTurn(ctx context.Context, sessionID, turnID, status string, raw json.RawMessage) (*domain.Event, error) {
+	runtimeEvent, err := domain.ParseRuntimeEvent(raw)
+	if err != nil {
+		return nil, err
+	}
+	event := &domain.Event{ID: uuid.NewString(), SessionID: sessionID, TurnID: turnID, Type: runtimeEvent.Type, Payload: raw, CreatedAt: time.Now().UTC()}
+	err = s.tx.RunInTx(ctx, func(txCtx context.Context) error {
+		sequence, err := s.repo.NextEventSequence(txCtx, sessionID)
+		if err != nil {
+			return err
+		}
+		event.Sequence = sequence
+		if err := s.repo.AppendEvent(txCtx, event, nil, runtimeEvent.SessionID); err != nil {
+			return err
+		}
+		return s.repo.FinishTurn(txCtx, turnID, status)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return event, nil
 }
 
 func normalizeRole(role, kind any) string {

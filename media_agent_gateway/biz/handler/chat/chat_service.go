@@ -33,7 +33,7 @@ func GetDefaultSession(ctx context.Context, c *app.RequestContext) {
 		writeError(c, err)
 		return
 	}
-	c.JSON(consts.StatusOK, &chatpb.SessionResponse{Id: value.ID, WorkspaceId: value.WorkspaceID, AgentId: value.AgentID, Status: value.Status, CreatedAt: value.CreatedAt.UnixMilli(), UpdatedAt: value.UpdatedAt.UnixMilli()})
+	c.JSON(consts.StatusOK, toSessionResponse(value))
 }
 
 func CreateSession(ctx context.Context, c *app.RequestContext) {
@@ -107,7 +107,7 @@ func RunTurn(ctx context.Context, c *app.RequestContext) {
 }
 
 func toSessionResponse(value *domain.Session) *chatpb.SessionResponse {
-	return &chatpb.SessionResponse{Id: value.ID, WorkspaceId: value.WorkspaceID, AgentId: value.AgentID, AgentType: value.AgentType, Title: value.Title, Status: value.Status, CreatedAt: value.CreatedAt.UnixMilli(), UpdatedAt: value.UpdatedAt.UnixMilli()}
+	return &chatpb.SessionResponse{Id: value.ID, WorkspaceId: value.WorkspaceID, AgentId: value.AgentID, AgentType: value.AgentType, Title: value.Title, Status: value.Status, ChatStatus: value.ChatStatus, CreatedAt: value.CreatedAt.UnixMilli(), UpdatedAt: value.UpdatedAt.UnixMilli()}
 }
 
 func writeError(c *app.RequestContext, err error) {
@@ -160,6 +160,12 @@ func SubscribeEvents(ctx context.Context, c *app.RequestContext) {
 		case event, ok := <-subscription.Events:
 			if !ok {
 				return
+			}
+			if event.Sequence == 0 {
+				if err := writer.WriteEvent("", "message", event.Payload); err != nil {
+					return
+				}
+				continue
 			}
 			if event.Sequence <= cursor {
 				continue

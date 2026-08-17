@@ -14,10 +14,15 @@ var (
 	ErrAlreadyExists = errors.New("turn idempotency key already exists")
 )
 
+const (
+	ChatStatusHuman = "human"
+	ChatStatusAgent = "agent"
+)
+
 type Session struct {
-	ID, UserID, WorkspaceID, AgentID, AgentType, Title, RuntimeSessionID, Status string
-	ContextVersion                                                               int64
-	CreatedAt, UpdatedAt                                                         time.Time
+	ID, UserID, WorkspaceID, AgentID, AgentType, Title, RuntimeSessionID, Status, ChatStatus string
+	ContextVersion                                                                           int64
+	CreatedAt, UpdatedAt                                                                     time.Time
 }
 
 type Turn struct {
@@ -47,6 +52,7 @@ type Repository interface {
 	GetOwned(ctx context.Context, sessionID, userID string) (*Session, error)
 	ListMessages(ctx context.Context, sessionID string) ([]Message, error)
 	ListEventsAfter(ctx context.Context, sessionID string, sequence int64) ([]Event, error)
+	FindCompletedItemEvent(ctx context.Context, turnID, itemID, itemKind string) (*Event, error)
 	NextMessageSequence(ctx context.Context, sessionID string) (int64, error)
 	NextEventSequence(ctx context.Context, sessionID string) (int64, error)
 	CreateTurnAndMessage(ctx context.Context, turn *Turn, message *Message) error

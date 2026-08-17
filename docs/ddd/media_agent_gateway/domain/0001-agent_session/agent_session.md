@@ -18,7 +18,7 @@ Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、
 
 ### 做什么
 - 创建、查询、更新、删除和中断 Agent Session。
-- 保存 Turn、Message、Universal Event 和 Agent Request。
+- 保存 Turn、Message、Universal Event、Tool Result Snapshot 和 Agent Request；Live Event Frame 只属于运行期传输。
 - 在控制配置为空时，以平台 Default Agent Context 创建用户的首个可对话 Session。
 - 保证同一 Session 最多一个 active Turn，并保存一个待执行 follow-up。
 - 校验 Session Token 并解析 Session Context。
@@ -36,6 +36,7 @@ Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、
 | 获取或创建默认会话 | 为已登录用户返回最近 Session；不存在时使用 Default Agent Context 创建 | `SessionService.GetOrCreateDefault` |
 | 运行交互 | 创建 Turn 并流式记录事件 | `ChatService.RunTurn/Reconnect/Respond` |
 | 订阅会话事件 | 授权后按 sequence 回放 Universal Event 并接入实时广播 | `ChatService.SubscribeEvents` |
+| 查询交互控制方 | 返回独立于 Session 生命周期的 human/agent Chat Status | `SessionService.Get/List` |
 | 暂存 follow-up | Turn 运行期间原子保存下一条用户输入 | 待 IDL 定义 |
 | 处理请求 | 查询和解决 Agent Request | `AgentRequestService.Get/Resolve` |
 | 解析上下文 | 由 Session Token 返回固定身份上下文 | `ResolveSessionContext` |
@@ -52,6 +53,7 @@ Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、
 | agent_id | text | 固定绑定的 Agent ID |
 | token_hash | bytea | Session Token 的 SHA-256 Hash |
 | status | text | starting/active/interrupted/failed/deleted |
+| chat_status | text | human/agent；当前交互控制方的可查询投影 |
 | context_version | bigint | Session Context 版本 |
 | active_turn_id | text nullable | 当前 pending/running Turn 的逻辑引用 |
 | pending_message | jsonb nullable | 运行期间提交的唯一待执行 follow-up |
@@ -101,6 +103,8 @@ Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、
 | payload | jsonb | 事件载荷 |
 | created_at | timestamptz | 产生时间 |
 
+Universal Event 只保存可恢复的权威事实。`item.started`、`item.delta` 等 Live Event Frame 不写入本表；tool result 每次聚合 flush 以新的 sequence 追加 Tool Result Snapshot，不覆盖旧 sequence。
+
 ### `agent_requests`
 
 | 字段 | 类型 | 含义 |
@@ -136,6 +140,21 @@ Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、
 3. 订阅先注册实时接收者，再查询持久化事件；实时阶段丢弃不大于已交付游标的重复事件，因此回放与实时切换无缺口。
 4. 一个 Session 可以同时存在多个订阅，每个订阅独立断开，不能影响其他订阅或 active Turn。
 5. 广播是进程内投递优化，Universal Event 才是恢复事实；断线、慢消费者或 Gateway 重启均通过 sequence 回放恢复。
+6. 无 SSE id 的 Live Event Frame 可以实时更新 UI，但不得推进客户端 sequence cursor；刷新后由 Message、Tool Result Snapshot 和 Session 终态恢复。
+
+### Chat Status
+
+1. `status` 表示 Session 生命周期是否可用；`chat_status` 只表示当前交互由 human 还是 agent 掌控，两者禁止合并。
+2. 创建 running Turn 的同一事务把 `chat_status` 从 human 切换为 agent。
+3. Runtime 的所有待写完成项和 Tool Result Snapshot flush 后，Turn 终态与 `chat_status=human` 在同一事务提交。
+4. Turn 是执行状态的权威来源；若投影异常，恢复任务必须根据是否存在 running Turn 修正 `chat_status`。
+
+### Runtime Event Durability
+
+1. 文本 delta 只作为 Live Event Frame 广播；message kind 的 `item.completed` 整块生成 assistant Message 和 Universal Event。
+2. tool call 在完成时以稳定的 item/call 标识幂等持久化一次。
+3. tool result 首次立即形成快照，后续更新按 300ms 聚合；每次 flush 追加新的 sequence，终态 flush 保证最终快照先于 Turn 终态提交。
+4. tool result 在统一规范化边界按 Runtime capability 做一次 UTF-8 安全截断，清除 NUL，并记录是否截断、原始字节数和持久化字节数。
 
 ### GetOrCreateDefault
 

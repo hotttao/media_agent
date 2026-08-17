@@ -1019,7 +1019,7 @@ function CodeBlock({ block }) {
       <strong>{block.title}</strong>
       {hasSequence && <SequenceDiagramView source={block.code} />}
       {hasFlowchart && <FlowchartView source={block.code} title={block.title} />}
-      <pre>{block.code}</pre>
+      {!block.hideSource && <pre>{block.code}</pre>}
     </div>
   );
 }
@@ -1544,6 +1544,7 @@ function StepCard({ step, index, onPickTable, id }) {
             <code>{step.redirectTo}</code>
           </div>
         )}
+        {step.diagram && <CodeBlock block={{ title: "业务时序图", code: step.diagram, hideSource: true }} />}
         {step.codeBlocks?.map((block) => <CodeBlock key={block.title} block={block} />)}
         {(paramRows.length > 0 || paramExtraNotes.length > 0) && (
           <div className="param-table-block">

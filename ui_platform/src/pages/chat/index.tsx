@@ -595,6 +595,7 @@ export function ChatPage() {
       setSessionId("");
       setHistoryReadySessionId("");
       setMessages([]);
+      setStreaming(false);
       return;
     }
     if (!workspacesLoaded) return;
@@ -606,6 +607,7 @@ export function ChatPage() {
     setLoading(true);
     setMessages([]);
     setHistoryReadySessionId("");
+    setStreaming(false);
     setError("");
     listSessions(workspaceId)
       .then(async (values) => {
@@ -615,6 +617,7 @@ export function ChatPage() {
           values.find((item) => item.id === requestedSessionId) ?? values[0];
         activeSessionId.current = selected?.id ?? "";
         setSessionId(selected?.id ?? "");
+        setStreaming(selected?.chat_status === "agent");
         if (selected) {
           if (requestedSessionId !== selected.id)
             setSearchParams({ session: selected.id }, { replace: true });
@@ -646,6 +649,10 @@ export function ChatPage() {
       const version = ++requestVersion.current;
       activeSessionId.current = nextId;
       setSessionId(nextId);
+      setStreaming(
+        sessions.find((session) => session.id === nextId)?.chat_status ===
+          "agent",
+      );
       setSearchParams({ session: nextId }, { replace: true });
       const values = await listMessages(nextId);
       if (version === requestVersion.current) {
@@ -656,7 +663,7 @@ export function ChatPage() {
         setHistoryReadySessionId(nextId);
       }
     },
-    [setSearchParams],
+    [sessions, setSearchParams],
   );
   async function addSession() {
     if (!workspaceId) return;
@@ -673,6 +680,13 @@ export function ChatPage() {
       if (targetSession !== activeSessionId.current) return;
       if (event.type === "session.started") {
         setStreaming(true);
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === targetSession
+              ? { ...session, chat_status: "agent" }
+              : session,
+          ),
+        );
         void listMessages(targetSession).then((history) => {
           if (targetSession !== activeSessionId.current) return;
           seedCompletedItems(history, itemMessageIds.current);
@@ -736,6 +750,13 @@ export function ChatPage() {
       }
       if (event.type === "session.ended") {
         setStreaming(false);
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === targetSession
+              ? { ...session, chat_status: "human" }
+              : session,
+          ),
+        );
         void listMessages(targetSession).then((history) => {
           if (targetSession !== activeSessionId.current) return;
           seedCompletedItems(history, itemMessageIds.current);
@@ -787,6 +808,13 @@ export function ChatPage() {
     if (!targetSession || streaming) return;
     setError("");
     setStreaming(true);
+    setSessions((current) =>
+      current.map((session) =>
+        session.id === targetSession
+          ? { ...session, chat_status: "agent" }
+          : session,
+      ),
+    );
     const user: ChatMessage = {
       id: createClientId(),
       turn_id: "pending",
@@ -804,6 +832,13 @@ export function ChatPage() {
       if (targetSession === activeSessionId.current) {
         setError(cause instanceof Error ? cause.message : "Chat failed");
         setStreaming(false);
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === targetSession
+              ? { ...session, chat_status: "human" }
+              : session,
+          ),
+        );
       }
     }
   }
