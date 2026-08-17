@@ -99,9 +99,175 @@ func TestMediaAgentGatewayChatE2E(t *testing.T) {
 	}
 }
 
+func TestMediaAgentGatewayInterruptTurnE2E(t *testing.T) {
+	authAddr := os.Getenv("MEDIA_AUTH_ADDR")
+	gatewayAddr := os.Getenv("MEDIA_AGENT_GATEWAY_ADDR")
+	controlAddr := os.Getenv("MEDIA_CONTROL_ADDR")
+	if authAddr == "" || gatewayAddr == "" || controlAddr == "" {
+		t.Skip("MEDIA_AUTH_ADDR, MEDIA_CONTROL_ADDR and MEDIA_AGENT_GATEWAY_ADDR are required; start services with docker-compose")
+	}
+	client := httpClient(t)
+	login(t, client, authAddr, envOr("MEDIA_AUTH_E2E_USER", "smoke"), envOr("MEDIA_AUTH_E2E_PASS", "smoke123"))
+
+	status, body := doJSON(t, client, http.MethodPost, controlAddr+"/api/v1/workspaces", map[string]string{"name": fmt.Sprintf("interrupt-e2e-%d", time.Now().UnixNano()), "agent_type": "codex"})
+	if status != http.StatusCreated {
+		t.Fatalf("create workspace: status=%d body=%s", status, body)
+	}
+	var workspace struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &workspace); err != nil {
+		t.Fatal(err)
+	}
+	status, body = doJSON(t, client, http.MethodPost, gatewayAddr+"/api/chat/sessions", map[string]string{"workspace_id": workspace.ID, "title": "Interrupt E2E"})
+	if status != http.StatusCreated {
+		t.Fatalf("create session: status=%d body=%s", status, body)
+	}
+	var session struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &session); err != nil {
+		t.Fatal(err)
+	}
+
+	feed := startEventFeed(t, client, gatewayAddr, session.ID)
+	startTurn(t, client, gatewayAddr, session.ID, "Use the shell to run `sleep 120`, wait for it to finish, then reply done.")
+	observedTransient := false
+	for {
+		event := awaitFeedEvent(t, feed)
+		if event.Sequence == 0 && (event.Type == "item.started" || event.Type == "item.delta") {
+			observedTransient = true
+			break
+		}
+		if event.Type == "error" || event.Type == "session.ended" {
+			t.Fatalf("turn ended before interrupt: %+v", event)
+		}
+	}
+	status, body = doJSON(t, client, http.MethodPost, gatewayAddr+"/api/chat/sessions/"+session.ID+"/interrupt", map[string]string{})
+	if status != http.StatusAccepted {
+		t.Fatalf("interrupt: status=%d body=%s", status, body)
+	}
+	var interrupted bool
+	for !interrupted {
+		event := awaitFeedEvent(t, feed)
+		if event.Type == "session.ended" {
+			if event.Reason != "interrupted" {
+				t.Fatalf("terminal reason=%q, want interrupted", event.Reason)
+			}
+			interrupted = true
+		}
+	}
+	if !observedTransient {
+		t.Fatal("no transient Runtime frame was observed before interrupt")
+	}
+
+	status, body = doJSON(t, client, http.MethodGet, gatewayAddr+"/api/chat/sessions?workspace_id="+workspace.ID, nil)
+	if status != http.StatusOK {
+		t.Fatalf("list sessions: status=%d body=%s", status, body)
+	}
+	var sessions struct {
+		Sessions []struct {
+			ID         string `json:"id"`
+			ChatStatus string `json:"chat_status"`
+		} `json:"sessions"`
+	}
+	if err := json.Unmarshal(body, &sessions); err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions.Sessions) != 1 || sessions.Sessions[0].ChatStatus != "human" {
+		t.Fatalf("chat status was not restored: %+v", sessions.Sessions)
+	}
+
+	replayed := awaitEvents(t, startEventSubscription(t, client, gatewayAddr, session.ID, 0))
+	for _, event := range replayed {
+		if event.Sequence == 0 || event.Type == "item.started" || event.Type == "item.delta" {
+			t.Fatalf("transient event was persisted/replayed: %+v", event)
+		}
+	}
+}
+
 type gatewayEvent struct {
 	Type     string `json:"type"`
+	Reason   string `json:"reason"`
 	Sequence int64  `json:"-"`
+}
+
+type eventFeed struct {
+	events <-chan gatewayEvent
+}
+
+func startEventFeed(t *testing.T, client *http.Client, baseURL, sessionID string) eventFeed {
+	t.Helper()
+	ready := make(chan struct{})
+	events := make(chan gatewayEvent, 32)
+	go func() {
+		defer close(events)
+		req, err := http.NewRequest(http.MethodGet, baseURL+"/api/chat/sessions/"+sessionID+"/events?after_sequence=0", nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("subscribe feed: status=%d body=%s", resp.StatusCode, body)
+			return
+		}
+		scanner := bufio.NewScanner(resp.Body)
+		var sequence int64
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "event: ready") {
+				close(ready)
+				continue
+			}
+			if strings.HasPrefix(line, "id:") {
+				_, _ = fmt.Sscan(strings.TrimSpace(strings.TrimPrefix(line, "id:")), &sequence)
+				continue
+			}
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			var event gatewayEvent
+			if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+				continue
+			}
+			event.Sequence = sequence
+			sequence = 0
+			events <- event
+			if event.Type == "session.ended" || event.Type == "error" {
+				return
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			t.Error(err)
+		}
+	}()
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("event feed did not become ready")
+	}
+	return eventFeed{events: events}
+}
+
+func awaitFeedEvent(t *testing.T, feed eventFeed) gatewayEvent {
+	t.Helper()
+	select {
+	case event, ok := <-feed.events:
+		if !ok {
+			t.Fatal("event feed closed before terminal event")
+		}
+		return event
+	case <-time.After(90 * time.Second):
+		t.Fatal("timed out waiting for feed event")
+		return gatewayEvent{}
+	}
 }
 
 type subscription struct {

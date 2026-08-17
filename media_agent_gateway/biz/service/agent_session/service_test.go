@@ -12,6 +12,7 @@ type fakeRepo struct {
 	session  *domain.Session
 	messages []domain.Message
 	events   []domain.Event
+	turn     *domain.Turn
 	finished string
 }
 
@@ -39,6 +40,12 @@ func (f *fakeRepo) GetOwned(_ context.Context, id, user string) (*domain.Session
 		return nil, domain.ErrForbidden
 	}
 	return f.session, nil
+}
+func (f *fakeRepo) GetRunningTurn(_ context.Context, sessionID string) (*domain.Turn, error) {
+	if f.turn == nil || f.turn.SessionID != sessionID || f.turn.Status != "running" {
+		return nil, domain.ErrNotFound
+	}
+	return f.turn, nil
 }
 func (f *fakeRepo) ListMessages(context.Context, string) ([]domain.Message, error) {
 	return f.messages, nil
@@ -151,6 +158,24 @@ func TestFinalizeTurnAppendsTerminalEventBeforeFinishing(t *testing.T) {
 	}
 	if event.Sequence != 1 || len(repo.events) != 1 || repo.finished != "completed" {
 		t.Fatalf("terminal transaction was incomplete: event=%+v events=%d status=%q", event, len(repo.events), repo.finished)
+	}
+}
+
+func TestRunningTurnAuthorizesSessionOwner(t *testing.T) {
+	repo := &fakeRepo{
+		session: &domain.Session{ID: "session", UserID: "user", RuntimeSessionID: "runtime"},
+		turn:    &domain.Turn{ID: "turn", SessionID: "session", Status: "running"},
+	}
+	service := New(repo, directTx{}, defaultContext{})
+	session, turn, err := service.RunningTurn(context.Background(), "session", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.RuntimeSessionID != "runtime" || turn.ID != "turn" {
+		t.Fatalf("unexpected running turn: session=%+v turn=%+v", session, turn)
+	}
+	if _, _, err := service.RunningTurn(context.Background(), "session", "other"); err != domain.ErrForbidden {
+		t.Fatalf("foreign owner error=%v, want forbidden", err)
 	}
 }
 

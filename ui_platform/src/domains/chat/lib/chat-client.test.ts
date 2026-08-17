@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { decodeSessionEventFrame } from "@/domains/chat/lib/chat-client";
+import {
+  decodeSessionEventFrame,
+  interruptTurn,
+} from "@/domains/chat/lib/chat-client";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("decodeSessionEventFrame", () => {
   it("delivers transient message frames without advancing the durable cursor", () => {
@@ -33,5 +38,29 @@ describe("decodeSessionEventFrame", () => {
       decodeSessionEventFrame('event: ready\ndata: {"ok":true}', 7),
     ).toBeNull();
     expect(decodeSessionEventFrame("event: heartbeat\ndata: {}", 7)).toBeNull();
+  });
+});
+
+describe("interruptTurn", () => {
+  it("submits the interrupt command for the active session", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ turn_id: "turn-1", status: "interrupting" }),
+        {
+          status: 202,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(interruptTurn("session-1")).resolves.toEqual({
+      turn_id: "turn-1",
+      status: "interrupting",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/chat/sessions/session-1/interrupt",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
   });
 });

@@ -103,3 +103,18 @@ func TestTurnEventSinkSeparatesTransientAndDurableEvents(t *testing.T) {
 		}
 	}
 }
+
+func TestTurnEventSinkReportsInterruptedTerminal(t *testing.T) {
+	persister := &recordingEventStore{}
+	publisher := &recordingPublisher{}
+	sink := newTurnEventSink(context.Background(), "session", "turn", persister, publisher, 1024, time.Hour)
+	if err := sink.Accept(json.RawMessage(`{"type":"session.ended","reason":"interrupted"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got := sink.TerminalReason(); got != "interrupted" {
+		t.Fatalf("terminal reason=%q, want interrupted", got)
+	}
+	if got := string(sink.Terminal("interrupted")); got != `{"type":"session.ended","reason":"interrupted"}` {
+		t.Fatalf("terminal=%s", got)
+	}
+}

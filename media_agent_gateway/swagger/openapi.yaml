@@ -98,6 +98,36 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/chat/sessions/{session_id}/interrupt:
+        post:
+            tags:
+                - ChatService
+            operationId: ChatService_InterruptTurn
+            parameters:
+                - name: session_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/InterruptTurnRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InterruptTurnResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/chat/sessions/{session_id}/messages:
         get:
             tags:
@@ -190,6 +220,18 @@ components:
         HealthResponse:
             type: object
             properties:
+                status:
+                    type: string
+        InterruptTurnRequest:
+            type: object
+            properties:
+                session_id:
+                    type: string
+        InterruptTurnResponse:
+            type: object
+            properties:
+                turn_id:
+                    type: string
                 status:
                     type: string
         ListMessagesResponse:

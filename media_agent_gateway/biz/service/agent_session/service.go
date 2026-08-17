@@ -94,6 +94,18 @@ func (s *Service) EventsAfter(ctx context.Context, sessionID, userID string, seq
 	return s.repo.ListEventsAfter(ctx, sessionID, sequence)
 }
 
+func (s *Service) RunningTurn(ctx context.Context, sessionID, userID string) (*domain.Session, *domain.Turn, error) {
+	session, err := s.repo.GetOwned(ctx, sessionID, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	turn, err := s.repo.GetRunningTurn(ctx, sessionID)
+	if err != nil {
+		return session, nil, err
+	}
+	return session, turn, nil
+}
+
 func (s *Service) StartTurn(ctx context.Context, sessionID, userID, key, text string) (*domain.Session, *domain.Turn, error) {
 	session, err := s.repo.GetOwned(ctx, sessionID, userID)
 	if err != nil {

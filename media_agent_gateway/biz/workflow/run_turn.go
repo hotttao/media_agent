@@ -48,6 +48,28 @@ func (w *RunTurn) Start(ctx context.Context, sessionID, userID, authToken, key, 
 	return turn, nil
 }
 
+func (w *RunTurn) Interrupt(ctx context.Context, sessionID, userID string) (*domain.Turn, error) {
+	session, turn, err := w.sessions.RunningTurn(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if session.RuntimeSessionID == "" {
+		return nil, domain.ErrNotFound
+	}
+	runtime, ok := w.runtimes.Get(session.AgentType)
+	if !ok {
+		return nil, fmt.Errorf("agent runtime %q is not registered", session.AgentType)
+	}
+	interrupted, err := runtime.Interrupt(ctx, session.RuntimeSessionID)
+	if err != nil {
+		return nil, err
+	}
+	if !interrupted {
+		return nil, domain.ErrNotFound
+	}
+	return turn, nil
+}
+
 func (w *RunTurn) execute(session *domain.Session, turn *domain.Turn, runtimeContext service.AgentContext, runtime client.Runtime, message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), turnTimeout)
 	defer cancel()
@@ -59,7 +81,10 @@ func (w *RunTurn) execute(session *domain.Session, turn *domain.Turn, runtimeCon
 	}
 	status := "completed"
 	reason := "completed"
-	if err != nil {
+	if sink.TerminalReason() == "interrupted" {
+		status = "interrupted"
+		reason = "interrupted"
+	} else if err != nil {
 		status = "failed"
 		reason = "error"
 		raw, _ := json.Marshal(map[string]any{"type": "error", "message": err.Error()})

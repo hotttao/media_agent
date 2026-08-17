@@ -29,6 +29,7 @@ func Register(r *server.Hertz) {
 				{
 					_session_id := _sessions.Group("/:session_id", _session_idMw()...)
 					_session_id.GET("/events", append(_subscribeeventsMw(), chat.SubscribeEvents)...)
+					_session_id.POST("/interrupt", append(_interruptturnMw(), chat.InterruptTurn)...)
 					_session_id.GET("/messages", append(_listmessagesMw(), chat.ListMessages)...)
 					_session_id.POST("/turns", append(_runturnMw(), chat.RunTurn)...)
 				}

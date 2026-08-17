@@ -19,6 +19,7 @@ const session = {
   agent_type: "codex",
   title: "Session 1",
   status: "active",
+  chat_status: "human",
   created_at: 1,
   updated_at: 1,
 };
@@ -197,5 +198,32 @@ test.describe("workspace platform", () => {
     await expect(page.getByTestId("chat-messages")).not.toContainText(
       "Stale answer",
     );
+  });
+
+  test("stops a running agent without changing status optimistically", {
+    tag: "@C000008",
+  }, async ({ page }) => {
+    const running = { ...session, chat_status: "agent" };
+    await mockWorkspace(page, [running]);
+    let interruptRequests = 0;
+    await page.route(
+      `**/api/chat/sessions/${session.id}/interrupt`,
+      async (route) => {
+        interruptRequests += 1;
+        expect(route.request().method()).toBe("POST");
+        await route.fulfill({
+          status: 202,
+          json: { turn_id: "turn-1", status: "interrupting" },
+        });
+      },
+    );
+    await page.goto(`/w/${workspace.id}`);
+
+    await page.getByRole("button", { name: "Stop agent" }).click();
+
+    await expect(
+      page.getByRole("button", { name: "Stopping agent" }),
+    ).toBeDisabled();
+    expect(interruptRequests).toBe(1);
   });
 });

@@ -65,6 +65,18 @@ func (r *Repository) GetOwned(ctx context.Context, sessionID, userID string) (*d
 	return toSession(row), nil
 }
 
+func (r *Repository) GetRunningTurn(ctx context.Context, sessionID string) (*domain.Turn, error) {
+	var row model.Turn
+	err := dal.FromContext(ctx, r.db).Where("session_id = ? AND status = ?", sessionID, "running").First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &domain.Turn{ID: row.ID, SessionID: row.SessionID, IdempotencyKey: row.IdempotencyKey, Status: row.Status, StartedAt: row.StartedAt, FinishedAt: row.FinishedAt}, nil
+}
+
 func (r *Repository) ListMessages(ctx context.Context, sessionID string) ([]domain.Message, error) {
 	var rows []model.Message
 	if err := dal.FromContext(ctx, r.db).Where("session_id = ?", sessionID).Order("sequence ASC").Find(&rows).Error; err != nil {

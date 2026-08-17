@@ -43,3 +43,20 @@ func TestCodexRuntimeConsumesSSEInOrder(t *testing.T) {
 		t.Fatalf("unexpected events: %v", eventTypes)
 	}
 }
+
+func TestCodexRuntimeInterruptsRuntimeSession(t *testing.T) {
+	httpClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodPost || req.URL.Path != "/sessions/runtime-1/interrupt" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL.Path)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"success":true,"interrupted":true}`))}, nil
+	})}
+	runtime := &CodexRuntime{BaseURL: "http://runtime.test", HTTP: httpClient}
+	ok, err := runtime.Interrupt(context.Background(), "runtime-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("interrupt was not accepted")
+	}
+}

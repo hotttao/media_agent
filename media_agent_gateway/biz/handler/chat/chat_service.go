@@ -106,6 +106,23 @@ func RunTurn(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusAccepted, &chatpb.RunTurnResponse{TurnId: turn.ID, Status: "accepted"})
 }
 
+func InterruptTurn(ctx context.Context, c *app.RequestContext) {
+	var req chatpb.InterruptTurnRequest
+	if err := c.BindAndValidate(&req); err != nil || req.SessionId == "" {
+		if err == nil {
+			err = errors.New("session_id is required")
+		}
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	turn, err := runTurn.Interrupt(ctx, req.SessionId, middleware.UserID(ctx))
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusAccepted, &chatpb.InterruptTurnResponse{TurnId: turn.ID, Status: "interrupting"})
+}
+
 func toSessionResponse(value *domain.Session) *chatpb.SessionResponse {
 	return &chatpb.SessionResponse{Id: value.ID, WorkspaceId: value.WorkspaceID, AgentId: value.AgentID, AgentType: value.AgentType, Title: value.Title, Status: value.Status, ChatStatus: value.ChatStatus, CreatedAt: value.CreatedAt.UnixMilli(), UpdatedAt: value.UpdatedAt.UnixMilli()}
 }

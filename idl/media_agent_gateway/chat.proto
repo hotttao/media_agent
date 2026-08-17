@@ -36,6 +36,14 @@ service ChatService {
     };
   }
 
+  rpc InterruptTurn(InterruptTurnRequest) returns (InterruptTurnResponse) {
+    option (api.post) = "/api/chat/sessions/:session_id/interrupt";
+    option (google.api.http) = {
+      post: "/api/chat/sessions/{session_id}/interrupt"
+      body: "*"
+    };
+  }
+
   rpc SubscribeEvents(SubscribeEventsRequest) returns (SubscribeEventsResponse) {
     option (api.get) = "/api/chat/sessions/:session_id/events";
     option (google.api.http) = { get: "/api/chat/sessions/{session_id}/events" };
@@ -93,6 +101,15 @@ message RunTurnRequest {
 }
 
 message RunTurnResponse {
+  string turn_id = 1;
+  string status = 2;
+}
+
+message InterruptTurnRequest {
+  string session_id = 1 [(api.path) = "session_id"];
+}
+
+message InterruptTurnResponse {
   string turn_id = 1;
   string status = 2;
 }
