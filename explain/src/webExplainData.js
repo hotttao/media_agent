@@ -4,68 +4,70 @@ export const webExplainData = {
   "chapters": [
     {
       "id": "interrupt-agent-turn",
-      "title": "用户中断 Agent：从停止按钮到 Turn 终态",
-      "summary": "中断不是把数据库状态直接改成 interrupted。正确流程是先记录 interrupt_requested，再把取消命令送到 Agent Runtime；只有 Runtime 确认停止或返回 interrupted 终止事件后，Gateway 才提交 Turn 终态。",
+      "title": "用户中断 Agent：当前 agent-platform 的真实调用链",
+      "summary": "当前实现是一次同步的软中断：Web 调用 control-plane，control-plane 校验 Workspace 权限后转发到 Agent；Agent 从内存 activeControllers 中查找 session 对应的 AbortController 并调用 abort()。中断后的 session.ended(reason=interrupted) 再沿原 SSE 链路返回 control-plane，完成消息落盘和 chat_status 回切。",
       "sourceRefs": [
-        "目标设计：docs/ddd/media_agent_gateway/workflow/0001-run_turn/run_turn.md",
-        "目标领域：docs/ddd/media_agent_gateway/domain/0001-agent_session/agent_session.md",
-        "旧平台入口：control-plane/src/routes/workspaces/sessions.ts:221-260",
-        "旧平台转发：control-plane/src/routes/workspaces/_shared.ts:19-39",
-        "旧 Agent 中断：agents/claude-code/src/server.ts:342-348",
-        "旧 Agent AbortController：agents/claude-code/src/agent.ts:69,124-139",
-        "旧平台终止清理：control-plane/src/lib/sse.ts:567-590"
+        "web/src/stores/agent-session-store.ts:839-869：停止按钮对应的 stop() 行为。",
+        "web/src/lib/api/client.ts:415-424：Web 调用中断 API。",
+        "control-plane/src/routes/workspaces/sessions.ts:221-261：校验 Workspace 管理权限并解析 Agent 地址。",
+        "control-plane/src/routes/workspaces/_shared.ts:10-41：转发请求并区分 delivered/interrupted。",
+        "agents/claude-code/src/server.ts:343-349：Agent 的 POST /sessions/:id/interrupt。",
+        "agents/claude-code/src/agent.ts:70,124-137,160-164,444-463：AbortController 注册、中断和异常归类。",
+        "agents/claude-code/src/server.ts:227-258：生成 session.ended(error/completed/interrupted)。",
+        "control-plane/src/lib/sse.ts:946-990,1213-1223：消费终止事件、回切 chat_status 并结束 active turn。"
       ],
       "outline": [
         { "label": "核心结论", "target": "interrupt-agent-turn-overview" },
         { "label": "端到端时序", "target": "interrupt-agent-turn-code-0" },
-        { "label": "Turn 状态机", "target": "interrupt-agent-turn-code-1" },
+        { "label": "Agent 内部实现", "target": "interrupt-agent-turn-code-1" },
         { "label": "接口结果语义", "target": "interrupt-agent-turn-code-2" },
         { "label": "Pending Message", "target": "interrupt-agent-turn-code-3" },
-        { "label": "事务与幂等", "target": "interrupt-agent-turn-code-4" },
-        { "label": "旧实现对应关系", "target": "interrupt-agent-turn-code-5" },
+        { "label": "终止事件处理", "target": "interrupt-agent-turn-code-4" },
+        { "label": "边界与限制", "target": "interrupt-agent-turn-code-5" },
         { "label": "阅读结论", "target": "interrupt-agent-turn-takeaways" }
       ],
       "bullets": [
-        "用户只能中断自己有权访问的 Session。Edge 验证 Cookie JWT 或用户 Service Token，Gateway 再读取 Session 的真实 owner 和 workspace 做最终判断。",
-        "pending 且尚未启动 Runtime 的 Turn 可以在数据库内直接进入 interrupted；running Turn 必须先进入 interrupt_requested，再通知 Runtime。",
-        "delivered 表示取消请求到达 Runtime；interrupted 表示 Runtime 确实找到并终止了 active Turn。两者不能合并成一个 success。",
-        "Runtime 不可达时，Turn 保持 interrupt_requested。Gateway 后台重试或通过 Runtime 终止事件协调，不能谎报 interrupted。",
-        "中断和自然完成可能并发。若 Runtime 已自然完成，completed 是真实结果，晚到中断不能覆盖它。",
-        "中断只能阻止后续执行，不能撤销已经发生的外部 MCP、消息发送、Browser 创建、生成任务或对象上传。",
-        "同一 Session 不允许并发 Turn。运行期间输入的 follow-up 只是 pending message；中断或失败后不自动执行它。"
+        "Web 的 stop() 只有拿到 activeSessionId 后才调用后端中断 API；尚未拿到 session id 的启动窗口只会中止当前前端流。",
+        "control-plane 使用当前认证用户和 canManage(workspace, user) 校验 Workspace 所有权；它没有单独查询 Session owner。",
+        "control-plane 根据 workspace/session 解析 Agent 地址，直接 POST Agent 的 /sessions/:id/interrupt。",
+        "Agent 的 activeControllers 是进程内 Map。找到 session id 时调用 AbortController.abort() 并立即从 Map 删除；找不到时返回 interrupted=false。",
+        "Agent 将 abort 引发的 AbortError、aborted signal 或 'aborted by user' 错误统一走 onComplete()，server 随后发送 session.ended(reason=interrupted)。",
+        "control-plane 消费 session.ended 后 flush 待写工具结果、保存消息和统计、把 chat_status 切回 human，并把终止事件广播给仍连接的订阅者。",
+        "当前实现没有持久化 interrupt_requested、取消请求 ID或后台重试；中断 API 的返回值反映这次请求是否送达、Agent 当时是否找到活动控制器。"
       ],
       "codeBlocks": [
         {
-          "title": "端到端时序：请求中断、Runtime 确认、提交终态",
-          "code": "UI                 Edge              media_agent_gateway       Gateway DB             Agent Runtime\n |                  |                         |                    |                       |\n |-- 点击停止 ----->|                         |                    |                       |\n |                  |-- mTLS + Principal ---->|                    |                       |\n |                  |                         |-- 读取 Session --->|                       |\n |                  |                         |   校验 owner/workspace/active_turn_id        |\n |                  |                         |                    |                       |\n |                  |                         |-- TX1: running -> interrupt_requested ------>|\n |                  |                         |-- CancelTurn(turn_id, request_id) ----------->|\n |                  |                         |                    |          AbortController.Cancel()\n |                  |                         |<-- accepted=true -----------------------------|\n |                  |                         |<-- TurnEnded(reason=interrupted) -------------|\n |                  |                         |-- TX2: interrupt_requested -> interrupted --->|\n |<-- delivered=true, interrupted=true -------|                    |                       |\n\n关键顺序：\n  1. 先持久化 interrupt_requested，避免取消请求丢失。\n  2. 再调用 Runtime，数据库事务不覆盖网络调用。\n  3. Runtime 的终止事件才是 interrupted 终态的依据。"
+          "title": "业务时序图：从停止按钮到 session.ended",
+          "code": "用户中断 Agent 执行\nsequenceDiagram\n  participant User as 用户\n  participant Web as Web AgentSessionStore\n  participant CP as control-plane\n  participant Agent as Claude Agent Server\n  participant Runtime as Claude SDK Runtime\n  participant SSE as CP SSE 持久化链\n\n  User->>Web: 点击停止\n  Web->>CP: POST /api/workspaces/{wid}/sessions/{sid}/interrupt\n  CP->>CP: 校验当前用户可管理 Workspace\n  CP->>Agent: POST /sessions/{sid}/interrupt\n  Agent->>Agent: activeControllers.get(sessionId)\n  Agent->>Runtime: AbortController.abort()\n  Agent-->>CP: 200 { success: true, interrupted: true }\n  CP-->>Web: 200 { success: true, interrupted: true }\n  Web->>Web: abortActiveStream + 清除 busy/loading\n  Runtime-->>Agent: AbortError 或 aborted by user\n  Agent->>Agent: onComplete() 无 stats\n  Agent-->>SSE: session.ended reason=interrupted\n  SSE->>SSE: flush 事件并将 chat_status 改为 human",
+          "hideSource": true
         },
         {
-          "title": "Turn 状态机：为什么需要 interrupt_requested",
-          "code": "pending -------------------------------> interrupted\n   |                                      尚未启动 Runtime，可本地结束\n   v\nrunning ---> interrupt_requested ---> interrupted\n   |                 |                     Runtime 确认中断\n   |                 +-------------------> completed\n   |                 |                     中断到达前已经自然完成\n   |                 +-------------------> failed\n   |                                       Runtime 以错误结束\n   +-------------------------------------> completed / failed\n\n终态：completed、failed、interrupted。\n规则：\n  - 终态不能互相覆盖。\n  - interrupt_requested 不是“已经停止”，只是“平台已接受中断意图”。\n  - 晚到的 completed/failed/interrupted 事件使用 expected_status 做 CAS。\n  - 客户端断线不是中断，不改变 Turn 状态。"
+          "title": "Agent 内部：activeControllers 如何定位一次执行",
+          "code": "chat(sessionId, ...) 启动时\n  abortController = new AbortController()\n  queryKey = sessionId || pending-<uuid>\n  activeControllers.set(queryKey, abortController)\n  SDK query 使用 abortController\n\n新会话拿到真实 session id 后\n  activeControllers.delete(queryKey)\n  activeControllers.set(resultSessionId, abortController)\n\ninterruptSession(sessionId)\n  controller = activeControllers.get(sessionId)\n  找到：controller.abort(); delete(sessionId); return true\n  未找到：return false\n\nfinally\n  activeControllers.delete(resultSessionId || queryKey)\n\n这里没有数据库 Turn，也没有持久化取消状态。控制器只存在于当前 Agent 进程内。"
         },
         {
-          "title": "接口结果语义：delivered 和 interrupted 必须分开",
-          "code": "场景                                  delivered   interrupted   Gateway 行为\n--------------------------------------------------------------------------------\nTurn=pending，尚未启动 Runtime            true        true          本地提交 interrupted\nRuntime 找到 active Turn 并接受取消        true        true          等终止事件后提交终态\nRuntime 已经自然结束                       true        false         协调并返回 completed/failed\nRuntime 收到请求但没有这个 Turn            true        false         查询真实状态，不伪造终态\nRuntime 网络不可达                         false       false         保持 interrupt_requested 并重试\nTurn 已经 interrupted                      true        true          幂等返回既有结果\nTurn 已经 completed/failed                  true        false         返回真实终态\n\nHTTP 请求成功只说明 Gateway 处理了请求，不等于 Agent 已经停止。UI 应依据 delivered、interrupted 和 turn_status 展示结果。"
+          "title": "接口返回值：success 与 interrupted 的真实含义",
+          "code": "Agent 返回\n  找到 controller：{ success: true,  interrupted: true  }\n  未找到 controller：{ success: false, interrupted: false }\n\ncontrol-plane 转换\n  Agent HTTP 2xx：delivered=true\n  Agent 非 2xx / 网络异常：delivered=false\n  interrupted 只在 body.interrupted === true 时为 true\n\nWeb 最终收到\n  { success: delivered, interrupted }\n\n注意：\n  success 表示 CP 是否成功把请求送到 Agent 并获得正常响应。\n  interrupted=true 表示 Agent 当时找到控制器并调用了 abort()。\n  它不是一个等待 session.ended 落库后才返回的强确认。"
         },
         {
-          "title": "Pending Message：中断后为什么不能自动执行 follow-up",
-          "code": "同一 Session：\n\nTurn A = running\n用户提交 follow-up B\n  -> 不创建并发 Turn\n  -> 保存 session.pending_message = B\n\nTurn A completed\n  -> 原子 take-and-clear B\n  -> 创建 Turn B\n\nTurn A interrupted / failed\n  -> 不消费 B\n  -> B 保留为 pending message\n  -> 用户选择继续、修改或清除\n\n原因：用户刚点击“停止”，系统如果立刻执行排队输入，会产生“明明停止了却又开始运行”的反直觉行为。旧 agent-platform 也是只在 session.ended(reason=completed) 后 drain pending message。"
+          "title": "Web 的三个处理分支",
+          "code": "1. 尚无 activeSessionId\n   abortActiveStream()\n   isLoading=false, isBusy=false\n   不调用后端 interrupt API\n\n2. 后端返回 interrupted=false\n   保持当前 stream 和 busy 状态\n   显示 interruptNotReady\n   原因通常是新 session 尚未注册到 activeControllers\n\n3. 后端返回 interrupted=true\n   abortActiveStream()\n   isLoading=false, isBusy=false\n   UI 立即结束等待\n\n4. 请求异常\n   保持执行状态\n   显示 interruptFailed 或实际错误信息"
         },
         {
-          "title": "事务、幂等和晚到事件",
-          "code": "TX1（中断意图）\n  条件：turn.status = running\n  写入：status=interrupt_requested, interrupt_request_id, requested_by, requested_at\n\n事务外\n  调用 Runtime.CancelTurn(turn_id, interrupt_request_id)\n\nTX2（终态）\n  条件：status IN (running, interrupt_requested)\n  写入：status=interrupted, finished_at, terminal event + Outbox\n\n幂等键：turn_id + interrupt_request_id\n\n晚到规则：\n  - 重复 CancelTurn：Runtime 返回同一接受结果。\n  - 重复 TurnEnded：Gateway 按 event_id / expected_status 去重。\n  - interrupted 后的普通增量事件：只保留诊断，不生成新的用户可见内容。\n  - completed 已提交后再收到 Cancel：返回 interrupted=false，不覆盖 completed。"
+          "title": "session.ended 如何完成后续清理",
+          "code": "Agent 捕获中断异常\n  abortController.signal.aborted\n  或 error.name === AbortError\n  或错误文本匹配 aborted by user\n    -> callbacks.onComplete()，不传 stats\n\nAgent Server\n  stats 存在  -> reason=completed\n  stats 不存在 -> reason=interrupted\n  写入 UniversalEvent: session.ended\n\ncontrol-plane SSE persist plugin\n  标记 sessionEndedSeen\n  flushPendingToolResults()\n  enqueueUserMessage()\n  transitionSessionStatus(sessionId, human)\n  保存 assistant message / summary 等结果\n\nactive stream\n  turnActive=false\n  终止事件在持久化队列之后广播"
         },
         {
-          "title": "旧 agent-platform 如何实现这一语义",
-          "code": "Web route\n  control-plane/src/routes/workspaces/sessions.ts\n  POST /:workspaceId/sessions/:sessionId/interrupt\n\nControl-plane -> Agent\n  interruptAgentSession() 调 Agent /sessions/:id/interrupt\n  返回 { delivered, interrupted }，明确区分“送达”和“真正中断”。\n\nAgent Runtime\n  activeControllers: Map<sessionId, AbortController>\n  interruptSession(sessionId) 找到 controller 后调用 abort()。\n\n终止事件\n  Agent 输出 session.ended(reason=interrupted)。\n  SSE 持久化链清理 active turn，并释放 turn admission slot。\n\nPending follow-up\n  只有 reason=completed 才调用 drainPendingMessage()。\n  error/interrupted 会保留 pending message。\n\n新架构保留这些业务语义，但把状态所有权收回 media_agent_gateway，并增加持久化 interrupt_requested 和 CAS 终态。"
+          "title": "当前实现的边界与容易误解的地方",
+          "code": "软中断，不是进程终止\n  Agent Pod 不会被删除；只取消当前 SDK query。\n\n按 Session 查找，不是按 Turn 查找\n  activeControllers 的 key 是 sessionId。\n  当前接口没有 turnId 或 interruptRequestId。\n\n存在注册窗口\n  新 Session 最初使用 pending-uuid 注册。\n  在真实 sessionId 回写前，用 sessionId 中断可能找不到控制器。\n\n没有持久化重试\n  CP 请求失败时只返回 success=false。\n  当前链路不会保存中断意图并后台重试。\n\n不能撤销副作用\n  abort 只阻止后续执行。已经完成的 MCP 调用、文件写入或外部操作不会自动回滚。\n\nWeb 主动关闭自己的流\n  interrupted=true 后 Web 立即 abortActiveStream；CP 与 Agent 之间的 SSE 处理仍负责接收并持久化终止事件。"
         }
       ],
       "takeaways": [
-        "中断是一个跨 Gateway 与 Runtime 的协作流程，不是一次数据库状态赋值。",
-        "interrupt_requested 表达中断意图，interrupted 表达 Runtime 已经终止执行。",
-        "delivered 与 interrupted 分离后，UI 才能准确展示网络失败、已自然完成和真正中断。",
-        "中断不补偿已经发生的外部副作用，也不会自动执行 Session 的 pending follow-up。",
-        "同一 Session 只有一个 active Turn；不同 Session 仍可以并发执行。"
+        "当前中断入口是 Web stop()，权限边界在 control-plane 的 Workspace canManage 校验。",
+        "真正的取消动作发生在 Agent 进程内：按 sessionId 找到 AbortController 并调用 abort()。",
+        "success 表示请求送达 Agent；interrupted 表示当时找到了控制器并发起 abort，不是持久化终态确认。",
+        "session.ended(reason=interrupted) 才驱动 control-plane 完成消息 flush、chat_status 回切和终止广播。",
+        "这是内存型软中断实现：有注册窗口、无持久化取消请求、无后台重试，也不补偿既有外部副作用。"
       ]
     },
     {

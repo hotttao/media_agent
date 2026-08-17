@@ -17,8 +17,12 @@ _禁用替代词_：Anonymous Session、Unowned Workspace、Temporary Chat
 _禁用替代词_：Platform Token、Cookie、Access Token
 
 **Turn（交互轮次）**:
-Agent Session 内由一次用户输入触发并自然结束的一轮处理。
+Agent Session 内由一次用户输入触发的一轮处理，以 completed、failed 或 interrupted 之一结束。
 _禁用替代词_：Session、Agent Task
+
+**Turn Interrupt（轮次中断）**:
+用户请求 Agent Runtime 停止当前 running Turn 的软中断操作；它不终止 Agent Session，也不回滚已经发生的工具调用或外部副作用。
+_禁用替代词_：Session Interrupt、Session Termination、Rollback
 
 **Pending Message（待执行消息）**:
 同一 Agent Session 已有 active Turn 时保存的唯一 follow-up 输入；它不是 Turn，仅在当前 Turn 自然完成后转换为下一 Turn。

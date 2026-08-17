@@ -17,7 +17,7 @@ Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、
 ## 边界
 
 ### 做什么
-- 创建、查询、更新、删除和中断 Agent Session。
+- 创建、查询、更新和删除 Agent Session；用户中断只停止当前 Turn，不改变 Session 生命周期。
 - 保存 Turn、Message、Universal Event、Tool Result Snapshot 和 Agent Request；Live Event Frame 只属于运行期传输。
 - 在控制配置为空时，以平台 Default Agent Context 创建用户的首个可对话 Session。
 - 保证同一 Session 最多一个 active Turn，并保存一个待执行 follow-up。
@@ -32,9 +32,10 @@ Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、
 
 | 能力 | 说明 | 对外接口/函数 |
 |:---|:---|:---|
-| 管理会话 | 管理 Agent Session 生命周期 | `SessionService.Get/List/Update/Delete/Star/Interrupt` |
+| 管理会话 | 管理 Agent Session 生命周期 | `SessionService.Get/List/Update/Delete/Star` |
 | 获取或创建默认会话 | 为已登录用户返回最近 Session；不存在时使用 Default Agent Context 创建 | `SessionService.GetOrCreateDefault` |
 | 运行交互 | 创建 Turn 并流式记录事件 | `ChatService.RunTurn/Reconnect/Respond` |
+| 中断交互 | 请求 Runtime 软中断当前 running Turn | `ChatService.InterruptTurn` |
 | 订阅会话事件 | 授权后按 sequence 回放 Universal Event 并接入实时广播 | `ChatService.SubscribeEvents` |
 | 查询交互控制方 | 返回独立于 Session 生命周期的 human/agent Chat Status | `SessionService.Get/List` |
 | 暂存 follow-up | Turn 运行期间原子保存下一条用户输入 | 待 IDL 定义 |
@@ -52,7 +53,7 @@ Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、
 | workspace_id | text | 固定绑定的 Workspace ID |
 | agent_id | text | 固定绑定的 Agent ID |
 | token_hash | bytea | Session Token 的 SHA-256 Hash |
-| status | text | starting/active/interrupted/failed/deleted |
+| status | text | starting/active/failed/deleted |
 | chat_status | text | human/agent；当前交互控制方的可查询投影 |
 | context_version | bigint | Session Context 版本 |
 | active_turn_id | text nullable | 当前 pending/running Turn 的逻辑引用 |
@@ -69,17 +70,14 @@ Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、
 | id | text PK | Turn ID |
 | session_id | text | 所属 Agent Session |
 | sequence | bigint | Session 内轮次序号 |
-| status | text | pending/running/interrupt_requested/completed/failed/interrupted |
+| status | text | pending/running/completed/failed/interrupted |
 | started_at | timestamptz nullable | 开始时间 |
 | finished_at | timestamptz nullable | 结束时间 |
-| interrupt_request_id | text nullable | 当前中断请求的幂等 ID |
-| interrupt_requested_by | text nullable | 发起中断的用户或服务主体 ID |
-| interrupt_requested_at | timestamptz nullable | 中断意图持久化时间 |
 
 #### 约束与索引
 
-- `UNIQUE (session_id) WHERE status IN ('pending', 'running', 'interrupt_requested')`，数据库层禁止并发 Turn。
-- `active_turn_id` 必须引用本 Session 的 pending/running/interrupt_requested Turn；终态提交时原子清空。
+- `UNIQUE (session_id) WHERE status IN ('pending', 'running')`，数据库层禁止并发 Turn。
+- `active_turn_id` 必须引用本 Session 的 pending/running Turn；终态提交时原子清空。
 - pending message 每个 Session 只有一份；新 follow-up 按产品合并/替换规则更新同一记录，不创建并发 Turn。
 
 ### `messages`
@@ -138,11 +136,11 @@ Universal Event 只保存可恢复的权威事实。`item.started`、`item.delta
 
 ### InterruptTurn
 
-1. 若 Turn 仍为 `pending` 且 Runtime 尚未启动，可在本地事务中直接提交 `interrupted` 并清空 `active_turn_id`。
-2. 若 Turn 为 `running`，先以 CAS 写入 `interrupt_requested`、请求 ID、发起人和时间，再在事务外调用 Runtime；此时仍视为 active Turn。
-3. Runtime 返回或上报 `reason=interrupted` 后，Gateway 才强制 flush 待写事件，并以 CAS 提交 `interrupted`、`chat_status=human` 和 Outbox Event。
-4. Runtime 暂不可达时保持 `interrupt_requested`，使用同一请求 ID 重试；不得提前清空 active Turn 或声明已经停止。
-5. 若 Runtime 在中断到达前已自然完成或失败，提交真实终态；任何晚到结果都不得覆盖已经提交的终态。
+1. 只对 `running` Turn 请求中断；`pending` 或已经进入终态时返回 not_running，不修改 Session 或 Turn。
+2. Gateway 完成 Session 归属授权后，在数据库事务外调用 Runtime `CancelTurn(turn_id)`，不持久化中断请求，也不自动重试。
+3. Runtime 找到 active Turn 后取消执行，停止产生新输出，并发送 `TurnEnded(reason=interrupted)`；已经发生的工具调用和外部副作用不回滚。
+4. Gateway 保留并 flush 取消前已经收到的事件，再以 CAS 提交 `running -> interrupted`、`chat_status=human`、清空 `active_turn_id` 和 Outbox Event。
+5. Runtime 未找到 active Turn 或不可达时返回失败，Turn 保持原状态；自然完成、失败和中断终态按实际到达结果提交，终态不互相覆盖。
 
 ### Session Event Subscription
 
