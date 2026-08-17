@@ -79,10 +79,24 @@ sequenceDiagram
         G->>DB: TX-FINAL: CAS pending/running -> failed
         G-->>S: TurnFailed(final_sequence)
     else 用户显式中断
-        C->>G: InterruptTurn(turn_id)
-        G->>DB: TX-INTERRUPT: CAS pending/running -> interrupted
-        G->>R: CancelTurn(turn_id)
-        G-->>S: TurnInterrupted(final_sequence)
+        C->>G: InterruptTurn(turn_id, interrupt_request_id)
+        alt Turn 尚未启动 Runtime
+            G->>DB: TX-INTERRUPT-FINAL: CAS pending -> interrupted
+            G-->>S: TurnInterrupted(final_sequence)
+        else Turn 正在 Runtime 执行
+            G->>DB: TX-INTERRUPT-REQUEST: CAS running -> interrupt_requested
+            G->>R: CancelTurn(turn_id, interrupt_request_id)
+            alt Runtime 确认中断
+                R-->>G: TurnEnded(reason=interrupted)
+                G->>G: 强制 flush 全部 pending tool result
+                G->>DB: TX-FINAL: CAS interrupt_requested -> interrupted, chat_status=human
+                G-->>S: TurnInterrupted(final_sequence)
+            else Runtime 已自然结束
+                G->>DB: 协调并提交真实 completed/failed 终态
+            else Runtime 暂不可达
+                G->>G: 保持 interrupt_requested，后台重试/协调
+            end
+        end
     end
 
     G-->>A: Turn 终态事件
@@ -122,13 +136,17 @@ stateDiagram-v2
     pending --> interrupted: 用户中断
     running --> completed: Runtime 自然结束
     running --> failed: Runtime 执行失败
-    running --> interrupted: 用户中断
+    running --> interrupt_requested: 接受中断请求
+    interrupt_requested --> interrupted: Runtime 确认停止
+    interrupt_requested --> completed: 中断前已自然完成
+    interrupt_requested --> failed: Runtime 以错误结束
     completed --> [*]
     failed --> [*]
     interrupted --> [*]
 ```
 
 - `completed`、`failed`、`interrupted` 均为终态，不允许互相覆盖。
+- `interrupt_requested` 是非终态，只表达已持久化的中断意图；它不能作为 Agent 已停止的依据。
 - Turn 固定属于一个 Session；`session_id` 和 `context_version` 创建后不可改变。
 - `chat_status` 是 Session 的交互控制投影：存在 running Turn 时必须为 agent；Turn 终态提交后必须为 human。Turn 状态仍是执行事实的权威来源。
 - 客户端 SSE/HTTP 连接状态不是 Turn 状态，连接断开不会产生 interrupted。
@@ -144,9 +162,10 @@ stateDiagram-v2
 | TX-EVENT | 一个完成项或生命周期 Universal Event，以及由它形成的 Message | 客户端网络推送 |
 | TX-SNAPSHOT | 一个规范化 Tool Result Snapshot，使用新的 sequence 追加 | 客户端网络推送 |
 | TX-FINAL | 已 flush 的全部事件之后的 Turn 终态、`chat_status=human`、Outbox Event | Session Analytics 投影更新、pending drain |
-| TX-INTERRUPT | Turn interrupted、Outbox Event | Runtime 是否立即停止 |
+| TX-INTERRUPT-REQUEST | `running -> interrupt_requested`、中断请求 ID、发起人和时间 | 调用 Runtime、提交 interrupted 终态 |
+| TX-INTERRUPT-FINAL | 尚未启动 Runtime 的 `pending -> interrupted`、`chat_status=human`、Outbox Event | 调用 Runtime |
 
-Gateway 不在调用 Runtime 期间持有数据库事务。Runtime 取消失败时，Turn 仍保持 interrupted；之后到达的 Runtime Event 可以记录为诊断事件，但不能改变终态或继续生成用户可见内容。
+Gateway 不在调用 Runtime 期间持有数据库事务。Runtime 暂不可达时，Turn 保持 `interrupt_requested` 并由后台重试或终止事件协调；不能在 Runtime 尚未停止时对外宣称 `interrupted`。若自然完成先提交，则晚到的中断确认不得覆盖 `completed/failed`。
 
 ## 幂等、重试与恢复
 
@@ -154,6 +173,7 @@ Gateway 不在调用 Runtime 期间持有数据库事务。Runtime 取消失败�
 |:---|:---|:---|
 | 创建 Turn | `session_id + idempotency_key` | 重复请求返回既有 Turn，不创建第二条 User Message |
 | 启动 Runtime | `turn_id` | 启动结果不明确时先查询 Runtime/Turn 状态，不直接创建新 Turn |
+| 请求中断 | `turn_id + interrupt_request_id` | 重复请求返回同一送达结果；Runtime 取消命令使用相同请求 ID 重试 |
 | 写入完成项 | `turn_id + item_id`，tool call 额外使用 `call_id` | Runtime 重放时忽略已持久化完成项；Gateway sequence 只在实际追加时分配 |
 | 写入工具结果快照 | `turn_id + call_id + snapshot_version` | 聚合窗口内只保留最新值；每次 flush 追加新 sequence；终态 flush 可重复调用且无新值时 no-op |
 | 提交终态 | `turn_id + expected_status` | compare-and-set；重复终态事件返回当前终态 |
@@ -178,6 +198,8 @@ Runtime 失败后不得自动重新执行整个 Turn，因为此前可能已经�
 | Session 不存在、无访问权、输入非法 | 否 | 创建 Turn 前返回错误 |
 | Runtime 启动瞬时失败且确认未启动 | 可以 | 使用同一 `turn_id` 有限重试 |
 | Runtime 结果不明确 | 否，先查询 | 协调 Runtime 状态，避免重复执行 |
+| Runtime 取消请求不可达 | 是 | 保持 `interrupt_requested`，使用同一 `interrupt_request_id` 重试并等待权威终止事件 |
+| Runtime 收到中断前已经结束 | 不适用 | 协调真实 `completed/failed` 终态，不伪造 `interrupted` |
 | Event 重复 | 不需要 | 按 `turn_id + sequence` 忽略 |
 | 持久化 sequence 冲突 | 否 | 回滚当前写入并终止 Turn；临时帧没有 sequence，不参与缺口校验 |
 | 客户端连接断开 | 不适用 | Turn 继续执行，客户端按游标重连 |

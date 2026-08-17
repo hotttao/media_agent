@@ -69,14 +69,17 @@ Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、
 | id | text PK | Turn ID |
 | session_id | text | 所属 Agent Session |
 | sequence | bigint | Session 内轮次序号 |
-| status | text | pending/running/completed/failed/interrupted |
+| status | text | pending/running/interrupt_requested/completed/failed/interrupted |
 | started_at | timestamptz nullable | 开始时间 |
 | finished_at | timestamptz nullable | 结束时间 |
+| interrupt_request_id | text nullable | 当前中断请求的幂等 ID |
+| interrupt_requested_by | text nullable | 发起中断的用户或服务主体 ID |
+| interrupt_requested_at | timestamptz nullable | 中断意图持久化时间 |
 
 #### 约束与索引
 
-- `UNIQUE (session_id) WHERE status IN ('pending', 'running')`，数据库层禁止并发 Turn。
-- `active_turn_id` 必须引用本 Session 的 pending/running Turn；终态提交时原子清空。
+- `UNIQUE (session_id) WHERE status IN ('pending', 'running', 'interrupt_requested')`，数据库层禁止并发 Turn。
+- `active_turn_id` 必须引用本 Session 的 pending/running/interrupt_requested Turn；终态提交时原子清空。
 - pending message 每个 Session 只有一份；新 follow-up 按产品合并/替换规则更新同一记录，不创建并发 Turn。
 
 ### `messages`
@@ -132,6 +135,14 @@ Universal Event 只保存可恢复的权威事实。`item.started`、`item.delta
 3. 当前 Turn completed 后，原子 take-and-clear pending message，再创建下一 Turn；派发失败时仅在没有更新版本时恢复旧 pending message。
 4. 当前 Turn failed/interrupted 时不自动消费 pending message，保留给用户继续、修改或清除。
 5. 客户端连接断开不改变 active Turn，也不触发 pending message 消费。
+
+### InterruptTurn
+
+1. 若 Turn 仍为 `pending` 且 Runtime 尚未启动，可在本地事务中直接提交 `interrupted` 并清空 `active_turn_id`。
+2. 若 Turn 为 `running`，先以 CAS 写入 `interrupt_requested`、请求 ID、发起人和时间，再在事务外调用 Runtime；此时仍视为 active Turn。
+3. Runtime 返回或上报 `reason=interrupted` 后，Gateway 才强制 flush 待写事件，并以 CAS 提交 `interrupted`、`chat_status=human` 和 Outbox Event。
+4. Runtime 暂不可达时保持 `interrupt_requested`，使用同一请求 ID 重试；不得提前清空 active Turn 或声明已经停止。
+5. 若 Runtime 在中断到达前已自然完成或失败，提交真实终态；任何晚到结果都不得覆盖已经提交的终态。
 
 ### Session Event Subscription
 

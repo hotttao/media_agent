@@ -7,8 +7,8 @@ export const webExplainData = {
       "title": "用户中断 Agent：从停止按钮到 Turn 终态",
       "summary": "中断不是把数据库状态直接改成 interrupted。正确流程是先记录 interrupt_requested，再把取消命令送到 Agent Runtime；只有 Runtime 确认停止或返回 interrupted 终止事件后，Gateway 才提交 Turn 终态。",
       "sourceRefs": [
-        "目标设计：docs/media_agent_gateway/workflow/0001-run_turn/run_turn.md",
-        "目标领域：docs/media_agent_gateway/domain/0001-agent_session/agent_session.md",
+        "目标设计：docs/ddd/media_agent_gateway/workflow/0001-run_turn/run_turn.md",
+        "目标领域：docs/ddd/media_agent_gateway/domain/0001-agent_session/agent_session.md",
         "旧平台入口：control-plane/src/routes/workspaces/sessions.ts:221-260",
         "旧平台转发：control-plane/src/routes/workspaces/_shared.ts:19-39",
         "旧 Agent 中断：agents/claude-code/src/server.ts:342-348",
