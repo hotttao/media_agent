@@ -11,14 +11,11 @@ services:
       WORKSPACE_DIR: /workspace
       MOCK_MEDIA_CONTROL: "true"
       CODEX_AUX_PROCESSES: "false"
-      ALL_PROXY: ${CODEX_DOCKER_PROXY:-socks5://host.docker.internal:7891}
+      ALL_PROXY: ${CODEX_DOCKER_PROXY:-socks5://127.0.0.1:7891}
     volumes:
       - ${CODEX_AUTH_FILE:-/home/tao/.codex/auth.json}:/run/secrets/codex-auth.json:ro
       - codex_workspace:/workspace
-    ports:
-      - "3001:3001"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3001/health', timeout=2)"]
       interval: 5s
@@ -39,7 +36,7 @@ services:
       CONSUL_ENABLED: "false"
       CONSUL_KV_ENABLED: "false"
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-agent-gateway?sslmode=disable
-      CODEX_RUNTIME_URL: http://codex_agent:3001
+      CODEX_RUNTIME_URL: http://host.docker.internal:3001
       MEDIA_CONTROL_URL: http://host.docker.internal:8007
       LOG_DIR: /media_logs/media-agent-gateway
     volumes:
