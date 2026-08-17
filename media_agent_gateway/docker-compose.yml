@@ -1,4 +1,31 @@
 services:
+  codex_agent:
+    build:
+      context: ../media_agents
+      dockerfile: codex/Dockerfile
+    image: media-agent-codex:local
+    environment:
+      PORT: "3001"
+      CODEX_CONFIG_DIR: /root/.codex
+      CODEX_AUTH_SOURCE: /run/secrets/codex-auth.json
+      WORKSPACE_DIR: /workspace
+      MOCK_MEDIA_CONTROL: "true"
+      CODEX_AUX_PROCESSES: "false"
+      ALL_PROXY: ${CODEX_DOCKER_PROXY:-socks5://host.docker.internal:7891}
+    volumes:
+      - ${CODEX_AUTH_FILE:-/home/tao/.codex/auth.json}:/run/secrets/codex-auth.json:ro
+      - codex_workspace:/workspace
+    ports:
+      - "3001:3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3001/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   media_agent_gateway:
     build:
       context: ..
@@ -12,11 +39,17 @@ services:
       CONSUL_ENABLED: "false"
       CONSUL_KV_ENABLED: "false"
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-agent-gateway?sslmode=disable
-      CODEX_RUNTIME_URL: http://host.docker.internal:3001
+      CODEX_RUNTIME_URL: http://codex_agent:3001
       MEDIA_CONTROL_URL: http://host.docker.internal:8007
       LOG_DIR: /media_logs/media-agent-gateway
     volumes:
       - ../media_logs/media-agent-gateway:/media_logs/media-agent-gateway
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      codex_agent:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  codex_workspace:
