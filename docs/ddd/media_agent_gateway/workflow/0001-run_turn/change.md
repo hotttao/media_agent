@@ -1,11 +1,11 @@
 # Run Turn 变更记录
 
-## 2026-08-17 · 中断改为请求与确认两阶段
+## 2026-08-17 · 采用 Runtime 软中断
 
-- running Turn 先持久化为 `interrupt_requested`，再在事务外向 Runtime 发送幂等取消命令。
-- 只有 Runtime 的权威终止结果可以提交 `interrupted`；Runtime 不可达时保持请求态并重试/协调。
-- pending Turn 尚未启动 Runtime 时允许本地直接中断；自然完成或失败一旦提交，晚到中断不得覆盖终态。
-- 区分取消请求是否送达与 Turn 是否真正中断，供 Web UI 准确展示停止结果。
+- 用户中断只停止当前 running Turn，不终止 Agent Session，也不回滚已经发生的外部副作用。
+- Gateway 不持久化中断请求、不增加中间状态和后台重试；Runtime 不可达或未找到 active Turn 时直接返回失败。
+- Runtime 使用运行期取消能力停止输出并发送 `TurnEnded(reason=interrupted)`；Gateway 保留已接收事件并复用 TX-FINAL 提交 Turn 终态。
+- 删除 `interrupt_requested` 和中断请求元数据，Turn 状态保持 pending/running/completed/failed/interrupted。
 
 ## 2026-08-10 · 最小 Chat 闭环
 
