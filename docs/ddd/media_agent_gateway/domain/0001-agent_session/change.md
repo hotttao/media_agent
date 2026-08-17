@@ -24,3 +24,9 @@
 - 把非持久化 Live Event Frame 与带 sequence 的 Universal Event 分开，恢复承诺收敛到最终 Message、工具快照和生命周期事实。
 - tool result 改为首次立即写、300ms 聚合追加快照、终态强制 flush，并在持久化边界统一截断超大输出。
 - Session 增加 `chat_status=human|agent` 交互控制投影；它不替代 Session 生命周期或 Turn 执行状态。
+
+## 2026-08-17 · Turn 软中断
+
+- 增加查询当前 running Turn 的领域能力，作为中断前的 Session 归属与执行状态事实。
+- 用户中断不创建新的持久化实体，也不直接把 Turn 改为终态；Runtime 确认取消后，由既有执行流提交 `interrupted`。
+- `interrupted` 与 `completed`、`failed` 同为不可互相覆盖的终态；中断前已提交的 Message、Universal Event 和 Tool Result Snapshot 全部保留。
