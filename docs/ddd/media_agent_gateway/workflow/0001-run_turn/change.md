@@ -1,5 +1,12 @@
 # Run Turn 变更记录
 
+## 2026-08-17 · 中断改为请求与确认两阶段
+
+- running Turn 先持久化为 `interrupt_requested`，再在事务外向 Runtime 发送幂等取消命令。
+- 只有 Runtime 的权威终止结果可以提交 `interrupted`；Runtime 不可达时保持请求态并重试/协调。
+- pending Turn 尚未启动 Runtime 时允许本地直接中断；自然完成或失败一旦提交，晚到中断不得覆盖终态。
+- 区分取消请求是否送达与 Turn 是否真正中断，供 Web UI 准确展示停止结果。
+
 ## 2026-08-10 · 最小 Chat 闭环
 
 - 首次对话支持通过 Default Agent Context 创建 Session。
