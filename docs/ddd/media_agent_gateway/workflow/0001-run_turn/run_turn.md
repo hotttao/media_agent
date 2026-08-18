@@ -1,203 +1,159 @@
 ---
 name: run_turn
-description: 单个 Agent Turn 的持久化、Runtime 执行与事件回流
-participants: [client, media_agent_gateway, agent_runtime, session_analytics]
-domains: [agent_session, session_analytics]
+description: 授权并转发 Turn 命令，把 Agent 事件总线与持久化回放适配为客户端 SSE
+participants:
+  - client
+  - media_agent_gateway
+  - media_agents
+  - session_event_bus
+  - session_analytics
+domains:
+  - agent_session
+  - agent_task
+  - session_analytics
 ---
 
 ## 一句话说明
 
-Gateway 在本地事务中创建 Turn 和用户消息后，以独立于 HTTP 客户端的后台生命周期驱动 Agent Runtime；高频实时帧即时广播，权威事件按 kind 规范化并持久化，Turn 终止前强制 flush 所有待写快照，再提交和广播终态。
+Gateway 校验 Agent Session Registration 后把 Turn 命令交给 Agent；页面事件连接先订阅 Session Event Bus，再通过 Agent 查询接口回放已提交 Universal Event，最后按 Agent Session Sequence 去重并持续转发 SSE。
 
 ## 触发与结果
 
 | 项目 | 内容 |
 |:---|:---|
-| 触发 | Web 用户提交消息，或 `agent_task_dispatch` 请求执行一个持久化 Agent Task |
-| 前置条件 | 调用者已经登录且有权访问该 Session；首次对话可由 Gateway 使用 Default Agent Context 创建 active Session |
-| 成功结果 | Turn 进入 completed；最终 Message、Tool Result Snapshot、Session 生命周期事实可以按 sequence 恢复，流式 delta 不承诺逐帧回放 |
-| 显式中断 | Turn 进入 interrupted；已经提交的 Message 和 Event 保留 |
-| 执行失败 | Turn 进入 failed，并保存稳定错误分类；已经提交的 Message 和 Event 保留 |
-| 客户端断开 | 不改变 Turn 状态；客户端可使用最后收到的 sequence 重新连接 |
-| Session 已有 active Turn | 不创建并发 Turn；把输入保存为唯一 pending message 并返回 queued |
+| Turn 触发 | Web 用户提交输入，或 Agent Task Dispatch 提交持久化任务输入 |
+| 订阅触发 | 客户端以 `session_id + after_sequence` 建立 Session Event Subscription |
+| 前置条件 | 调用者已认证且有权访问 active Agent Session Registration |
+| Turn 结果 | Agent 返回稳定 turn_id 和 queued/running；Gateway 不等待执行完成 |
+| 订阅结果 | 已提交事件无缺口、可重复地到达 UI；临时帧尽力实时传输 |
+| 客户端断开 | 只释放本 Gateway 订阅，不改变 Agent Turn 或其他订阅 |
 
 ## 执行时间线
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant C as Turn 发起方
-    participant S as 页面 A/B 订阅
+    participant C as Client
     participant G as media_agent_gateway
-    participant DB as Gateway DB
-    participant R as Agent Runtime
-    participant A as Session Analytics
+    participant GD as Gateway DB
+    participant A as media_agents API
+    participant AD as Agent MySQL
+    participant B as Session Event Bus
+    participant X as Session Analytics
 
-    C->>G: RunTurn(session_id, input, idempotency_key)
-    G->>G: 使用共享密钥本地验证 media_auth Cookie JWT，并检查 Session 访问权
-    opt 首次对话且 media_control 返回空配置
-        G->>G: 选择内置 Codex Default Agent Context
-        G->>DB: TX-SESSION: 创建 active Agent Session
-    end
-    G->>DB: TX0: 锁定 Session，检查 active_turn_id
-    break 已有 active Turn
-        G->>DB: 原子写入/合并 pending_message + version
-        G-->>C: queued(active_turn_id)
-    end
-    G->>DB: TX1: 创建 Turn + User Message，chat_status=agent
-    DB-->>G: turn_id, context_version, first_sequence
-    G-->>C: 202 Accepted(turn_id)
-
-    S->>G: SubscribeEvents(session_id, after_sequence)
-    G->>G: 注册 Session subscriber
-    G->>DB: 查询 sequence > after_sequence
-    DB-->>G: 已提交事件
-    G-->>S: 按 sequence 回放
-
-    G->>R: StartTurn(turn_id, session context, input)
-    R-->>G: Live Event Frame(type, payload)
-    alt item.delta / item.started
-        G-->>S: 广播临时帧（无 SSE id，不推进 cursor）
-    else text item.completed / tool_call completed
-        G->>DB: TX-EVENT: 追加 Universal Event / Message
-        DB-->>G: committed_sequence
-        G-->>S: 广播已提交事件
-    else tool_result
-        G->>G: 按 call_id 保存最新快照，首次立即写，之后 300ms 聚合
-        G->>DB: TX-SNAPSHOT: 追加规范化 Tool Result Snapshot
-        DB-->>G: committed_sequence
-        G-->>S: 广播已提交快照
-    end
-
-    alt Runtime 自然结束
-        R-->>G: TurnFinished(result, usage)
-        G->>G: 强制 flush 全部 pending tool result
-        G->>DB: TX-FINAL: CAS running -> completed，chat_status=human
-        G-->>S: TurnCompleted(final_sequence)
-    else Runtime 执行失败
-        R-->>G: TurnFailed(error_class, detail)
-        G->>DB: TX-FINAL: CAS pending/running -> failed
-        G-->>S: TurnFailed(final_sequence)
-    else 用户显式中断
-        C->>G: InterruptTurn(turn_id)
-        G->>R: CancelTurn(turn_id)
-        alt Runtime 找到 active Turn
-            R-->>G: accepted=true
-            R-->>G: TurnEnded(reason=interrupted)
-            G->>G: 强制 flush 全部 pending tool result
-            G->>DB: TX-FINAL: CAS running -> interrupted, chat_status=human
-            G-->>S: TurnInterrupted(final_sequence)
-        else Runtime 未找到 active Turn
-            R-->>G: accepted=false
-            G-->>C: not_running
-        else Runtime 不可达
-            G-->>C: interrupt_failed
+    par 提交 Turn
+        C->>G: POST Turn(session_id, input, idempotency_key)
+        G->>GD: 读取 Registration 并校验 owner/workspace/status
+        G->>A: SubmitTurn(identity, session_id, input, idempotency_key, context_version)
+        A->>AD: TX: 写 Queued Turn + User Message；必要时声明 running
+        AD-->>A: committed(turn_id, status, queue_position)
+        A-->>G: accepted(turn_id, queued|running)
+        G-->>C: 202 accepted
+    and 建立/恢复事件订阅
+        C->>G: GET /events?after_sequence=N
+        G->>GD: 校验 Session Registration 访问权
+        G->>B: Subscribe(session subject)
+        Note over G: 开始缓存实时总线消息
+        G->>A: ReplayEvents(session_id, after_sequence=N)
+        A->>AD: SELECT sequence > N ORDER BY sequence
+        AD-->>A: persisted events
+        A-->>G: replay page + high watermark
+        G-->>C: 按 sequence 回放 SSE
+        G->>G: 合并缓存事件，丢弃 sequence <= cursor 的重复项
+        loop 实时阶段
+            B-->>G: Live Frame 或 Universal Event
+            alt sequence = 0
+                G-->>C: SSE 无 id 临时帧
+            else sequence = cursor + 1
+                G-->>C: SSE id=sequence
+                G->>G: 推进 cursor
+            else sequence > cursor + 1
+                G->>A: ReplayEvents(after_sequence=cursor)
+                A-->>G: 补齐缺口
+                G-->>C: 按 sequence 输出并去重
+            else sequence <= cursor
+                G->>G: 丢弃重复事件
+            end
         end
     end
 
-    G-->>A: Turn 终态事件
-    A->>A: 幂等更新 Activity / Usage 投影
+    opt 周期检查或收到 Turn 终态
+        G->>A: ReplayEvents(after_sequence=cursor)
+        A-->>G: 补交已提交但未发布的事件
+        G-->>C: 按 sequence 输出
+    end
+
+    A-->>B: Turn terminal event
+    B-->>X: Turn terminal event
+    X->>X: 幂等更新 Activity / Usage
 ```
 
 ### 步骤说明
 
-1. **认证与授权**：Web 请求使用 Cookie JWT 或用户 Service Token。Agent Task 是 Gateway 内部执行入口，使用可信服务身份，并携带 Task 已固定的 user/workspace/session 信息。
-2. **创建业务事实**：TX1 原子创建 Turn 和 User Message，并把 Session `chat_status` 切换为 agent。只有 TX1 提交成功后才能启动 Runtime，避免出现没有持久化 Turn 的孤儿执行。
-3. **启动 Runtime**：使用与发起请求分离的后台 Context 和 TX1 固定的 `context_version` 构建运行上下文。发起请求或任意订阅断开均不取消本轮执行。
-4. **按 kind 持久化与广播**：`item.started` 和 `item.delta` 是 Live Event Frame，只实时广播且不携带 SSE id；文本在 `item.completed` 时整块写入；tool call 以 `turn_id + call_id` 幂等写入；tool result 首次立即写入，之后按 300ms 窗口聚合最新值，每次提交使用新的 Session sequence。只有已提交事件推进客户端 cursor。
-5. **规范化工具结果**：tool result 在持久化边界按 Runtime capability 做一次 UTF-8 安全截断并移除 JSONB 不支持的 NUL；持久化 payload 包含 `truncated`、`original_bytes` 和 `stored_bytes`。截断后的同一 payload 同时用于数据库、SSE 与历史读模型，禁止二次截断。
-6. **生成 Message**：assistant 文本只由 message kind 的 `item.completed` 生成权威 Message；tool call 与 tool result 作为 Universal Event/Tool Result Snapshot 保存。UI 收到 completed 后以完整内容替换已累计 delta，并在 Session 终态后刷新历史。
-7. **提交终态**：Runtime 自然结束、执行失败、用户中断、超时和上游 EOF 均先停止聚合 timer、强制 flush pending tool result，等待持久化完成后再在同一事务提交 Turn 终态并把 Session `chat_status` 切回 human，随后广播终态事件。用户中断以 Runtime 的 `TurnEnded(reason=interrupted)` 为结束依据；`CancelTurn` 的 accepted 响应只表示已调用取消，不直接修改 Turn。终态使用 compare-and-set，先提交的真实终态生效。
-8. **完成后排空 follow-up**：仅 completed 路径原子 take-and-clear pending message，并创建下一 Turn。派发失败时使用 pending_message_version 做条件恢复；用户更新的新内容优先。
-9. **更新投影**：Turn 终态提交后通过 Outbox 产生事件；Session Analytics 更新失败不回滚 Turn，可以独立重试和重建。
+1. **Gateway 只授权和转发**：Gateway Registration 决定用户能否访问 Session；Agent Runtime Session 决定输入是立即 running 还是 queued。Gateway 不创建 Turn、Message 或 pending message。
+2. **Agent 接受才算成功**：只有 Agent MySQL 已提交 Queued Turn 后 Gateway 才返回 202。Gateway 超时且结果不明确时，以同一 `idempotency_key` 重试或查询 Agent，不创建新 ID。
+3. **先订阅再回放**：Gateway 必须先订阅 Session subject 并缓存消息，再调用 Agent `ReplayEvents`。回放和缓存重叠由 Session sequence 去重，因此页面刷新窗口内正常发布的事件不会丢。
+4. **补偿数据库提交/发布间隙**：Agent 先提交 MySQL 再发布总线。若在两步之间失败，Gateway 通过 sequence 跳号、周期检查以及 Turn 终态补查重新调用 `ReplayEvents`。当前连接最终补齐；页面重连也能从 MySQL 恢复。
+5. **总线不是恢复事实**：初始实现采用 Redis Pub/Sub 的按 Session 广播语义。Gateway 不使用共享 Consumer Group 分摊事件；每个持有相关 SSE 的 Gateway 都订阅对应 Session subject。
+6. **临时帧语义**：Live Event Frame 没有持久 sequence，允许因断线、慢消费者或总线故障丢失；UI 最终由完成 Message、工具快照和终态事件收敛。
+7. **连接与执行解耦**：关闭 SSE 只取消当前订阅。中断必须调用 Agent `InterruptTurn`；Gateway、Redis 或浏览器不能直接改变 Turn 状态。
+
+## 状态与不变量
+
+- Gateway 不持有 Turn 状态机；queued/running/completed/failed/interrupted/cancelled 均由 Agent Runtime Session 决定。
+- 同一 Session 多个 SSE 订阅相互独立，任一断开不能取消 Agent Turn。
+- 业务 cursor 只由 Agent Session Sequence 推进；Redis message id、Kafka offset 和 Gateway 内存下标不得写回客户端 cursor。
+- 持久事件以 `session_id + sequence` 去重；Live Event Frame 不承诺重放。
+- 同一 Session Turn 串行性由 Agent 队列和数据库约束保证，与请求落在哪个 Gateway 无关。
 
 ## 关键参数
 
 | 参数 | 产生方 | 使用方 | 语义 |
 |:---|:---|:---|:---|
-| `session_id` | Client / Agent Task | Gateway | 定位固定的 user、workspace、agent 交互边界 |
-| `idempotency_key` | Client / Agent Task | Gateway | 防止同一用户输入创建多个 Turn |
-| `turn_id` | Gateway | Runtime、Client、Analytics | 单轮执行的稳定标识 |
-| `context_version` | Agent Session | Runtime | 固定本轮使用的控制配置版本 |
-| `sequence` | Gateway DB | DB、Client | 仅分配给已持久化 Universal Event 的 Session 内严格递增恢复游标；事务先锁 Session 行再计算 `MAX + 1`；临时帧没有 sequence |
-| `committed_sequence` | Gateway DB | Client | 客户端可以安全保存的最后持久化游标 |
-
-## 状态与不变量
-
-```mermaid
-stateDiagram-v2
-    [*] --> pending: TX1 创建 Turn
-    pending --> running: Runtime 接受执行
-    pending --> failed: Runtime 启动失败
-    running --> completed: Runtime 自然结束
-    running --> failed: Runtime 执行失败
-    running --> interrupted: Runtime 确认用户中断
-    completed --> [*]
-    failed --> [*]
-    interrupted --> [*]
-```
-
-- `completed`、`failed`、`interrupted` 均为终态，不允许互相覆盖。
-- Turn 固定属于一个 Session；`session_id` 和 `context_version` 创建后不可改变。
-- `chat_status` 是 Session 的交互控制投影：存在 running Turn 时必须为 agent；Turn 终态提交后必须为 human。Turn 状态仍是执行事实的权威来源。
-- 客户端 SSE/HTTP 连接状态不是 Turn 状态，连接断开不会产生 interrupted。
-- Turn 发起请求不承载 Runtime SSE；Session Event Subscription 是独立只读连接，同一 Session 允许多个订阅者。
-- 同一 Session 最多一个 pending/running Turn；数据库部分唯一索引和 Session `active_turn_id` 双重保证。
-- follow-up 只是待执行输入，不是 Turn；只有当前 Turn 自然 completed 后才转换成新 Turn。
+| session_id | Gateway Registration | Agent、Bus、Client | 跨上下文稳定会话标识 |
+| idempotency_key | Client/Agent Task | Agent | 防止重复创建 Turn |
+| turn_id | Agent | Gateway、Client、Analytics | Agent 执行轮次标识 |
+| sequence | Agent MySQL | Gateway、Client | Universal Event 的 Session 内严格递增游标 |
+| after_sequence | Client/Gateway | Agent Replay API | 已确认处理的最后持久化事件 |
+| context_version | Registration | Agent | 本次提交对应的运行上下文版本 |
 
 ## 一致性边界
 
-| 事务 | 原子提交内容 | 不包含的副作用 |
+| 边界 | 原子提交事实 | 不包含的副作用 |
 |:---|:---|:---|
-| TX1 | Turn、User Message、`chat_status=agent` | 启动 Runtime |
-| TX-EVENT | 一个完成项或生命周期 Universal Event，以及由它形成的 Message | 客户端网络推送 |
-| TX-SNAPSHOT | 一个规范化 Tool Result Snapshot，使用新的 sequence 追加 | 客户端网络推送 |
-| TX-FINAL | 已 flush 的全部事件之后的 Turn 终态、`chat_status=human`、Outbox Event | Session Analytics 投影更新、pending drain |
+| Gateway Registration 读取 | 无写事务，仅授权快照 | Agent SubmitTurn |
+| Agent TX-ENQUEUE | Queued Turn、User Message、enqueue sequence | Gateway HTTP 响应 |
+| Agent TX-EVENT | Universal Event、Session sequence、可选 Message | Session Event Bus publish、SSE 写入 |
+| Agent TX-FINAL | flush 后终态、Chat Status、终态事件 | 总线发布、Analytics 投影 |
 
-Gateway 不在调用 Runtime 期间持有数据库事务，也不持久化中断请求。Runtime 不可达或未找到 active Turn 时，本次中断失败，Turn 保持原状态；用户可以再次请求。Gateway 只保存取消前已经收到的事件，收到 `TurnEnded(reason=interrupted)` 后复用 TX-FINAL 收尾，不回滚已经发生的外部副作用。
+Gateway 禁止开启跨 Gateway DB 与 Agent MySQL 的事务。跨服务通过稳定 idempotency key、sequence 回放和最终一致投影协调。
 
-## 幂等、重试与恢复
+## 幂等、重试与补偿
 
-| 环节 | 幂等键 | 重试与恢复规则 |
-|:---|:---|:---|
-| 创建 Turn | `session_id + idempotency_key` | 重复请求返回既有 Turn，不创建第二条 User Message |
-| 启动 Runtime | `turn_id` | 启动结果不明确时先查询 Runtime/Turn 状态，不直接创建新 Turn |
-| 写入完成项 | `turn_id + item_id`，tool call 额外使用 `call_id` | Runtime 重放时忽略已持久化完成项；Gateway sequence 只在实际追加时分配 |
-| 写入工具结果快照 | `turn_id + call_id + snapshot_version` | 聚合窗口内只保留最新值；每次 flush 追加新 sequence；终态 flush 可重复调用且无新值时 no-op |
-| 提交终态 | `turn_id + expected_status` | compare-and-set；重复终态事件返回当前终态 |
-| 更新 Analytics | `terminal_event_id` | 至少一次消费，Inbox 去重，可从 Gateway 事实重建 |
-| 暂存 follow-up | `session_id + pending_message_version` | 同一 Session 只有一份；并发更新使用 CAS |
-| 排空 follow-up | `session_id + pending_message_version` | completed 后原子 take-and-clear；派发失败条件恢复 |
+| 步骤 | 幂等键 | 重试策略 | 补偿/恢复 |
+|:---|:---|:---|:---|
+| SubmitTurn | session_id + idempotency_key | 超时可用相同 key 重试 | Agent 返回既有 turn_id |
+| Subscribe bus | connection_id + session_id | 断线重新建立 | 随后 ReplayEvents 补齐 |
+| ReplayEvents | session_id + after_sequence | 可安全分页重试 | sequence 去重 |
+| Bus delivery | event_id/sequence | 允许重复 | sequence <= cursor 丢弃 |
+| Publish 缺失 | sequence gap/periodic check | 查询 Agent | 从 Agent MySQL 补齐 |
+| Analytics | terminal event_id | 至少一次 | Inbox 去重，可重建 |
 
-Runtime 失败后不得自动重新执行整个 Turn，因为此前可能已经调用外部 MCP 或其他非幂等工具。只有在能够证明尚未发生不可逆副作用，或所有工具调用都以稳定幂等键保护时，才允许原 `turn_id` 恢复执行；否则保留 failed，由用户创建新 Turn。
+## 权限与失败
 
-## 权限与身份传递
-
-- Web 入口解析 Cookie JWT 或用户 Service Token，并以真实 Session 归属检查 `user_id` 和 `workspace_id`，不信任请求体覆盖身份。
-- 用户没有 Workspace/Agent 配置时，Gateway 可以选择 Default Agent Context；空配置不授予额外资源权限，也不跳过用户身份校验。
-- Agent Task 执行使用服务身份进入本 Workflow，但 Task 中的代表用户和 Workspace 必须来自已持久化任务事实。
-- Runtime 获得本 Session 的 `session_token`，用于直接调用 Platform MCP 和平台内业务 MCP；Gateway 不向 Runtime 暴露 Platform Token。
-- MCP 或业务服务根据 Session Token 解析用户、Workspace、Session，并在资源所有服务内完成最终授权。
-
-## 失败分类
+Gateway 从 Cookie JWT 或用户 Service Token 取得身份，读取本地 Registration 校验 user/workspace/status，然后通过 mTLS 调 Agent。Agent 接受 Gateway 服务身份，但仍校验 `session_id + context_version` 已注册；请求体中的 user/workspace/agent 字段不得覆盖 Gateway 持久化身份。
 
 | 失败 | 是否自动重试 | 处理 |
 |:---|:---|:---|
-| Session 不存在、无访问权、输入非法 | 否 | 创建 Turn 前返回错误 |
-| Runtime 启动瞬时失败且确认未启动 | 可以 | 使用同一 `turn_id` 有限重试 |
-| Runtime 结果不明确 | 否，先查询 | 协调 Runtime 状态，避免重复执行 |
-| Runtime 取消请求不可达 | 否 | 返回中断失败，Turn 继续保持当前状态；用户可以再次请求 |
-| Runtime 未找到 active Turn | 否 | 返回 not_running；由既有 Runtime 终止事件决定最终状态 |
-| Event 重复 | 不需要 | 按 `turn_id + sequence` 忽略 |
-| 持久化 sequence 冲突 | 否 | 回滚当前写入并终止 Turn；临时帧没有 sequence，不参与缺口校验 |
-| 客户端连接断开 | 不适用 | Turn 继续执行，客户端按游标重连 |
-| 订阅慢或广播缓冲溢出 | 不重试内存投递 | 关闭该订阅；客户端使用最后 sequence 建立新订阅并回放 |
-| Analytics 更新失败 | 是 | 独立重试，不影响 Turn 终态 |
+| Session 不存在或无访问权 | 否 | 调 Agent 前拒绝 |
+| Agent Submit 超时、结果不明 | 查询/同 key 重试 | 不生成第二个 Turn |
+| Agent 返回 session busy | 不应出现为错误 | 正常持久化为 queued；仅队列不可用时失败 |
+| Session Event Bus 不可用 | 是，降级 | 保持 SSE 并周期 ReplayEvents，或让客户端重连 |
+| Bus 消息跳号 | 立即补查 | 暂存高 sequence，回放缺口后顺序输出 |
+| 慢消费者溢出 | 不阻塞 Agent | 关闭单订阅，客户端从最后 sequence 重连 |
+| Client 断开 | 不适用 | 释放订阅，Turn 继续 |
+| Agent Replay 不可用 | 有限重试 | 不伪造事件；SSE 返回可重连错误 |
 
 ## 结果事件
 
-| 事件 | 产生条件 | 关键载荷 | 消费方 |
-|:---|:---|:---|:---|
-| `TurnCompleted` | Turn 成功进入 completed | turn_id, session_id, user_id, workspace_id, usage, final_sequence | Session Analytics、Agent Task |
-| `TurnFailed` | Turn 成功进入 failed | turn_id, error_class, final_sequence | Session Analytics、Agent Task |
-| `TurnInterrupted` | Turn 成功进入 interrupted | turn_id, interrupted_by, final_sequence | Session Analytics、Agent Task |
+Gateway 不产生 Turn 领域事件。它把 Agent 已提交的 `TurnQueued`、`TurnStarted`、`TurnCompleted`、`TurnFailed` 和 `TurnInterrupted` 适配为 SSE，并把终态事件交给 Session Analytics 与 Agent Task Dispatch。

@@ -1,5 +1,12 @@
 # Agent Session 变更记录
 
+## 2026-08-18 · Turn 与交互事实下沉 Agent
+
+- Gateway Agent Session 收敛为 Registration、访问控制、Session Token 与 UI 元数据。
+- Turn、pending message、Message、Universal Event、Agent Request、Session sequence 和 Chat Status 的权威所有权迁移到 `media_agents/runtime_session`。
+- `pending_message` 单槽位被 Agent 持久化 Queued Turn 取代；Gateway 不再维护 Session 执行锁或 active Turn。
+- 事件回放只通过 Agent 查询接口完成，禁止 Gateway 共享或直连 Agent 数据库。
+
 ## 2026-08-10 · 最小 Chat 默认上下文
 
 - 增加 `GetOrCreateDefault`，让已登录但尚未配置 Workspace/Agent 的用户可以直接进入对话。
