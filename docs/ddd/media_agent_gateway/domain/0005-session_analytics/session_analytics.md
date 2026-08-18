@@ -4,6 +4,7 @@ description: 近期会话、活动和 Usage 查询投影
 dependencies:
   - agent_session
   - agent_task
+  - media_agents/runtime_session
 related_workflow:
   - run_turn
   - agent_task_dispatch
@@ -11,17 +12,18 @@ related_workflow:
 
 ## 一句话职责
 
-Session Analytics 从 Gateway 运行事实构建用户和 Workspace 维度的可重建查询投影。
+Session Analytics 把 Gateway Session Registration/Agent Task 与 Agent Turn 终态、Message 计数和 Usage 事件关联，构建用户和 Workspace 维度的可重建查询投影。
 
 ## 边界
 
 ### 做什么
 - 提供近期 Session、活动摘要和 Usage 查询。
-- 消费 Session、Turn 和 Task 结果更新投影。
+- 消费 Gateway Session/Task 事件与 Agent Turn 结果更新投影。
 
 ### 不做什么
 - 不作为计费账本或审计日志。
-- 不改变 Session、Turn 或 Task 状态。
+- 不改变 Session Registration、Agent Runtime Turn 或 Task 状态。
+- 不把 Redis/Kafka 投递位置作为业务游标；同一 Agent 事件使用 `session_id + sequence/event_id` 幂等应用。
 
 ## 能力清单
 
@@ -33,7 +35,7 @@ Session Analytics 从 Gateway 运行事实构建用户和 Workspace 维度的可
 
 ## 聚合与不变量
 
-本 Domain 仅包含可重建读模型，无命令侧聚合；同一来源事件通过 event_id 幂等应用。
+本 Domain 仅包含可重建读模型，无命令侧聚合；同一 Agent 来源事件通过 `event_id` 幂等应用。总线漏投时可通过 Agent Replay API 按 Session sequence 重建，禁止直连 Agent MySQL。
 
 ## 领域事件
 
@@ -72,8 +74,9 @@ Session Analytics 从 Gateway 运行事实构建用户和 Workspace 维度的可
 ## 关联关系
 
 ### 依赖的 Domain
-- [agent_session](../0001-agent_session/agent_session.md) - 提供会话和交互事实。
+- [agent_session](../0001-agent_session/agent_session.md) - 提供 Session Registration 与归属元数据。
 - [agent_task](../0002-agent_task/agent_task.md) - 提供异步任务事实。
+- `media_agents/runtime_session` - 提供 Turn、Message 计数与 Usage 权威事实。
 
 ### 被依赖的 Domain
 - 无。

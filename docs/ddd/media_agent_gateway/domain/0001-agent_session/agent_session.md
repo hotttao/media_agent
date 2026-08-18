@@ -1,46 +1,66 @@
 ---
 name: agent_session
-description: Agent 持久化会话、Session Token 与交互记录
+description: Agent Session Registration、Session Token 与访问元数据
 dependencies:
-    - media_control/workspace
+  - media_control/workspace
+  - media_agents/runtime_session
 related_workflow:
-    - agent_session_startup
-    - run_turn
-    - agent_task_dispatch
-    - platform_mcp_invocation
+  - agent_session_startup
+  - run_turn
+  - agent_task_dispatch
+  - platform_mcp_invocation
 ---
 
 ## 一句话职责
 
-Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、稳定 Session Token 及可恢复交互记录。
+Agent Session Domain 拥有用户、Workspace 与 Agent 的稳定会话注册关系、Session Token 和 UI 元数据，不拥有 Runtime Turn、交互历史或事件序号。
 
 ## 边界
 
 ### 做什么
-- 创建、查询、更新和删除 Agent Session；用户中断只停止当前 Turn，不改变 Session 生命周期。
-- 保存 Turn、Message、Universal Event、Tool Result Snapshot 和 Agent Request；Live Event Frame 只属于运行期传输。
-- 在控制配置为空时，以平台 Default Agent Context 创建用户的首个可对话 Session。
-- 保证同一 Session 最多一个 active Turn，并保存一个待执行 follow-up。
-- 校验 Session Token 并解析 Session Context。
-- 按 Session 与 sequence 查询已提交 Universal Event，作为事件订阅的恢复事实源。
+
+- 创建、查询、更新和删除 Agent Session Registration。
+- 固定 Session 的 user、Workspace、Agent 和 context version。
+- 在控制配置为空时，以 Default Agent Context 创建用户首个可对话 Session。
+- 签发、Hash 保存并验证 Session Token，解析 Platform MCP 所需 Session Context。
+- 在调用 Agent 命令和查询前执行 Session 所有权校验。
+- 保存收藏、标题等 Gateway/UI 侧注册元数据。
 
 ### 不做什么
+
+- 不保存 Turn、Queued Turn、Message、Universal Event、Agent Request 或 Chat Status；这些事实属于 `media_agents/runtime_session`。
+- 不维护 pending message、Session Turn Queue 或 Session 执行锁。
+- 不直连 Runtime SSE，不以 Gateway 进程、页面连接或节点亲和性决定 Turn 是否运行。
+- 不直连 Agent MySQL；事件历史只能通过 Agent 查询接口读取。
 - 不拥有 Workspace/Agent 期望配置。
-- 不保存 Runtime 进程内状态，不代理业务 MCP。
 
 ## 能力清单
 
 | 能力 | 说明 | 对外接口/函数 |
 |:---|:---|:---|
-| 管理会话 | 管理 Agent Session 生命周期 | `SessionService.Get/List/Update/Delete/Star` |
+| 管理会话注册 | 管理 Agent Session Registration 生命周期和 UI 元数据 | `SessionService.Get/List/Update/Delete/Star` |
 | 获取或创建默认会话 | 为已登录用户返回最近 Session；不存在时使用 Default Agent Context 创建 | `SessionService.GetOrCreateDefault` |
-| 运行交互 | 创建 Turn 并流式记录事件 | `ChatService.RunTurn/Reconnect/Respond` |
-| 中断交互 | 请求 Runtime 软中断当前 running Turn | `ChatService.InterruptTurn` |
-| 订阅会话事件 | 授权后按 sequence 回放 Universal Event 并接入实时广播 | `ChatService.SubscribeEvents` |
-| 查询交互控制方 | 返回独立于 Session 生命周期的 human/agent Chat Status | `SessionService.Get/List` |
-| 暂存 follow-up | Turn 运行期间原子保存下一条用户输入 | 待 IDL 定义 |
-| 处理请求 | 查询和解决 Agent Request | `AgentRequestService.Get/Resolve` |
+| 授权 Agent 调用 | 校验用户是否拥有目标 Session，再允许命令或查询转发 | `SessionService.Authorize`（目标接口） |
 | 解析上下文 | 由 Session Token 返回固定身份上下文 | `ResolveSessionContext` |
+
+Turn 提交、中断、Agent Request 响应和事件订阅是跨服务 Workflow，不是本 Domain 的状态变更能力。
+
+## 聚合与不变量
+
+| 聚合根 | 包含对象 | 一致性边界 | 核心不变量 |
+|:---|:---|:---|:---|
+| Agent Session Registration | Session Token Hash、UI Metadata | 注册、版本更新与删除 | user_id、workspace_id、agent_id 创建后固定；明文 Token 不落库 |
+
+- `session_id` 同时作为 Agent Runtime Session 的外部关联 ID，但两侧禁止共享数据库表或建立跨服务外键。
+- Gateway Registration active 不代表 Agent 当前没有 running Turn；Chat Status 必须查询 Agent 或读取其投影事件。
+- 删除 Registration 必须通过启动/删除 Workflow 通知 Agent；仅删除 Gateway 行不能等价为终止 Runtime。
+
+## 领域事件
+
+| 事件 | 产生条件 | 关键载荷 | 消费方 |
+|:---|:---|:---|:---|
+| `AgentSessionRegistered` | Session Registration 首次提交 | session_id, user_id, workspace_id, agent_id, context_version | Agent Session Startup |
+| `AgentSessionDeleted` | Registration 进入 deleted | session_id, deleted_by | Agent Runtime、Analytics |
 
 ## 数据模型
 
@@ -48,132 +68,67 @@ Agent Session 负责用户在指定 Workspace 与 Agent 的持续交互边界、
 
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
-| id | text PK | Agent Session ID |
+| id | text PK | Agent Session ID；同时用于关联 Agent Runtime Session |
 | user_id | text | 固定绑定的用户 ID |
 | workspace_id | text | 固定绑定的 Workspace ID |
 | agent_id | text | 固定绑定的 Agent ID |
 | token_hash | bytea | Session Token 的 SHA-256 Hash |
 | status | text | starting/active/failed/deleted |
-| chat_status | text | human/agent；当前交互控制方的可查询投影 |
 | context_version | bigint | Session Context 版本 |
-| active_turn_id | text nullable | 当前 pending/running Turn 的逻辑引用 |
-| pending_message | jsonb nullable | 运行期间提交的唯一待执行 follow-up |
-| pending_message_version | bigint | pending_message 的 CAS 版本 |
+| title | text nullable | UI 展示标题 |
 | starred | boolean | 用户是否收藏 |
 | created_at | timestamptz | 创建时间 |
 | updated_at | timestamptz | 最后更新时间 |
 
-### `turns`
-
-| 字段 | 类型 | 含义 |
-|:---|:---|:---|
-| id | text PK | Turn ID |
-| session_id | text | 所属 Agent Session |
-| sequence | bigint | Session 内轮次序号 |
-| status | text | pending/running/completed/failed/interrupted |
-| started_at | timestamptz nullable | 开始时间 |
-| finished_at | timestamptz nullable | 结束时间 |
-
 #### 约束与索引
 
-- `UNIQUE (session_id) WHERE status IN ('pending', 'running')`，数据库层禁止并发 Turn。
-- `active_turn_id` 必须引用本 Session 的 pending/running Turn；终态提交时原子清空。
-- pending message 每个 Session 只有一份；新 follow-up 按产品合并/替换规则更新同一记录，不创建并发 Turn。
-
-### `messages`
-
-| 字段 | 类型 | 含义 |
-|:---|:---|:---|
-| id | text PK | Message ID |
-| session_id | text | 所属 Agent Session |
-| turn_id | text | 所属 Turn |
-| role | text | user/assistant/tool/system |
-| content_ref | jsonb | 文本内容或外部内容引用 |
-| sequence | bigint | Session 内消息序号 |
-| created_at | timestamptz | 创建时间 |
-
-### `universal_events`
-
-| 字段 | 类型 | 含义 |
-|:---|:---|:---|
-| id | text PK | Universal Event ID |
-| session_id | text | 所属 Agent Session |
-| turn_id | text nullable | 关联 Turn |
-| sequence | bigint | Session 内严格递增事件游标 |
-| type | text | 事件类型 |
-| payload | jsonb | 事件载荷 |
-| created_at | timestamptz | 产生时间 |
-
-Universal Event 只保存可恢复的权威事实。`item.started`、`item.delta` 等 Live Event Frame 不写入本表；tool result 每次聚合 flush 以新的 sequence 追加 Tool Result Snapshot，不覆盖旧 sequence。
-
-### `agent_requests`
-
-| 字段 | 类型 | 含义 |
-|:---|:---|:---|
-| id | text PK | Agent Request ID |
-| session_id | text | 所属 Agent Session |
-| turn_id | text | 所属 Turn |
-| type | text | confirm/input/permission 等请求类型 |
-| payload | jsonb | 请求内容 |
-| status | text | pending/resolved/cancelled/expired |
-| response | jsonb nullable | 用户响应 |
-| resolved_at | timestamptz nullable | 解决时间 |
-| created_at | timestamptz | 创建时间 |
-
-### ID 生成规则
-
-当前最小 Chat 的业务 ID 使用 UUID v4；后续 Session Token 使用至少 256 位随机数，数据库只保存 Hash，明文仅在受控启动链路交付。
+- Token Hash 唯一，明文 Token 只在受控启动链路交付。
+- Session 所有读取和写入均按认证主体校验 `user_id`/Workspace 范围。
+- 本表不保存 `active_turn_id`、`pending_message`、`chat_status` 或事件 sequence；迁移期旧列只允许兼容读取，禁止继续作为权威写入。
 
 ## 能力详细说明
-
-### RunTurn / 暂存 follow-up
-
-1. Session 没有 active Turn 时，在一个事务中创建 pending Turn、User Message，并设置 `active_turn_id`。
-2. Session 已有 pending/running Turn 时，不创建新 Turn；原子写入或合并 `pending_message`，返回 queued。
-3. 当前 Turn completed 后，原子 take-and-clear pending message，再创建下一 Turn；派发失败时仅在没有更新版本时恢复旧 pending message。
-4. 当前 Turn failed/interrupted 时不自动消费 pending message，保留给用户继续、修改或清除。
-5. 客户端连接断开不改变 active Turn，也不触发 pending message 消费。
-
-### InterruptTurn
-
-1. 只对 `running` Turn 请求中断；`pending` 或已经进入终态时返回 not_running，不修改 Session 或 Turn。
-2. Gateway 完成 Session 归属授权后，在数据库事务外调用 Runtime `CancelTurn(turn_id)`，不持久化中断请求，也不自动重试。
-3. Runtime 找到 active Turn 后取消执行，停止产生新输出，并发送 `TurnEnded(reason=interrupted)`；已经发生的工具调用和外部副作用不回滚。
-4. Gateway 保留并 flush 取消前已经收到的事件，再以 CAS 提交 `running -> interrupted`、`chat_status=human`、清空 `active_turn_id` 和 Outbox Event。
-5. Runtime 未找到 active Turn 或不可达时返回失败，Turn 保持原状态；自然完成、失败和中断终态按实际到达结果提交，终态不互相覆盖。
-
-### Session Event Subscription
-
-1. 订阅前必须校验 Session 归属，客户端只能订阅自己拥有的 Session。
-2. `after_sequence` 表示客户端已处理的最后一个事件；服务端只交付更大的 sequence。
-3. 订阅先注册实时接收者，再查询持久化事件；实时阶段丢弃不大于已交付游标的重复事件，因此回放与实时切换无缺口。
-4. 一个 Session 可以同时存在多个订阅，每个订阅独立断开，不能影响其他订阅或 active Turn。
-5. 广播是进程内投递优化，Universal Event 才是恢复事实；断线、慢消费者或 Gateway 重启均通过 sequence 回放恢复。
-6. 无 SSE id 的 Live Event Frame 可以实时更新 UI，但不得推进客户端 sequence cursor；刷新后由 Message、Tool Result Snapshot 和 Session 终态恢复。
-
-### Chat Status
-
-1. `status` 表示 Session 生命周期是否可用；`chat_status` 只表示当前交互由 human 还是 agent 掌控，两者禁止合并。
-2. 创建 running Turn 的同一事务把 `chat_status` 从 human 切换为 agent。
-3. Runtime 的所有待写完成项和 Tool Result Snapshot flush 后，Turn 终态与 `chat_status=human` 在同一事务提交。
-4. Turn 是执行状态的权威来源；若投影异常，恢复任务必须根据是否存在 running Turn 修正 `chat_status`。
-
-### Runtime Event Durability
-
-1. 文本 delta 只作为 Live Event Frame 广播；message kind 的 `item.completed` 整块生成 assistant Message 和 Universal Event。
-2. tool call 在完成时以稳定的 item/call 标识幂等持久化一次。
-3. tool result 首次立即形成快照，后续更新按 300ms 聚合；每次 flush 追加新的 sequence，终态 flush 保证最终快照先于 Turn 终态提交。
-4. tool result 在统一规范化边界按 Runtime capability 做一次 UTF-8 安全截断，清除 NUL，并记录是否截断、原始字节数和持久化字节数。
 
 ### GetOrCreateDefault
 
 1. 只接受认证上下文中的 `user_id`，不接受请求体指定所有者。
-2. 优先返回该用户最近的 active Session。
-3. 若不存在，通过 media_control 配置接口解析 Workspace/Agent；本阶段由内置 mock provider 返回合理的 Codex Default Agent Context。
-4. 在一个事务中创建 active Session；并发首次访问按用户与默认上下文幂等收敛到同一 Session。
+2. 优先返回该用户最近的 active Registration。
+3. 若不存在，通过 media_control 解析 Workspace/Agent；本阶段可以使用内置 Codex Default Agent Context。
+4. 在本地事务创建 starting Registration 和 Token Hash；事务提交后通过 `agent_session_startup` 注册 Agent Runtime Session。
+5. Runtime 注册成功后 CAS 为 active；结果不明确时按 `session_id` 查询 Agent，禁止重新创建第二个 Session。
+
+### Authorize
+
+1. 从 Cookie JWT 或用户 Service Token 取得真实用户身份。
+2. 加载 Registration，检查 status、user_id 和 Workspace 访问范围。
+3. 生成只包含稳定 session/user/workspace/agent/context version 的内部命令；请求体同名字段不得覆盖。
+4. Agent 仍校验调用方 mTLS 服务身份和 Runtime Session 注册关系。
 
 ### ResolveSessionContext
 
 1. 从 mTLS 获取并校验调用服务 allowlist。
-2. Hash 查询 Token，要求 Session active 且未撤销。
-3. 返回 user/workspace/session/agent、状态、context_version 和 expires_at，不返回任何 Token。
+2. Hash 查询 Token，要求 Registration active 且未撤销。
+3. 返回 user/workspace/session/agent、Registration status、context_version 和 expires_at，不返回任何 Token。
+
+## 关联关系
+
+### 依赖的 Domain
+
+- `media_control/workspace`：提供 Workspace 访问和 Agent 运行上下文。
+- `media_agents/runtime_session`：接受 Session 注册并拥有全部执行事实。
+
+### 被依赖的 Domain
+
+- `agent_task`：保存任务身份并引用目标 Session。
+- `session_analytics`：使用 Registration 元数据关联 Agent Turn 事实。
+
+### 参与的 Workflow
+
+- [agent_session_startup](../../../workflow/0002-agent-session-startup/agent_session_startup.md)
+- [run_turn](../../workflow/0001-run_turn/run_turn.md)
+- [agent_task_dispatch](../../workflow/0002-agent_task_dispatch/agent_task_dispatch.md)
+
+### 关联术语
+
+- `Agent Session Registration`
+- `Session Token`
+- `Runtime Session`
