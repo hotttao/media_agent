@@ -12,11 +12,14 @@ import (
 	"media_agent/media_agent_gateway/biz/dal"
 	repo "media_agent/media_agent_gateway/biz/dal/repo/agent_session"
 	taskrepo "media_agent/media_agent_gateway/biz/dal/repo/agent_task"
+	batchrepo "media_agent/media_agent_gateway/biz/dal/repo/batch_run"
 	taskhandler "media_agent/media_agent_gateway/biz/handler/agent_task"
+	batchhandler "media_agent/media_agent_gateway/biz/handler/batch_run"
 	chathandler "media_agent/media_agent_gateway/biz/handler/chat"
 	"media_agent/media_agent_gateway/biz/middleware"
 	service "media_agent/media_agent_gateway/biz/service/agent_session"
 	taskservice "media_agent/media_agent_gateway/biz/service/agent_task"
+	batchservice "media_agent/media_agent_gateway/biz/service/batch_run"
 	sharedclient "media_agent/media_agent_gateway/biz/shared/client"
 	"media_agent/media_agent_gateway/biz/shared/riverqueue"
 	"media_agent/media_agent_gateway/biz/shared/sessionevents"
@@ -92,6 +95,7 @@ func main() {
 	}()
 	go taskdispatch.NewLoops(taskdispatch.NewRelay(taskStore, taskQueue), dispatcher, time.Second).Run(dispatchCtx)
 	taskhandler.Configure(taskservice.New(taskStore, taskStore, txRunner, store, control))
+	batchhandler.Configure(batchservice.New(batchrepo.New(db), txRunner, store))
 	var eventSource sessionevents.Source = sessionevents.New(256)
 	if redisURL := os.Getenv("MEDIA_AGENTS_REDIS_URL"); redisURL != "" {
 		redisSource, redisErr := sessionevents.NewRedisSource(
