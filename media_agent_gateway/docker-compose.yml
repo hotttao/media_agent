@@ -11,6 +11,7 @@ services:
       WORKSPACE_DIR: /workspace
       MOCK_MEDIA_CONTROL: "true"
       CODEX_AUX_PROCESSES: "false"
+      MEDIA_AGENTS_DB_URL: postgresql+asyncpg://media_auth:media_auth@127.0.0.1:5432/media_auth
       ALL_PROXY: ${CODEX_DOCKER_PROXY:-socks5://127.0.0.1:7891}
     volumes:
       - ${CODEX_AUTH_FILE:-/home/tao/.codex/auth.json}:/run/secrets/codex-auth.json:ro

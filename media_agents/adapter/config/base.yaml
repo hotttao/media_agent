@@ -29,6 +29,11 @@ bridge_ttl:
 keepalive:
   interval_ms: 15000
 
+database:
+  url: ${oc.env:MEDIA_AGENTS_DB_URL,postgresql+asyncpg://media_auth:media_auth@127.0.0.1:5432/media_auth}
+  migrate_on_start: ${oc.decode:${oc.env:MEDIA_AGENTS_DB_MIGRATE_ON_START,true}}
+  echo: ${oc.decode:${oc.env:MEDIA_AGENTS_DB_ECHO,false}}
+
 runtime:
   file: runtime.json
   prompt_file: AGENTS.md

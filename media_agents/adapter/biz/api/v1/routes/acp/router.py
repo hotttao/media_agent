@@ -75,9 +75,7 @@ def build_acp_router() -> APIRouter:
                 session, _ = await sm.chat(Chat.model_validate(body.model_dump()))
                 session_id = session.session_id
                 writer_id = session.stream.writer_id
-                turn_task = asyncio.create_task(
-                    sm.run_turn(session, body.message, body.images)
-                )
+                turn_task = asyncio.create_task(sm.run_turn(session, body.message, body.images))
                 turn_task.add_done_callback(_log_task_error)
 
                 async for chunk in session.read(keepalive_interval=KEEPALIVE_INTERVAL_S):

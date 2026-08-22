@@ -32,6 +32,8 @@ capabilities:
     assert cfg.agent.port == 3100
     assert cfg.workspace_dir == "/workspace"
     assert cfg.bridge_ttl.max_count == 10
+    assert cfg.database.url.startswith("postgresql+asyncpg://")
+    assert cfg.database.migrate_on_start is True
 
 
 def test_cp_url_and_workspace_id_must_be_configured_together(tmp_path: Path) -> None:
@@ -79,4 +81,28 @@ runtime:
     )
 
     with pytest.raises(ValueError, match="runtime.file"):
+        load_agent_config(override, AdapterConfig)
+
+
+def test_database_rejects_non_postgresql_driver(tmp_path: Path) -> None:
+    override = tmp_path / "config.yaml"
+    override.write_text(
+        """
+agent:
+  type: test
+capabilities:
+  system_prompt: true
+  mcp: true
+  skills: false
+  questions: false
+  reconnect: true
+  permissions: true
+  streaming_deltas: true
+database:
+  url: mysql+asyncmy://localhost/media_agents
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="postgresql\\+asyncpg"):
         load_agent_config(override, AdapterConfig)

@@ -1,6 +1,6 @@
 # Agent 持有 Turn 调度、交互事实与事件发布
 
-状态：accepted
+状态：accepted；其中数据库产品选择已由 [ADR-0010](0010-agent-runtime-postgresql.md) 修订，领域所有权与事件发布决策继续有效。
 
 Agent 是 Runtime Session、Turn 队列、Message、Universal Event、Session sequence 和 Chat Status 的唯一权威写入方；Gateway 只保留 Agent Session Registration、Web 鉴权、命令/查询转发及 SSE framing。Agent 先把 Universal Event 提交到自己的 MySQL，再发布到 Session Event Bus；Gateway 建立订阅时先注册实时接收者，再通过 Agent 查询接口回放 `sequence > after_sequence` 的持久化事件，并按 sequence 去重。初始总线采用 Redis Pub/Sub 的按 Session 广播语义，因为 MySQL 已承担恢复事实，Gateway 还会在序号缺口、终态和周期检查时补查持久化事件。
 

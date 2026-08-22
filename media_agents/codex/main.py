@@ -29,8 +29,7 @@ def create_app() -> FastAPI:
         cp_client=CpClient(base_url=cfg.cp.url, workspace_id=cfg.cp.workspace_id),
         workspace_dir=cfg.workspace.dir,
         codex_config_dir=cfg.codex.config_dir,
-        mock_control=os.environ.get("MOCK_MEDIA_CONTROL", "true").lower()
-        in {"1", "true", "yes"},
+        mock_control=os.environ.get("MOCK_MEDIA_CONTROL", "true").lower() in {"1", "true", "yes"},
     )
 
     def bridge_factory(session_id: str, api_key: str | None = None) -> CodexAcpBridge:

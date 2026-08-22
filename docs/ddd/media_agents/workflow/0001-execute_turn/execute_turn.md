@@ -33,7 +33,7 @@ sequenceDiagram
     participant G as media_agent_gateway
     participant A as Agent Application
     participant D as Runtime Session Domain
-    participant DB as Agent MySQL
+    participant DB as Agent PostgreSQL
     participant R as Runtime Adapter
     participant B as Session Event Bus
 
@@ -122,7 +122,7 @@ sequenceDiagram
 | TX-SNAPSHOT | 规范化工具结果快照和新 sequence | 总线发布 |
 | TX-FINAL | 已 flush 事件之后的 Turn 终态、chat_status、终态事件 | 总线发布、Analytics 更新、下一 Turn 执行 |
 
-MySQL 与 Session Event Bus 不组成分布式事务。publish 失败时保留数据库事实；恢复由 Gateway replay/补查完成。若以后即时通知的故障恢复目标提高，再增加 Outbox Relay。
+PostgreSQL 与 Session Event Bus 不组成分布式事务。publish 失败时保留数据库事实；恢复由 Gateway replay/补查完成。若以后即时通知的故障恢复目标提高，再增加 Outbox Relay。
 
 ## 幂等、重试与补偿
 
@@ -132,7 +132,7 @@ MySQL 与 Session Event Bus 不组成分布式事务。publish 失败时保留�
 | 声明执行 | session_id + enqueue_sequence | 唯一约束冲突后重读 | 已有 running 时保持 queued |
 | Runtime 启动 | turn_id | 结果不明先查询 adapter | 不能证明安全时标记 failed，不重复副作用 |
 | 完成项写入 | turn_id + item_id/call_id | 可重放 | 已存在时 no-op |
-| 总线发布 | event_id/sequence | 有限重试 | Gateway 从 MySQL 补查 |
+| 总线发布 | event_id/sequence | 有限重试 | Gateway 从 Agent PostgreSQL 补查 |
 | 终态提交 | turn_id + expected_status | CAS | 既有终态胜出，晚到结果不覆盖 |
 
 ## 权限与失败
@@ -143,7 +143,7 @@ Gateway 先完成 Web 用户与 Session Registration 的资源授权，再以 mT
 |:---|:---|:---|
 | Session 未注册或 context version 不匹配 | 不可重试，先修复注册 | 不创建 Turn |
 | 幂等重复 | 成功等价 | 返回既有 Turn |
-| MySQL 入队失败 | 可重试 | 不返回 accepted |
+| PostgreSQL 入队失败 | 可重试 | 不返回 accepted |
 | Redis/总线不可用 | 通知降级 | 执行与持久化继续，Gateway 轮询补查 |
 | Runtime 结果不明确 | 需协调 | 查询 adapter；无法证明安全则 failed |
 | Gateway/UI 断开 | 非业务失败 | Turn 继续执行 |

@@ -1,0 +1,63 @@
+openapi: 3.0.3
+info:
+  title: Media Agents Runtime Session API
+  version: 1.0.0
+paths:
+  /api/v1/runtime-sessions:
+    post:
+      operationId: registerRuntimeSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRuntimeSessionRequest'
+      responses:
+        '201':
+          description: Registered or existing compatible Runtime Session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeSessionResponse'
+        '409':
+          description: Existing Runtime Session uses a different context version
+  /api/v1/runtime-sessions/{session_id}:
+    get:
+      operationId: getRuntimeSession
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Runtime Session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeSessionResponse'
+        '404': {description: Not found}
+components:
+  schemas:
+    RegisterRuntimeSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [session_id, context_version, context_ref]
+      properties:
+        session_id: {type: string, minLength: 1, maxLength: 64}
+        context_version: {type: integer, format: int64, minimum: 1}
+        context_ref: {type: string, minLength: 1, maxLength: 512}
+    RuntimeSessionResponse:
+      type: object
+      required: [session_id, context_version, context_ref, status, chat_status, next_turn_sequence, next_event_sequence, created_at, updated_at]
+      properties:
+        session_id: {type: string}
+        context_version: {type: integer, format: int64}
+        context_ref: {type: string}
+        status: {type: string, enum: [active, paused, failed, deleted]}
+        chat_status: {type: string, enum: [human, agent]}
+        active_turn_id: {type: string, nullable: true}
+        next_turn_sequence: {type: integer, format: int64}
+        next_event_sequence: {type: integer, format: int64}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}

@@ -1,11 +1,15 @@
 # Run Turn 变更记录
 
+## 2026-08-22 · Agent 事实库统一为 PostgreSQL
+
+- Gateway 与 Agent 的命令、回放和补查契约不变，仅把 Agent 权威库从 MySQL 修订为 PostgreSQL。
+
 ## 2026-08-18 · Gateway 改为 Agent 命令与事件适配层
 
 - Turn 接受、持久化排队、串行执行、Message/Universal Event 写入和 Session sequence 全部迁入 Agent。
 - Gateway 不再直连 Runtime SSE 或维护进程内事实广播；改为订阅 Session Event Bus，并通过 Agent Replay API 回放。
 - 订阅固定采用“先订阅并缓存，再回放，再按 sequence 合并去重”；跳号、周期和终态触发补查。
-- Agent MySQL 提交后 Redis 发布失败不回滚事实，当前连接和页面重连均通过持久化补查恢复。
+- Agent 数据库提交后 Redis 发布失败不回滚事实，当前连接和页面重连均通过持久化补查恢复。
 - pending message 单槽位被 Agent Queued Turn FIFO 取代；同 Session 串行性不再依赖 Gateway 节点。
 
 ## 2026-08-17 · 采用 Runtime 软中断

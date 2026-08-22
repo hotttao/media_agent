@@ -8,7 +8,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 
-from adapter.main import build_base_app
+from adapter.agent_app import build_base_app
 from claude_code.config import load_claude_code_config
 from claude_code.routes import build_claude_code_router
 

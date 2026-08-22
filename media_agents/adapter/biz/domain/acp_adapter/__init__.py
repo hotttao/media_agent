@@ -240,9 +240,7 @@ class AcpServer:
 
         # Pass 2: cap（超 max_count 时按 LRU 驱逐最久未活动的）
         if len(self.sessions) > self.max_count:
-            sorted_sessions = sorted(
-                self.sessions.items(), key=lambda kv: kv[1].last_active
-            )
+            sorted_sessions = sorted(self.sessions.items(), key=lambda kv: kv[1].last_active)
             overflow = len(self.sessions) - self.max_count
             for sid, session in sorted_sessions:
                 if overflow <= 0:
@@ -258,7 +256,9 @@ class AcpServer:
 
     # ── 内部：session 创建/加载 ──────────────────────────────
 
-    async def create_session(self, session_token: str | None, api_key: str | None = None) -> AcpSession:
+    async def create_session(
+        self, session_token: str | None, api_key: str | None = None
+    ) -> AcpSession:
         """创建新 session：bridge.start -> wait_for_mcp_ready -> create_session。"""
         draft_id = new_session_id()
         bridge = self._make_bridge(draft_id, api_key)
@@ -277,7 +277,12 @@ class AcpServer:
         logger.info("acp session created: session=%s", session.session_id)
         return session
 
-    async def load_session(self, session_id: str, session_token: str | None, api_key: str | None = None) -> AcpSession:
+    async def load_session(
+        self,
+        session_id: str,
+        session_token: str | None,
+        api_key: str | None = None,
+    ) -> AcpSession:
         """加载已持久化的 session：bridge.start -> load_session。"""
         bridge = self._make_bridge(session_id, api_key)
         try:

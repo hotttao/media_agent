@@ -35,7 +35,7 @@ sequenceDiagram
     participant P as media_plugin
     participant GD as Gateway DB
     participant A as media_agents
-    participant AD as Agent MySQL
+    participant AD as Agent PostgreSQL
 
     U->>G: CreateSession(workspace_id, agent_id, idempotency_key)
     G->>C: CheckWorkspaceAccess + GetRuntimeContext
@@ -62,7 +62,7 @@ sequenceDiagram
 ### 步骤说明
 
 1. Control 执行 Workspace 最终授权，Plugin 提供版本化 MCP Snapshot。Default Agent Context 仍必须绑定真实用户和 Workspace。
-2. TX-G1 只提交 Gateway Registration 和 Token Hash；Agent MySQL 不参与 Gateway 事务。
+2. TX-G1 只提交 Gateway Registration 和 Token Hash；Agent PostgreSQL 不参与 Gateway 事务。
 3. `RegisterRuntimeSession` 以 session_id 幂等。相同版本重复调用成功等价，不同版本返回冲突，禁止静默覆盖正在运行的上下文。
 4. Agent Runtime Session 注册提交后，才允许 Gateway Registration 进入 active。结果不明确时查询 Agent，不重新生成 session_id 或 Session Token。
 5. 明文 Session Token 仅在首次受控链路交付给 Agent/用户；Gateway 数据库只保存 Hash，Agent 不获得 Platform Token。
