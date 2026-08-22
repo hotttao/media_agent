@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package media_control.memory_store;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/memory_store";
+
+service MemoryStoreService {
+  rpc CreateMemoryStore(CreateMemoryStoreRequest) returns (MemoryStoreResponse) {
+    option (api.post) = "/api/v1/memory-stores";
+    option (google.api.http) = { post: "/api/v1/memory-stores" body: "*" };
+  }
+  rpc ListMemoryStores(ListMemoryStoresRequest) returns (ListMemoryStoresResponse) {
+    option (api.get) = "/api/v1/memory-stores";
+    option (google.api.http) = { get: "/api/v1/memory-stores" };
+  }
+  rpc GetMemoryStore(GetMemoryStoreRequest) returns (MemoryStoreResponse) {
+    option (api.get) = "/api/v1/memory-stores/:store_id";
+    option (google.api.http) = { get: "/api/v1/memory-stores/{store_id}" };
+  }
+  rpc UpdateMemoryStore(UpdateMemoryStoreRequest) returns (MemoryStoreResponse) {
+    option (api.put) = "/api/v1/memory-stores/:store_id";
+    option (google.api.http) = { put: "/api/v1/memory-stores/{store_id}" body: "*" };
+  }
+  rpc SetMemoryStoreStatus(SetMemoryStoreStatusRequest) returns (MemoryStoreResponse) {
+    option (api.post) = "/api/v1/memory-stores/:store_id/status";
+    option (google.api.http) = { post: "/api/v1/memory-stores/{store_id}/status" body: "*" };
+  }
+}
+
+message CreateMemoryStoreRequest { string workspace_id = 1 [(api.body) = "workspace_id"]; string name = 2 [(api.body) = "name"]; string store_type = 3 [(api.body) = "store_type"]; string configuration_json = 4 [(api.body) = "configuration_json"]; string credential_reference_id = 5 [(api.body) = "credential_reference_id"]; }
+message ListMemoryStoresRequest { string workspace_id = 1 [(api.query) = "workspace_id"]; }
+message GetMemoryStoreRequest { string store_id = 1 [(api.path) = "store_id"]; }
+message UpdateMemoryStoreRequest { string store_id = 1 [(api.path) = "store_id"]; string name = 2 [(api.body) = "name"]; string store_type = 3 [(api.body) = "store_type"]; string configuration_json = 4 [(api.body) = "configuration_json"]; string credential_reference_id = 5 [(api.body) = "credential_reference_id"]; int64 expected_version = 6 [(api.body) = "expected_version"]; }
+message SetMemoryStoreStatusRequest { string store_id = 1 [(api.path) = "store_id"]; string status = 2 [(api.body) = "status"]; int64 expected_version = 3 [(api.body) = "expected_version"]; }
+message MemoryStoreResponse { string id = 1; string workspace_id = 2; string name = 3; string store_type = 4; string configuration_json = 5; string credential_reference_id = 6; string status = 7; int64 version = 8; int64 created_at = 9; int64 updated_at = 10; }
+message ListMemoryStoresResponse { repeated MemoryStoreResponse stores = 1; }
