@@ -14,7 +14,7 @@
 
 - [x] media_control 未配置时 Hooks 使用合理 mock 默认值成功启动。
 - [x] 添加 Codex Runtime Dockerfile 与 auth.json 构建准备脚本。
-- [ ] 验证镜像内 auth 路径、权限和 Codex 启动。
+- [x] 验证镜像内 auth 路径、权限和 Codex 启动。
 
 ## P3 · UI Chat
 
