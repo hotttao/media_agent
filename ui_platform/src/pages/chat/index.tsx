@@ -511,6 +511,7 @@ export function ChatPage() {
     const version = ++requestVersion.current;
     setLoading(true);
     setMessages([]);
+    setRequests([]);
     setHistoryReadySessionId("");
     setStreaming(false);
     setInterrupting(false);
