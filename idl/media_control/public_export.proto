@@ -1,0 +1,15 @@
+syntax = "proto3";
+package media_control.public_export;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_control/public_export";
+service PublicExportService {
+  rpc CreateExport(CreateExportRequest) returns (ExportResponse) { option (api.post) = "/api/v1/public-exports"; option (google.api.http) = { post: "/api/v1/public-exports" body: "*" }; }
+  rpc ListExports(ListExportsRequest) returns (ListExportsResponse) { option (api.get) = "/api/v1/public-exports"; option (google.api.http) = { get: "/api/v1/public-exports" }; }
+  rpc SetExportStatus(SetExportStatusRequest) returns (ExportResponse) { option (api.post) = "/api/v1/public-exports/:export_id/status"; option (google.api.http) = { post: "/api/v1/public-exports/{export_id}/status" body: "*" }; }
+}
+message CreateExportRequest { string workspace_id = 1 [(api.body) = "workspace_id"]; string resource_type = 2 [(api.body) = "resource_type"]; string resource_id = 3 [(api.body) = "resource_id"]; string object_path = 4 [(api.body) = "object_path"]; }
+message ListExportsRequest { string workspace_id = 1 [(api.query) = "workspace_id"]; string resource_type = 2 [(api.query) = "resource_type"]; string resource_id = 3 [(api.query) = "resource_id"]; }
+message SetExportStatusRequest { string export_id = 1 [(api.path) = "export_id"]; string status = 2 [(api.body) = "status"]; }
+message ExportResponse { string id = 1; string workspace_id = 2; string resource_type = 3; string resource_id = 4; string object_path = 5; string status = 6; string created_by = 7; int64 created_at = 8; }
+message ListExportsResponse { repeated ExportResponse exports = 1; }
