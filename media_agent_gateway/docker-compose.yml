@@ -19,6 +19,7 @@ services:
       PORT: "${CODEX_AGENT_PORT:-3001}"
       HOME: /workspace/.home
       CODEX_CONFIG_DIR: /workspace/.home/.codex
+      CODEX_ACP_BIN: ${CODEX_ACP_BIN:-codex-acp}
       CODEX_AUTH_SOURCE: /run/secrets/codex-auth.json
       RUNTIME_WORKSPACE_ID: ${RUNTIME_WORKSPACE_ID:-local}
       WORKSPACE_DIR: /workspace
