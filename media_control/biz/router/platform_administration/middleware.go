@@ -73,3 +73,17 @@ func _cluster_idMw() []app.HandlerFunc {
 func _reportclusterprojectionMw() []app.HandlerFunc {
 	return []app.HandlerFunc{middleware.RequireInternalSystem()}
 }
+
+func _listplatformstatisticsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _platform_statisticsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _reportplatformstatisticMw() []app.HandlerFunc {
+	return []app.HandlerFunc{middleware.RequireInternalSystem()}
+}

@@ -16,9 +16,10 @@ import (
 
 var platformAdministrationService *service.Service
 var clusterProjectionService *service.ClusterService
+var platformStatisticsService *service.StatisticsService
 
-func Configure(value *service.Service, clusters *service.ClusterService) {
-	platformAdministrationService, clusterProjectionService = value, clusters
+func Configure(value *service.Service, clusters *service.ClusterService, statistics *service.StatisticsService) {
+	platformAdministrationService, clusterProjectionService, platformStatisticsService = value, clusters, statistics
 }
 
 // CreatePlatformSetting .
@@ -183,4 +184,50 @@ func GetClusterProjection(ctx context.Context, c *app.RequestContext) {
 
 func toClusterResponse(value *domain.ClusterProjection) *platform_administration.ClusterProjectionResponse {
 	return &platform_administration.ClusterProjectionResponse{ClusterId: value.ClusterID, Status: string(value.Status), CapacityJson: value.CapacityJSON, ObservedAt: value.ObservedAt.UnixMilli()}
+}
+
+// ReportPlatformStatistic .
+// @router /api/v1/admin/platform-statistics/report [POST]
+func ReportPlatformStatistic(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req platform_administration.ReportPlatformStatisticRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	value, err := platformStatisticsService.Report(ctx, actor(ctx), req.MetricKey, req.PeriodStart, req.DimensionsJson, req.Value, req.RefreshedAt)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, toStatisticResponse(value))
+}
+
+// ListPlatformStatistics .
+// @router /api/v1/admin/platform-statistics [GET]
+func ListPlatformStatistics(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req platform_administration.ListPlatformStatisticsRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	values, err := platformStatisticsService.List(ctx, actor(ctx), req.MetricKey, req.PeriodStartFrom, req.PeriodStartTo)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	resp := &platform_administration.ListPlatformStatisticsResponse{}
+	for i := range values {
+		resp.Statistics = append(resp.Statistics, toStatisticResponse(&values[i]))
+	}
+	c.JSON(consts.StatusOK, resp)
+}
+
+func toStatisticResponse(value *domain.PlatformStatistic) *platform_administration.PlatformStatisticResponse {
+	return &platform_administration.PlatformStatisticResponse{MetricKey: value.MetricKey, PeriodStart: value.PeriodStart.UnixMilli(), DimensionsJson: value.DimensionsJSON, Value: value.Value, RefreshedAt: value.RefreshedAt.UnixMilli()}
 }
