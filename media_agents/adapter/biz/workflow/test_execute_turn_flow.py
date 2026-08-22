@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
 
 from adapter.biz.domain.runtime_session.entity import (
+    AgentRequest,
+    AgentRequestStatus,
     RuntimeSession,
     Turn,
     TurnStatus,
@@ -13,11 +16,13 @@ from adapter.biz.domain.runtime_session.entity import (
 )
 from adapter.biz.service.runtime_session.command import SubmitTurn
 from adapter.biz.service.runtime_session.service import (
+    AgentRequestChange,
     TurnExecution,
     TurnFinalization,
     TurnSubmission,
 )
 from adapter.biz.workflow.execute_turn_flow import (
+    AgentRequestHandler,
     ExecuteTurnFlow,
     RuntimeCredentials,
     RuntimePreparation,
@@ -49,6 +54,8 @@ class ScriptService:
         self.turns = [_turn("turn-1", 1, TurnStatus.RUNNING), _turn("turn-2", 2, TurnStatus.QUEUED)]
         self.session = replace(self.session, active_turn_id="turn-1")
         self.finalized: list[tuple[str, TurnStatus]] = []
+        self.request_opened = asyncio.Event()
+        self.agent_request: AgentRequest | None = None
 
     async def submit_turn_details(self, command: SubmitTurn) -> TurnSubmission:
         return TurnSubmission(self.turns[0], ())
@@ -77,13 +84,61 @@ class ScriptService:
     ) -> TurnFinalization:
         self.finalized.append((turn_id, status))
         terminal = next(turn for turn in self.turns if turn.turn_id == turn_id)
-        terminal = replace(terminal, status=status)
+        terminal = replace(terminal, status=status, error_class=error_class)
         if turn_id == "turn-1" and status is TurnStatus.COMPLETED:
             self.turns[1] = replace(self.turns[1], status=TurnStatus.RUNNING)
             self.session = replace(self.session, active_turn_id="turn-2")
             return TurnFinalization(terminal, self.turns[1])
         self.session = replace(self.session, active_turn_id=None)
         return TurnFinalization(terminal, None)
+
+    async def open_agent_request(
+        self, session_id: str, turn_id: str, request_type: str, payload: dict[str, object]
+    ) -> AgentRequestChange:
+        self.agent_request = AgentRequest(
+            "request-1",
+            session_id,
+            turn_id,
+            request_type,
+            payload,
+            AgentRequestStatus.PENDING,
+            None,
+            None,
+            datetime.now(UTC),
+        )
+        event = UniversalEvent(
+            "event-request",
+            session_id,
+            turn_id,
+            1,
+            "agent.requested",
+            {"type": "agent.requested", "request_id": "request-1"},
+            datetime.now(UTC),
+        )
+        self.request_opened.set()
+        return AgentRequestChange(self.agent_request, event)
+
+    async def resolve_agent_request(
+        self, session_id: str, turn_id: str, request_id: str, response: dict[str, object]
+    ) -> AgentRequestChange:
+        assert self.agent_request is not None
+        self.agent_request = self.agent_request.resolve(response, now=datetime.now(UTC))
+        event = UniversalEvent(
+            "event-resolve",
+            session_id,
+            turn_id,
+            2,
+            "agent.request.resolved",
+            {"type": "agent.request.resolved", "request_id": request_id},
+            datetime.now(UTC),
+        )
+        return AgentRequestChange(self.agent_request, event)
+
+    async def running_turns(self) -> list[Turn]:
+        return [turn for turn in self.turns if turn.status is TurnStatus.RUNNING]
+
+    async def get_turn(self, turn_id: str) -> Turn:
+        return next(turn for turn in self.turns if turn.turn_id == turn_id)
 
 
 class ScriptRuntime:
@@ -107,6 +162,7 @@ class ScriptRuntime:
         turn: Turn,
         credentials: RuntimeCredentials,
         event_handler: RuntimeEventHandler,
+        request_handler: AgentRequestHandler,
     ) -> RuntimeResult:
         self.calls.append(f"execute:{turn.turn_id}")
         return RuntimeResult(self.statuses.pop(0))
@@ -114,6 +170,26 @@ class ScriptRuntime:
     async def interrupt(self, handle: str) -> bool:
         self.interrupted = True
         return True
+
+
+class RequestRuntime(ScriptRuntime):
+    def __init__(self) -> None:
+        super().__init__([TurnStatus.COMPLETED])
+        self.response: dict[str, object] | None = None
+
+    async def execute(
+        self,
+        preparation: RuntimePreparation,
+        session: RuntimeSession,
+        turn: Turn,
+        credentials: RuntimeCredentials,
+        event_handler: RuntimeEventHandler,
+        request_handler: AgentRequestHandler,
+    ) -> RuntimeResult:
+        self.response = await request_handler(
+            "permission", {"options": [{"option_id": "allow-once"}]}
+        )
+        return RuntimeResult(TurnStatus.FAILED, "test_stop")
 
 
 @pytest.mark.asyncio
@@ -154,4 +230,50 @@ async def test_flow_maps_runtime_failure_and_interrupts_by_persisted_handle() ->
     assert runtime.interrupted
     await flow.submit(SubmitTurn("session-1", "one", 1, {"message": "one"}))
     await flow.wait("session-1")
+    assert service.finalized == [("turn-1", TurnStatus.FAILED)]
+
+
+@pytest.mark.asyncio
+async def test_flow_waits_for_durable_agent_request_resolution() -> None:
+    service = ScriptService()
+    runtime = RequestRuntime()
+    bus = InMemorySessionEventBus()
+    flow = ExecuteTurnFlow(
+        service,
+        runtime,
+        lambda session_id, turn_id: TurnEventSink(service, bus, session_id, turn_id),
+    )
+    await flow.submit(SubmitTurn("session-1", "one", 1, {"message": "one"}))
+    await asyncio.wait_for(service.request_opened.wait(), timeout=1)
+    assert service.finalized == []
+    request = service.agent_request
+    assert request is not None and request.status is AgentRequestStatus.PENDING
+
+    resolved = await flow.resolve_request(
+        "session-1", "turn-1", request.request_id, {"option_id": "allow-once"}
+    )
+    await flow.wait("session-1")
+
+    assert resolved.status is AgentRequestStatus.RESOLVED
+    assert runtime.response == {"option_id": "allow-once"}
+    assert service.finalized == [("turn-1", TurnStatus.FAILED)]
+
+
+@pytest.mark.asyncio
+async def test_recovery_fails_outcome_unknown_turn_without_reexecution() -> None:
+    service = ScriptService()
+    runtime = ScriptRuntime([])
+    bus = InMemorySessionEventBus()
+    flow = ExecuteTurnFlow(
+        service,
+        runtime,
+        lambda session_id, turn_id: TurnEventSink(service, bus, session_id, turn_id),
+    )
+
+    recovered = await flow.recover()
+
+    assert len(recovered) == 1
+    assert recovered[0].status is TurnStatus.FAILED
+    assert recovered[0].error_class == "recovery_outcome_unknown"
+    assert runtime.calls == []
     assert service.finalized == [("turn-1", TurnStatus.FAILED)]

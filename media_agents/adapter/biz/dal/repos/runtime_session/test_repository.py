@@ -152,3 +152,53 @@ async def test_postgresql_rolls_back_turn_and_message_together() -> None:
                 {"id": session_id},
             )
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_postgresql_persists_agent_request_and_idempotent_response() -> None:
+    database_url = os.environ.get("MEDIA_AGENTS_TEST_DB_URL")
+    if not database_url:
+        pytest.skip("MEDIA_AGENTS_TEST_DB_URL is required for PostgreSQL DAL integration")
+    await migrate_database(database_url)
+    engine, session_factory = create_database(database_url)
+    service = RuntimeSessionService(TxRunner(session_factory), SqlRuntimeSessionRepository())
+    session_id = f"request-{uuid.uuid4()}"
+    await service.register(RegisterRuntimeSession(session_id, 1, "dal:context:v1"))
+    turn = await service.submit_turn(SubmitTurn(session_id, "request-key", 1, {"message": "hi"}))
+    try:
+        opened = await service.open_agent_request(
+            session_id,
+            turn.turn_id,
+            "permission",
+            {"options": [{"option_id": "allow-once"}]},
+        )
+        first = await service.resolve_agent_request(
+            session_id,
+            turn.turn_id,
+            opened.request.request_id,
+            {"option_id": "allow-once"},
+        )
+        repeated = await service.resolve_agent_request(
+            session_id,
+            turn.turn_id,
+            opened.request.request_id,
+            {"option_id": "allow-once"},
+        )
+        assert first.request.status.value == "resolved"
+        assert repeated.event is None
+        assert [event.event_type for event in await service.replay_events(session_id, 0)][-2:] == [
+            "agent.requested",
+            "agent.request.resolved",
+        ]
+    finally:
+        async with engine.begin() as connection:
+            for table in ("agent_requests", "universal_events", "messages", "turns"):
+                await connection.execute(
+                    text(f"DELETE FROM media_agents.{table} WHERE session_id=:id"),
+                    {"id": session_id},
+                )
+            await connection.execute(
+                text("DELETE FROM media_agents.runtime_sessions WHERE session_id=:id"),
+                {"id": session_id},
+            )
+        await engine.dispose()

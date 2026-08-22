@@ -104,8 +104,58 @@ paths:
         - {in: path, name: turn_id, required: true, schema: {type: string}}
       responses:
         '202': {description: Soft interrupt accepted}
+  /api/v1/runtime-sessions/{session_id}/requests:
+    get:
+      operationId: listAgentRequests
+      parameters:
+        - {in: path, name: session_id, required: true, schema: {type: string}}
+        - {in: query, name: turn_id, schema: {type: string}}
+      responses:
+        '200':
+          description: Agent Requests ordered by creation time
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/AgentRequestResponse'}}
+  /api/v1/runtime-sessions/{session_id}/turns/{turn_id}/requests/{request_id}/resolve:
+    post:
+      operationId: resolveAgentRequest
+      parameters:
+        - {in: path, name: session_id, required: true, schema: {type: string}}
+        - {in: path, name: turn_id, required: true, schema: {type: string}}
+        - {in: path, name: request_id, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ResolveAgentRequestRequest'}
+      responses:
+        '200':
+          description: Idempotently resolved Agent Request
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentRequestResponse'}
+        '409': {description: Conflicting response or terminal Turn}
 components:
   schemas:
+    ResolveAgentRequestRequest:
+      type: object
+      additionalProperties: false
+      required: [response]
+      properties:
+        response: {type: object}
+    AgentRequestResponse:
+      type: object
+      required: [request_id, session_id, turn_id, request_type, payload, status, created_at]
+      properties:
+        request_id: {type: string}
+        session_id: {type: string}
+        turn_id: {type: string}
+        request_type: {type: string, enum: [confirm, input, permission]}
+        payload: {type: object}
+        status: {type: string, enum: [pending, resolved, cancelled, expired]}
+        response: {type: object, nullable: true}
+        resolved_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
     SubmitTurnRequest:
       type: object
       additionalProperties: false

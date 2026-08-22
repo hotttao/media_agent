@@ -127,6 +127,22 @@ func (w *RunTurn) Messages(ctx context.Context, sessionID, userID string) ([]cli
 	return runtime.ListMessages(ctx, session.ID, 1000)
 }
 
+func (w *RunTurn) AgentRequests(ctx context.Context, sessionID, userID, turnID string) ([]client.AgentRequest, error) {
+	session, runtime, err := w.authorizedRuntime(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return runtime.ListAgentRequests(ctx, session.ID, turnID)
+}
+
+func (w *RunTurn) ResolveAgentRequest(ctx context.Context, sessionID, userID, turnID, requestID string, response map[string]any) (*client.AgentRequest, error) {
+	session, runtime, err := w.authorizedRuntime(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return runtime.ResolveAgentRequest(ctx, session.ID, turnID, requestID, response)
+}
+
 func (w *RunTurn) EventsAfter(ctx context.Context, sessionID, userID string, afterSequence int64) ([]client.UniversalEvent, error) {
 	session, runtime, err := w.authorizedRuntime(ctx, sessionID, userID)
 	if err != nil {

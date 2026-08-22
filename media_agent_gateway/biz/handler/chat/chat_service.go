@@ -14,6 +14,7 @@ import (
 	domain "media_agent/media_agent_gateway/biz/domain/agent_session"
 	"media_agent/media_agent_gateway/biz/middleware"
 	service "media_agent/media_agent_gateway/biz/service/agent_session"
+	"media_agent/media_agent_gateway/biz/shared/client"
 	"media_agent/media_agent_gateway/biz/shared/sessionevents"
 	"media_agent/media_agent_gateway/biz/workflow"
 )
@@ -203,4 +204,51 @@ func messageContent(role string, content json.RawMessage) string {
 	}
 	encoded, _ := json.Marshal([]map[string]string{{"type": "text", "text": input.Message}})
 	return string(encoded)
+}
+
+// ListAgentRequests .
+// @router /api/chat/sessions/:session_id/requests [GET]
+func ListAgentRequests(ctx context.Context, c *app.RequestContext) {
+	var req chatpb.ListAgentRequestsRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	values, err := runTurn.AgentRequests(ctx, req.SessionId, middleware.UserID(ctx), req.TurnId)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	resp := &chatpb.ListAgentRequestsResponse{Requests: make([]*chatpb.AgentRequestResponse, 0, len(values))}
+	for i := range values {
+		resp.Requests = append(resp.Requests, toAgentRequestResponse(&values[i]))
+	}
+	c.JSON(consts.StatusOK, resp)
+}
+
+// ResolveAgentRequest .
+// @router /api/chat/sessions/:session_id/turns/:turn_id/requests/:request_id/resolve [POST]
+func ResolveAgentRequest(ctx context.Context, c *app.RequestContext) {
+	var req chatpb.ResolveAgentRequestRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	var response map[string]any
+	if req.ResponseJson == "" || json.Unmarshal([]byte(req.ResponseJson), &response) != nil || response == nil {
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": "response_json must be a JSON object"})
+		return
+	}
+	value, err := runTurn.ResolveAgentRequest(ctx, req.SessionId, middleware.UserID(ctx), req.TurnId, req.RequestId, response)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, toAgentRequestResponse(value))
+}
+
+func toAgentRequestResponse(value *client.AgentRequest) *chatpb.AgentRequestResponse {
+	createdAt, _ := time.Parse(time.RFC3339, value.CreatedAt)
+	resolvedAt, _ := time.Parse(time.RFC3339, value.ResolvedAt)
+	return &chatpb.AgentRequestResponse{RequestId: value.RequestID, TurnId: value.TurnID, RequestType: value.RequestType, PayloadJson: string(value.Payload), Status: value.Status, ResponseJson: string(value.Response), CreatedAt: createdAt.UnixMilli(), ResolvedAt: resolvedAt.UnixMilli()}
 }

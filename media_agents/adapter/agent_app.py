@@ -85,6 +85,7 @@ def build_base_app(cfg: AdapterConfig, *, turn_runtime: TurnRuntime) -> FastAPI:
         app.state.execute_turn_flow, app.state.session_event_bus = _execute_turn_flow(
             cfg, app.state.runtime_session_service, turn_runtime
         )
+        await app.state.execute_turn_flow.recover()
         logger.info(
             "adapter base app started: agent=%s workspace=%s",
             cfg.agent_type,
@@ -142,6 +143,7 @@ def build_app(
         app.state.execute_turn_flow, app.state.session_event_bus = _execute_turn_flow(
             cfg, app.state.runtime_session_service, AcpTurnRuntime(acp_server)
         )
+        await app.state.execute_turn_flow.recover()
         logger.info(
             "adapter app started: agent=%s workspace=%s",
             cfg.agent_type,

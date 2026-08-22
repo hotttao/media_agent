@@ -36,7 +36,7 @@ workflow 顶层开启，repository 从 context-local session 取得连接。
 | 回放 Universal Event | media_agents | runtime_session | Universal Event 读模型 | execute_turn | covered |
 | 查询 Message 与 Chat Status | media_agents | runtime_session | Message / Runtime Session | execute_turn | covered |
 | 软中断当前 Turn | media_agents | runtime_session | Turn | execute_turn | covered |
-| 解决 Agent Request | media_agents | runtime_session | Agent Request | execute_turn | missing |
+| 解决 Agent Request | media_agents | runtime_session | Agent Request | execute_turn | covered |
 | Gateway Web 鉴权与 SSE framing | media_agent_gateway | agent_session | Registration/SSE adapter | run_turn | external-owner |
 | Gateway 直接持久化交互事件 | media_agent_gateway | agent_session | 旧 Message/Event 写模型 | run_turn | deprecated-with-reason |
 

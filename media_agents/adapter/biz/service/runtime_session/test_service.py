@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from adapter.biz.domain.runtime_session.entity import (
+    AgentRequest,
     Message,
     RuntimeSession,
     Turn,
@@ -36,6 +37,7 @@ class FakeRepository:
         self.turns: dict[tuple[str, str], Turn] = {}
         self.messages: list[Message] = []
         self.events: list[UniversalEvent] = []
+        self.requests: dict[str, AgentRequest] = {}
 
     async def get(self, session_id: str, *, for_update: bool = False) -> RuntimeSession | None:
         self.locked = self.locked or for_update
@@ -96,6 +98,41 @@ class FakeRepository:
         self.sessions[session.session_id] = session
         if turn is not None:
             self.turns[(turn.session_id, turn.idempotency_key)] = turn
+
+    async def add_agent_request(
+        self, session: RuntimeSession, request: AgentRequest, event: UniversalEvent
+    ) -> None:
+        self.sessions[session.session_id] = session
+        self.requests[request.request_id] = request
+        self.events.append(event)
+
+    async def get_agent_request(
+        self, request_id: str, *, for_update: bool = False
+    ) -> AgentRequest | None:
+        self.locked = self.locked or for_update
+        return self.requests.get(request_id)
+
+    async def save_agent_request(
+        self, session: RuntimeSession, request: AgentRequest, event: UniversalEvent
+    ) -> None:
+        self.sessions[session.session_id] = session
+        self.requests[request.request_id] = request
+        self.events.append(event)
+
+    async def list_agent_requests(
+        self, session_id: str, turn_id: str | None = None
+    ) -> list[AgentRequest]:
+        return [
+            request
+            for request in self.requests.values()
+            if request.session_id == session_id and (turn_id is None or request.turn_id == turn_id)
+        ]
+
+    async def save_agent_request_state(self, request: AgentRequest) -> None:
+        self.requests[request.request_id] = request
+
+    async def list_running_turns(self) -> list[Turn]:
+        return [turn for turn in self.turns.values() if turn.status is TurnStatus.RUNNING]
 
 
 def _matches_completed_item(event: UniversalEvent, turn_id: str, item_id: str) -> bool:
@@ -235,3 +272,83 @@ async def test_submit_turn_rejects_nested_runtime_credentials() -> None:
         await service.submit_turn(
             SubmitTurn("session-1", "secret", 1, {"message": "hi", "meta": {"api_key": "x"}})
         )
+
+
+@pytest.mark.asyncio
+async def test_agent_request_open_and_resolve_are_durable_and_idempotent() -> None:
+    repository = FakeRepository()
+    service = RuntimeSessionService(FakeTransactionRunner(), repository)
+    await service.register(RegisterRuntimeSession("session-1", 1, "context:v1"))
+    turn = await service.submit_turn(SubmitTurn("session-1", "one", 1, {"message": "hi"}))
+
+    opened = await service.open_agent_request(
+        "session-1",
+        turn.turn_id,
+        "permission",
+        {"tool_call": {"name": "shell"}, "options": [{"option_id": "allow-once"}]},
+    )
+    resolved = await service.resolve_agent_request(
+        "session-1",
+        turn.turn_id,
+        opened.request.request_id,
+        {"option_id": "allow-once"},
+    )
+    repeated = await service.resolve_agent_request(
+        "session-1",
+        turn.turn_id,
+        opened.request.request_id,
+        {"option_id": "allow-once"},
+    )
+
+    assert opened.request.status.value == "pending"
+    assert resolved.request.status.value == "resolved"
+    assert repeated.request == resolved.request
+    assert repeated.event is None
+    assert [event.event_type for event in repository.events[-2:]] == [
+        "agent.requested",
+        "agent.request.resolved",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent_request_conflicting_or_late_response_is_rejected() -> None:
+    repository = FakeRepository()
+    service = RuntimeSessionService(FakeTransactionRunner(), repository)
+    await service.register(RegisterRuntimeSession("session-1", 1, "context:v1"))
+    turn = await service.submit_turn(SubmitTurn("session-1", "one", 1, {"message": "hi"}))
+    opened = await service.open_agent_request(
+        "session-1", turn.turn_id, "confirm", {"question": "continue?"}
+    )
+    await service.resolve_agent_request(
+        "session-1", turn.turn_id, opened.request.request_id, {"confirmed": True}
+    )
+    with pytest.raises(InvalidTurn, match="different response"):
+        await service.resolve_agent_request(
+            "session-1", turn.turn_id, opened.request.request_id, {"confirmed": False}
+        )
+
+    late = await service.open_agent_request("session-1", turn.turn_id, "input", {"prompt": "value"})
+    await service.finalize_turn("session-1", turn.turn_id, TurnStatus.FAILED)
+    with pytest.raises(InvalidTurn, match="not pending: cancelled"):
+        await service.resolve_agent_request(
+            "session-1", turn.turn_id, late.request.request_id, {"value": "late"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_late_runtime_event_does_not_mutate_terminal_turn_history() -> None:
+    repository = FakeRepository()
+    service = RuntimeSessionService(FakeTransactionRunner(), repository)
+    await service.register(RegisterRuntimeSession("session-1", 1, "context:v1"))
+    turn = await service.submit_turn(SubmitTurn("session-1", "one", 1, {"message": "hi"}))
+    await service.finalize_turn("session-1", turn.turn_id, TurnStatus.FAILED)
+    event_count = len(repository.events)
+
+    with pytest.raises(InvalidTurn, match="late Runtime event"):
+        await service.persist_runtime_event(
+            "session-1",
+            turn.turn_id,
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "late"}},
+        )
+
+    assert len(repository.events) == event_count

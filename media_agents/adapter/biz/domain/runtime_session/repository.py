@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from adapter.biz.domain.runtime_session.entity import Message, RuntimeSession, Turn, UniversalEvent
+from adapter.biz.domain.runtime_session.entity import (
+    AgentRequest,
+    Message,
+    RuntimeSession,
+    Turn,
+    UniversalEvent,
+)
 
 
 class RuntimeSessionRepository(Protocol):
@@ -37,3 +43,23 @@ class RuntimeSessionRepository(Protocol):
     ) -> list[UniversalEvent]: ...
 
     async def list_messages(self, session_id: str, limit: int) -> list[Message]: ...
+
+    async def add_agent_request(
+        self, session: RuntimeSession, request: AgentRequest, event: UniversalEvent
+    ) -> None: ...
+
+    async def get_agent_request(
+        self, request_id: str, *, for_update: bool = False
+    ) -> AgentRequest | None: ...
+
+    async def save_agent_request(
+        self, session: RuntimeSession, request: AgentRequest, event: UniversalEvent
+    ) -> None: ...
+
+    async def list_agent_requests(
+        self, session_id: str, turn_id: str | None = None
+    ) -> list[AgentRequest]: ...
+
+    async def save_agent_request_state(self, request: AgentRequest) -> None: ...
+
+    async def list_running_turns(self) -> list[Turn]: ...

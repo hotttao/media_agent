@@ -5,6 +5,7 @@ from __future__ import annotations
 from adapter.biz.domain.runtime_session.entity import RuntimeSession, Turn, TurnStatus
 from adapter.biz.domain.runtime_session.errors import InvalidTurn
 from adapter.biz.workflow.execute_turn_flow import (
+    AgentRequestHandler,
     RuntimeCredentials,
     RuntimePreparation,
     RuntimeResult,
@@ -30,6 +31,7 @@ class ClaudeCodeTurnRuntime:
         turn: Turn,
         credentials: RuntimeCredentials,
         event_handler: RuntimeEventHandler,
+        request_handler: AgentRequestHandler,
     ) -> RuntimeResult:
         message = turn.input.get("message")
         if not isinstance(message, str) or not message.strip():

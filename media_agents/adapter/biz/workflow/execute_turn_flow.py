@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from adapter.biz.domain.runtime_session.entity import RuntimeSession, Turn, TurnStatus
+from adapter.biz.domain.runtime_session.entity import AgentRequest, RuntimeSession, Turn, TurnStatus
 from adapter.biz.domain.runtime_session.errors import InvalidTurn
 from adapter.biz.service.runtime_session.command import SubmitTurn
 from adapter.biz.service.runtime_session.service import (
+    AgentRequestChange,
     TurnExecution,
     TurnFinalization,
     TurnSubmission,
@@ -39,6 +40,9 @@ class RuntimeResult:
     error_class: str | None = None
 
 
+AgentRequestHandler = Callable[[str, dict[str, object]], Awaitable[dict[str, object]]]
+
+
 class TurnRuntime(Protocol):
     async def prepare(
         self, session: RuntimeSession, turn: Turn, credentials: RuntimeCredentials
@@ -51,6 +55,7 @@ class TurnRuntime(Protocol):
         turn: Turn,
         credentials: RuntimeCredentials,
         event_handler: RuntimeEventHandler,
+        request_handler: AgentRequestHandler,
     ) -> RuntimeResult: ...
 
     async def interrupt(self, handle: str) -> bool: ...
@@ -75,6 +80,18 @@ class RuntimeSessionUseCases(Protocol):
         terminal_payload: dict[str, object] | None = None,
     ) -> TurnFinalization: ...
 
+    async def open_agent_request(
+        self, session_id: str, turn_id: str, request_type: str, payload: dict[str, object]
+    ) -> AgentRequestChange: ...
+
+    async def running_turns(self) -> list[Turn]: ...
+
+    async def get_turn(self, turn_id: str) -> Turn: ...
+
+    async def resolve_agent_request(
+        self, session_id: str, turn_id: str, request_id: str, response: dict[str, object]
+    ) -> AgentRequestChange: ...
+
 
 class ExecuteTurnFlow:
     def __init__(
@@ -92,6 +109,8 @@ class ExecuteTurnFlow:
         self._turn_sessions: dict[str, str] = {}
         self._interrupt_requested: set[str] = set()
         self._session_locks: dict[str, asyncio.Lock] = {}
+        self._request_waiters: dict[str, asyncio.Future[dict[str, object]]] = {}
+        self._early_responses: dict[str, dict[str, object]] = {}
 
     async def submit(
         self, command: SubmitTurn, credentials: RuntimeCredentials | None = None
@@ -118,10 +137,47 @@ class ExecuteTurnFlow:
         await self._send_interrupt(handle)
         return True
 
+    async def resolve_request(
+        self, session_id: str, turn_id: str, request_id: str, response: dict[str, object]
+    ) -> AgentRequest:
+        change = await self._service.resolve_agent_request(
+            session_id, turn_id, request_id, response
+        )
+        if change.event is not None:
+            await self._sink_factory(session_id, turn_id).publish_committed(change.event)
+        waiter = self._request_waiters.get(request_id)
+        if waiter is not None and not waiter.done():
+            waiter.set_result(change.request.response or response)
+        else:
+            self._early_responses[request_id] = change.request.response or response
+        return change.request
+
     async def wait(self, session_id: str) -> None:
         task = self._tasks.get(session_id)
         if task is not None:
             await asyncio.shield(task)
+
+    async def recover(self) -> list[Turn]:
+        recovered: list[Turn] = []
+        for turn in await self._service.running_turns():
+            try:
+                async with self._session_lock(turn.session_id):
+                    finalized = await self._service.finalize_turn(
+                        turn.session_id,
+                        turn.turn_id,
+                        TurnStatus.FAILED,
+                        error_class="recovery_outcome_unknown",
+                    )
+            except InvalidTurn:
+                current = await self._service.get_turn(turn.turn_id)
+                if current.status is TurnStatus.RUNNING:
+                    raise
+                continue
+            sink = self._sink_factory(turn.session_id, turn.turn_id)
+            for event in finalized.events:
+                await sink.publish_committed(event)
+            recovered.append(finalized.terminal_turn)
+        return recovered
 
     async def close(self) -> None:
         tasks = list(self._tasks.values())
@@ -134,6 +190,10 @@ class ExecuteTurnFlow:
         self._interrupt_requested.clear()
         self._session_locks.clear()
         self._scheduled_turns.clear()
+        for waiter in self._request_waiters.values():
+            waiter.cancel()
+        self._request_waiters.clear()
+        self._early_responses.clear()
 
     def _schedule(self, session_id: str, turn_id: str) -> None:
         if turn_id in self._scheduled_turns:
@@ -169,6 +229,7 @@ class ExecuteTurnFlow:
             execution = await self._service.execution(session_id, current_turn_id)
             credentials = self._credentials.get(current_turn_id, RuntimeCredentials())
             sink = self._sink_factory(session_id, current_turn_id)
+            active_turn_id = current_turn_id
             try:
                 preparation = await self._runtime.prepare(
                     execution.session, execution.turn, credentials
@@ -182,7 +243,14 @@ class ExecuteTurnFlow:
                     raise InvalidTurn("Runtime returned a different persisted handle")
                 runtime_task = asyncio.create_task(
                     self._runtime.execute(
-                        preparation, session, execution.turn, credentials, sink.accept
+                        preparation,
+                        session,
+                        execution.turn,
+                        credentials,
+                        sink.accept,
+                        lambda request_type, payload: self._await_agent_request(
+                            session_id, active_turn_id, sink, request_type, payload
+                        ),
                     )
                 )
                 await asyncio.sleep(0)
@@ -220,6 +288,30 @@ class ExecuteTurnFlow:
             self._interrupt_requested.discard(finalized.terminal_turn.turn_id)
             if result.status is not TurnStatus.COMPLETED:
                 self._clear_session_credentials(session_id)
+
+    async def _await_agent_request(
+        self,
+        session_id: str,
+        turn_id: str,
+        sink: TurnEventSink,
+        request_type: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        change = await self._service.open_agent_request(session_id, turn_id, request_type, payload)
+        request = change.request
+        loop = asyncio.get_running_loop()
+        waiter: asyncio.Future[dict[str, object]] = loop.create_future()
+        self._request_waiters[request.request_id] = waiter
+        if change.event is None:
+            raise InvalidTurn("new Agent Request did not produce a durable event")
+        await sink.publish_committed(change.event)
+        early = self._early_responses.pop(request.request_id, None)
+        if early is not None and not waiter.done():
+            waiter.set_result(early)
+        try:
+            return await waiter
+        finally:
+            self._request_waiters.pop(request.request_id, None)
 
     async def _send_interrupt(
         self, handle: str, runtime_task: asyncio.Task[RuntimeResult] | None = None

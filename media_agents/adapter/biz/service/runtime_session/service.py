@@ -9,6 +9,7 @@ from typing import Protocol, TypeVar
 from uuid import uuid4
 
 from adapter.biz.domain.runtime_session.entity import (
+    AgentRequest,
     ChatStatus,
     Message,
     RuntimeSession,
@@ -51,6 +52,12 @@ class TurnFinalization:
 class TurnSubmission:
     turn: Turn
     events: tuple[UniversalEvent, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class AgentRequestChange:
+    request: AgentRequest
+    event: UniversalEvent | None
 
 
 class RuntimeSessionService:
@@ -201,6 +208,8 @@ class RuntimeSessionService:
             turn = await self._repository.get_turn(turn_id)
             if turn is None or turn.session_id != session_id:
                 raise InvalidTurn(f"turn not found: {turn_id}")
+            if turn.status is not TurnStatus.RUNNING:
+                raise InvalidTurn("late Runtime event arrived after its Turn became terminal")
             if envelope.is_tool_call and envelope.item_id:
                 existing = await self._repository.find_completed_item(turn_id, envelope.item_id)
                 if existing is not None:
@@ -249,6 +258,96 @@ class RuntimeSessionService:
             raise InvalidTurn(f"turn not found: {turn_id}")
         return turn
 
+    async def open_agent_request(
+        self, session_id: str, turn_id: str, request_type: str, payload: dict[str, object]
+    ) -> AgentRequestChange:
+        async def operation() -> AgentRequestChange:
+            session = await self._repository.get(session_id, for_update=True)
+            turn = await self._repository.get_turn(turn_id)
+            if session is None:
+                raise RuntimeSessionNotFound(session_id)
+            if (
+                turn is None
+                or turn.session_id != session_id
+                or turn.status is not TurnStatus.RUNNING
+            ):
+                raise InvalidTurn("Agent Request requires the active running Turn")
+            if session.active_turn_id != turn_id:
+                raise InvalidTurn("Agent Request Turn is no longer active")
+            now = datetime.now(UTC)
+            request = AgentRequest.open(
+                session_id=session_id,
+                turn_id=turn_id,
+                request_type=request_type,
+                payload=payload,
+                now=now,
+            )
+            session, event = session.new_event(
+                event_type="agent.requested",
+                payload={
+                    "type": "agent.requested",
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "request_id": request.request_id,
+                    "request_type": request.request_type,
+                    "request": payload,
+                },
+                turn_id=turn_id,
+                now=now,
+            )
+            await self._repository.add_agent_request(session, request, event)
+            return AgentRequestChange(request, event)
+
+        return await self._tx.run_in_tx(operation)
+
+    async def resolve_agent_request(
+        self, session_id: str, turn_id: str, request_id: str, response: dict[str, object]
+    ) -> AgentRequestChange:
+        async def operation() -> AgentRequestChange:
+            request = await self._repository.get_agent_request(request_id, for_update=True)
+            if request is None or request.session_id != session_id or request.turn_id != turn_id:
+                raise InvalidTurn(f"Agent Request not found: {request_id}")
+            now = datetime.now(UTC)
+            resolved = request.resolve(response, now=now)
+            if resolved is request:
+                return AgentRequestChange(request, None)
+            session = await self._repository.get(session_id, for_update=True)
+            turn = await self._repository.get_turn(turn_id)
+            if session is None:
+                raise RuntimeSessionNotFound(session_id)
+            if (
+                turn is None
+                or turn.status is not TurnStatus.RUNNING
+                or session.active_turn_id != turn_id
+            ):
+                raise InvalidTurn("Agent Request response arrived after its Turn became terminal")
+            session, event = session.new_event(
+                event_type="agent.request.resolved",
+                payload={
+                    "type": "agent.request.resolved",
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "request_id": request_id,
+                },
+                turn_id=turn_id,
+                now=now,
+            )
+            await self._repository.save_agent_request(session, resolved, event)
+            return AgentRequestChange(resolved, event)
+
+        return await self._tx.run_in_tx(operation)
+
+    async def list_agent_requests(
+        self, session_id: str, *, turn_id: str | None = None
+    ) -> list[AgentRequest]:
+        await self.get(session_id)
+        return await self._tx.run_in_tx(
+            lambda: self._repository.list_agent_requests(session_id, turn_id)
+        )
+
+    async def running_turns(self) -> list[Turn]:
+        return await self._tx.run_in_tx(self._repository.list_running_turns)
+
     async def execution(self, session_id: str, turn_id: str) -> TurnExecution:
         async def operation() -> TurnExecution:
             session = await self._repository.get(session_id)
@@ -295,6 +394,10 @@ class RuntimeSessionService:
             now = datetime.now(UTC)
             terminal = turn.finish(status, now=now, error_class=error_class)
             released = session.release_turn(terminal, now=now)
+            for request in await self._repository.list_agent_requests(session_id, turn_id):
+                cancelled = request.cancel(now=now)
+                if cancelled is not request:
+                    await self._repository.save_agent_request_state(cancelled)
             next_turn: Turn | None = None
             events: list[UniversalEvent] = []
             reason = {

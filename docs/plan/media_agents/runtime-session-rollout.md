@@ -48,8 +48,8 @@
 
 ## P6：Agent Request 与重启恢复
 
-- [ ] 实现 Agent Request 持久化与 resolve。
-- [ ] 实现 running Turn 启动协调和安全恢复规则。
+- [x] 实现 Agent Request 持久化与 resolve。
+- [x] 实现 running Turn 启动协调和安全恢复规则。
 - [ ] 完成响应幂等、晚到事件、结果不明确 E2E，独立提交。
 
 ## 完成门禁

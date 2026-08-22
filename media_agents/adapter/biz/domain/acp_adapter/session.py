@@ -178,11 +178,20 @@ class AcpSession:
         self.last_active: float = 0.0
         self.pending_destroy: bool = False
         self._event_observer: Callable[[dict[str, object]], Awaitable[None]] | None = None
+        self._permission_observer: (
+            Callable[[dict[str, object]], Awaitable[dict[str, object]]] | None
+        ) = None
 
     def set_event_observer(
         self, observer: Callable[[dict[str, object]], Awaitable[None]] | None
     ) -> None:
         self._event_observer = observer
+
+    def set_permission_observer(
+        self,
+        observer: Callable[[dict[str, object]], Awaitable[dict[str, object]]] | None,
+    ) -> None:
+        self._permission_observer = observer
 
     def set_session_id(self, session_id: str) -> None:
         """Update the resolved platform session id across session collaborators."""
@@ -259,6 +268,18 @@ class AcpSession:
         而非裸 dict —— SDK 用 discriminated union 校验 outcome 字段。
         """
         option_id = options[0].option_id if options else "allow-once"
+        if self._permission_observer is not None:
+            response = await self._permission_observer(
+                {
+                    "tool_call": tool_call.model_dump(mode="json"),
+                    "options": [option.model_dump(mode="json") for option in options],
+                }
+            )
+            selected = response.get("option_id")
+            allowed = {option.option_id for option in options}
+            if not isinstance(selected, str) or (allowed and selected not in allowed):
+                raise ValueError("resolved permission option_id is invalid")
+            option_id = selected
         return RequestPermissionResponse(
             outcome=AllowedOutcome(outcome="selected", option_id=option_id)
         )

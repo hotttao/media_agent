@@ -48,3 +48,15 @@ class MessageResponse(BaseModel):
     content_ref: dict[str, object]
     sequence: int
     created_at: str
+
+
+class AgentRequestResponse(BaseModel):
+    request_id: str
+    session_id: str
+    turn_id: str
+    request_type: str
+    payload: dict[str, object]
+    status: str
+    response: dict[str, object] | None
+    resolved_at: str | None
+    created_at: str

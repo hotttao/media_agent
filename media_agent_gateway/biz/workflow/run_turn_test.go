@@ -67,6 +67,8 @@ type fakeRuntime struct {
 	messages                        []client.Message
 	eventPages                      map[int64][]client.UniversalEvent
 	replay                          func(int64) []client.UniversalEvent
+	requests                        []client.AgentRequest
+	resolvedRequest                 *client.AgentRequest
 }
 
 func (r *fakeRuntime) RegisterRuntimeSession(_ context.Context, in client.RegisterRuntimeSessionInput) (*client.RuntimeSession, error) {
@@ -92,6 +94,12 @@ func (r *fakeRuntime) ReplayEvents(_ context.Context, _ string, after int64, _ i
 		return r.replay(after), nil
 	}
 	return r.eventPages[after], nil
+}
+func (r *fakeRuntime) ListAgentRequests(context.Context, string, string) ([]client.AgentRequest, error) {
+	return r.requests, nil
+}
+func (r *fakeRuntime) ResolveAgentRequest(context.Context, string, string, string, map[string]any) (*client.AgentRequest, error) {
+	return r.resolvedRequest, nil
 }
 
 func newWorkflowFixture(status string) (*RunTurn, *workflowRepo, *fakeRuntime) {
@@ -173,6 +181,24 @@ func TestInterruptUsesAgentActiveTurn(t *testing.T) {
 	}
 	if turn.TurnID != "turn-active" || runtime.interruptSession != "session" || runtime.interruptTurn != "turn-active" {
 		t.Fatalf("turn=%+v interrupt=%s/%s", turn, runtime.interruptSession, runtime.interruptTurn)
+	}
+}
+
+func TestAgentRequestsAreAuthorizedAndDelegated(t *testing.T) {
+	flow, _, runtime := newWorkflowFixture(domain.StatusActive)
+	runtime.requests = []client.AgentRequest{{RequestID: "request"}}
+	runtime.resolvedRequest = &client.AgentRequest{RequestID: "request", Status: "resolved"}
+
+	requests, err := flow.AgentRequests(context.Background(), "session", "user", "turn")
+	if err != nil || len(requests) != 1 || requests[0].RequestID != "request" {
+		t.Fatalf("requests=%+v error=%v", requests, err)
+	}
+	resolved, err := flow.ResolveAgentRequest(context.Background(), "session", "user", "turn", "request", map[string]any{"option_id": "allow"})
+	if err != nil || resolved.Status != "resolved" {
+		t.Fatalf("resolved=%+v error=%v", resolved, err)
+	}
+	if _, err := flow.AgentRequests(context.Background(), "session", "other-user", "turn"); err != domain.ErrForbidden {
+		t.Fatalf("unauthorized error=%v", err)
 	}
 }
 

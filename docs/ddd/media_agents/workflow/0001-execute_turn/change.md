@@ -1,5 +1,11 @@
 # Execute Turn 变更记录
 
+## 2026-08-22 · Agent Request 与重启恢复落地
+
+- Codex ACP permission 请求先持久化再等待用户响应，resolve 提交后唤醒原 Runtime 调用。
+- 进程启动扫描 running Turn；当 adapter 无法证明旧执行结果或重新挂接时，以 `recovery_outcome_unknown` 失败并暂停队列，禁止重放可能已产生副作用的 Turn。
+- 多副本同时恢复容忍其他副本已提交的终态，不重复发布终态事件。
+
 ## 2026-08-22 · Runtime 事件持久化与提交后发布落地
 
 - TX-ENQUEUE 和 TX-EVENT 均在 Session 行锁内分配 Message Sequence。

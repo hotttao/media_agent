@@ -7,6 +7,7 @@ from adapter.biz.domain.acp_adapter.entity import StopReason
 from adapter.biz.domain.runtime_session.entity import RuntimeSession, Turn, TurnStatus
 from adapter.biz.domain.runtime_session.errors import InvalidTurn
 from adapter.biz.workflow.execute_turn_flow import (
+    AgentRequestHandler,
     RuntimeCredentials,
     RuntimePreparation,
     RuntimeResult,
@@ -42,6 +43,7 @@ class AcpTurnRuntime:
         turn: Turn,
         credentials: RuntimeCredentials,
         event_handler: RuntimeEventHandler,
+        request_handler: AgentRequestHandler,
     ) -> RuntimeResult:
         runtime_session = self._server.get(preparation.handle)
         if runtime_session is None:
@@ -50,10 +52,14 @@ class AcpTurnRuntime:
         if not isinstance(message, str) or not message.strip():
             raise InvalidTurn("Turn input.message is required")
         runtime_session.set_event_observer(event_handler)
+        runtime_session.set_permission_observer(
+            lambda payload: request_handler("permission", payload)
+        )
         try:
             result = await self._server.run_turn(runtime_session, message)
         finally:
             runtime_session.set_event_observer(None)
+            runtime_session.set_permission_observer(None)
         status = (
             TurnStatus.INTERRUPTED
             if result.stop_reason is StopReason.CANCELLED

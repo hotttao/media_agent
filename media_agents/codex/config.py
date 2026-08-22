@@ -185,9 +185,9 @@ def _write_codex_toml(
         "disable_response_storage": True,
     }
     if not _toml_has_key(agent_settings, "sandbox_mode"):
-        toml["sandbox_mode"] = "danger-full-access"
+        toml["sandbox_mode"] = "workspace-write"
     if not _toml_has_key(agent_settings, "approval_policy"):
-        toml["approval_policy"] = "never"
+        toml["approval_policy"] = "on-request"
     if isinstance(base_url, str) and base_url:
         toml["model_providers"] = {
             "custom": {

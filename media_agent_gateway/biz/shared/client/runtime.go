@@ -33,6 +33,8 @@ type Runtime interface {
 	InterruptTurn(context.Context, string, string) (bool, error)
 	ListMessages(context.Context, string, int) ([]Message, error)
 	ReplayEvents(context.Context, string, int64, int) ([]UniversalEvent, error)
+	ListAgentRequests(context.Context, string, string) ([]AgentRequest, error)
+	ResolveAgentRequest(context.Context, string, string, string, map[string]any) (*AgentRequest, error)
 }
 
 type RegisterRuntimeSessionInput struct {
@@ -85,4 +87,16 @@ type UniversalEvent struct {
 	EventType string          `json:"event_type"`
 	Payload   json.RawMessage `json:"payload"`
 	CreatedAt string          `json:"created_at"`
+}
+
+type AgentRequest struct {
+	RequestID   string          `json:"request_id"`
+	SessionID   string          `json:"session_id"`
+	TurnID      string          `json:"turn_id"`
+	RequestType string          `json:"request_type"`
+	Payload     json.RawMessage `json:"payload"`
+	Status      string          `json:"status"`
+	Response    json.RawMessage `json:"response"`
+	ResolvedAt  string          `json:"resolved_at"`
+	CreatedAt   string          `json:"created_at"`
 }

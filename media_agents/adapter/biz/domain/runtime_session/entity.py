@@ -31,6 +31,69 @@ class TurnStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class AgentRequestStatus(StrEnum):
+    PENDING = "pending"
+    RESOLVED = "resolved"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
+@dataclass(frozen=True, slots=True)
+class AgentRequest:
+    request_id: str
+    session_id: str
+    turn_id: str
+    request_type: str
+    payload: dict[str, object]
+    status: AgentRequestStatus
+    response: dict[str, object] | None
+    resolved_at: datetime | None
+    created_at: datetime
+
+    @classmethod
+    def open(
+        cls,
+        *,
+        session_id: str,
+        turn_id: str,
+        request_type: str,
+        payload: dict[str, object],
+        now: datetime,
+    ) -> AgentRequest:
+        normalized = request_type.strip()
+        if normalized not in {"confirm", "input", "permission"}:
+            raise InvalidTurn(f"invalid Agent Request type: {normalized}")
+        if not payload:
+            raise InvalidTurn("Agent Request payload is required")
+        return cls(
+            str(uuid4()),
+            session_id,
+            turn_id,
+            normalized,
+            payload,
+            AgentRequestStatus.PENDING,
+            None,
+            None,
+            now,
+        )
+
+    def resolve(self, response: dict[str, object], *, now: datetime) -> AgentRequest:
+        if not response:
+            raise InvalidTurn("Agent Request response is required")
+        if self.status is AgentRequestStatus.RESOLVED:
+            if self.response != response:
+                raise InvalidTurn("Agent Request was resolved with a different response")
+            return self
+        if self.status is not AgentRequestStatus.PENDING:
+            raise InvalidTurn(f"Agent Request is not pending: {self.status.value}")
+        return replace(self, status=AgentRequestStatus.RESOLVED, response=response, resolved_at=now)
+
+    def cancel(self, *, now: datetime) -> AgentRequest:
+        if self.status is not AgentRequestStatus.PENDING:
+            return self
+        return replace(self, status=AgentRequestStatus.CANCELLED, resolved_at=now)
+
+
 @dataclass(frozen=True, slots=True)
 class Turn:
     turn_id: str

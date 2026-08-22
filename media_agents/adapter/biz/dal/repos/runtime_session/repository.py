@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC
 
 from adapter.biz.dal.models.runtime_session import (
+    AgentRequestRow,
     MessageRow,
     RuntimeSessionRow,
     TurnRow,
@@ -12,6 +13,8 @@ from adapter.biz.dal.models.runtime_session import (
 )
 from adapter.biz.dal.session import current_session
 from adapter.biz.domain.runtime_session.entity import (
+    AgentRequest,
+    AgentRequestStatus,
     ChatStatus,
     Message,
     RuntimeSession,
@@ -204,6 +207,70 @@ class SqlRuntimeSessionRepository:
             turn_row.error_class = turn.error_class
         await db.flush()
 
+    async def add_agent_request(
+        self, session: RuntimeSession, request: AgentRequest, event: UniversalEvent
+    ) -> None:
+        db = current_session()
+        db.add(_request_to_row(request))
+        await self.add_event(session, event)
+
+    async def get_agent_request(
+        self, request_id: str, *, for_update: bool = False
+    ) -> AgentRequest | None:
+        statement = select(AgentRequestRow).where(AgentRequestRow.request_id == request_id)
+        if for_update:
+            statement = statement.with_for_update()
+        row = (await current_session().execute(statement)).scalar_one_or_none()
+        return _request_to_domain(row) if row is not None else None
+
+    async def save_agent_request(
+        self, session: RuntimeSession, request: AgentRequest, event: UniversalEvent
+    ) -> None:
+        db = current_session()
+        row = await db.get(AgentRequestRow, request.request_id)
+        if row is None:
+            raise RuntimeSessionAlreadyExists(request.request_id)
+        row.status = request.status.value
+        row.response = request.response
+        row.resolved_at = request.resolved_at
+        await self.add_event(session, event)
+
+    async def list_agent_requests(
+        self, session_id: str, turn_id: str | None = None
+    ) -> list[AgentRequest]:
+        statement = select(AgentRequestRow).where(AgentRequestRow.session_id == session_id)
+        if turn_id is not None:
+            statement = statement.where(AgentRequestRow.turn_id == turn_id)
+        rows = (
+            (await current_session().execute(statement.order_by(AgentRequestRow.created_at)))
+            .scalars()
+            .all()
+        )
+        return [_request_to_domain(row) for row in rows]
+
+    async def save_agent_request_state(self, request: AgentRequest) -> None:
+        row = await current_session().get(AgentRequestRow, request.request_id)
+        if row is None:
+            raise RuntimeSessionAlreadyExists(request.request_id)
+        row.status = request.status.value
+        row.response = request.response
+        row.resolved_at = request.resolved_at
+        await current_session().flush()
+
+    async def list_running_turns(self) -> list[Turn]:
+        rows = (
+            (
+                await current_session().execute(
+                    select(TurnRow)
+                    .where(TurnRow.status == TurnStatus.RUNNING.value)
+                    .order_by(TurnRow.started_at, TurnRow.turn_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [_turn_to_domain(row) for row in rows]
+
 
 def _to_row(session: RuntimeSession) -> RuntimeSessionRow:
     return RuntimeSessionRow(
@@ -277,5 +344,33 @@ def _event_to_domain(row: UniversalEventRow) -> UniversalEvent:
         sequence=row.sequence,
         event_type=row.event_type,
         payload=row.payload,
+        created_at=row.created_at.replace(tzinfo=row.created_at.tzinfo or UTC),
+    )
+
+
+def _request_to_row(request: AgentRequest) -> AgentRequestRow:
+    return AgentRequestRow(
+        request_id=request.request_id,
+        session_id=request.session_id,
+        turn_id=request.turn_id,
+        request_type=request.request_type,
+        payload=request.payload,
+        status=request.status.value,
+        response=request.response,
+        resolved_at=request.resolved_at,
+        created_at=request.created_at,
+    )
+
+
+def _request_to_domain(row: AgentRequestRow) -> AgentRequest:
+    return AgentRequest(
+        request_id=row.request_id,
+        session_id=row.session_id,
+        turn_id=row.turn_id,
+        request_type=row.request_type,
+        payload=row.payload,
+        status=AgentRequestStatus(row.status),
+        response=row.response,
+        resolved_at=row.resolved_at,
         created_at=row.created_at.replace(tzinfo=row.created_at.tzinfo or UTC),
     )
