@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package media_control.provider;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/provider";
+
+service ProviderService {
+  rpc CreateProvider(CreateProviderRequest) returns (ProviderResponse) {
+    option (api.post) = "/api/v1/providers";
+    option (google.api.http) = { post: "/api/v1/providers" body: "*" };
+  }
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse) {
+    option (api.get) = "/api/v1/providers";
+    option (google.api.http) = { get: "/api/v1/providers" };
+  }
+  rpc GetProvider(GetProviderRequest) returns (ProviderResponse) {
+    option (api.get) = "/api/v1/providers/:provider_id";
+    option (google.api.http) = { get: "/api/v1/providers/{provider_id}" };
+  }
+  rpc UpdateProvider(UpdateProviderRequest) returns (ProviderResponse) {
+    option (api.put) = "/api/v1/providers/:provider_id";
+    option (google.api.http) = { put: "/api/v1/providers/{provider_id}" body: "*" };
+  }
+  rpc SetProviderStatus(SetProviderStatusRequest) returns (ProviderResponse) {
+    option (api.post) = "/api/v1/providers/:provider_id/status";
+    option (google.api.http) = { post: "/api/v1/providers/{provider_id}/status" body: "*" };
+  }
+}
+
+message CreateProviderRequest { string name = 1 [(api.body) = "name"]; string provider_type = 2 [(api.body) = "provider_type"]; string endpoint = 3 [(api.body) = "endpoint"]; string capabilities_json = 4 [(api.body) = "capabilities_json"]; }
+message ListProvidersRequest {}
+message GetProviderRequest { string provider_id = 1 [(api.path) = "provider_id"]; }
+message UpdateProviderRequest { string provider_id = 1 [(api.path) = "provider_id"]; string name = 2 [(api.body) = "name"]; string provider_type = 3 [(api.body) = "provider_type"]; string endpoint = 4 [(api.body) = "endpoint"]; string capabilities_json = 5 [(api.body) = "capabilities_json"]; int64 expected_version = 6 [(api.body) = "expected_version"]; }
+message SetProviderStatusRequest { string provider_id = 1 [(api.path) = "provider_id"]; string status = 2 [(api.body) = "status"]; int64 expected_version = 3 [(api.body) = "expected_version"]; }
+message ProviderResponse { string id = 1; string name = 2; string provider_type = 3; string endpoint = 4; string capabilities_json = 5; string status = 6; int64 version = 7; int64 created_at = 8; int64 updated_at = 9; }
+message ListProvidersResponse { repeated ProviderResponse providers = 1; }
