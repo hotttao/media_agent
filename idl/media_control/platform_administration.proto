@@ -36,6 +36,14 @@ service PlatformAdministrationService {
     option (api.get) = "/api/v1/admin/clusters/:cluster_id";
     option (google.api.http) = { get: "/api/v1/admin/clusters/{cluster_id}" };
   }
+  rpc ReportPlatformStatistic(ReportPlatformStatisticRequest) returns (PlatformStatisticResponse) {
+    option (api.post) = "/api/v1/admin/platform-statistics/report";
+    option (google.api.http) = { post: "/api/v1/admin/platform-statistics/report" body: "*" };
+  }
+  rpc ListPlatformStatistics(ListPlatformStatisticsRequest) returns (ListPlatformStatisticsResponse) {
+    option (api.get) = "/api/v1/admin/platform-statistics";
+    option (google.api.http) = { get: "/api/v1/admin/platform-statistics" };
+  }
 }
 
 message CreatePlatformSettingRequest { string key = 1 [(api.body) = "key"]; string value_json = 2 [(api.body) = "value_json"]; }
@@ -49,3 +57,7 @@ message ListClusterProjectionsRequest {}
 message GetClusterProjectionRequest { string cluster_id = 1 [(api.path) = "cluster_id"]; }
 message ClusterProjectionResponse { string cluster_id = 1; string status = 2; string capacity_json = 3; int64 observed_at = 4; }
 message ListClusterProjectionsResponse { repeated ClusterProjectionResponse clusters = 1; }
+message ReportPlatformStatisticRequest { string metric_key = 1 [(api.body) = "metric_key"]; int64 period_start = 2 [(api.body) = "period_start"]; string dimensions_json = 3 [(api.body) = "dimensions_json"]; string value = 4 [(api.body) = "value"]; int64 refreshed_at = 5 [(api.body) = "refreshed_at"]; }
+message ListPlatformStatisticsRequest { string metric_key = 1 [(api.query) = "metric_key"]; int64 period_start_from = 2 [(api.query) = "period_start_from"]; int64 period_start_to = 3 [(api.query) = "period_start_to"]; }
+message PlatformStatisticResponse { string metric_key = 1; int64 period_start = 2; string dimensions_json = 3; string value = 4; int64 refreshed_at = 5; }
+message ListPlatformStatisticsResponse { repeated PlatformStatisticResponse statistics = 1; }

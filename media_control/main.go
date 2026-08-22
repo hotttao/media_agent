@@ -111,7 +111,7 @@ func main() {
 	skillhandler.Configure(skillservice.New(skillrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	providerhandler.Configure(providerservice.New(providerrepo.New(db), dal.NewTxRunner(db)))
 	adminStore := adminrepo.New(db)
-	adminhandler.Configure(adminservice.New(adminStore, dal.NewTxRunner(db)), adminservice.NewClusterService(adminStore))
+	adminhandler.Configure(adminservice.New(adminStore, dal.NewTxRunner(db)), adminservice.NewClusterService(adminStore), adminservice.NewStatisticsService(adminStore))
 	credentialhandler.Configure(credentialservice.New(credentialrepo.New(db), dal.NewTxRunner(db), repo.New(db), providerrepo.New(db)))
 	memoryhandler.Configure(memoryservice.New(memoryrepo.New(db), dal.NewTxRunner(db), repo.New(db), credentialrepo.New(db)))
 	schedulehandler.Configure(scheduleservice.New(schedulerepo.New(db), dal.NewTxRunner(db), repo.New(db)))

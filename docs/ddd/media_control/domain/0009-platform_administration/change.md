@@ -14,3 +14,10 @@
 - 仅有效 Control Service Token 建立的内部 `system` Principal 可以上报；Admin/System 角色可以查询。
 - Service 与 PostgreSQL conditional upsert 双层保证 `observed_at` 单调，迟到和重复观察不覆盖新状态。
 - 增加普通用户、非 system 上报拒绝以及迟到/较新观察的单测和真实 HTTP E2E。
+
+## 2026-08-22 · Platform Statistics 投影
+
+- 新增指标、周期和 canonical dimensions hash 复合幂等的统计读模型。
+- decimal string 无损写入 PostgreSQL `numeric`，避免 API 浮点精度丢失。
+- internal-system 单调刷新 `refreshed_at`；Admin/System 可按指标与周期区间查询。
+- 增加维度键顺序幂等、迟到刷新、越权拒绝及真实 HTTP E2E。

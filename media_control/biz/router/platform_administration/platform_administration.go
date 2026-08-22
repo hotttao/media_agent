@@ -26,6 +26,7 @@ func Register(r *server.Hertz) {
 				_admin.GET("/clusters", append(_listclusterprojectionsMw(), platform_administration.ListClusterProjections)...)
 				_admin.GET("/platform-settings", append(_listplatformsettingsMw(), platform_administration.ListPlatformSettings)...)
 				_admin.POST("/platform-settings", append(_createplatformsettingMw(), platform_administration.CreatePlatformSetting)...)
+				_admin.GET("/platform-statistics", append(_listplatformstatisticsMw(), platform_administration.ListPlatformStatistics)...)
 				{
 					_clusters := _admin.Group("/clusters", _clustersMw()...)
 					_clusters.GET("/:cluster_id", append(_getclusterprojectionMw(), platform_administration.GetClusterProjection)...)
@@ -38,6 +39,10 @@ func Register(r *server.Hertz) {
 					_platform_settings := _admin.Group("/platform-settings", _platform_settingsMw()...)
 					_platform_settings.GET("/:setting_key", append(_getplatformsettingMw(), platform_administration.GetPlatformSetting)...)
 					_platform_settings.PUT("/:setting_key", append(_updateplatformsettingMw(), platform_administration.UpdatePlatformSetting)...)
+				}
+				{
+					_platform_statistics := _admin.Group("/platform-statistics", _platform_statisticsMw()...)
+					_platform_statistics.POST("/report", append(_reportplatformstatisticMw(), platform_administration.ReportPlatformStatistic)...)
 				}
 			}
 		}
