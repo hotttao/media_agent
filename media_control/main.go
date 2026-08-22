@@ -10,17 +10,20 @@ import (
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_control/biz/dal"
 	templaterepo "media_agent/media_control/biz/dal/repo/agent_template"
+	credentialrepo "media_agent/media_control/biz/dal/repo/credential_reference"
 	promptrepo "media_agent/media_control/biz/dal/repo/prompt"
 	providerrepo "media_agent/media_control/biz/dal/repo/provider"
 	skillrepo "media_agent/media_control/biz/dal/repo/skill"
 	repo "media_agent/media_control/biz/dal/repo/workspace"
 	templatehandler "media_agent/media_control/biz/handler/agent_template"
+	credentialhandler "media_agent/media_control/biz/handler/credential_reference"
 	prompthandler "media_agent/media_control/biz/handler/prompt"
 	providerhandler "media_agent/media_control/biz/handler/provider"
 	skillhandler "media_agent/media_control/biz/handler/skill"
 	workspacehandler "media_agent/media_control/biz/handler/workspace"
 	"media_agent/media_control/biz/middleware"
 	templateservice "media_agent/media_control/biz/service/agent_template"
+	credentialservice "media_agent/media_control/biz/service/credential_reference"
 	promptservice "media_agent/media_control/biz/service/prompt"
 	providerservice "media_agent/media_control/biz/service/provider"
 	skillservice "media_agent/media_control/biz/service/skill"
@@ -76,6 +79,7 @@ func main() {
 	templatehandler.Configure(templateservice.New(templaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	skillhandler.Configure(skillservice.New(skillrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	providerhandler.Configure(providerservice.New(providerrepo.New(db), dal.NewTxRunner(db)))
+	credentialhandler.Configure(credentialservice.New(credentialrepo.New(db), dal.NewTxRunner(db), repo.New(db), providerrepo.New(db)))
 
 	h := suite.NewServer()
 	register(h)
