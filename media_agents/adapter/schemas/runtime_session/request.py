@@ -17,3 +17,8 @@ class SubmitTurnRequest(BaseModel):
     input: dict[str, object]
     api_key: str | None = Field(default=None, max_length=4096, repr=False)
     session_token: str | None = Field(default=None, max_length=4096, repr=False)
+
+
+class ResolveAgentRequestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    response: dict[str, object]

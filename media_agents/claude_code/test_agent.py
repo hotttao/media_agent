@@ -149,16 +149,22 @@ print(json.dumps({"type":"result","subtype":"success"}), flush=True)
     first = await runtime.prepare(session, turn, credentials)
     assert first.handle == "business-1" and first.is_new
     assert (
-        await runtime.execute(first, session, turn, credentials, _ignore_event)
+        await runtime.execute(first, session, turn, credentials, _ignore_event, _ignore_request)
     ).status is TurnStatus.COMPLETED
 
     resumed_session = session.attach_runtime("business-1", now=datetime.now(UTC))
     resumed = await runtime.prepare(resumed_session, turn, credentials)
     assert not resumed.is_new
     assert (
-        await runtime.execute(resumed, resumed_session, turn, credentials, _ignore_event)
+        await runtime.execute(
+            resumed, resumed_session, turn, credentials, _ignore_event, _ignore_request
+        )
     ).status is TurnStatus.COMPLETED
 
 
 async def _ignore_event(payload: dict[str, object]) -> None:
     pass
+
+
+async def _ignore_request(request_type: str, payload: dict[str, object]) -> dict[str, object]:
+    return {"option_id": "allow-once"}

@@ -88,6 +88,31 @@ func (r *HTTPRuntime) ReplayEvents(ctx context.Context, sessionID string, afterS
 	return output, nil
 }
 
+func (r *HTTPRuntime) ListAgentRequests(ctx context.Context, sessionID, turnID string) ([]AgentRequest, error) {
+	var output []AgentRequest
+	query := url.Values{}
+	if turnID != "" {
+		query.Set("turn_id", turnID)
+	}
+	path := "/api/v1/runtime-sessions/" + url.PathEscape(sessionID) + "/requests"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	if err := r.doJSON(ctx, http.MethodGet, path, nil, &output); err != nil {
+		return nil, err
+	}
+	return output, nil
+}
+
+func (r *HTTPRuntime) ResolveAgentRequest(ctx context.Context, sessionID, turnID, requestID string, response map[string]any) (*AgentRequest, error) {
+	var output AgentRequest
+	path := "/api/v1/runtime-sessions/" + url.PathEscape(sessionID) + "/turns/" + url.PathEscape(turnID) + "/requests/" + url.PathEscape(requestID) + "/resolve"
+	if err := r.doJSON(ctx, http.MethodPost, path, map[string]any{"response": response}, &output); err != nil {
+		return nil, err
+	}
+	return &output, nil
+}
+
 func (r *HTTPRuntime) doJSON(ctx context.Context, method, path string, input, output any) error {
 	var body io.Reader
 	if input != nil {

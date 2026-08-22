@@ -18,22 +18,28 @@ import (
 var runtimeSessionCmd = &cobra.Command{Use: "runtime-session", Short: "注册和查询 Agent Runtime Session"}
 
 var (
-	registerSessionID      string
-	registerContextVersion int64
-	registerContextRef     string
-	submitTurnSessionID    string
-	submitTurnKey          string
-	submitTurnContext      int64
-	submitTurnInput        string
-	getTurnSessionID       string
-	getTurnID              string
-	interruptTurnSessionID string
-	interruptTurnID        string
-	replayEventsSessionID  string
-	replayAfterSequence    int64
-	replayLimit            int
-	listMessagesSessionID  string
-	listMessagesLimit      int
+	registerSessionID       string
+	registerContextVersion  int64
+	registerContextRef      string
+	submitTurnSessionID     string
+	submitTurnKey           string
+	submitTurnContext       int64
+	submitTurnInput         string
+	getTurnSessionID        string
+	getTurnID               string
+	interruptTurnSessionID  string
+	interruptTurnID         string
+	replayEventsSessionID   string
+	replayAfterSequence     int64
+	replayLimit             int
+	listMessagesSessionID   string
+	listMessagesLimit       int
+	listRequestsSessionID   string
+	listRequestsTurnID      string
+	resolveRequestSessionID string
+	resolveRequestTurnID    string
+	resolveRequestID        string
+	resolveRequestResponse  string
 )
 
 var registerRuntimeSessionCmd = &cobra.Command{
@@ -110,6 +116,33 @@ var listMessagesCmd = &cobra.Command{
 	},
 }
 
+var listAgentRequestsCmd = &cobra.Command{
+	Use: "requests", Short: "查询 Runtime Session 的 Agent Request",
+	RunE: func(command *cobra.Command, _ []string) error {
+		path := fmt.Sprintf("/api/v1/runtime-sessions/%s/requests", listRequestsSessionID)
+		if listRequestsTurnID != "" {
+			path += "?turn_id=" + listRequestsTurnID
+		}
+		return requestAndPrint(command, http.MethodGet, path, nil)
+	},
+}
+
+var resolveAgentRequestCmd = &cobra.Command{
+	Use: "resolve-request", Short: "幂等解决 pending Agent Request",
+	RunE: func(command *cobra.Command, _ []string) error {
+		var response map[string]any
+		if err := json.Unmarshal([]byte(resolveRequestResponse), &response); err != nil {
+			return fmt.Errorf("invalid --response JSON: %w", err)
+		}
+		payload, err := json.Marshal(map[string]any{"response": response})
+		if err != nil {
+			return err
+		}
+		path := fmt.Sprintf("/api/v1/runtime-sessions/%s/turns/%s/requests/%s/resolve", resolveRequestSessionID, resolveRequestTurnID, resolveRequestID)
+		return requestAndPrint(command, http.MethodPost, path, payload)
+	},
+}
+
 var runtimeWorkspaceCmd = &cobra.Command{
 	Use:   "runtime-workspace",
 	Short: "查询 Agent 挂载的 Workspace Runtime Directory identity",
@@ -153,8 +186,20 @@ func init() {
 	listMessagesCmd.Flags().IntVar(&listMessagesLimit, "limit", 200, "最多返回 Message 数")
 	_ = replayEventsCmd.MarkFlagRequired("session-id")
 	_ = listMessagesCmd.MarkFlagRequired("session-id")
+	listAgentRequestsCmd.Flags().StringVar(&listRequestsSessionID, "session-id", "", "Runtime Session ID")
+	listAgentRequestsCmd.Flags().StringVar(&listRequestsTurnID, "turn-id", "", "可选 Turn ID")
+	_ = listAgentRequestsCmd.MarkFlagRequired("session-id")
+	resolveAgentRequestCmd.Flags().StringVar(&resolveRequestSessionID, "session-id", "", "Runtime Session ID")
+	resolveAgentRequestCmd.Flags().StringVar(&resolveRequestTurnID, "turn-id", "", "Turn ID")
+	resolveAgentRequestCmd.Flags().StringVar(&resolveRequestID, "request-id", "", "Agent Request ID")
+	resolveAgentRequestCmd.Flags().StringVar(&resolveRequestResponse, "response", "", "响应 JSON object")
+	_ = resolveAgentRequestCmd.MarkFlagRequired("session-id")
+	_ = resolveAgentRequestCmd.MarkFlagRequired("turn-id")
+	_ = resolveAgentRequestCmd.MarkFlagRequired("request-id")
+	_ = resolveAgentRequestCmd.MarkFlagRequired("response")
 	runtimeSessionCmd.AddCommand(registerRuntimeSessionCmd, getRuntimeSessionCmd, submitTurnCmd,
-		getTurnCmd, interruptTurnCmd, replayEventsCmd, listMessagesCmd)
+		getTurnCmd, interruptTurnCmd, replayEventsCmd, listMessagesCmd, listAgentRequestsCmd,
+		resolveAgentRequestCmd)
 	runtimeWorkspaceCmd.AddCommand(getRuntimeWorkspaceCmd)
 	MediaAgentsCmd.AddCommand(runtimeSessionCmd, runtimeWorkspaceCmd)
 }

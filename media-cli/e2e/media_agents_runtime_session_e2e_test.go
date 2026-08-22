@@ -5,10 +5,120 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestMediaAgentsAgentRequestResolveE2E(t *testing.T) {
+	agentAddr := os.Getenv("MEDIA_AGENTS_PERMISSION_ADDR")
+	if agentAddr == "" {
+		t.Skip("MEDIA_AGENTS_PERMISSION_ADDR is required for ACP permission E2E")
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	sessionID := fmt.Sprintf("e2e-request-%d", time.Now().UnixNano())
+	status, body := doJSON(t, client, http.MethodPost, agentAddr+"/api/v1/runtime-sessions", map[string]any{"session_id": sessionID, "context_version": 1, "context_ref": "e2e:request:v1"})
+	if status != http.StatusCreated {
+		t.Fatalf("register: %d %s", status, body)
+	}
+	status, body = doJSON(t, client, http.MethodPost, agentAddr+"/api/v1/runtime-sessions/"+sessionID+"/turns", map[string]any{"idempotency_key": "permission", "context_version": 1, "input": map[string]any{"message": "Use the shell to write agent-request-e2e into /tmp/media-agent-permission-e2e, then reply done. Request permission if required."}})
+	if status != http.StatusAccepted {
+		t.Fatalf("submit: %d %s", status, body)
+	}
+	var turn struct {
+		TurnID string `json:"turn_id"`
+	}
+	if err := json.Unmarshal(body, &turn); err != nil {
+		t.Fatal(err)
+	}
+	var request struct {
+		RequestID, Status string
+		Payload           map[string]any
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		status, body = doJSON(t, client, http.MethodGet, agentAddr+"/api/v1/runtime-sessions/"+sessionID+"/requests?turn_id="+turn.TurnID, nil)
+		var values []struct {
+			RequestID string         `json:"request_id"`
+			Status    string         `json:"status"`
+			Payload   map[string]any `json:"payload"`
+		}
+		_ = json.Unmarshal(body, &values)
+		if status == http.StatusOK && len(values) > 0 {
+			request.RequestID, request.Status, request.Payload = values[0].RequestID, values[0].Status, values[0].Payload
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if request.RequestID == "" || request.Status != "pending" {
+		t.Skipf("Codex completed without requesting permission under the configured model policy: %+v", request)
+	}
+	options, _ := request.Payload["options"].([]any)
+	if len(options) == 0 {
+		t.Fatalf("permission options missing: %+v", request.Payload)
+	}
+	option, _ := options[0].(map[string]any)
+	optionID, _ := option["optionId"].(string)
+	if optionID == "" {
+		optionID, _ = option["option_id"].(string)
+	}
+	resolvePath := fmt.Sprintf("%s/api/v1/runtime-sessions/%s/turns/%s/requests/%s/resolve", agentAddr, sessionID, turn.TurnID, request.RequestID)
+	response := map[string]any{"response": map[string]any{"option_id": optionID}}
+	status, body = doJSON(t, client, http.MethodPost, resolvePath, response)
+	if status != http.StatusOK {
+		t.Fatalf("resolve: %d %s", status, body)
+	}
+	status, _ = doJSON(t, client, http.MethodPost, resolvePath, response)
+	if status != http.StatusOK {
+		t.Fatalf("idempotent resolve status=%d", status)
+	}
+	status, _ = doJSON(t, client, http.MethodPost, resolvePath, map[string]any{"response": map[string]any{"option_id": "different"}})
+	if status != http.StatusConflict {
+		t.Fatalf("conflicting resolve status=%d", status)
+	}
+	pollTurn(t, client, agentAddr, sessionID, turn.TurnID, "completed")
+}
+
+func TestMediaAgentsRestartMarksUnknownRunningTurnFailedE2E(t *testing.T) {
+	agentAddr, container := os.Getenv("MEDIA_AGENTS_ADDR"), os.Getenv("MEDIA_AGENTS_E2E_CONTAINER")
+	if agentAddr == "" || container == "" {
+		t.Skip("MEDIA_AGENTS_ADDR and MEDIA_AGENTS_E2E_CONTAINER are required")
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	sessionID := fmt.Sprintf("e2e-recovery-%d", time.Now().UnixNano())
+	status, body := doJSON(t, client, http.MethodPost, agentAddr+"/api/v1/runtime-sessions", map[string]any{"session_id": sessionID, "context_version": 1, "context_ref": "e2e:recovery:v1"})
+	if status != http.StatusCreated {
+		t.Fatalf("register: %s", body)
+	}
+	status, body = doJSON(t, client, http.MethodPost, agentAddr+"/api/v1/runtime-sessions/"+sessionID+"/turns", map[string]any{"idempotency_key": "running", "context_version": 1, "input": map[string]any{"message": "wait-for-interrupt"}})
+	if status != http.StatusAccepted {
+		t.Fatalf("submit: %s", body)
+	}
+	var turn struct {
+		TurnID string `json:"turn_id"`
+	}
+	if err := json.Unmarshal(body, &turn); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("docker", "restart", container).CombinedOutput(); err != nil {
+		t.Fatalf("restart: %v %s", err, output)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if response, err := client.Get(agentAddr + "/health"); err == nil {
+			response.Body.Close()
+			if response.StatusCode == http.StatusOK {
+				break
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	failed := pollTurn(t, client, agentAddr, sessionID, turn.TurnID, "failed")
+	if !strings.Contains(string(failed), `"error_class":"recovery_outcome_unknown"`) {
+		t.Fatalf("unsafe recovery result: %s", failed)
+	}
+}
 
 func TestMediaAgentsRuntimeSessionExecutionE2E(t *testing.T) {
 	agentAddr := os.Getenv("MEDIA_AGENTS_ADDR")

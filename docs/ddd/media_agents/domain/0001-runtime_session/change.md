@@ -1,5 +1,11 @@
 # Runtime Session 变更记录
 
+## 2026-08-22 · Agent Request 交互事实落地
+
+- confirm、input 和 permission 请求与 `agent.requested` 事件在同一 PostgreSQL 事务持久化。
+- 同一响应重试幂等，不同响应冲突；Turn 终态会取消 pending Request，晚到响应和 Runtime 事件不得改写历史。
+- Agent API 提供请求查询和 resolve，Gateway 仅在授权后代理，不保存交互事实。
+
 ## 2026-08-22 · Universal Event、Message 历史与回放落地
 
 - Runtime Session 新增 `next_message_sequence`，并发安全地分配历史 Message 查询次序。

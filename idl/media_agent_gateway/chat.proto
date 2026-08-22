@@ -48,6 +48,19 @@ service ChatService {
     option (api.get) = "/api/chat/sessions/:session_id/events";
     option (google.api.http) = { get: "/api/chat/sessions/{session_id}/events" };
   }
+
+  rpc ListAgentRequests(ListAgentRequestsRequest) returns (ListAgentRequestsResponse) {
+    option (api.get) = "/api/chat/sessions/:session_id/requests";
+    option (google.api.http) = { get: "/api/chat/sessions/{session_id}/requests" };
+  }
+
+  rpc ResolveAgentRequest(ResolveAgentRequestRequest) returns (AgentRequestResponse) {
+    option (api.post) = "/api/chat/sessions/:session_id/turns/:turn_id/requests/:request_id/resolve";
+    option (google.api.http) = {
+      post: "/api/chat/sessions/{session_id}/turns/{turn_id}/requests/{request_id}/resolve"
+      body: "*"
+    };
+  }
 }
 
 message GetDefaultSessionRequest {}
@@ -121,3 +134,30 @@ message SubscribeEventsRequest {
 
 // SubscribeEvents is transported as text/event-stream.
 message SubscribeEventsResponse {}
+
+message ListAgentRequestsRequest {
+  string session_id = 1 [(api.path) = "session_id"];
+  string turn_id = 2 [(api.query) = "turn_id"];
+}
+
+message ResolveAgentRequestRequest {
+  string session_id = 1 [(api.path) = "session_id"];
+  string turn_id = 2 [(api.path) = "turn_id"];
+  string request_id = 3 [(api.path) = "request_id"];
+  string response_json = 4 [(api.body) = "response_json"];
+}
+
+message AgentRequestResponse {
+  string request_id = 1;
+  string turn_id = 2;
+  string request_type = 3;
+  string payload_json = 4;
+  string status = 5;
+  string response_json = 6;
+  int64 created_at = 7;
+  int64 resolved_at = 8;
+}
+
+message ListAgentRequestsResponse {
+  repeated AgentRequestResponse requests = 1;
+}

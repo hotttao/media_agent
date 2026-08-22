@@ -1,5 +1,10 @@
 # Agent Session 变更记录
 
+## 2026-08-22 · Agent Request 只读代理落地
+
+- Gateway 新增授权后的 Agent Request 查询与 resolve 路由，通过 Agent Runtime Session API 代理。
+- Request、响应、幂等和终态不在 Gateway 建立事实副本，页面仅通过该代理处理交互。
+
 ## 2026-08-18 · Turn 与交互事实下沉 Agent
 
 - Gateway Agent Session 收敛为 Registration、访问控制、Session Token 与 UI 元数据。

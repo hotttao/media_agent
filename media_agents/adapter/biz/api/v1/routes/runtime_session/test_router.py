@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from adapter.biz.api.v1.deps import get_execute_turn_flow, get_runtime_session_service
 from adapter.biz.api.v1.routes.runtime_session.router import build_runtime_session_router
 from adapter.biz.domain.runtime_session.entity import (
+    AgentRequest,
+    AgentRequestStatus,
     Message,
     RuntimeSession,
     Turn,
@@ -71,6 +73,12 @@ class FakeService:
             )
         ][:limit]
 
+    async def list_agent_requests(
+        self, session_id: str, *, turn_id: str | None = None
+    ) -> list[AgentRequest]:
+        await self.get(session_id)
+        return [_request()]
+
 
 class FakeFlow:
     async def submit(self, command: object, credentials: object = None) -> Turn:
@@ -78,6 +86,11 @@ class FakeFlow:
 
     async def interrupt(self, session_id: str, turn_id: str) -> bool:
         return True
+
+    async def resolve_request(
+        self, session_id: str, turn_id: str, request_id: str, response: dict[str, object]
+    ) -> AgentRequest:
+        return _request().resolve(response, now=datetime(2026, 8, 22, tzinfo=UTC))
 
 
 def _turn() -> Turn:
@@ -91,6 +104,20 @@ def _turn() -> Turn:
         context_version=1,
         created_at=datetime(2026, 8, 22, tzinfo=UTC),
         started_at=datetime(2026, 8, 22, tzinfo=UTC),
+    )
+
+
+def _request() -> AgentRequest:
+    return AgentRequest(
+        "agent-request-1",
+        "session-1",
+        "turn-1",
+        "permission",
+        {"options": [{"option_id": "allow-once"}]},
+        AgentRequestStatus.PENDING,
+        None,
+        None,
+        datetime(2026, 8, 22, tzinfo=UTC),
     )
 
 
@@ -153,6 +180,16 @@ async def test_register_get_and_conflict_mapping() -> None:
         messages = await client.get("/api/v1/runtime-sessions/session-1/messages")
         assert messages.status_code == 200
         assert messages.json()[0]["role"] == "assistant"
+
+        requests = await client.get("/api/v1/runtime-sessions/session-1/requests")
+        assert requests.status_code == 200
+        assert requests.json()[0]["status"] == "pending"
+        resolved = await client.post(
+            "/api/v1/runtime-sessions/session-1/turns/turn-1/requests/agent-request-1/resolve",
+            json={"response": {"option_id": "allow-once"}},
+        )
+        assert resolved.status_code == 200
+        assert resolved.json()["status"] == "resolved"
 
 
 @pytest.mark.asyncio

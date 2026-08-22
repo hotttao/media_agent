@@ -91,3 +91,20 @@ class UniversalEventRow(Base):
     event_type: Mapped[str] = mapped_column("type", String(64), nullable=False)
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AgentRequestRow(Base):
+    __tablename__ = "agent_requests"
+    __table_args__ = ({"schema": "media_agents"},)
+
+    request_id: Mapped[str] = mapped_column("id", String(64), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("media_agents.runtime_sessions.session_id"), nullable=False
+    )
+    turn_id: Mapped[str] = mapped_column(ForeignKey("media_agents.turns.id"), nullable=False)
+    request_type: Mapped[str] = mapped_column("type", String(16), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    response: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

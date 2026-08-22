@@ -65,3 +65,33 @@ func _interruptturnMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _listagentrequestsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _turnsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _turn_idMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _requestsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _request_idMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _resolveagentrequestMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

@@ -3,7 +3,13 @@
 from fastapi import APIRouter, HTTPException, Query, status
 
 from adapter.biz.api.v1.deps import ExecuteTurnFlowDep, RuntimeSessionServiceDep
-from adapter.biz.domain.runtime_session.entity import Message, RuntimeSession, Turn, UniversalEvent
+from adapter.biz.domain.runtime_session.entity import (
+    AgentRequest,
+    Message,
+    RuntimeSession,
+    Turn,
+    UniversalEvent,
+)
 from adapter.biz.domain.runtime_session.errors import (
     ContextVersionConflict,
     InvalidRuntimeSession,
@@ -12,8 +18,13 @@ from adapter.biz.domain.runtime_session.errors import (
 )
 from adapter.biz.service.runtime_session.command import RegisterRuntimeSession, SubmitTurn
 from adapter.biz.workflow.execute_turn_flow import RuntimeCredentials
-from adapter.schemas.runtime_session.request import RegisterRuntimeSessionRequest, SubmitTurnRequest
+from adapter.schemas.runtime_session.request import (
+    RegisterRuntimeSessionRequest,
+    ResolveAgentRequestRequest,
+    SubmitTurnRequest,
+)
 from adapter.schemas.runtime_session.response import (
+    AgentRequestResponse,
     MessageResponse,
     RuntimeSessionResponse,
     TurnResponse,
@@ -115,6 +126,37 @@ def build_runtime_session_router() -> APIRouter:
         except InvalidTurn as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 
+    @router.get("/{session_id}/requests", response_model=list[AgentRequestResponse])
+    async def list_agent_requests(
+        session_id: str, service: RuntimeSessionServiceDep, turn_id: str | None = None
+    ) -> list[AgentRequestResponse]:
+        try:
+            return [
+                _request_response(value)
+                for value in await service.list_agent_requests(session_id, turn_id=turn_id)
+            ]
+        except RuntimeSessionNotFound as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+
+    @router.post(
+        "/{session_id}/turns/{turn_id}/requests/{request_id}/resolve",
+        response_model=AgentRequestResponse,
+    )
+    async def resolve_agent_request(
+        session_id: str,
+        turn_id: str,
+        request_id: str,
+        body: ResolveAgentRequestRequest,
+        flow: ExecuteTurnFlowDep,
+    ) -> AgentRequestResponse:
+        try:
+            value = await flow.resolve_request(session_id, turn_id, request_id, body.response)
+            return _request_response(value)
+        except RuntimeSessionNotFound as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except InvalidTurn as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
     return router
 
 
@@ -171,5 +213,19 @@ def _message_response(value: Message) -> MessageResponse:
         role=value.role,
         content_ref=value.content_ref,
         sequence=value.sequence,
+        created_at=value.created_at.isoformat(),
+    )
+
+
+def _request_response(value: AgentRequest) -> AgentRequestResponse:
+    return AgentRequestResponse(
+        request_id=value.request_id,
+        session_id=value.session_id,
+        turn_id=value.turn_id,
+        request_type=value.request_type,
+        payload=value.payload,
+        status=value.status.value,
+        response=value.response,
+        resolved_at=value.resolved_at.isoformat() if value.resolved_at else None,
         created_at=value.created_at.isoformat(),
     )

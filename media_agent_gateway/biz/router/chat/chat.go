@@ -31,7 +31,21 @@ func Register(r *server.Hertz) {
 					_session_id.GET("/events", append(_subscribeeventsMw(), chat.SubscribeEvents)...)
 					_session_id.POST("/interrupt", append(_interruptturnMw(), chat.InterruptTurn)...)
 					_session_id.GET("/messages", append(_listmessagesMw(), chat.ListMessages)...)
+					_session_id.GET("/requests", append(_listagentrequestsMw(), chat.ListAgentRequests)...)
 					_session_id.POST("/turns", append(_runturnMw(), chat.RunTurn)...)
+					{
+						_turns := _session_id.Group("/turns", _turnsMw()...)
+						{
+							_turn_id := _turns.Group("/:turn_id", _turn_idMw()...)
+							{
+								_requests := _turn_id.Group("/requests", _requestsMw()...)
+								{
+									_request_id := _requests.Group("/:request_id", _request_idMw()...)
+									_request_id.POST("/resolve", append(_resolveagentrequestMw(), chat.ResolveAgentRequest)...)
+								}
+							}
+						}
+					}
 				}
 			}
 		}
