@@ -39,11 +39,14 @@ Batch Run 负责批量创建 Agent Task、汇总进度并传播取消意图。
 | id | text PK | Batch Run ID |
 | workspace_id | text | 执行所在 Workspace |
 | requested_by | text | 发起用户 ID |
-| status | text | pending/running/completed/cancelled |
+| status | text | creating/running/completed/partial_failed/failed/cancelled |
 | item_count | integer | 固定输入项数量 |
+| next_cursor | integer | 已完成 Task 拆分的稳定游标 |
+| completed_count/failed_count/cancelled_count | integer | Item 终态投影计数 |
 | idempotency_key | text | Workspace 内幂等键 |
 | created_at | timestamptz | 创建时间 |
 | finished_at | timestamptz nullable | 批次终态时间 |
+| updated_at | timestamptz | 最近状态更新时间 |
 
 ### `batch_run_items`
 
@@ -51,13 +54,16 @@ Batch Run 负责批量创建 Agent Task、汇总进度并传播取消意图。
 |:---|:---|:---|
 | batch_run_id | text | 所属 Batch Run |
 | item_key | text | 批次内唯一项标识，与 batch_run_id 联合主键 |
+| session_id | text | 已验证 owner/workspace 的 Agent Session |
 | agent_task_id | text nullable | 已创建的 Agent Task ID |
 | input | jsonb | 该项不可变输入 |
+| status | text | pending/queued/running/completed/failed/cancelled 投影 |
 | created_at | timestamptz | 创建时间 |
+| updated_at | timestamptz | 最近状态更新时间 |
 
 ### UUID 生成规则
 
-Batch Run 使用 ULID；Task 幂等键由 `batch_run_id + item_key` 派生。
+Batch Run 使用 UUID v4；Task 幂等键由 `batch_run_id + item_key` 派生。
 
 ## 能力详细说明
 
