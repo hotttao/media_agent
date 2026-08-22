@@ -14,6 +14,7 @@ import (
 	credentialrepo "media_agent/media_control/biz/dal/repo/credential_reference"
 	grantrepo "media_agent/media_control/biz/dal/repo/environment_grant"
 	memoryrepo "media_agent/media_control/biz/dal/repo/memory_store"
+	adminrepo "media_agent/media_control/biz/dal/repo/platform_administration"
 	promptrepo "media_agent/media_control/biz/dal/repo/prompt"
 	providerrepo "media_agent/media_control/biz/dal/repo/provider"
 	exportrepo "media_agent/media_control/biz/dal/repo/public_export"
@@ -29,6 +30,7 @@ import (
 	credentialhandler "media_agent/media_control/biz/handler/credential_reference"
 	granthandler "media_agent/media_control/biz/handler/environment_grant"
 	memoryhandler "media_agent/media_control/biz/handler/memory_store"
+	adminhandler "media_agent/media_control/biz/handler/platform_administration"
 	prompthandler "media_agent/media_control/biz/handler/prompt"
 	providerhandler "media_agent/media_control/biz/handler/provider"
 	exporthandler "media_agent/media_control/biz/handler/public_export"
@@ -45,6 +47,7 @@ import (
 	credentialservice "media_agent/media_control/biz/service/credential_reference"
 	grantservice "media_agent/media_control/biz/service/environment_grant"
 	memoryservice "media_agent/media_control/biz/service/memory_store"
+	adminservice "media_agent/media_control/biz/service/platform_administration"
 	promptservice "media_agent/media_control/biz/service/prompt"
 	providerservice "media_agent/media_control/biz/service/provider"
 	exportservice "media_agent/media_control/biz/service/public_export"
@@ -107,6 +110,7 @@ func main() {
 	templatehandler.Configure(templateservice.New(templaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	skillhandler.Configure(skillservice.New(skillrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	providerhandler.Configure(providerservice.New(providerrepo.New(db), dal.NewTxRunner(db)))
+	adminhandler.Configure(adminservice.New(adminrepo.New(db), dal.NewTxRunner(db)))
 	credentialhandler.Configure(credentialservice.New(credentialrepo.New(db), dal.NewTxRunner(db), repo.New(db), providerrepo.New(db)))
 	memoryhandler.Configure(memoryservice.New(memoryrepo.New(db), dal.NewTxRunner(db), repo.New(db), credentialrepo.New(db)))
 	schedulehandler.Configure(scheduleservice.New(schedulerepo.New(db), dal.NewTxRunner(db), repo.New(db)))

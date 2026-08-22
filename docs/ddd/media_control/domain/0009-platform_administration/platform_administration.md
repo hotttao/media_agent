@@ -25,7 +25,7 @@ Platform Administration 持有平台级设置，并向管理员提供 Cluster、
 
 | 能力 | 说明 | 对外接口/函数 |
 |:---|:---|:---|
-| 管理平台设置 | 查询和更新平台级配置 | 待 IDL 定义 |
+| 管理平台设置 | 创建、查询和乐观锁更新平台级配置 | `PlatformAdministrationService.Create/List/Get/UpdatePlatformSetting` |
 | 查询集群 | 返回 Cluster 状态投影 | 待 IDL 定义 |
 | 查询平台统计 | 返回按周期聚合的统计投影 | 待 IDL 定义 |
 | 查询管理工作空间 | 按管理视角查询 Workspace | 待 IDL 定义 |
@@ -75,6 +75,8 @@ Cluster 和统计为可重建读模型，不作为命令侧聚合。
 ## 能力详细说明
 
 管理查询可组合 Workspace 与投影数据，但不得绕过各 Domain 的命令接口修改事实。
+
+Platform Setting 管理入口只接受 `admin/system` 角色；内部调用必须同时持有 Control Service Token、acting user 和受控 acting role。创建与更新在同一事务写入 `PlatformSettingChanged` Outbox，配置订阅方不得依赖同步回调。
 
 ## 关联关系
 
