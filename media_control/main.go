@@ -11,13 +11,16 @@ import (
 	"media_agent/media_control/biz/dal"
 	templaterepo "media_agent/media_control/biz/dal/repo/agent_template"
 	promptrepo "media_agent/media_control/biz/dal/repo/prompt"
+	skillrepo "media_agent/media_control/biz/dal/repo/skill"
 	repo "media_agent/media_control/biz/dal/repo/workspace"
 	templatehandler "media_agent/media_control/biz/handler/agent_template"
 	prompthandler "media_agent/media_control/biz/handler/prompt"
+	skillhandler "media_agent/media_control/biz/handler/skill"
 	workspacehandler "media_agent/media_control/biz/handler/workspace"
 	"media_agent/media_control/biz/middleware"
 	templateservice "media_agent/media_control/biz/service/agent_template"
 	promptservice "media_agent/media_control/biz/service/prompt"
+	skillservice "media_agent/media_control/biz/service/skill"
 	workspaceservice "media_agent/media_control/biz/service/workspace"
 	"media_agent/media_control/biz/shared/secret"
 )
@@ -68,6 +71,7 @@ func main() {
 	)
 	prompthandler.Configure(promptservice.New(promptrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	templatehandler.Configure(templateservice.New(templaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))
+	skillhandler.Configure(skillservice.New(skillrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 
 	h := suite.NewServer()
 	register(h)
