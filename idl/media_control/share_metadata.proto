@@ -1,0 +1,15 @@
+syntax = "proto3";
+package media_control.share_metadata;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_control/share_metadata";
+service ShareMetadataService {
+  rpc CreateShare(CreateShareRequest) returns (ShareResponse) { option (api.post) = "/api/v1/share-metadata"; option (google.api.http) = { post: "/api/v1/share-metadata" body: "*" }; }
+  rpc ListShares(ListSharesRequest) returns (ListSharesResponse) { option (api.get) = "/api/v1/share-metadata"; option (google.api.http) = { get: "/api/v1/share-metadata" }; }
+  rpc RevokeShare(RevokeShareRequest) returns (ShareResponse) { option (api.post) = "/api/v1/share-metadata/:share_id/revoke"; option (google.api.http) = { post: "/api/v1/share-metadata/{share_id}/revoke" body: "*" }; }
+}
+message CreateShareRequest { string workspace_id = 1 [(api.body) = "workspace_id"]; string resource_type = 2 [(api.body) = "resource_type"]; string resource_id = 3 [(api.body) = "resource_id"]; }
+message ListSharesRequest { string workspace_id = 1 [(api.query) = "workspace_id"]; string resource_type = 2 [(api.query) = "resource_type"]; string resource_id = 3 [(api.query) = "resource_id"]; }
+message RevokeShareRequest { string share_id = 1 [(api.path) = "share_id"]; }
+message ShareResponse { string id = 1; string workspace_id = 2; string resource_type = 3; string resource_id = 4; string owner_user_id = 5; string status = 6; int64 created_at = 7; int64 revoked_at = 8; }
+message ListSharesResponse { repeated ShareResponse shares = 1; }
