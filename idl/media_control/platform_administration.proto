@@ -44,6 +44,10 @@ service PlatformAdministrationService {
     option (api.get) = "/api/v1/admin/platform-statistics";
     option (google.api.http) = { get: "/api/v1/admin/platform-statistics" };
   }
+  rpc ListAdminWorkspaces(ListAdminWorkspacesRequest) returns (ListAdminWorkspacesResponse) {
+    option (api.get) = "/api/v1/admin/workspaces";
+    option (google.api.http) = { get: "/api/v1/admin/workspaces" };
+  }
 }
 
 message CreatePlatformSettingRequest { string key = 1 [(api.body) = "key"]; string value_json = 2 [(api.body) = "value_json"]; }
@@ -61,3 +65,6 @@ message ReportPlatformStatisticRequest { string metric_key = 1 [(api.body) = "me
 message ListPlatformStatisticsRequest { string metric_key = 1 [(api.query) = "metric_key"]; int64 period_start_from = 2 [(api.query) = "period_start_from"]; int64 period_start_to = 3 [(api.query) = "period_start_to"]; }
 message PlatformStatisticResponse { string metric_key = 1; int64 period_start = 2; string dimensions_json = 3; string value = 4; int64 refreshed_at = 5; }
 message ListPlatformStatisticsResponse { repeated PlatformStatisticResponse statistics = 1; }
+message ListAdminWorkspacesRequest { string owner_user_id = 1 [(api.query) = "owner_user_id"]; string desired_state = 2 [(api.query) = "desired_state"]; string agent_type = 3 [(api.query) = "agent_type"]; int32 page_size = 4 [(api.query) = "page_size"]; int32 page_offset = 5 [(api.query) = "page_offset"]; }
+message AdminWorkspaceResponse { string workspace_id = 1; string owner_user_id = 2; string name = 3; string desired_state = 4; int64 workspace_version = 5; string agent_id = 6; string agent_type = 7; int64 context_version = 8; string environment_id = 9; string placement_status = 10; int64 updated_at = 11; }
+message ListAdminWorkspacesResponse { repeated AdminWorkspaceResponse workspaces = 1; int64 total = 2; int32 page_size = 3; int32 page_offset = 4; }

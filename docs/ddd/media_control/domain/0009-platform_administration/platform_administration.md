@@ -28,7 +28,7 @@ Platform Administration 持有平台级设置，并向管理员提供 Cluster、
 | 管理平台设置 | 创建、查询和乐观锁更新平台级配置 | `PlatformAdministrationService.Create/List/Get/UpdatePlatformSetting` |
 | 查询集群 | internal-system 单调更新并向管理员返回 Cluster 状态投影 | `Report/List/GetClusterProjection` |
 | 查询平台统计 | internal-system 刷新并按指标/周期返回聚合投影 | `Report/ListPlatformStatistic` |
-| 查询管理工作空间 | 按管理视角查询 Workspace | 待 IDL 定义 |
+| 查询管理工作空间 | 按 owner/state/agent type 分页组合 Workspace、Agent Context 与 Placement 摘要 | `ListAdminWorkspaces` |
 
 ## 聚合与不变量
 
@@ -82,6 +82,8 @@ Platform Setting 管理入口只接受 `admin/system` 角色；内部调用必�
 Cluster Projection 上报只接受内部 `system` Principal；`observed_at` 必须单调递增，迟到或重复观察不得覆盖较新状态。管理员只能查询该读模型，不能通过普通管理请求上报基础设施事实。
 
 Platform Statistics 使用 `metric_key + period_start + dimensions_hash` 唯一定位投影。维度 JSON canonicalize 后计算 SHA-256，数值以十进制字符串进入 PostgreSQL `numeric`；只有更大的 `refreshed_at` 可以覆盖当前值。
+
+Admin Workspace Query 只组合 Workspace、Agent Configuration 和 Placement 的管理摘要，不选择或返回 `encrypted_api_key`、Provider API Key 或 Session 凭据；普通用户不能借此跨 owner 查询。
 
 ## 关联关系
 

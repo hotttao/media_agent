@@ -87,3 +87,8 @@ func _platform_statisticsMw() []app.HandlerFunc {
 func _reportplatformstatisticMw() []app.HandlerFunc {
 	return []app.HandlerFunc{middleware.RequireInternalSystem()}
 }
+
+func _listadminworkspacesMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
