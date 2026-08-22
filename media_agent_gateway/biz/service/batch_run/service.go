@@ -21,12 +21,13 @@ type CreateCommand struct {
 
 type Service struct {
 	repo     domain.Repository
+	outbox   domain.OutboxRepository
 	tx       dal.TxRunner
 	sessions sessiondomain.Repository
 }
 
-func New(repo domain.Repository, tx dal.TxRunner, sessions sessiondomain.Repository) *Service {
-	return &Service{repo: repo, tx: tx, sessions: sessions}
+func New(repo domain.Repository, outbox domain.OutboxRepository, tx dal.TxRunner, sessions sessiondomain.Repository) *Service {
+	return &Service{repo: repo, outbox: outbox, tx: tx, sessions: sessions}
 }
 
 func (s *Service) Create(ctx context.Context, command CreateCommand) (*domain.BatchRun, error) {
@@ -62,7 +63,15 @@ func (s *Service) Create(ctx context.Context, command CreateCommand) (*domain.Ba
 		items[i].Status, items[i].CreatedAt, items[i].UpdatedAt = domain.ItemPending, now, now
 	}
 	value := &domain.BatchRun{ID: uuid.NewString(), WorkspaceID: workspace, RequestedBy: command.Owner, IdempotencyKey: key, Status: domain.StatusCreating, ItemCount: int32(len(items)), Items: items, CreatedAt: now, UpdatedAt: now}
-	err = s.tx.RunInTx(ctx, func(tx context.Context) error { return s.repo.Create(tx, value) })
+	err = s.tx.RunInTx(ctx, func(tx context.Context) error {
+		if err := s.repo.Create(tx, value); err != nil {
+			return err
+		}
+		if s.outbox == nil {
+			return nil
+		}
+		return s.outbox.Enqueue(tx, &domain.OutboxEvent{BatchRunID: value.ID, Action: "batch_run.dispatch", PayloadJSON: fmt.Sprintf(`{"batch_run_id":%q}`, value.ID), AvailableAt: now, CreatedAt: now, UpdatedAt: now})
+	})
 	if errors.Is(err, domain.ErrConflict) {
 		return s.repo.FindByKey(ctx, command.Owner, workspace, key)
 	}
@@ -89,14 +98,22 @@ func (s *Service) Cancel(ctx context.Context, id, owner string) (*domain.BatchRu
 	if value.Status == domain.StatusCancelled {
 		return value, nil
 	}
-	if value.Status != domain.StatusCreating || value.NextCursor != 0 {
+	if value.Status != domain.StatusCreating && value.Status != domain.StatusRunning {
 		return nil, domain.ErrConflict
 	}
 	now := time.Now().UTC()
-	value.Status, value.CancelledCount, value.FinishedAt, value.UpdatedAt = domain.StatusCancelled, value.ItemCount, &now, now
-	for i := range value.Items {
-		value.Items[i].Status, value.Items[i].UpdatedAt = domain.ItemCancelled, now
+	value.Status, value.FinishedAt, value.UpdatedAt = domain.StatusCancelled, &now, now
+	err = s.tx.RunInTx(ctx, func(tx context.Context) error {
+		if err := s.repo.Cancel(tx, value); err != nil {
+			return err
+		}
+		if s.outbox == nil {
+			return nil
+		}
+		return s.outbox.Enqueue(tx, &domain.OutboxEvent{BatchRunID: value.ID, Action: "batch_run.cancel", PayloadJSON: fmt.Sprintf(`{"batch_run_id":%q}`, value.ID), AvailableAt: now, CreatedAt: now, UpdatedAt: now})
+	})
+	if err != nil {
+		return nil, err
 	}
-	err = s.tx.RunInTx(ctx, func(tx context.Context) error { return s.repo.CancelCreating(tx, value) })
-	return value, err
+	return s.repo.GetOwned(ctx, value.ID, owner)
 }

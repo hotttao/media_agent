@@ -58,7 +58,35 @@ type Repository interface {
 	FindByKey(context.Context, string, string, string) (*BatchRun, error)
 	ListOwned(context.Context, string, string, Status) ([]BatchRun, error)
 	GetOwned(context.Context, string, string) (*BatchRun, error)
-	CancelCreating(context.Context, *BatchRun) error
+	Cancel(context.Context, *BatchRun) error
+}
+
+type OutboxEvent struct {
+	ID, BatchRunID, Action, PayloadJSON string
+	Attempts                            int32
+	AvailableAt, CreatedAt, UpdatedAt   time.Time
+}
+
+type OutboxRepository interface {
+	Enqueue(context.Context, *OutboxEvent) error
+	ListPendingActions(context.Context, int) ([]OutboxEvent, error)
+	MarkDelivered(context.Context, string, time.Time) error
+	MarkDeliveryFailed(context.Context, string, string, time.Time) error
+}
+
+type DispatchRepository interface {
+	Get(context.Context, string) (*BatchRun, error)
+	AttachTask(context.Context, string, int32, string, string, time.Time) error
+	ApplyTaskTerminal(context.Context, TaskTerminal, time.Time) error
+}
+
+type TaskTerminal struct {
+	EventID, TaskID, Status, ErrorCode string
+}
+
+type TaskTerminalSource interface {
+	ListPendingBatchTerminal(context.Context, int) ([]TaskTerminal, error)
+	MarkDelivered(context.Context, string, time.Time) error
 }
 
 func Validate(workspaceID, key string, items []Item) (string, string, []Item, error) {

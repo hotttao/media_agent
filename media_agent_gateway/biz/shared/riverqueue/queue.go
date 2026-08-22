@@ -26,6 +26,27 @@ type AgentTaskWorker struct {
 	work func(context.Context, string, string) error
 }
 
+type BatchRunArgs struct {
+	Action     string `json:"action" river:"unique"`
+	BatchRunID string `json:"batch_run_id" river:"unique"`
+}
+
+func (BatchRunArgs) Kind() string { return "batch_run" }
+
+type BatchRunWorker struct {
+	river.WorkerDefaults[BatchRunArgs]
+	work func(context.Context, string, string) error
+}
+
+func (w *BatchRunWorker) Work(ctx context.Context, job *river.Job[BatchRunArgs]) error {
+	return w.work(ctx, job.Args.Action, job.Args.BatchRunID)
+}
+
+type Handlers struct {
+	AgentTask func(context.Context, string, string) error
+	BatchRun  func(context.Context, string, string) error
+}
+
 func (w *AgentTaskWorker) Work(ctx context.Context, job *river.Job[AgentTaskArgs]) error {
 	return w.work(ctx, job.Args.Action, job.Args.TaskID)
 }
@@ -35,9 +56,9 @@ type Queue struct {
 	client *river.Client[pgx.Tx]
 }
 
-func New(ctx context.Context, dsn string, migrate bool, work func(context.Context, string, string) error) (*Queue, error) {
-	if work == nil {
-		return nil, errors.New("riverqueue: worker is required")
+func New(ctx context.Context, dsn string, migrate bool, handlers Handlers) (*Queue, error) {
+	if handlers.AgentTask == nil || handlers.BatchRun == nil {
+		return nil, errors.New("riverqueue: Agent Task and Batch Run workers are required")
 	}
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
@@ -56,7 +77,8 @@ func New(ctx context.Context, dsn string, migrate bool, work func(context.Contex
 		}
 	}
 	workers := river.NewWorkers()
-	river.AddWorker(workers, &AgentTaskWorker{work: work})
+	river.AddWorker(workers, &AgentTaskWorker{work: handlers.AgentTask})
+	river.AddWorker(workers, &BatchRunWorker{work: handlers.BatchRun})
 	client, err := river.NewClient(driver, &river.Config{
 		Queues:  map[string]river.QueueConfig{queueName: {MaxWorkers: 8}},
 		Workers: workers,
@@ -77,6 +99,11 @@ func (q *Queue) Publish(ctx context.Context, action, taskID string) error {
 			ByArgs: true,
 		},
 	})
+	return err
+}
+
+func (q *Queue) PublishBatch(ctx context.Context, action, batchRunID string) error {
+	_, err := q.client.Insert(ctx, BatchRunArgs{Action: action, BatchRunID: batchRunID}, &river.InsertOpts{Queue: queueName, UniqueOpts: river.UniqueOpts{ByArgs: true}})
 	return err
 }
 

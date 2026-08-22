@@ -25,6 +25,7 @@ import (
 	"media_agent/media_agent_gateway/biz/shared/sessionevents"
 	"media_agent/media_agent_gateway/biz/workflow"
 	taskdispatch "media_agent/media_agent_gateway/biz/workflow/agent_task_dispatch"
+	batchdispatch "media_agent/media_agent_gateway/biz/workflow/batch_run_dispatch"
 )
 
 func main() {
@@ -76,11 +77,15 @@ func main() {
 	control := &sharedclient.Control{BaseURL: envOr("MEDIA_CONTROL_URL", "http://127.0.0.1:8007"), ServiceToken: envOr("CONTROL_INTERNAL_TOKEN", ""), Fallback: fallbackControl}
 	sessionService := service.New(store, control)
 	taskStore := taskrepo.New(db)
+	batchStore := batchrepo.New(db)
 	txRunner := dal.NewTxRunner(db)
 	runtimes := sharedclient.NewRuntimeRegistryFromEnvironment()
-	dispatcher := taskdispatch.NewDispatcher(taskStore, taskStore, txRunner, sessionService, runtimes)
+	taskApplication := taskservice.New(taskStore, taskStore, txRunner, store, control)
+	batchApplication := batchservice.New(batchStore, batchStore, txRunner, store)
+	taskDispatcher := taskdispatch.NewDispatcher(taskStore, taskStore, txRunner, sessionService, runtimes)
+	batchDispatcher := batchdispatch.NewDispatcher(batchStore, txRunner, taskApplication)
 	dispatchCtx, cancelDispatch := context.WithCancel(context.Background())
-	taskQueue, err := riverqueue.New(dispatchCtx, dbCfg.GetDsn(), dbCfg.GetMigrateOnStart(), dispatcher.Process)
+	taskQueue, err := riverqueue.New(dispatchCtx, dbCfg.GetDsn(), dbCfg.GetMigrateOnStart(), riverqueue.Handlers{AgentTask: taskDispatcher.Process, BatchRun: batchDispatcher.Process})
 	if err != nil {
 		log.Fatalf("init Agent Task River queue: %v", err)
 	}
@@ -93,9 +98,10 @@ func main() {
 			log.Printf("stop Agent Task River queue: %v", err)
 		}
 	}()
-	go taskdispatch.NewLoops(taskdispatch.NewRelay(taskStore, taskQueue), dispatcher, time.Second).Run(dispatchCtx)
-	taskhandler.Configure(taskservice.New(taskStore, taskStore, txRunner, store, control))
-	batchhandler.Configure(batchservice.New(batchrepo.New(db), txRunner, store))
+	go taskdispatch.NewLoops(taskdispatch.NewRelay(taskStore, taskQueue), taskDispatcher, time.Second).Run(dispatchCtx)
+	go batchdispatch.NewLoops(batchdispatch.NewRelay(batchStore, taskQueue), batchdispatch.NewProjector(taskStore, batchStore, txRunner), time.Second).Run(dispatchCtx)
+	taskhandler.Configure(taskApplication)
+	batchhandler.Configure(batchApplication)
 	var eventSource sessionevents.Source = sessionevents.New(256)
 	if redisURL := os.Getenv("MEDIA_AGENTS_REDIS_URL"); redisURL != "" {
 		redisSource, redisErr := sessionevents.NewRedisSource(

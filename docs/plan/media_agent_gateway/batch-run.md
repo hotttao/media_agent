@@ -13,9 +13,9 @@
 
 ## P2 · Task 拆分与投影
 
-- [ ] Batch Outbox/River Job 与稳定 next_cursor。
-- [ ] 每个 Item 幂等创建 Agent Task 并保存 task_id。
-- [ ] Task terminal Inbox 去重、Item/计数投影与 Batch 终态。
-- [ ] running Batch 取消与未终态 Task 传播。
-- [ ] 故障/重复事件单测与 media-cli E2E。
-- [ ] 更新能力矩阵为无 missing，并独立提交。
+- [x] Batch Outbox/River Job 与稳定 next_cursor。
+- [x] 每个 Item 幂等创建 Agent Task 并保存 task_id。
+- [x] Task terminal Inbox 去重、Item/计数投影与 Batch 终态。
+- [x] running Batch 取消与未终态 Task 传播。
+- [x] 故障/重复事件单测与 media-cli E2E。
+- [x] 更新能力矩阵为无 missing，并独立提交。

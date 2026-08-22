@@ -45,9 +45,15 @@ func TestMediaAgentGatewayBatchRunE2E(t *testing.T) {
 		t.Fatalf("create Batch Run: %d %s", status, body)
 	}
 	var batch struct {
-		ID, Status string
-		ItemCount  int32 `json:"item_count"`
-		Items      []struct{ ItemKey, Status string }
+		ID, Status     string
+		ItemCount      int32 `json:"item_count"`
+		NextCursor     int32 `json:"next_cursor"`
+		CompletedCount int32 `json:"completed_count"`
+		CancelledCount int32 `json:"cancelled_count"`
+		Items          []struct {
+			ItemKey, Status string
+			AgentTaskID     string `json:"agent_task_id"`
+		} `json:"items"`
 	}
 	if err := json.Unmarshal(body, &batch); err != nil {
 		t.Fatal(err)
@@ -72,8 +78,51 @@ func TestMediaAgentGatewayBatchRunE2E(t *testing.T) {
 	if status != http.StatusForbidden {
 		t.Fatalf("cross-user get: %d %s", status, body)
 	}
-	status, body = doJSON(t, owner, http.MethodPost, gatewayAddr+"/api/v1/batch-runs/"+batch.ID+"/cancel", map[string]any{})
-	if status != http.StatusOK || !jsonContains(body, `"status":"cancelled"`) || !jsonContains(body, `"cancelled_count":2`) {
+	deadline := time.Now().Add(30 * time.Second)
+	for batch.Status != "completed" && time.Now().Before(deadline) {
+		time.Sleep(250 * time.Millisecond)
+		status, body = doJSON(t, owner, http.MethodGet, gatewayAddr+"/api/v1/batch-runs/"+batch.ID, nil)
+		if status != http.StatusOK {
+			t.Fatalf("get dispatched Batch Run: %d %s", status, body)
+		}
+		if err := json.Unmarshal(body, &batch); err != nil {
+			t.Fatal(err)
+		}
+		if batch.Status == "failed" || batch.Status == "partial_failed" || batch.Status == "cancelled" {
+			t.Fatalf("Batch Run ended as %s: %s", batch.Status, body)
+		}
+	}
+	if batch.Status != "completed" || batch.CompletedCount != 2 || batch.NextCursor != 2 || batch.Items[0].AgentTaskID == "" || batch.Items[1].AgentTaskID == "" {
+		t.Fatalf("Batch Run did not converge: %+v", batch)
+	}
+
+	cancelRequest := map[string]any{"workspace_id": workspace.ID, "idempotency_key": "batch-cancel-key", "items": []map[string]string{
+		{"item_key": "cancel-one", "session_id": session.ID, "input_json": `{"message":"cancel one"}`},
+		{"item_key": "cancel-two", "session_id": session.ID, "input_json": `{"message":"cancel two"}`},
+	}}
+	status, body = doJSON(t, owner, http.MethodPost, gatewayAddr+"/api/v1/batch-runs", cancelRequest)
+	if status != http.StatusCreated {
+		t.Fatalf("create cancellable Batch Run: %d %s", status, body)
+	}
+	var cancellable struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &cancellable); err != nil {
+		t.Fatal(err)
+	}
+	status, body = doJSON(t, owner, http.MethodPost, gatewayAddr+"/api/v1/batch-runs/"+cancellable.ID+"/cancel", map[string]any{})
+	if status != http.StatusOK || !jsonContains(body, `"status":"cancelled"`) {
 		t.Fatalf("cancel: %d %s", status, body)
+	}
+	deadline = time.Now().Add(15 * time.Second)
+	for !jsonContains(body, `"cancelled_count":2`) && time.Now().Before(deadline) {
+		time.Sleep(250 * time.Millisecond)
+		status, body = doJSON(t, owner, http.MethodGet, gatewayAddr+"/api/v1/batch-runs/"+cancellable.ID, nil)
+		if status != http.StatusOK {
+			t.Fatalf("get cancelled Batch Run: %d %s", status, body)
+		}
+	}
+	if !jsonContains(body, `"cancelled_count":2`) {
+		t.Fatalf("cancel did not converge: %s", body)
 	}
 }

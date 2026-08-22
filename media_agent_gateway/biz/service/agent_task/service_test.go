@@ -129,7 +129,7 @@ func TestCreateAndRunningCancelWriteOutboxActions(t *testing.T) {
 	if _, err := svc.Cancel(context.Background(), created.ID, "user-1"); err != nil {
 		t.Fatal(err)
 	}
-	if len(outbox.events) != 2 || outbox.events[1].EventType != "agent_task.cancel" {
+	if len(outbox.events) != 3 || outbox.events[1].EventType != "agent_task.cancel" || outbox.events[2].EventType != "agent_task.cancelled" {
 		t.Fatalf("events=%+v", outbox.events)
 	}
 }

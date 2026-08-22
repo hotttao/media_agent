@@ -105,7 +105,10 @@ func (s *Service) Cancel(ctx context.Context, id, owner string) (*domain.Task, e
 		if s.outbox == nil {
 			return nil
 		}
-		return s.outbox.Enqueue(tx, &domain.OutboxEvent{AggregateID: v.ID, EventType: "agent_task.cancel", PayloadJSON: fmt.Sprintf(`{"task_id":%q}`, v.ID), AvailableAt: now, CreatedAt: now, UpdatedAt: now})
+		if err := s.outbox.Enqueue(tx, &domain.OutboxEvent{AggregateID: v.ID, EventType: "agent_task.cancel", PayloadJSON: fmt.Sprintf(`{"task_id":%q}`, v.ID), AvailableAt: now, CreatedAt: now, UpdatedAt: now}); err != nil {
+			return err
+		}
+		return s.outbox.Enqueue(tx, &domain.OutboxEvent{AggregateID: v.ID, EventType: "agent_task.cancelled", PayloadJSON: fmt.Sprintf(`{"task_id":%q,"status":"cancelled"}`, v.ID), AvailableAt: now, CreatedAt: now, UpdatedAt: now})
 	})
 	return v, err
 }

@@ -12,6 +12,7 @@ import (
 	"media_agent/media_agent_gateway/biz/dal"
 	"media_agent/media_agent_gateway/biz/dal/model"
 	domain "media_agent/media_agent_gateway/biz/domain/agent_task"
+	batchdomain "media_agent/media_agent_gateway/biz/domain/batch_run"
 )
 
 type Repository struct{ db *gorm.DB }
@@ -224,6 +225,29 @@ func (r *Repository) MarkDelivered(ctx context.Context, id string, now time.Time
 
 func (r *Repository) MarkDeliveryFailed(ctx context.Context, id, message string, now time.Time) error {
 	return dal.FromContext(ctx, r.db).Model(&model.AgentTaskOutbox{}).Where("id = ? AND delivered_at IS NULL", id).Updates(map[string]any{"attempts": gorm.Expr("attempts + 1"), "last_error": message, "available_at": now.Add(time.Second), "updated_at": now}).Error
+}
+
+func (r *Repository) ListPendingBatchTerminal(ctx context.Context, limit int) ([]batchdomain.TaskTerminal, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
+	var rows []struct {
+		EventID, TaskID, Status string
+		ErrorCode               *string
+	}
+	err := dal.FromContext(ctx, r.db).Table("media_agent_gateway.agent_task_outbox AS o").
+		Select("o.id AS event_id, t.id AS task_id, t.status, t.error_code").
+		Joins("JOIN media_agent_gateway.agent_tasks AS t ON t.id = o.aggregate_id").
+		Where("o.delivered_at IS NULL AND o.event_type IN ? AND t.source = ?", []string{"agent_task.completed", "agent_task.failed", "agent_task.cancelled"}, "batch_run").
+		Order("o.created_at ASC").Limit(limit).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make([]batchdomain.TaskTerminal, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, batchdomain.TaskTerminal{EventID: row.EventID, TaskID: row.TaskID, Status: row.Status, ErrorCode: value(row.ErrorCode)})
+	}
+	return result, nil
 }
 func toRow(v *domain.Task) *model.AgentTask {
 	return &model.AgentTask{ID: v.ID, WorkspaceID: v.WorkspaceID, RequestedBy: v.RequestedBy, SessionID: nullable(v.SessionID), Source: v.Source, SourceResourceID: v.SourceResourceID, IdempotencyKey: v.IdempotencyKey, Input: v.InputJSON, Status: string(v.Status), Attempt: v.Attempt, TurnID: nullable(v.TurnID), ResultRef: nullable(v.ResultRefJSON), ErrorCode: nullable(v.ErrorCode), ErrorMessage: nullable(v.ErrorMessage), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, StartedAt: v.StartedAt, FinishedAt: v.FinishedAt}
