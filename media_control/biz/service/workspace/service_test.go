@@ -50,7 +50,7 @@ func TestUpdateKeepsSecretWhenAPIKeyIsBlank(t *testing.T) {
 	if value.Name != "After" {
 		t.Fatalf("name = %q", value.Name)
 	}
-	if value.AgentConfiguration.Version != 2 {
+	if value.AgentConfiguration.Version != 1 {
 		t.Fatalf("configuration version = %d", value.AgentConfiguration.Version)
 	}
 	plain, err := cipher.Decrypt(value.EncryptedAPIKey)
@@ -59,5 +59,54 @@ func TestUpdateKeepsSecretWhenAPIKeyIsBlank(t *testing.T) {
 	}
 	if plain != "existing-secret" {
 		t.Fatalf("secret changed to %q", plain)
+	}
+}
+
+func TestCreateAcceptsClaudeCodeAndEncryptsAPIKey(t *testing.T) {
+	cipher := secret.New("test-key")
+	service := New(&fakeRepository{}, directTx{}, cipher)
+
+	value, err := service.Create(context.Background(), CreateCommand{
+		OwnerUserID: "owner-1", Name: "Claude", AgentType: "CLAUDE-CODE", APIKey: "sk-ant-test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.AgentType != "claude-code" || value.AgentID != "claude-code" {
+		t.Fatalf("unexpected Agent Configuration: %+v", value.AgentConfiguration)
+	}
+	plain, err := cipher.Decrypt(value.EncryptedAPIKey)
+	if err != nil || plain != "sk-ant-test" {
+		t.Fatalf("stored API Key = %q, err=%v", plain, err)
+	}
+}
+
+func TestUpdateOnlyAdvancesConfigurationVersionWhenConfigurationChanges(t *testing.T) {
+	cipher := secret.New("test-key")
+	encrypted, err := cipher.Encrypt("same-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	repo := &fakeRepository{value: domain.ConfiguredWorkspace{
+		Workspace:          domain.Workspace{ID: "workspace-1", OwnerUserID: "owner-1", Name: "Before", Version: 1, CreatedAt: now, UpdatedAt: now},
+		AgentConfiguration: domain.AgentConfiguration{ID: "config-1", WorkspaceID: "workspace-1", AgentID: "codex", AgentType: "codex", EncryptedAPIKey: encrypted, Version: 4, CreatedAt: now, UpdatedAt: now},
+	}}
+	service := New(repo, directTx{}, cipher)
+
+	unchanged, err := service.Update(context.Background(), UpdateCommand{WorkspaceID: "workspace-1", OwnerUserID: "owner-1", Name: "Renamed", AgentType: "codex", APIKey: "same-secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.AgentConfiguration.Version != 4 || unchanged.Workspace.Version != 2 {
+		t.Fatalf("unexpected versions after name-only update: workspace=%d config=%d", unchanged.Workspace.Version, unchanged.AgentConfiguration.Version)
+	}
+
+	changed, err := service.Update(context.Background(), UpdateCommand{WorkspaceID: "workspace-1", OwnerUserID: "owner-1", Name: "Renamed", AgentType: "claude-code"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed.AgentConfiguration.Version != 5 || changed.AgentType != "claude-code" {
+		t.Fatalf("unexpected changed configuration: %+v", changed.AgentConfiguration)
 	}
 }

@@ -38,11 +38,12 @@ from adapter.schemas.acp.response import (
     ReloadConfigResponse,
     ResetWorkspaceResponse,
 )
+from claude_code.agent import ClaudeCodeAgent
 
 logger = logging.getLogger(__name__)
 
 
-def build_claude_code_router() -> APIRouter:
+def build_claude_code_router(agent: ClaudeCodeAgent) -> APIRouter:
     """工厂：构造 claude_code 专用路由。不依赖 adapter.SessionManager。"""
     router = APIRouter()
 
@@ -70,27 +71,17 @@ def build_claude_code_router() -> APIRouter:
 
     @router.post("/chat")
     async def chat(body: ChatRequest, request: Request) -> StreamingResponse:
-        """对标 agents/claude-code/src/agent.ts chat()：spawn `claude` 子进程流式输出。
-
-        简化版：直接 SSE echo 一个 session.started + session.ended。完整实现调
-        ClaudeCodeAgent.chat() 跟 `claude` CLI 交互。
-        """
+        """Spawn Claude Code and translate its stream-json output to Universal Events."""
         if not body.message:
             raise HTTPException(status_code=400, detail="Message is required")
 
         async def event_stream() -> Any:
-            yield (
-                "event: message\ndata: "
-                + json.dumps({"type": "session.started", "session_id": body.session_id or "draft"})
-                + "\n\n"
-            )
-            # TODO: 调 ClaudeCodeAgent.chat(body) 跟 claude CLI 子进程交互
-            await asyncio.sleep(0)
-            yield (
-                "event: message\ndata: "
-                + json.dumps({"type": "session.ended", "reason": "completed"})
-                + "\n\n"
-            )
+            async for event in agent.stream(
+                message=body.message,
+                session_id=body.session_id,
+                api_key=body.api_key,
+            ):
+                yield "event: message\ndata: " + json.dumps(event, separators=(",", ":")) + "\n\n"
 
         return StreamingResponse(
             event_stream(),
@@ -100,9 +91,8 @@ def build_claude_code_router() -> APIRouter:
 
     @router.post("/sessions/{session_id}/interrupt", response_model=InterruptResponse)
     async def interrupt_session(session_id: str) -> InterruptResponse:
-        # TODO: 调 ClaudeCodeAgent.interrupt(session_id)
-        logger.info("Interrupt request session=%s", session_id)
-        return InterruptResponse(success=True, interrupted=True)
+        interrupted = await agent.interrupt(session_id)
+        return InterruptResponse(success=True, interrupted=interrupted)
 
     @router.post("/sessions/{session_id}/reconnect")
     async def reconnect(session_id: str, request: Request) -> StreamingResponse:

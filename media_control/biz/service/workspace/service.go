@@ -28,12 +28,12 @@ func New(repo domain.Repository, tx dal.TxRunner, cipher *secret.Cipher) *Servic
 
 func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.ConfiguredWorkspace, error) {
 	cmd.Name = strings.TrimSpace(cmd.Name)
-	cmd.AgentType = strings.ToLower(strings.TrimSpace(cmd.AgentType))
 	if cmd.OwnerUserID == "" || cmd.Name == "" {
 		return nil, fmt.Errorf("owner and name are required")
 	}
-	if cmd.AgentType != "codex" {
-		return nil, fmt.Errorf("unsupported agent type %q", cmd.AgentType)
+	agentType, err := domain.ParseAgentType(cmd.AgentType)
+	if err != nil {
+		return nil, err
 	}
 	encrypted, err := s.cipher.Encrypt(strings.TrimSpace(cmd.APIKey))
 	if err != nil {
@@ -42,7 +42,7 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Config
 	now := time.Now().UTC()
 	workspaceID := uuid.NewString()
 	w := &domain.Workspace{ID: workspaceID, OwnerUserID: cmd.OwnerUserID, Name: cmd.Name, DesiredState: "running", Version: 1, CreatedAt: now, UpdatedAt: now}
-	a := &domain.AgentConfiguration{ID: uuid.NewString(), WorkspaceID: workspaceID, AgentID: cmd.AgentType, AgentType: cmd.AgentType, EncryptedAPIKey: encrypted, Version: 1, CreatedAt: now, UpdatedAt: now}
+	a := &domain.AgentConfiguration{ID: uuid.NewString(), WorkspaceID: workspaceID, AgentID: string(agentType), AgentType: string(agentType), EncryptedAPIKey: encrypted, Version: 1, CreatedAt: now, UpdatedAt: now}
 	if err := s.tx.RunInTx(ctx, func(txCtx context.Context) error { return s.repo.Create(txCtx, w, a) }); err != nil {
 		return nil, err
 	}
@@ -57,33 +57,46 @@ func (s *Service) Get(ctx context.Context, id, owner string) (*domain.Configured
 }
 func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.ConfiguredWorkspace, error) {
 	cmd.Name = strings.TrimSpace(cmd.Name)
-	cmd.AgentType = strings.ToLower(strings.TrimSpace(cmd.AgentType))
 	if cmd.WorkspaceID == "" || cmd.OwnerUserID == "" || cmd.Name == "" {
 		return nil, fmt.Errorf("workspace, owner and name are required")
 	}
-	if cmd.AgentType != "codex" {
-		return nil, fmt.Errorf("unsupported agent type %q", cmd.AgentType)
+	agentType, err := domain.ParseAgentType(cmd.AgentType)
+	if err != nil {
+		return nil, err
 	}
 	value, err := s.repo.GetOwned(ctx, cmd.WorkspaceID, cmd.OwnerUserID)
 	if err != nil {
 		return nil, err
 	}
 	secretValue := value.EncryptedAPIKey
-	if strings.TrimSpace(cmd.APIKey) != "" {
-		secretValue, err = s.cipher.Encrypt(strings.TrimSpace(cmd.APIKey))
-		if err != nil {
-			return nil, err
+	configurationChanged := value.AgentType != string(agentType)
+	newAPIKey := strings.TrimSpace(cmd.APIKey)
+	if newAPIKey != "" {
+		oldAPIKey, decryptErr := s.cipher.Decrypt(value.EncryptedAPIKey)
+		if decryptErr != nil {
+			return nil, decryptErr
+		}
+		if oldAPIKey != newAPIKey {
+			configurationChanged = true
+			secretValue, err = s.cipher.Encrypt(newAPIKey)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	now := time.Now().UTC()
+	if value.Name != cmd.Name {
+		value.Workspace.Version++
+	}
 	value.Name = cmd.Name
-	value.Workspace.Version++
 	value.Workspace.UpdatedAt = now
-	value.AgentID = cmd.AgentType
-	value.AgentType = cmd.AgentType
+	value.AgentID = string(agentType)
+	value.AgentType = string(agentType)
 	value.EncryptedAPIKey = secretValue
-	value.AgentConfiguration.Version++
-	value.AgentConfiguration.UpdatedAt = now
+	if configurationChanged {
+		value.AgentConfiguration.Version++
+		value.AgentConfiguration.UpdatedAt = now
+	}
 	if err := s.tx.RunInTx(ctx, func(txCtx context.Context) error {
 		return s.repo.Update(txCtx, &value.Workspace, &value.AgentConfiguration)
 	}); err != nil {

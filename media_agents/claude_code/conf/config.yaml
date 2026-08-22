@@ -3,17 +3,17 @@ agent:
   port: ${oc.env:PORT,3003}
 
 capabilities:
-  system_prompt: true
-  mcp: true
-  skills: true
-  questions: true
-  reconnect: true
+  system_prompt: false
+  mcp: false
+  skills: false
+  questions: false
+  reconnect: false
   permissions: false
   streaming_deltas: true
 
 skills:
-  enabled: true
+  enabled: false
 
 claude_code:
   bin: ${oc.env:CLAUDE_CODE_BIN,claude}
-  session_store_dir: ${oc.env:SESSION_STORE_DIR,/tmp/claude-sessions}
+  session_store_dir: ${oc.env:SESSION_STORE_DIR,/workspace/.home/.claude/projects}

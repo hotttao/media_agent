@@ -99,9 +99,7 @@ async def test_codex_hook_writes_shared_workspace_files_and_mcp(tmp_path: Path) 
     assert json.loads((codex_dir / "mcp.json").read_text(encoding="utf-8"))["mcpServers"][
         "remote"
     ] == {"url": "http://remote", "headers": {"A": "B"}}
-    assert json.loads((codex_dir / "auth.json").read_text(encoding="utf-8")) == {
-        "OPENAI_API_KEY": "sk-test"
-    }
+    assert not (codex_dir / "auth.json").exists()
 
     servers = hooks.load_mcp_servers("token")
     assert servers[0]["headers"] == {

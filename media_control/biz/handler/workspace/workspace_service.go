@@ -11,12 +11,17 @@ import (
 	workspace "media_agent/hertz_gen/model/media_control/workspace"
 	domain "media_agent/media_control/biz/domain/workspace"
 	"media_agent/media_control/biz/middleware"
+	"media_agent/media_control/biz/policy"
 	service "media_agent/media_control/biz/service/workspace"
 )
 
 var workspaceService *service.Service
+var runtimeContextToken string
 
-func Configure(value *service.Service) { workspaceService = value }
+func Configure(value *service.Service, serviceToken string) {
+	workspaceService = value
+	runtimeContextToken = serviceToken
+}
 
 // CreateWorkspace .
 // @router /api/v1/workspaces [POST]
@@ -82,6 +87,10 @@ func GetWorkspace(ctx context.Context, c *app.RequestContext) {
 // GetRuntimeContext .
 // @router /api/v1/workspaces/:workspace_id/runtime-context [GET]
 func GetRuntimeContext(ctx context.Context, c *app.RequestContext) {
+	if !policy.AllowsRuntimeContext(string(c.GetHeader("X-Control-Service-Token")), runtimeContextToken) {
+		c.JSON(consts.StatusForbidden, map[string]string{"error": "runtime context is internal"})
+		return
+	}
 	var err error
 	var req workspace.GetRuntimeContextRequest
 	err = c.BindAndValidate(&req)

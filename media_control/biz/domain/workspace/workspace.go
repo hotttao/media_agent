@@ -3,10 +3,29 @@ package workspace
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
 
 var ErrNotFound = errors.New("workspace not found")
+
+type AgentType string
+
+const (
+	AgentTypeCodex      AgentType = "codex"
+	AgentTypeClaudeCode AgentType = "claude-code"
+)
+
+func ParseAgentType(value string) (AgentType, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch AgentType(value) {
+	case AgentTypeCodex, AgentTypeClaudeCode:
+		return AgentType(value), nil
+	default:
+		return "", fmt.Errorf("unsupported agent type %q", value)
+	}
+}
 
 type Workspace struct {
 	ID, OwnerUserID, Name, DesiredState string

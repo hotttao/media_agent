@@ -64,7 +64,7 @@ func main() {
 		WorkspaceID: envOr("DEFAULT_WORKSPACE_ID", "default"),
 		AgentID:     envOr("DEFAULT_AGENT_ID", "codex"),
 	}
-	control := &sharedclient.Control{BaseURL: envOr("MEDIA_CONTROL_URL", "http://127.0.0.1:8007"), Fallback: fallbackControl}
+	control := &sharedclient.Control{BaseURL: envOr("MEDIA_CONTROL_URL", "http://127.0.0.1:8007"), ServiceToken: envOr("CONTROL_INTERNAL_TOKEN", ""), Fallback: fallbackControl}
 	sessionService := service.New(store, dal.NewTxRunner(db), control)
 	eventHub := sessionevents.New(256)
 	turnWorkflow := workflow.NewRunTurn(sessionService, sharedclient.NewRuntimeRegistryFromEnvironment(), eventHub)

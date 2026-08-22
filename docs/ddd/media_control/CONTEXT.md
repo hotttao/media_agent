@@ -24,6 +24,14 @@ _禁用替代词_：Deployment、Assignment
 Workspace 期望的 Agent 模型、工具、Prompt、Skill、Memory 和运行参数集合。
 _禁用替代词_：Runtime State、Session Config
 
+**Agent Type（Agent 类型）**:
+决定 Workspace 使用哪一种 Agent Runtime 实现的受控枚举；当前支持 Codex 与 Claude Code。
+_禁用替代词_：Model、Provider、Agent ID
+
+**Provider API Key（Provider API 密钥）**:
+Workspace 为当前 Agent Configuration 提交、由控制面加密托管并仅在运行调用链中解密传递的模型服务秘密。
+_禁用替代词_：Platform Token、Credential Reference、Session Token
+
 **Agent Catalog Item（Agent 目录项）**:
 可被 Agent Configuration 引用的 Prompt、Agent Template、Skill、Provider、Credential Reference 或 Memory Store 定义。
 _禁用替代词_：Plugin、MCP Definition

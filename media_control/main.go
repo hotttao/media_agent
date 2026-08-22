@@ -56,7 +56,10 @@ func main() {
 		log.Fatal("database must be enabled")
 	}
 	middleware.Configure(cfg.GetAuth().GetJwtSecret())
-	workspacehandler.Configure(workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret()))))
+	workspacehandler.Configure(
+		workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret()))),
+		envOr("CONTROL_INTERNAL_TOKEN", ""),
+	)
 
 	h := suite.NewServer()
 	register(h)
