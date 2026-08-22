@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package media_control.workspace_metadata;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/workspace_metadata";
+
+service WorkspaceMetadataService {
+  rpc CreateTag(CreateTagRequest) returns (TagResponse) { option (api.post) = "/api/v1/workspace-tags"; option (google.api.http) = { post: "/api/v1/workspace-tags" body: "*" }; }
+  rpc ListTags(ListTagsRequest) returns (ListTagsResponse) { option (api.get) = "/api/v1/workspace-tags"; option (google.api.http) = { get: "/api/v1/workspace-tags" }; }
+  rpc UpdateTag(UpdateTagRequest) returns (TagResponse) { option (api.put) = "/api/v1/workspace-tags/:tag_id"; option (google.api.http) = { put: "/api/v1/workspace-tags/{tag_id}" body: "*" }; }
+  rpc DeleteTag(DeleteTagRequest) returns (TagResponse) { option (api.post) = "/api/v1/workspace-tags/:tag_id/delete"; option (google.api.http) = { post: "/api/v1/workspace-tags/{tag_id}/delete" body: "*" }; }
+  rpc AttachTag(AttachTagRequest) returns (ResourceTagResponse) { option (api.post) = "/api/v1/workspace-tags/:tag_id/attach"; option (google.api.http) = { post: "/api/v1/workspace-tags/{tag_id}/attach" body: "*" }; }
+  rpc DetachTag(DetachTagRequest) returns (ResourceTagResponse) { option (api.post) = "/api/v1/workspace-tags/:tag_id/detach"; option (google.api.http) = { post: "/api/v1/workspace-tags/{tag_id}/detach" body: "*" }; }
+  rpc ListResourceTags(ListResourceTagsRequest) returns (ListResourceTagsResponse) { option (api.get) = "/api/v1/workspace-resources/:resource_type/:resource_id/tags"; option (google.api.http) = { get: "/api/v1/workspace-resources/{resource_type}/{resource_id}/tags" }; }
+}
+
+message CreateTagRequest { string workspace_id = 1 [(api.body) = "workspace_id"]; string name = 2 [(api.body) = "name"]; string color = 3 [(api.body) = "color"]; }
+message ListTagsRequest { string workspace_id = 1 [(api.query) = "workspace_id"]; }
+message UpdateTagRequest { string tag_id = 1 [(api.path) = "tag_id"]; string name = 2 [(api.body) = "name"]; string color = 3 [(api.body) = "color"]; int64 expected_version = 4 [(api.body) = "expected_version"]; }
+message DeleteTagRequest { string tag_id = 1 [(api.path) = "tag_id"]; int64 expected_version = 2 [(api.body) = "expected_version"]; }
+message AttachTagRequest { string tag_id = 1 [(api.path) = "tag_id"]; string workspace_id = 2 [(api.body) = "workspace_id"]; string resource_type = 3 [(api.body) = "resource_type"]; string resource_id = 4 [(api.body) = "resource_id"]; }
+message DetachTagRequest { string tag_id = 1 [(api.path) = "tag_id"]; string workspace_id = 2 [(api.body) = "workspace_id"]; string resource_type = 3 [(api.body) = "resource_type"]; string resource_id = 4 [(api.body) = "resource_id"]; }
+message ListResourceTagsRequest { string workspace_id = 1 [(api.query) = "workspace_id"]; string resource_type = 2 [(api.path) = "resource_type"]; string resource_id = 3 [(api.path) = "resource_id"]; }
+message TagResponse { string id = 1; string workspace_id = 2; string name = 3; string color = 4; int64 version = 5; int64 created_at = 6; int64 updated_at = 7; }
+message ListTagsResponse { repeated TagResponse tags = 1; }
+message ResourceTagResponse { string tag_id = 1; string workspace_id = 2; string resource_type = 3; string resource_id = 4; int64 created_at = 5; }
+message ListResourceTagsResponse { repeated TagResponse tags = 1; }
