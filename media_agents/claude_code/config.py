@@ -13,7 +13,7 @@ class ClaudeCodeSectionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     bin: str = "claude"
-    session_store_dir: str = "/tmp/claude-sessions"
+    session_store_dir: str = "/workspace/.home/.claude/projects"
 
     @field_validator("bin", "session_store_dir")
     @classmethod

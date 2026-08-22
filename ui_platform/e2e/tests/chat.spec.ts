@@ -114,12 +114,19 @@ test.describe("workspace platform", () => {
   }, async ({ page }) => {
     await page.route("**/api/v1/workspaces", async (route) => {
       if (route.request().method() === "POST") {
+        expect(route.request().postDataJSON()).toEqual({
+          name: "Creator workspace",
+          agent_type: "claude-code",
+          api_key: "test-key",
+        });
         await route.fulfill({
           status: 201,
           json: {
             ...workspace,
             id: "workspace-new",
             name: "Creator workspace",
+            agent_id: "claude-code",
+            agent_type: "claude-code",
           },
         });
       } else await route.fulfill({ json: { workspaces: [] } });
@@ -132,6 +139,7 @@ test.describe("workspace platform", () => {
 
     await page.getByRole("button", { name: "New workspace" }).click();
     await page.getByLabel("Workspace name").fill("Creator workspace");
+    await page.getByLabel("Agent").selectOption("claude-code");
     await page.getByLabel("API key").fill("test-key");
     await page.getByRole("button", { name: "Create workspace" }).click();
 

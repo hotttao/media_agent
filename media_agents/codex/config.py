@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from pathlib import Path
@@ -135,7 +134,6 @@ class CodexHooks:
         write_runtime_config(self._workspace_dir, config)
         write_mcp_json(self._codex_config_dir, self._user_mcp)
         _write_codex_toml(dict(config), self._user_mcp, self._codex_config_dir)
-        _write_codex_auth(self._api_key, self._codex_config_dir)
         logger.info(
             "Config written: model=%s provider=%s prompt=%dchars",
             config.get("model"),
@@ -217,10 +215,3 @@ def _write_codex_toml(
 
 def _toml_has_key(agent_settings: str, key: str) -> bool:
     return any(line.strip().startswith(f"{key} =") for line in agent_settings.splitlines())
-
-
-def _write_codex_auth(api_key: str, codex_dir: Path) -> None:
-    if not api_key:
-        return
-    codex_dir.mkdir(parents=True, exist_ok=True)
-    (codex_dir / "auth.json").write_text(json.dumps({"OPENAI_API_KEY": api_key}), encoding="utf-8")

@@ -26,6 +26,30 @@ services:
       retries: 20
     restart: unless-stopped
 
+  claude_code_agent:
+    build:
+      context: ../media_agents
+      dockerfile: claude_code/Dockerfile
+    image: media-agent-claude-code:local
+    environment:
+      PORT: "${CLAUDE_CODE_AGENT_PORT:-3003}"
+      HOME: /workspace/.home
+      RUNTIME_WORKSPACE_ID: ${RUNTIME_WORKSPACE_ID:-local}
+      WORKSPACE_DIR: /workspace
+      SESSION_STORE_DIR: /workspace/.home/.claude/projects
+      CLAUDE_CODE_BIN: ${CLAUDE_CODE_BIN:-claude}
+      MEDIA_AGENTS_DB_URL: postgresql+asyncpg://media_auth:media_auth@127.0.0.1:5432/media_auth
+      ALL_PROXY: ${CLAUDE_CODE_DOCKER_PROXY:-socks5://127.0.0.1:7891}
+    volumes:
+      - ${WORKSPACE_ROOT:-/workspace}/${RUNTIME_WORKSPACE_ID:-local}:/workspace
+    network_mode: host
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ['PORT'] + '/health', timeout=2)\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   media_agent_gateway:
     build:
       context: ..
@@ -40,7 +64,9 @@ services:
       CONSUL_KV_ENABLED: "false"
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-agent-gateway?sslmode=disable
       CODEX_RUNTIME_URL: http://host.docker.internal:3001
+      CLAUDE_CODE_RUNTIME_URL: http://host.docker.internal:3003
       MEDIA_CONTROL_URL: http://host.docker.internal:8007
+      CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
       LOG_DIR: /media_logs/media-agent-gateway
     volumes:
       - ../media_logs/media-agent-gateway:/media_logs/media-agent-gateway
@@ -48,5 +74,7 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       codex_agent:
+        condition: service_healthy
+      claude_code_agent:
         condition: service_healthy
     restart: unless-stopped

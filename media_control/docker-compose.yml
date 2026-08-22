@@ -12,6 +12,7 @@ services:
       CONSUL_ENABLED: "false"
       CONSUL_KV_ENABLED: "false"
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-control?sslmode=disable
+      CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
       LOG_DIR: /media_logs/media-control
     volumes:
       - ../media_logs/media-control:/media_logs/media-control

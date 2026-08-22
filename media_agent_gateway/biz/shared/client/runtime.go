@@ -20,7 +20,10 @@ type Registry map[string]Runtime
 func (r Registry) Get(agentType string) (Runtime, bool) { value, ok := r[agentType]; return value, ok }
 
 func NewRuntimeRegistryFromEnvironment() Registry {
-	return Registry{"codex": &CodexRuntime{BaseURL: envValue("CODEX_RUNTIME_URL", "http://127.0.0.1:3001"), SSE: &sharedsse.Client{HTTP: &http.Client{}}}}
+	return Registry{
+		"codex":       &HTTPRuntime{AgentType: "codex", BaseURL: envValue("CODEX_RUNTIME_URL", "http://127.0.0.1:3001"), SSE: &sharedsse.Client{HTTP: &http.Client{}}},
+		"claude-code": &HTTPRuntime{AgentType: "claude-code", BaseURL: envValue("CLAUDE_CODE_RUNTIME_URL", "http://127.0.0.1:3003"), SSE: &sharedsse.Client{HTTP: &http.Client{}}},
+	}
 }
 
 func envValue(name, fallback string) string {

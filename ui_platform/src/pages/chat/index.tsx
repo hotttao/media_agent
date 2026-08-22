@@ -37,12 +37,9 @@ import type {
   ChatSession,
   UniversalEvent,
 } from "@/domains/chat/types";
-import {
-  createWorkspace,
-  listWorkspaces,
-  updateWorkspace,
-} from "@/domains/workspace/lib/workspace-client";
-import type { Workspace } from "@/domains/workspace/types";
+import { WorkspaceFormDialog } from "@/domains/workspace/components/workspace-form-dialog";
+import { listWorkspaces } from "@/domains/workspace/lib/workspace-client";
+import { agentTypeLabel, type Workspace } from "@/domains/workspace/types";
 import { useAppHeaderSlot } from "@/foundation/components/app-window";
 import { SegmentedDock } from "@/foundation/components/segmented-dock";
 import { WorkspaceLayout } from "@/foundation/components/workspace-layout";
@@ -226,7 +223,7 @@ function ChatApp() {
         className="flex items-end gap-2 rounded-2xl border bg-white p-2 shadow-lg shadow-slate-200/60"
       >
         <textarea
-          aria-label="Message Codex"
+          aria-label={`Message ${agentTypeLabel(workspace.agent_type)}`}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
@@ -235,7 +232,7 @@ function ChatApp() {
               event.currentTarget.form?.requestSubmit();
             }
           }}
-          placeholder="Message Codex…"
+          placeholder={`Message ${agentTypeLabel(workspace.agent_type)}…`}
           rows={1}
           className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm outline-none"
         />
@@ -312,139 +309,6 @@ const WORKSPACE_APPS = createAppRegistry([
   { id: "workspace-settings", label: "Settings", Component: SettingsApp },
   { id: "chat", label: "Chat", Component: ChatApp },
 ]);
-
-function WorkspaceDialog({
-  mode,
-  workspace,
-  open,
-  onClose,
-  onSaved,
-}: {
-  mode: "create" | "edit";
-  workspace?: Workspace;
-  open: boolean;
-  onClose(): void;
-  onSaved(value: Workspace): void;
-}) {
-  const [name, setName] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    if (open) {
-      setName(workspace?.name ?? "");
-      setApiKey("");
-      setError("");
-    }
-  }, [open, workspace]);
-  if (!open) return null;
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!name.trim() || saving) return;
-    setSaving(true);
-    setError("");
-    try {
-      const value =
-        mode === "create"
-          ? await createWorkspace({
-              name: name.trim(),
-              agent_type: "codex",
-              api_key: apiKey.trim(),
-            })
-          : await updateWorkspace(workspace?.id ?? "", {
-              name: name.trim(),
-              agent_type: "codex",
-              api_key: apiKey.trim(),
-            });
-      onSaved(value);
-      onClose();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Request failed");
-    } finally {
-      setSaving(false);
-    }
-  }
-  return (
-    <div
-      role="presentation"
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4 backdrop-blur-sm"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <form
-        role="dialog"
-        aria-modal="true"
-        aria-label={mode === "create" ? "Create workspace" : "Edit workspace"}
-        onSubmit={submit}
-        className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl"
-      >
-        <div>
-          <h2 className="text-xl font-semibold">
-            {mode === "create" ? "New workspace" : "Workspace settings"}
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Choose the agent configuration.
-          </p>
-        </div>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Workspace name</span>
-          <input
-            aria-label={
-              mode === "create" ? "Workspace name" : "Settings workspace name"
-            }
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            className="w-full rounded-xl border px-3 py-2.5 text-sm"
-          />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Agent</span>
-          <select
-            aria-label="Agent"
-            value="codex"
-            disabled
-            className="w-full rounded-xl border bg-slate-50 px-3 py-2.5 text-sm"
-          >
-            <option value="codex">Codex</option>
-          </select>
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">API key</span>
-          <input
-            aria-label={mode === "create" ? "API key" : "Settings API key"}
-            type="password"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder={
-              workspace?.api_key_configured
-                ? "Configured — leave blank to keep"
-                : "Optional"
-            }
-            className="w-full rounded-xl border px-3 py-2.5 text-sm"
-          />
-        </label>
-        {error && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={!name.trim() || saving}>
-            {saving
-              ? "Saving…"
-              : mode === "create"
-                ? "Create workspace"
-                : "Save changes"}
-          </Button>
-        </div>
-      </form>
-    </div>
-  );
-}
 
 function Menubar({
   workspaces,
@@ -950,7 +814,7 @@ export function ChatPage() {
           </div>
         </div>
       )}
-      <WorkspaceDialog
+      <WorkspaceFormDialog
         mode={dialog === "edit" ? "edit" : "create"}
         workspace={workspace ?? undefined}
         open={dialog !== null}

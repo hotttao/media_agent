@@ -11,13 +11,14 @@ import (
 	sharedsse "media_agent/media_agent_gateway/biz/shared/sse"
 )
 
-type CodexRuntime struct {
-	BaseURL string
-	SSE     *sharedsse.Client
-	HTTP    *http.Client
+type HTTPRuntime struct {
+	AgentType string
+	BaseURL   string
+	SSE       *sharedsse.Client
+	HTTP      *http.Client
 }
 
-func (r *CodexRuntime) Interrupt(ctx context.Context, runtimeSessionID string) (bool, error) {
+func (r *HTTPRuntime) Interrupt(ctx context.Context, runtimeSessionID string) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(r.BaseURL, "/")+"/sessions/"+runtimeSessionID+"/interrupt", nil)
 	if err != nil {
 		return false, err
@@ -32,7 +33,7 @@ func (r *CodexRuntime) Interrupt(ctx context.Context, runtimeSessionID string) (
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("codex runtime interrupt returned %s", resp.Status)
+		return false, fmt.Errorf("%s runtime interrupt returned %s", r.AgentType, resp.Status)
 	}
 	var result struct {
 		Success     bool `json:"success"`
@@ -44,11 +45,11 @@ func (r *CodexRuntime) Interrupt(ctx context.Context, runtimeSessionID string) (
 	return result.Success && result.Interrupted, nil
 }
 
-func (*CodexRuntime) EventPersistenceCapabilities() EventPersistenceCapabilities {
+func (*HTTPRuntime) EventPersistenceCapabilities() EventPersistenceCapabilities {
 	return EventPersistenceCapabilities{MaxToolResultBytes: 32 * 1024}
 }
 
-func (r *CodexRuntime) Chat(ctx context.Context, input ChatInput, consume func(json.RawMessage) error) error {
+func (r *HTTPRuntime) Chat(ctx context.Context, input ChatInput, consume func(json.RawMessage) error) error {
 	body, err := json.Marshal(input)
 	if err != nil {
 		return err
@@ -66,7 +67,7 @@ func (r *CodexRuntime) Chat(ctx context.Context, input ChatInput, consume func(j
 	return transport.Stream(ctx, req, func(event sharedsse.Event) error {
 		raw := json.RawMessage(event.Data)
 		if !json.Valid(raw) {
-			return fmt.Errorf("codex runtime emitted invalid Universal Event JSON")
+			return fmt.Errorf("%s runtime emitted invalid Universal Event JSON", r.AgentType)
 		}
 		return consume(raw)
 	})

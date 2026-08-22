@@ -1,4 +1,5 @@
 import type {
+  AgentType,
   CreateWorkspaceInput,
   Workspace,
 } from "@/domains/workspace/types";
@@ -43,7 +44,7 @@ export async function createWorkspace(
 
 export async function updateWorkspace(
   workspaceId: string,
-  input: { name: string; agent_type: string; api_key: string },
+  input: { name: string; agent_type: AgentType; api_key: string },
 ): Promise<Workspace> {
   const response = await checked(
     await fetch(`/api/v1/workspaces/${workspaceId}`, {

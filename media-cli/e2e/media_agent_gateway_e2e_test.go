@@ -99,6 +99,68 @@ func TestMediaAgentGatewayChatE2E(t *testing.T) {
 	}
 }
 
+func TestMediaAgentGatewayClaudeCodeChatE2E(t *testing.T) {
+	authAddr := os.Getenv("MEDIA_AUTH_ADDR")
+	gatewayAddr := os.Getenv("MEDIA_AGENT_GATEWAY_ADDR")
+	controlAddr := os.Getenv("MEDIA_CONTROL_ADDR")
+	if authAddr == "" || gatewayAddr == "" || controlAddr == "" {
+		t.Skip("MEDIA_AUTH_ADDR, MEDIA_CONTROL_ADDR and MEDIA_AGENT_GATEWAY_ADDR are required")
+	}
+	client := httpClient(t)
+	username := fmt.Sprintf("claudechat%d", time.Now().UnixNano())
+	status, body := doJSON(t, client, http.MethodPost, authAddr+"/api/auth/register", map[string]string{
+		"username": username, "password": "claudechat123", "display_name": "Claude Chat E2E",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("register E2E user: status=%d body=%s", status, body)
+	}
+
+	status, body = doJSON(t, client, http.MethodPost, controlAddr+"/api/v1/workspaces", map[string]string{
+		"name": "Claude Chat", "agent_type": "claude-code", "api_key": "e2e-secret",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create Claude workspace: status=%d body=%s", status, body)
+	}
+	var workspace struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &workspace); err != nil {
+		t.Fatal(err)
+	}
+	status, body = doJSON(t, client, http.MethodPost, gatewayAddr+"/api/chat/sessions", map[string]string{
+		"workspace_id": workspace.ID, "title": "Claude session",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create Claude session: status=%d body=%s", status, body)
+	}
+	var session struct {
+		ID        string `json:"id"`
+		AgentType string `json:"agent_type"`
+	}
+	if err := json.Unmarshal(body, &session); err != nil {
+		t.Fatal(err)
+	}
+	if session.AgentType != "claude-code" {
+		t.Fatalf("session Agent Type = %q", session.AgentType)
+	}
+
+	subscription := startEventSubscription(t, client, gatewayAddr, session.ID, 0)
+	startTurn(t, client, gatewayAddr, session.ID, "hello-through-gateway")
+	events := awaitEvents(t, subscription)
+	assertCompleteEventStream(t, events)
+
+	status, body = doJSON(t, client, http.MethodGet, gatewayAddr+"/api/chat/sessions/"+session.ID+"/messages", nil)
+	if status != http.StatusOK {
+		t.Fatalf("Claude history: status=%d body=%s", status, body)
+	}
+	if !bytes.Contains(body, []byte("Claude fixture: hello-through-gateway")) {
+		t.Fatalf("Claude assistant message missing from history: %s", body)
+	}
+	if bytes.Contains(body, []byte("e2e-secret")) {
+		t.Fatalf("Claude history exposed API Key: %s", body)
+	}
+}
+
 func TestMediaAgentGatewayInterruptTurnE2E(t *testing.T) {
 	authAddr := os.Getenv("MEDIA_AUTH_ADDR")
 	gatewayAddr := os.Getenv("MEDIA_AGENT_GATEWAY_ADDR")
