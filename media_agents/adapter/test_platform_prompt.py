@@ -58,13 +58,17 @@ def test_write_platform_prompt_creates_target_file(tmp_path: Path) -> None:
 
     assert (tmp_path / ".codex" / "AGENTS.md").read_text(encoding="utf-8") == prompt
 
+
 def test_render_template_supports_sections_lists_and_triple_variables() -> None:
     template = "{{#items}}{{name}}={{#enabled}}{{{body}}}{{/enabled}};{{/items}}"
 
-    assert render_template(
-        template,
-        {"items": [{"name": "a", "enabled": True, "body": "<raw>"}]},
-    ) == "a=<raw>;"
+    assert (
+        render_template(
+            template,
+            {"items": [{"name": "a", "enabled": True, "body": "<raw>"}]},
+        )
+        == "a=<raw>;"
+    )
 
 
 def test_default_template_is_loaded_from_package_file() -> None:

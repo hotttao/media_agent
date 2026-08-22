@@ -125,13 +125,12 @@ def test_question_requested_event_matches_universal_protocol() -> None:
     assert event.request_id == "req_1"
     assert event.questions == [{"id": "q1", "label": "Continue?"}]
 
+
 def test_failed_tool_call_keeps_call_completed_and_marks_result_failed() -> None:
     translator = AcpEventTranslator("s1")
     translator.translate(_tool_start("call_fail", status="in_progress"))
 
-    events = translator.translate(
-        _tool_progress("call_fail", status="failed", raw_output="boom")
-    )
+    events = translator.translate(_tool_progress("call_fail", status="failed", raw_output="boom"))
 
     assert len(events) == 2
     tool_call = events[0].item

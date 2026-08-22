@@ -37,7 +37,7 @@ sequenceDiagram
     participant G as media_agent_gateway
     participant GD as Gateway DB
     participant A as media_agents API
-    participant AD as Agent MySQL
+    participant AD as Agent PostgreSQL
     participant B as Session Event Bus
     participant X as Session Analytics
 
@@ -91,9 +91,9 @@ sequenceDiagram
 ### 步骤说明
 
 1. **Gateway 只授权和转发**：Gateway Registration 决定用户能否访问 Session；Agent Runtime Session 决定输入是立即 running 还是 queued。Gateway 不创建 Turn、Message 或 pending message。
-2. **Agent 接受才算成功**：只有 Agent MySQL 已提交 Queued Turn 后 Gateway 才返回 202。Gateway 超时且结果不明确时，以同一 `idempotency_key` 重试或查询 Agent，不创建新 ID。
+2. **Agent 接受才算成功**：只有 Agent PostgreSQL 已提交 Queued Turn 后 Gateway 才返回 202。Gateway 超时且结果不明确时，以同一 `idempotency_key` 重试或查询 Agent，不创建新 ID。
 3. **先订阅再回放**：Gateway 必须先订阅 Session subject 并缓存消息，再调用 Agent `ReplayEvents`。回放和缓存重叠由 Session sequence 去重，因此页面刷新窗口内正常发布的事件不会丢。
-4. **补偿数据库提交/发布间隙**：Agent 先提交 MySQL 再发布总线。若在两步之间失败，Gateway 通过 sequence 跳号、周期检查以及 Turn 终态补查重新调用 `ReplayEvents`。当前连接最终补齐；页面重连也能从 MySQL 恢复。
+4. **补偿数据库提交/发布间隙**：Agent 先提交 PostgreSQL 再发布总线。若在两步之间失败，Gateway 通过 sequence 跳号、周期检查以及 Turn 终态补查重新调用 `ReplayEvents`。当前连接最终补齐；页面重连也能从 PostgreSQL 恢复。
 5. **总线不是恢复事实**：初始实现采用 Redis Pub/Sub 的按 Session 广播语义。Gateway 不使用共享 Consumer Group 分摊事件；每个持有相关 SSE 的 Gateway 都订阅对应 Session subject。
 6. **临时帧语义**：Live Event Frame 没有持久 sequence，允许因断线、慢消费者或总线故障丢失；UI 最终由完成 Message、工具快照和终态事件收敛。
 7. **连接与执行解耦**：关闭 SSE 只取消当前订阅。中断必须调用 Agent `InterruptTurn`；Gateway、Redis 或浏览器不能直接改变 Turn 状态。
@@ -113,7 +113,7 @@ sequenceDiagram
 | session_id | Gateway Registration | Agent、Bus、Client | 跨上下文稳定会话标识 |
 | idempotency_key | Client/Agent Task | Agent | 防止重复创建 Turn |
 | turn_id | Agent | Gateway、Client、Analytics | Agent 执行轮次标识 |
-| sequence | Agent MySQL | Gateway、Client | Universal Event 的 Session 内严格递增游标 |
+| sequence | Agent PostgreSQL | Gateway、Client | Universal Event 的 Session 内严格递增游标 |
 | after_sequence | Client/Gateway | Agent Replay API | 已确认处理的最后持久化事件 |
 | context_version | Registration | Agent | 本次提交对应的运行上下文版本 |
 
@@ -126,7 +126,7 @@ sequenceDiagram
 | Agent TX-EVENT | Universal Event、Session sequence、可选 Message | Session Event Bus publish、SSE 写入 |
 | Agent TX-FINAL | flush 后终态、Chat Status、终态事件 | 总线发布、Analytics 投影 |
 
-Gateway 禁止开启跨 Gateway DB 与 Agent MySQL 的事务。跨服务通过稳定 idempotency key、sequence 回放和最终一致投影协调。
+Gateway 禁止开启跨 Gateway DB 与 Agent PostgreSQL 的事务。跨服务通过稳定 idempotency key、sequence 回放和最终一致投影协调。
 
 ## 幂等、重试与补偿
 
@@ -136,7 +136,7 @@ Gateway 禁止开启跨 Gateway DB 与 Agent MySQL 的事务。跨服务通过�
 | Subscribe bus | connection_id + session_id | 断线重新建立 | 随后 ReplayEvents 补齐 |
 | ReplayEvents | session_id + after_sequence | 可安全分页重试 | sequence 去重 |
 | Bus delivery | event_id/sequence | 允许重复 | sequence <= cursor 丢弃 |
-| Publish 缺失 | sequence gap/periodic check | 查询 Agent | 从 Agent MySQL 补齐 |
+| Publish 缺失 | sequence gap/periodic check | 查询 Agent | 从 Agent PostgreSQL 补齐 |
 | Analytics | terminal event_id | 至少一次 | Inbox 去重，可重建 |
 
 ## 权限与失败

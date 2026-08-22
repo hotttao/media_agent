@@ -112,11 +112,7 @@ def to_event_dict(event: UniversalEvent) -> dict[str, object]:
         if is_dataclass(value):
             value = asdict(value)
         if isinstance(value, dict):
-            return {
-                key: compact(item)
-                for key, item in value.items()
-                if item is not None
-            }
+            return {key: compact(item) for key, item in value.items() if item is not None}
         if isinstance(value, list):
             return [compact(item) for item in value]
         return value

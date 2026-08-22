@@ -30,6 +30,9 @@ class CodexAcpBridge(AcpBridge):
             program=program,
             args=args,
             cwd=cwd,
-            env={"INITIAL_AGENT_MODE": initial_agent_mode, **({"OPENAI_API_KEY": api_key} if api_key else {})},
+            env={
+                "INITIAL_AGENT_MODE": initial_agent_mode,
+                **({"OPENAI_API_KEY": api_key} if api_key else {}),
+            },
             session_id=session_id,
         )

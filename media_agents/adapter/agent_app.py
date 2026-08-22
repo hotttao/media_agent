@@ -4,21 +4,26 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
-from typing import AsyncContextManager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from adapter.biz.api.v1.routes.acp.router import build_acp_router
+from adapter.biz.api.v1.routes.runtime_session.router import build_runtime_session_router
+from adapter.biz.dal.db import create_database
+from adapter.biz.dal.repos.runtime_session.repository import SqlRuntimeSessionRepository
+from adapter.biz.dal.session import TxRunner
 from adapter.biz.domain.acp_adapter import AcpServer
 from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks, BridgeFactory
+from adapter.biz.service.runtime_session.service import RuntimeSessionService
 from adapter.config.config import AdapterConfig
 from adapter.infra.logging import setup_logging
+from adapter.infra.migrations import migrate_database
 
 logger = logging.getLogger(__name__)
 
-ExtraLifespan = Callable[[FastAPI], AsyncContextManager[None]]
+ExtraLifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 
 
 def _add_common_middleware(app: FastAPI) -> None:
@@ -36,20 +41,30 @@ def build_base_app(cfg: AdapterConfig) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         setup_logging()
+        engine, session_factory = create_database(cfg.database.url, echo=cfg.database.echo)
+        if cfg.database.migrate_on_start:
+            await migrate_database(cfg.database.url)
         app.state.adapter_config = cfg
         app.state.acp_server = None
         app.state.session_manager = None
         app.state.hooks = None
+        app.state.runtime_session_service = RuntimeSessionService(
+            TxRunner(session_factory), SqlRuntimeSessionRepository()
+        )
         logger.info(
             "adapter base app started: agent=%s workspace=%s",
             cfg.agent_type,
             cfg.workspace_dir,
         )
-        yield
-        logger.info("adapter base app shutdown")
+        try:
+            yield
+        finally:
+            await engine.dispose()
+            logger.info("adapter base app shutdown")
 
     app = FastAPI(lifespan=lifespan)
     _add_common_middleware(app)
+    app.include_router(build_runtime_session_router())
     return app
 
 
@@ -70,6 +85,9 @@ def build_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         setup_logging()
+        engine, session_factory = create_database(cfg.database.url, echo=cfg.database.echo)
+        if cfg.database.migrate_on_start:
+            await migrate_database(cfg.database.url)
         acp_server = AcpServer(
             agent_hooks=hooks,
             bridge_factory=bridge_factory,
@@ -80,6 +98,9 @@ def build_app(
         app.state.adapter_config = cfg
         app.state.acp_server = acp_server
         app.state.hooks = hooks
+        app.state.runtime_session_service = RuntimeSessionService(
+            TxRunner(session_factory), SqlRuntimeSessionRepository()
+        )
         logger.info(
             "adapter app started: agent=%s workspace=%s",
             cfg.agent_type,
@@ -93,9 +114,11 @@ def build_app(
                     yield
         finally:
             acp_server.stop_evictor()
+            await engine.dispose()
             logger.info("adapter app shutdown")
 
     app = FastAPI(lifespan=lifespan)
     _add_common_middleware(app)
     app.include_router(build_acp_router())
+    app.include_router(build_runtime_session_router())
     return app

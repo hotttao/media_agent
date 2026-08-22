@@ -3,13 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import httpx
+import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from adapter.biz.api.v1.routes.usage.router import build_usage_router
 
 
-def test_usage_route_returns_records_and_cursors(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_usage_route_returns_records_and_cursors(tmp_path: Path) -> None:
     rollout = tmp_path / ".codex" / "sessions" / "2026" / "07" / "24" / "rollout-x-s1.jsonl"
     rollout.parent.mkdir(parents=True)
     rollout.write_text(
@@ -39,7 +41,10 @@ def test_usage_route_returns_records_and_cursors(tmp_path: Path) -> None:
     app = FastAPI()
     app.include_router(build_usage_router(home_dir=tmp_path, fallback_model=lambda: "gpt-test"))
 
-    response = TestClient(app).post("/usage", json={})
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post("/usage", json={})
 
     assert response.status_code == 200
     body = response.json()
@@ -52,7 +57,8 @@ def test_usage_route_returns_records_and_cursors(tmp_path: Path) -> None:
     assert body["cursors"]
 
 
-def test_usage_route_accepts_typed_cursors_and_max_files(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_usage_route_accepts_typed_cursors_and_max_files(tmp_path: Path) -> None:
     first = tmp_path / ".acp-usage" / "g1.jsonl"
     second = tmp_path / ".acp-usage" / "g2.jsonl"
     first.parent.mkdir(parents=True)
@@ -67,7 +73,10 @@ def test_usage_route_accepts_typed_cursors_and_max_files(tmp_path: Path) -> None
     app = FastAPI()
     app.include_router(build_usage_router(home_dir=tmp_path))
 
-    response = TestClient(app).post("/usage", json={"maxFiles": 1, "cursors": {}})
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post("/usage", json={"maxFiles": 1, "cursors": {}})
 
     assert response.status_code == 200
     body = response.json()

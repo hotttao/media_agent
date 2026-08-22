@@ -51,7 +51,7 @@ Runtime Session 拥有同一 Agent Session 的 Turn 接受与串行调度、Mess
 | Turn | Message 引用、Agent Request、执行结果 | 单次 Turn 状态变化 | 终态不可覆盖；Turn 固定属于一个 Runtime Session |
 | Universal Event | Event payload | 单事件提交 | sequence 唯一且只有数据库提交后才能发布 |
 
-Turn Queue 是持久化事实，不是单进程内存队列。Agent 可以为每个活跃 Session 使用进程内异步锁减少竞争，但锁只保护调度临界区，数据库 Session 行锁和 running 唯一约束才是最终一致性边界。
+Turn Queue 是 PostgreSQL 中的持久化事实，不是单进程内存队列。Agent 可以为每个活跃 Session 使用进程内异步锁减少竞争，但锁只保护调度临界区，数据库 Session 行锁和 running partial unique index 才是最终一致性边界。
 
 ### Turn 状态
 

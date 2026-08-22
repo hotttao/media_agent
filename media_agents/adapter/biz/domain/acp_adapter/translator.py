@@ -157,9 +157,7 @@ class AcpEventTranslator:
             stats=stats,
         )
 
-    def question_requested(
-        self, request_id: str, questions: list[object]
-    ) -> UniversalEvent:
+    def question_requested(self, request_id: str, questions: list[object]) -> UniversalEvent:
         return UniversalEvent(
             type="question.requested",
             timestamp=_ts(),
@@ -320,9 +318,7 @@ class AcpEventTranslator:
         tracked = self.active_tool_calls.get(update.tool_call_id)
         # spec: omitted status = unchanged，从跟踪状态继承
         effective_status = (
-            update.status or tracked.last_status
-            if tracked
-            else (update.status or "in_progress")
+            update.status or tracked.last_status if tracked else (update.status or "in_progress")
         )
 
         if (
@@ -597,6 +593,7 @@ def _summarize_image_generation_output(raw_output: object) -> str:
         f"Saved to: {saved_path}" if saved_path else None,
     ]
     return "\n".join(part for part in parts if part)
+
 
 def _stringify_raw(raw: object) -> str:
     """序列化 raw_input / raw_output 为展示字符串。对标 TS stringifyRaw。"""

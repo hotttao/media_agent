@@ -17,9 +17,7 @@ from typing import NotRequired, TypeAlias, TypedDict
 
 logger = logging.getLogger(__name__)
 
-JsonValue: TypeAlias = (
-    str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
-)
+JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
 JsonObject: TypeAlias = dict[str, JsonValue]
 RuntimeConfig: TypeAlias = dict[str, str]
 
@@ -109,9 +107,7 @@ def runtime_from_workspace_config(config: Mapping[str, object]) -> RuntimeConfig
     }
 
 
-def write_runtime_config(
-    workspace_dir: str | Path, config: Mapping[str, object]
-) -> RuntimeConfig:
+def write_runtime_config(workspace_dir: str | Path, config: Mapping[str, object]) -> RuntimeConfig:
     runtime = runtime_from_workspace_config(config)
     workspace = Path(workspace_dir)
     workspace.mkdir(parents=True, exist_ok=True)
@@ -188,9 +184,7 @@ def build_acp_mcp_servers(
             entry_headers = dict(cfg.get("headers", {}))
             if session_token:
                 entry_headers["X-Session-Token"] = session_token
-            servers.append(
-                {"type": "http", "name": name, "url": url, "headers": entry_headers}
-            )
+            servers.append({"type": "http", "name": name, "url": url, "headers": entry_headers})
         elif include_user_stdio and command:
             server: AcpMcpServerDeclaration = {"name": name, "command": command}
             if cfg.get("args"):

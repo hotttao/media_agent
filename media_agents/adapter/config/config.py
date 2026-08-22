@@ -8,7 +8,7 @@ packages should load their own typed config subclass via ``load_agent_config``.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import TypeVar, overload
 
 from omegaconf import OmegaConf
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -75,6 +75,24 @@ class KeepaliveConfig(BaseModel):
     interval_ms: int = Field(default=15_000, gt=0)
 
 
+class DatabaseConfig(BaseModel):
+    """Agent-owned durable Runtime Session database."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = "postgresql+asyncpg://media_auth:media_auth@127.0.0.1:5432/media_auth"
+    migrate_on_start: bool = True
+    echo: bool = False
+
+    @field_validator("url")
+    @classmethod
+    def _validate_postgresql_url(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized.startswith("postgresql+asyncpg://"):
+            raise ConfigError("database.url must use postgresql+asyncpg")
+        return normalized
+
+
 class RuntimeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -110,6 +128,7 @@ class AdapterConfig(BaseModel):
     cp: CpConfig = Field(default_factory=CpConfig)
     bridge_ttl: BridgeTtlConfig = Field(default_factory=BridgeTtlConfig)
     keepalive: KeepaliveConfig = Field(default_factory=KeepaliveConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
@@ -164,19 +183,37 @@ class AdapterConfig(BaseModel):
             raise ConfigError(f"{field_name} must be a relative path inside workspace")
 
 
+@overload
 def load_agent_config(
     yaml_path: str | Path,
-    model_type: type[TConfig] = cast(type[TConfig], AdapterConfig),
+    model_type: type[TConfig],
     *,
     base_path: str | Path | None = None,
-) -> TConfig:
+) -> TConfig: ...
+
+
+@overload
+def load_agent_config(
+    yaml_path: str | Path,
+    model_type: None = None,
+    *,
+    base_path: str | Path | None = None,
+) -> AdapterConfig: ...
+
+
+def load_agent_config(
+    yaml_path: str | Path,
+    model_type: type[AdapterConfig] | None = None,
+    *,
+    base_path: str | Path | None = None,
+) -> AdapterConfig:
     """Load common adapter config and one agent override into a typed model."""
     common_path = (
         Path(base_path) if base_path is not None else Path(__file__).with_name("base.yaml")
     )
     merged = OmegaConf.merge(OmegaConf.load(str(common_path)), OmegaConf.load(str(yaml_path)))
     data = OmegaConf.to_container(merged, resolve=True)
-    return model_type.model_validate(data)
+    return (model_type or AdapterConfig).model_validate(data)
 
 
 def load_adapter_config(yaml_path: str | Path) -> AdapterConfig:

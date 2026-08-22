@@ -35,7 +35,7 @@ Session Analytics 把 Gateway Session Registration/Agent Task 与 Agent Turn 终
 
 ## 聚合与不变量
 
-本 Domain 仅包含可重建读模型，无命令侧聚合；同一 Agent 来源事件通过 `event_id` 幂等应用。总线漏投时可通过 Agent Replay API 按 Session sequence 重建，禁止直连 Agent MySQL。
+本 Domain 仅包含可重建读模型，无命令侧聚合；同一 Agent 来源事件通过 `event_id` 幂等应用。总线漏投时可通过 Agent Replay API 按 Session sequence 重建，禁止直连 Agent PostgreSQL。
 
 ## 领域事件
 

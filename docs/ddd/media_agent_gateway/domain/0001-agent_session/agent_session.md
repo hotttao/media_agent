@@ -31,7 +31,7 @@ Agent Session Domain 拥有用户、Workspace 与 Agent 的稳定会话注册关
 - 不保存 Turn、Queued Turn、Message、Universal Event、Agent Request 或 Chat Status；这些事实属于 `media_agents/runtime_session`。
 - 不维护 pending message、Session Turn Queue 或 Session 执行锁。
 - 不直连 Runtime SSE，不以 Gateway 进程、页面连接或节点亲和性决定 Turn 是否运行。
-- 不直连 Agent MySQL；事件历史只能通过 Agent 查询接口读取。
+- 不直连 Agent PostgreSQL；事件历史只能通过 Agent 查询接口读取。
 - 不拥有 Workspace/Agent 期望配置。
 
 ## 能力清单

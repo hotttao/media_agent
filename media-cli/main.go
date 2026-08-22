@@ -30,6 +30,7 @@ import (
 	// Init(cfg) 由 main 显式调用（不依赖 init()）。
 	_ "media_agent/media_cli/cmd/client"
 	_ "media_agent/media_cli/cmd/infra"
+	_ "media_agent/media_cli/cmd/media_agents"            // Agent Runtime 内部 API e2e
 	_ "media_agent/media_cli/cmd/media_auth"              // media_auth 接口 e2e 一级子命令
 	_ "media_agent/media_cli/cmd/media_auth/auth"         // auth 子命令挂到 MediaAuthCmd
 	_ "media_agent/media_cli/cmd/media_auth/oauth_client" // oauth-client 子命令挂到 MediaAuthCmd
