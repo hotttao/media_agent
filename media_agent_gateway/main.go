@@ -10,9 +10,12 @@ import (
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_agent_gateway/biz/dal"
 	repo "media_agent/media_agent_gateway/biz/dal/repo/agent_session"
+	taskrepo "media_agent/media_agent_gateway/biz/dal/repo/agent_task"
+	taskhandler "media_agent/media_agent_gateway/biz/handler/agent_task"
 	chathandler "media_agent/media_agent_gateway/biz/handler/chat"
 	"media_agent/media_agent_gateway/biz/middleware"
 	service "media_agent/media_agent_gateway/biz/service/agent_session"
+	taskservice "media_agent/media_agent_gateway/biz/service/agent_task"
 	sharedclient "media_agent/media_agent_gateway/biz/shared/client"
 	"media_agent/media_agent_gateway/biz/shared/sessionevents"
 	"media_agent/media_agent_gateway/biz/workflow"
@@ -66,6 +69,7 @@ func main() {
 	}
 	control := &sharedclient.Control{BaseURL: envOr("MEDIA_CONTROL_URL", "http://127.0.0.1:8007"), ServiceToken: envOr("CONTROL_INTERNAL_TOKEN", ""), Fallback: fallbackControl}
 	sessionService := service.New(store, control)
+	taskhandler.Configure(taskservice.New(taskrepo.New(db), dal.NewTxRunner(db), store, control))
 	var eventSource sessionevents.Source = sessionevents.New(256)
 	if redisURL := os.Getenv("MEDIA_AGENTS_REDIS_URL"); redisURL != "" {
 		redisSource, redisErr := sessionevents.NewRedisSource(
