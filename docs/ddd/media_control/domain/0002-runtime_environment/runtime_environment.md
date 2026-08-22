@@ -73,6 +73,18 @@ Runtime Environment 负责可用执行环境及 Workspace Placement 的控制面
 | version | bigint | Placement 版本 |
 | updated_at | timestamptz | 最后对账时间 |
 
+### `environment_tokens`
+
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text PK | Token 元数据 ID |
+| environment_id | text | 唯一绑定的 Runtime Environment |
+| name | text | Runner/轮换用途标签 |
+| token_hash | text | 原始 Token 的 SHA-256；不对外返回 |
+| created_by | text | 签发操作用户，仅用于审计 |
+| created_at | timestamptz | 签发时间 |
+| revoked_at | timestamptz nullable | 撤销时间；非空后验证立即失败 |
+
 ### UUID 生成规则
 
 环境和 Grant 使用 ULID；Placement 以 `workspace_id` 唯一。
@@ -94,3 +106,10 @@ Runtime Environment 负责可用执行环境及 Workspace Placement 的控制面
 - 目录保存 Agent 会话文件、Workspace 文件和可恢复运行配置；数据库中的 Turn、Message、Universal Event 不复制到目录。
 - stop/restart 保留目录；删除与 rebuild 的清理必须遵循 Workspace Lifecycle 的显式语义，禁止容器退出时级联删除。
 - 目录内保存不可变 mount identity。Agent 配置的 workspace_id 与 identity 不一致时启动失败，不自动改写。
+
+### Environment Token 不变量
+
+- Token 使用 `env_` 前缀和 256-bit 随机值，原始值只在签发响应出现一次，数据库只保存 SHA-256。
+- Token 验证只解析为固定 `environment_id`，不映射为创建用户，也不继承用户或 Service Token 权限。
+- 同一环境允许新旧 Token 短期并存；Runner 切换到新 Token 后撤销旧 Token，实现无中断轮换。
+- 列表只返回 active Token 元数据；撤销幂等，环境删除时 Token 由外键级联删除。

@@ -40,6 +40,18 @@ service RuntimeEnvironmentService {
     option (api.post) = "/api/v1/workspaces/:workspace_id/runtime-directory/ensure";
     option (google.api.http) = { post: "/api/v1/workspaces/{workspace_id}/runtime-directory/ensure" body: "*" };
   }
+  rpc IssueEnvironmentToken(IssueEnvironmentTokenRequest) returns (IssuedEnvironmentTokenResponse) {
+    option (api.post) = "/api/v1/runtime-environments/:environment_id/tokens";
+    option (google.api.http) = { post: "/api/v1/runtime-environments/{environment_id}/tokens" body: "*" };
+  }
+  rpc ListEnvironmentTokens(ListEnvironmentTokensRequest) returns (ListEnvironmentTokensResponse) {
+    option (api.get) = "/api/v1/runtime-environments/:environment_id/tokens";
+    option (google.api.http) = { get: "/api/v1/runtime-environments/{environment_id}/tokens" };
+  }
+  rpc RevokeEnvironmentToken(RevokeEnvironmentTokenRequest) returns (EnvironmentTokenResponse) {
+    option (api.post) = "/api/v1/runtime-environments/:environment_id/tokens/:token_id/revoke";
+    option (google.api.http) = { post: "/api/v1/runtime-environments/{environment_id}/tokens/{token_id}/revoke" body: "*" };
+  }
 }
 
 message CreateEnvironmentRequest { string name = 1 [(api.body) = "name"]; string endpoint = 2 [(api.body) = "endpoint"]; string capacity_json = 3 [(api.body) = "capacity_json"]; }
@@ -53,3 +65,9 @@ message EnsureWorkspaceRuntimeDirectoryRequest { string workspace_id = 1 [(api.p
 message EnvironmentResponse { string id = 1; string name = 2; string endpoint = 3; string capacity_json = 4; string status = 5; int64 version = 6; int64 created_at = 7; int64 updated_at = 8; }
 message ListEnvironmentsResponse { repeated EnvironmentResponse environments = 1; }
 message PlacementResponse { string workspace_id = 1; string environment_id = 2; string status = 3; string reason = 4; string volume_ref = 5; int64 version = 6; int64 updated_at = 7; }
+message IssueEnvironmentTokenRequest { string environment_id = 1 [(api.path) = "environment_id"]; string name = 2 [(api.body) = "name"]; }
+message ListEnvironmentTokensRequest { string environment_id = 1 [(api.path) = "environment_id"]; }
+message RevokeEnvironmentTokenRequest { string environment_id = 1 [(api.path) = "environment_id"]; string token_id = 2 [(api.path) = "token_id"]; }
+message EnvironmentTokenResponse { string id = 1; string environment_id = 2; string name = 3; string created_by = 4; int64 created_at = 5; int64 revoked_at = 6; }
+message IssuedEnvironmentTokenResponse { EnvironmentTokenResponse metadata = 1; string token = 2; }
+message ListEnvironmentTokensResponse { repeated EnvironmentTokenResponse tokens = 1; }

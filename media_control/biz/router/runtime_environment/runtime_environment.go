@@ -30,6 +30,15 @@ func Register(r *server.Hertz) {
 				{
 					_environment_id := _runtime_environments.Group("/:environment_id", _environment_idMw()...)
 					_environment_id.POST("/delete", append(_deleteenvironmentMw(), runtime_environment.DeleteEnvironment)...)
+					_environment_id.GET("/tokens", append(_listenvironmenttokensMw(), runtime_environment.ListEnvironmentTokens)...)
+					_environment_id.POST("/tokens", append(_issueenvironmenttokenMw(), runtime_environment.IssueEnvironmentToken)...)
+					{
+						_tokens := _environment_id.Group("/tokens", _tokensMw()...)
+						{
+							_token_id := _tokens.Group("/:token_id", _token_idMw()...)
+							_token_id.POST("/revoke", append(_revokeenvironmenttokenMw(), runtime_environment.RevokeEnvironmentToken)...)
+						}
+					}
 				}
 			}
 			{

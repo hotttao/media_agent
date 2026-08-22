@@ -24,3 +24,11 @@ type WorkspacePlacement struct {
 }
 
 func (WorkspacePlacement) TableName() string { return "workspace_placements" }
+
+type EnvironmentToken struct {
+	ID, EnvironmentID, Name, TokenHash, CreatedBy string
+	CreatedAt                                     time.Time
+	RevokedAt                                     *time.Time
+}
+
+func (EnvironmentToken) TableName() string { return "environment_tokens" }
