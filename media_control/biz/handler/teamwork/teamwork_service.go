@@ -129,3 +129,29 @@ func writeError(c *app.RequestContext, e error) {
 	}
 	c.JSON(code, map[string]string{"error": e.Error()})
 }
+
+// GetRuntimeContext .
+// @router /api/v1/teamwork-topologies/:topology_id/runtime-context [GET]
+func GetRuntimeContext(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req teamwork.GetRuntimeContextRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	v, err := teamworkService.RuntimeContext(ctx, req.TopologyId, middleware.UserID(ctx))
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, &teamwork.RuntimeContextResponse{
+		TopologyId:      v.ID,
+		WorkspaceId:     v.WorkspaceID,
+		TopologyVersion: v.Version,
+		EntryMemberId:   v.EntryMemberID,
+		MembersJson:     domain.Encode(v.Members),
+		EdgesJson:       domain.Encode(v.Edges),
+	})
+}

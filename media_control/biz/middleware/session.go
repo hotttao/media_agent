@@ -71,6 +71,17 @@ func RequireInternalSystem() app.HandlerFunc {
 	}
 }
 
+func RequireInternal() app.HandlerFunc {
+	return func(ctx context.Context, c *app.RequestContext) {
+		if !isInternalPrincipal(principal(ctx)) {
+			c.JSON(consts.StatusForbidden, map[string]string{"error": "internal service identity is required"})
+			c.Abort()
+			return
+		}
+		c.Next(ctx)
+	}
+}
+
 func RequireAdmin() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		role := Role(ctx)
@@ -103,4 +114,8 @@ func internalUser(provided, configured, actingUserID string) (string, bool) {
 		return "", false
 	}
 	return actingUserID, true
+}
+
+func isInternalPrincipal(value Principal) bool {
+	return value.Internal && strings.TrimSpace(value.UserID) != ""
 }

@@ -29,7 +29,7 @@ Teamwork 负责多 Agent 的成员集合、协作边和拓扑版本，是运行�
 |:---|:---|:---|
 | 管理拓扑 | CRUD 版本化 Teamwork | `TeamworkService.Create/Get/List/Update/Delete` |
 | 管理成员 | 修改 Agent 成员和协作边 | `UpdateMembers/UpdateEdges` |
-| 获取运行配置 | 返回指定版本的只读拓扑 | `GetRuntimeContext` |
+| 获取运行配置 | 通过内部 acting-user 身份返回当前 active 版本的只读拓扑 | `TeamworkService.GetRuntimeContext` |
 
 ## 数据模型
 
@@ -77,3 +77,10 @@ Topology 和 Member 使用 ULID；更新以 `expected_version` 乐观并发控�
 1. 校验 Workspace 与 expected_version。
 2. 校验成员引用同一 Workspace，边端点存在且满足拓扑规则。
 3. 原子写入新版本并发布 `TeamworkTopologyChanged`。
+
+### GetRuntimeContext
+
+1. 仅接受 Control 内部服务令牌建立的 acting-user 身份，并按该用户校验 Workspace owner。
+2. 只投影当前 `active` Topology 的 ID、Workspace、版本、入口成员、成员与边。
+3. 创建、更新和投影时均校验成员的 `agent_config_id` 属于同一 Workspace；当前一个 Workspace 只有一个 active Agent Configuration，多个成员可以复用该配置。
+4. Provider API Key 不属于 Teamwork 投影；Gateway 仍通过 Workspace Runtime Context 按单次运行请求获取。

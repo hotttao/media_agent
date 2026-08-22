@@ -108,7 +108,7 @@ func GetRuntimeContext(ctx context.Context, c *app.RequestContext) {
 }
 
 func toResponse(value *domain.ConfiguredWorkspace) *workspace.WorkspaceResponse {
-	return &workspace.WorkspaceResponse{Id: value.Workspace.ID, Name: value.Workspace.Name, AgentId: value.AgentID, AgentType: value.AgentType, ApiKeyConfigured: len(value.EncryptedAPIKey) > 0, ConfigurationVersion: value.AgentConfiguration.Version, CreatedAt: value.Workspace.CreatedAt.UnixMilli(), UpdatedAt: value.Workspace.UpdatedAt.UnixMilli()}
+	return &workspace.WorkspaceResponse{Id: value.Workspace.ID, Name: value.Workspace.Name, AgentId: value.AgentID, AgentType: value.AgentType, ApiKeyConfigured: len(value.EncryptedAPIKey) > 0, ConfigurationVersion: value.AgentConfiguration.Version, CreatedAt: value.Workspace.CreatedAt.UnixMilli(), UpdatedAt: value.Workspace.UpdatedAt.UnixMilli(), AgentConfigurationId: value.AgentConfiguration.ID}
 }
 func writeError(c *app.RequestContext, err error) {
 	if errors.Is(err, domain.ErrNotFound) {
