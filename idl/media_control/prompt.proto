@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package media_control.prompt;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/prompt";
+
+service PromptService {
+  rpc CreatePrompt(CreatePromptRequest) returns (PromptResponse) {
+    option (api.post) = "/api/v1/prompts";
+    option (google.api.http) = { post: "/api/v1/prompts" body: "*" };
+  }
+
+  rpc ListPrompts(ListPromptsRequest) returns (ListPromptsResponse) {
+    option (api.get) = "/api/v1/prompts";
+    option (google.api.http) = { get: "/api/v1/prompts" };
+  }
+
+  rpc GetPrompt(GetPromptRequest) returns (PromptResponse) {
+    option (api.get) = "/api/v1/prompts/:prompt_id";
+    option (google.api.http) = { get: "/api/v1/prompts/{prompt_id}" };
+  }
+
+  rpc UpdatePrompt(UpdatePromptRequest) returns (PromptResponse) {
+    option (api.put) = "/api/v1/prompts/:prompt_id";
+    option (google.api.http) = { put: "/api/v1/prompts/{prompt_id}" body: "*" };
+  }
+
+  rpc ArchivePrompt(ArchivePromptRequest) returns (PromptResponse) {
+    option (api.post) = "/api/v1/prompts/:prompt_id/archive";
+    option (google.api.http) = { post: "/api/v1/prompts/{prompt_id}/archive" body: "*" };
+  }
+}
+
+message CreatePromptRequest {
+  string workspace_id = 1 [(api.body) = "workspace_id"];
+  string name = 2 [(api.body) = "name"];
+  string content = 3 [(api.body) = "content"];
+}
+
+message ListPromptsRequest {
+  string workspace_id = 1 [(api.query) = "workspace_id"];
+}
+
+message GetPromptRequest {
+  string prompt_id = 1 [(api.path) = "prompt_id"];
+}
+
+message UpdatePromptRequest {
+  string prompt_id = 1 [(api.path) = "prompt_id"];
+  string name = 2 [(api.body) = "name"];
+  string content = 3 [(api.body) = "content"];
+  int64 expected_version = 4 [(api.body) = "expected_version"];
+}
+
+message ArchivePromptRequest {
+  string prompt_id = 1 [(api.path) = "prompt_id"];
+  int64 expected_version = 2 [(api.body) = "expected_version"];
+}
+
+message PromptResponse {
+  string id = 1;
+  string workspace_id = 2;
+  string name = 3;
+  string content = 4;
+  string status = 5;
+  int64 version = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
+}
+
+message ListPromptsResponse {
+  repeated PromptResponse prompts = 1;
+}

@@ -9,9 +9,12 @@ import (
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_control/biz/dal"
+	promptrepo "media_agent/media_control/biz/dal/repo/prompt"
 	repo "media_agent/media_control/biz/dal/repo/workspace"
+	prompthandler "media_agent/media_control/biz/handler/prompt"
 	workspacehandler "media_agent/media_control/biz/handler/workspace"
 	"media_agent/media_control/biz/middleware"
+	promptservice "media_agent/media_control/biz/service/prompt"
 	workspaceservice "media_agent/media_control/biz/service/workspace"
 	"media_agent/media_control/biz/shared/secret"
 )
@@ -60,6 +63,7 @@ func main() {
 		workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret()))),
 		envOr("CONTROL_INTERNAL_TOKEN", ""),
 	)
+	prompthandler.Configure(promptservice.New(promptrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 
 	h := suite.NewServer()
 	register(h)
