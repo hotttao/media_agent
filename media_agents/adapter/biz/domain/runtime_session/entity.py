@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
+from uuid import uuid4
 
 from adapter.biz.domain.runtime_session.errors import InvalidRuntimeSession, InvalidTurn
 
@@ -70,6 +71,17 @@ class Message:
 
 
 @dataclass(frozen=True, slots=True)
+class UniversalEvent:
+    event_id: str
+    session_id: str
+    turn_id: str | None
+    sequence: int
+    event_type: str
+    payload: dict[str, object]
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeSession:
     session_id: str
     context_version: int
@@ -80,6 +92,7 @@ class RuntimeSession:
     runtime_session_id: str | None
     next_turn_sequence: int
     next_event_sequence: int
+    next_message_sequence: int
     created_at: datetime
     updated_at: datetime
 
@@ -111,8 +124,66 @@ class RuntimeSession:
             runtime_session_id=None,
             next_turn_sequence=1,
             next_event_sequence=1,
+            next_message_sequence=1,
             created_at=timestamp,
             updated_at=timestamp,
+        )
+
+    def new_message(
+        self,
+        *,
+        turn_id: str,
+        role: str,
+        content_ref: dict[str, object],
+        now: datetime,
+    ) -> tuple[RuntimeSession, Message]:
+        if role not in {"user", "assistant", "tool", "system"}:
+            raise InvalidTurn(f"invalid Message role: {role}")
+        message = Message(
+            message_id=str(uuid4()),
+            session_id=self.session_id,
+            turn_id=turn_id,
+            role=role,
+            content_ref=content_ref,
+            sequence=self.next_message_sequence,
+            created_at=now,
+        )
+        return (
+            replace(
+                self,
+                next_message_sequence=self.next_message_sequence + 1,
+                updated_at=now,
+            ),
+            message,
+        )
+
+    def new_event(
+        self,
+        *,
+        event_type: str,
+        payload: dict[str, object],
+        turn_id: str | None,
+        now: datetime,
+    ) -> tuple[RuntimeSession, UniversalEvent]:
+        normalized_type = event_type.strip()
+        if not normalized_type:
+            raise InvalidTurn("Universal Event type is required")
+        event = UniversalEvent(
+            event_id=str(uuid4()),
+            session_id=self.session_id,
+            turn_id=turn_id,
+            sequence=self.next_event_sequence,
+            event_type=normalized_type,
+            payload=payload,
+            created_at=now,
+        )
+        return (
+            replace(
+                self,
+                next_event_sequence=self.next_event_sequence + 1,
+                updated_at=now,
+            ),
+            event,
         )
 
     def attach_runtime(self, runtime_session_id: str, *, now: datetime) -> RuntimeSession:

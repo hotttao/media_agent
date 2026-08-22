@@ -148,11 +148,17 @@ print(json.dumps({"type":"result","subtype":"success"}), flush=True)
     credentials = RuntimeCredentials(api_key="sk-ant-runtime")
     first = await runtime.prepare(session, turn, credentials)
     assert first.handle == "business-1" and first.is_new
-    assert (await runtime.execute(first, session, turn, credentials)).status is TurnStatus.COMPLETED
+    assert (
+        await runtime.execute(first, session, turn, credentials, _ignore_event)
+    ).status is TurnStatus.COMPLETED
 
     resumed_session = session.attach_runtime("business-1", now=datetime.now(UTC))
     resumed = await runtime.prepare(resumed_session, turn, credentials)
     assert not resumed.is_new
     assert (
-        await runtime.execute(resumed, resumed_session, turn, credentials)
+        await runtime.execute(resumed, resumed_session, turn, credentials, _ignore_event)
     ).status is TurnStatus.COMPLETED
+
+
+async def _ignore_event(payload: dict[str, object]) -> None:
+    pass

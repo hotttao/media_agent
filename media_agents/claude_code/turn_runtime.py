@@ -9,6 +9,7 @@ from adapter.biz.workflow.execute_turn_flow import (
     RuntimePreparation,
     RuntimeResult,
 )
+from adapter.biz.workflow.turn_event_sink import RuntimeEventHandler
 from claude_code.agent import ClaudeCodeAgent
 
 
@@ -28,6 +29,7 @@ class ClaudeCodeTurnRuntime:
         session: RuntimeSession,
         turn: Turn,
         credentials: RuntimeCredentials,
+        event_handler: RuntimeEventHandler,
     ) -> RuntimeResult:
         message = turn.input.get("message")
         if not isinstance(message, str) or not message.strip():
@@ -40,6 +42,7 @@ class ClaudeCodeTurnRuntime:
             api_key=credentials.api_key,
             resume=not preparation.is_new,
         ):
+            await event_handler(event)
             if event.get("type") == "error":
                 error_class = "provider_error"
             if event.get("type") == "session.ended":

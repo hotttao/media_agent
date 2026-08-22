@@ -56,6 +56,33 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/TurnResponse'}
         '404': {description: Not found}
+  /api/v1/runtime-sessions/{session_id}/events:
+    get:
+      operationId: replayRuntimeSessionEvents
+      parameters:
+        - {in: path, name: session_id, required: true, schema: {type: string}}
+        - {in: query, name: after_sequence, schema: {type: integer, minimum: 0, default: 0}}
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 1000, default: 200}}
+      responses:
+        '200':
+          description: Durable events ordered by Session sequence
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/UniversalEventResponse'}}
+        '404': {description: Runtime Session not found}
+  /api/v1/runtime-sessions/{session_id}/messages:
+    get:
+      operationId: listRuntimeSessionMessages
+      parameters:
+        - {in: path, name: session_id, required: true, schema: {type: string}}
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 1000, default: 200}}
+      responses:
+        '200':
+          description: Stable Message history ordered by Message sequence
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/MessageResponse'}}
+        '404': {description: Runtime Session not found}
   /api/v1/runtime-sessions/{session_id}/turns/{turn_id}:
     get:
       operationId: getTurn
@@ -114,7 +141,7 @@ components:
         context_ref: {type: string, minLength: 1, maxLength: 512}
     RuntimeSessionResponse:
       type: object
-      required: [session_id, context_version, context_ref, status, chat_status, next_turn_sequence, next_event_sequence, created_at, updated_at]
+      required: [session_id, context_version, context_ref, status, chat_status, next_turn_sequence, next_event_sequence, next_message_sequence, created_at, updated_at]
       properties:
         session_id: {type: string}
         context_version: {type: integer, format: int64}
@@ -125,5 +152,28 @@ components:
         runtime_session_id: {type: string, nullable: true}
         next_turn_sequence: {type: integer, format: int64}
         next_event_sequence: {type: integer, format: int64}
+        next_message_sequence: {type: integer, format: int64}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+    UniversalEventResponse:
+      type: object
+      required: [event_id, session_id, sequence, event_type, payload, created_at]
+      properties:
+        event_id: {type: string}
+        session_id: {type: string}
+        turn_id: {type: string, nullable: true}
+        sequence: {type: integer, format: int64}
+        event_type: {type: string}
+        payload: {type: object}
+        created_at: {type: string, format: date-time}
+    MessageResponse:
+      type: object
+      required: [message_id, session_id, turn_id, role, content_ref, sequence, created_at]
+      properties:
+        message_id: {type: string}
+        session_id: {type: string}
+        turn_id: {type: string}
+        role: {type: string}
+        content_ref: {type: object}
+        sequence: {type: integer, format: int64}
+        created_at: {type: string, format: date-time}

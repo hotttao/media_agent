@@ -1,5 +1,13 @@
 # Runtime Session 变更记录
 
+## 2026-08-22 · Universal Event、Message 历史与回放落地
+
+- Runtime Session 新增 `next_message_sequence`，并发安全地分配历史 Message 查询次序。
+- Message Sequence 与 Universal Event 的 Session Sequence 分别递增，禁止复用或以 `MAX+1` 推导。
+- 现有 user Message 回填后从当前最大值继续，assistant/tool Message 使用同一计数器。
+- 完成项、工具结果快照和终态事实由 Agent 原子持久化；Live Event Frame 不占 Session Sequence。
+- 增加按 `after_sequence` 的 Universal Event 回放和稳定 Message 历史查询。
+
 ## 2026-08-22 · Execute Turn 终态与暂停规则落地
 
 - running Turn 可原子进入 completed、failed 或 interrupted，终态不可覆盖。

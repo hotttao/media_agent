@@ -35,6 +35,12 @@ database:
   migrate_on_start: ${oc.decode:${oc.env:MEDIA_AGENTS_DB_MIGRATE_ON_START,true}}
   echo: ${oc.decode:${oc.env:MEDIA_AGENTS_DB_ECHO,false}}
 
+event_bus:
+  redis_url: ${oc.env:MEDIA_AGENTS_REDIS_URL,null}
+  channel_prefix: ${oc.env:MEDIA_AGENTS_EVENT_CHANNEL_PREFIX,media-agents:session-events}
+  tool_result_max_bytes: ${oc.decode:${oc.env:MEDIA_AGENTS_TOOL_RESULT_MAX_BYTES,32768}}
+  tool_result_window_ms: ${oc.decode:${oc.env:MEDIA_AGENTS_TOOL_RESULT_WINDOW_MS,300}}
+
 runtime:
   file: runtime.json
   prompt_file: AGENTS.md

@@ -11,6 +11,7 @@ class RuntimeSessionResponse(BaseModel):
     runtime_session_id: str | None
     next_turn_sequence: int
     next_event_sequence: int
+    next_message_sequence: int
     created_at: str
     updated_at: str
 
@@ -27,3 +28,23 @@ class TurnResponse(BaseModel):
     started_at: str | None
     finished_at: str | None
     error_class: str | None
+
+
+class UniversalEventResponse(BaseModel):
+    event_id: str
+    session_id: str
+    turn_id: str | None
+    sequence: int
+    event_type: str
+    payload: dict[str, object]
+    created_at: str
+
+
+class MessageResponse(BaseModel):
+    message_id: str
+    session_id: str
+    turn_id: str
+    role: str
+    content_ref: dict[str, object]
+    sequence: int
+    created_at: str

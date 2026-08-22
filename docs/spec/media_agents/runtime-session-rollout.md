@@ -26,16 +26,16 @@ workflow 顶层开启，repository 从 context-local session 取得连接。
 | 原能力/设计能力 | 目标限界上下文 | Domain | 聚合/读模型 | Workflow | 状态 |
 |:---|:---|:---|:---|:---|:---|
 | Gateway Session Registration | media_agent_gateway | agent_session | Agent Session Registration | agent_session_startup | external-owner: `media_agent_gateway` |
-| 注册 Runtime Session | media_agents | runtime_session | Runtime Session | agent_session_startup | implemented |
-| 幂等提交并排队 Turn | media_agents | runtime_session | Runtime Session / Turn Queue | execute_turn | implemented |
-| 串行声明 queued Turn | media_agents | runtime_session | Runtime Session / Turn | execute_turn | implemented |
-| 执行 Runtime Turn | media_agents | runtime_session | Turn | execute_turn | implemented（Codex ACP、Claude Code） |
-| 持久化 Message | media_agents | runtime_session | Message | execute_turn | partial（user Message 已迁移；assistant/tool 属于 P4） |
-| 持久化 Universal Event 与 Session sequence | media_agents | runtime_session | Universal Event | execute_turn | missing（Gateway 现存能力待迁移） |
-| 发布 Live/Universal Event | media_agents | runtime_session | Session Event Bus | execute_turn | missing |
-| 回放 Universal Event | media_agents | runtime_session | Universal Event 读模型 | execute_turn | missing |
-| 查询 Message 与 Chat Status | media_agents | runtime_session | Message / Runtime Session | execute_turn | partial（Chat Status/Turn 已实现，Message 查询属于 P4） |
-| 软中断当前 Turn | media_agents | runtime_session | Turn | execute_turn | implemented |
+| 注册 Runtime Session | media_agents | runtime_session | Runtime Session | agent_session_startup | covered |
+| 幂等提交并排队 Turn | media_agents | runtime_session | Runtime Session / Turn Queue | execute_turn | covered |
+| 串行声明 queued Turn | media_agents | runtime_session | Runtime Session / Turn | execute_turn | covered |
+| 执行 Runtime Turn | media_agents | runtime_session | Turn | execute_turn | covered（Codex ACP、Claude Code） |
+| 持久化 Message | media_agents | runtime_session | Message | execute_turn | covered |
+| 持久化 Universal Event 与 Session sequence | media_agents | runtime_session | Universal Event | execute_turn | covered |
+| 发布 Live/Universal Event | media_agents | runtime_session | Session Event Bus | execute_turn | covered |
+| 回放 Universal Event | media_agents | runtime_session | Universal Event 读模型 | execute_turn | covered |
+| 查询 Message 与 Chat Status | media_agents | runtime_session | Message / Runtime Session | execute_turn | covered |
+| 软中断当前 Turn | media_agents | runtime_session | Turn | execute_turn | covered |
 | 解决 Agent Request | media_agents | runtime_session | Agent Request | execute_turn | missing |
 | Gateway Web 鉴权与 SSE framing | media_agent_gateway | agent_session | Registration/SSE adapter | run_turn | external-owner: `media_agent_gateway` |
 | Gateway 直接持久化交互事件 | media_agent_gateway | agent_session | 旧 Message/Event 写模型 | run_turn | deprecated-with-reason: ADR-0009 完成迁移后删除 |
@@ -67,7 +67,8 @@ API key 等秘密放在 SubmitTurn 的 write-only 执行信封中，仅在对应
 ### 4. Universal Event、Message 与回放
 
 实现 Agent-owned sequence、完成 Message、tool result 聚合/截断、持久化后发布，以及
-`after_sequence` 回放。Live frame 不分配 sequence。
+`after_sequence` 回放。Runtime Session 使用独立 `next_event_sequence` 与
+`next_message_sequence`，分别服务事件恢复和 Message 查询，禁止 `MAX+1`。Live frame 不分配 sequence。
 
 ### 5. Gateway 切换与旧写路径移除
 

@@ -47,7 +47,7 @@ from adapter.biz.domain.acp_adapter.llm_event import (
 from adapter.biz.domain.acp_adapter.translator import AcpEventTranslator
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Awaitable, Callable
 
     from adapter.biz.domain.acp_adapter.bridge import AcpBridge
 
@@ -177,6 +177,12 @@ class AcpSession:
         self.busy_turns: int = 0
         self.last_active: float = 0.0
         self.pending_destroy: bool = False
+        self._event_observer: Callable[[dict[str, object]], Awaitable[None]] | None = None
+
+    def set_event_observer(
+        self, observer: Callable[[dict[str, object]], Awaitable[None]] | None
+    ) -> None:
+        self._event_observer = observer
 
     def set_session_id(self, session_id: str) -> None:
         """Update the resolved platform session id across session collaborators."""
@@ -227,7 +233,10 @@ class AcpSession:
 
     async def write_event(self, event: UniversalEvent) -> None:
         """Write one UniversalEvent to the SSE sink as structured JSON."""
-        await self.sink.write("message", json.dumps(to_event_dict(event), ensure_ascii=False))
+        payload = to_event_dict(event)
+        if self._event_observer is not None:
+            await self._event_observer(payload)
+        await self.sink.write("message", json.dumps(payload, ensure_ascii=False))
 
     async def emit_started(self) -> None:
         """Emit the session.started lifecycle event for this SSE stream."""

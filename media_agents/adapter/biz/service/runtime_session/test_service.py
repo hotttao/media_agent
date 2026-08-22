@@ -5,7 +5,13 @@ from typing import Any
 
 import pytest
 
-from adapter.biz.domain.runtime_session.entity import Message, RuntimeSession, Turn, TurnStatus
+from adapter.biz.domain.runtime_session.entity import (
+    Message,
+    RuntimeSession,
+    Turn,
+    TurnStatus,
+    UniversalEvent,
+)
 from adapter.biz.domain.runtime_session.errors import (
     ContextVersionConflict,
     InvalidTurn,
@@ -29,6 +35,7 @@ class FakeRepository:
         self.locked = False
         self.turns: dict[tuple[str, str], Turn] = {}
         self.messages: list[Message] = []
+        self.events: list[UniversalEvent] = []
 
     async def get(self, session_id: str, *, for_update: bool = False) -> RuntimeSession | None:
         self.locked = self.locked or for_update
@@ -47,6 +54,32 @@ class FakeRepository:
     async def save_submission(self, session: RuntimeSession) -> None:
         self.sessions[session.session_id] = session
 
+    async def add_event(
+        self, session: RuntimeSession, event: UniversalEvent, message: Message | None = None
+    ) -> None:
+        self.sessions[session.session_id] = session
+        self.events.append(event)
+        if message is not None:
+            self.messages.append(message)
+
+    async def find_completed_item(self, turn_id: str, item_id: str) -> UniversalEvent | None:
+        return next(
+            (event for event in self.events if _matches_completed_item(event, turn_id, item_id)),
+            None,
+        )
+
+    async def list_events_after(
+        self, session_id: str, after_sequence: int, limit: int
+    ) -> list[UniversalEvent]:
+        return [
+            event
+            for event in self.events
+            if event.session_id == session_id and event.sequence > after_sequence
+        ][:limit]
+
+    async def list_messages(self, session_id: str, limit: int) -> list[Message]:
+        return [message for message in self.messages if message.session_id == session_id][:limit]
+
     async def get_turn(self, turn_id: str, *, for_update: bool = False) -> Turn | None:
         self.locked = self.locked or for_update
         return next((turn for turn in self.turns.values() if turn.turn_id == turn_id), None)
@@ -63,6 +96,16 @@ class FakeRepository:
         self.sessions[session.session_id] = session
         if turn is not None:
             self.turns[(turn.session_id, turn.idempotency_key)] = turn
+
+
+def _matches_completed_item(event: UniversalEvent, turn_id: str, item_id: str) -> bool:
+    item = event.payload.get("item")
+    return (
+        event.turn_id == turn_id
+        and event.event_type == "item.completed"
+        and isinstance(item, dict)
+        and item.get("item_id") == item_id
+    )
 
 
 @pytest.mark.asyncio
@@ -134,11 +177,53 @@ async def test_finalize_completed_claims_next_but_failure_pauses_queue() -> None
     assert completed.next_turn.status is TurnStatus.RUNNING
 
     failed = await service.finalize_turn(
-        "session-1", second.turn_id, TurnStatus.FAILED, error_class="RuntimeError"
+        "session-1",
+        second.turn_id,
+        TurnStatus.FAILED,
+        error_class="RuntimeError",
+        terminal_payload={"type": "session.ended", "reason": "completed"},
     )
     assert failed.next_turn is None
     assert repository.sessions["session-1"].status.value == "paused"
     assert repository.sessions["session-1"].runtime_session_id == "runtime-1"
+    assert failed.events[0].payload["reason"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_runtime_events_allocate_independent_event_and_message_sequences() -> None:
+    repository = FakeRepository()
+    service = RuntimeSessionService(FakeTransactionRunner(), repository)
+    await service.register(RegisterRuntimeSession("session-1", 1, "context:v1"))
+    turn = await service.submit_turn(SubmitTurn("session-1", "one", 1, {"message": "hello"}))
+    assistant: dict[str, object] = {
+        "type": "item.completed",
+        "item": {
+            "item_id": "message-1",
+            "kind": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": "world"}],
+        },
+    }
+    tool_call: dict[str, object] = {
+        "type": "item.completed",
+        "item": {
+            "item_id": "tool-call-1",
+            "kind": "tool_call",
+            "content": [{"type": "tool_call", "call_id": "call-1"}],
+        },
+    }
+
+    assistant_event = await service.persist_runtime_event("session-1", turn.turn_id, assistant)
+    first_tool_event = await service.persist_runtime_event("session-1", turn.turn_id, tool_call)
+    repeated_tool_event = await service.persist_runtime_event("session-1", turn.turn_id, tool_call)
+
+    assert repeated_tool_event == first_tool_event
+    assert assistant_event.sequence + 1 == first_tool_event.sequence
+    assert [message.sequence for message in await service.list_messages("session-1")] == [1, 2]
+    assert [
+        event.sequence
+        for event in await service.replay_events("session-1", assistant_event.sequence)
+    ] == [first_tool_event.sequence]
 
 
 @pytest.mark.asyncio

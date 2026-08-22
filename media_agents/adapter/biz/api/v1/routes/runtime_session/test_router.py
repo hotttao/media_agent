@@ -6,7 +6,13 @@ from fastapi import FastAPI
 
 from adapter.biz.api.v1.deps import get_execute_turn_flow, get_runtime_session_service
 from adapter.biz.api.v1.routes.runtime_session.router import build_runtime_session_router
-from adapter.biz.domain.runtime_session.entity import RuntimeSession, Turn, TurnStatus
+from adapter.biz.domain.runtime_session.entity import (
+    Message,
+    RuntimeSession,
+    Turn,
+    TurnStatus,
+    UniversalEvent,
+)
 from adapter.biz.domain.runtime_session.errors import (
     ContextVersionConflict,
     RuntimeSessionNotFound,
@@ -35,6 +41,35 @@ class FakeService:
 
     async def get_turn(self, turn_id: str) -> Turn:
         return _turn()
+
+    async def replay_events(
+        self, session_id: str, after_sequence: int, *, limit: int = 200
+    ) -> list[UniversalEvent]:
+        await self.get(session_id)
+        event = UniversalEvent(
+            "event-2",
+            session_id,
+            "turn-1",
+            2,
+            "item.completed",
+            {"type": "item.completed"},
+            datetime(2026, 8, 22, tzinfo=UTC),
+        )
+        return [event] if after_sequence < 2 and limit > 0 else []
+
+    async def list_messages(self, session_id: str, *, limit: int = 200) -> list[Message]:
+        await self.get(session_id)
+        return [
+            Message(
+                "message-1",
+                session_id,
+                "turn-1",
+                "assistant",
+                {"text": "hello"},
+                1,
+                datetime(2026, 8, 22, tzinfo=UTC),
+            )
+        ][:limit]
 
 
 class FakeFlow:
@@ -109,6 +144,15 @@ async def test_register_get_and_conflict_mapping() -> None:
         assert fetched_turn.status_code == 200
         interrupted = await client.post("/api/v1/runtime-sessions/session-1/turns/turn-1/interrupt")
         assert interrupted.json() == {"interrupted": True}
+
+        events = await client.get(
+            "/api/v1/runtime-sessions/session-1/events?after_sequence=1&limit=10"
+        )
+        assert events.status_code == 200
+        assert events.json()[0]["sequence"] == 2
+        messages = await client.get("/api/v1/runtime-sessions/session-1/messages")
+        assert messages.status_code == 200
+        assert messages.json()[0]["role"] == "assistant"
 
 
 @pytest.mark.asyncio

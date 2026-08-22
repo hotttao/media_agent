@@ -40,6 +40,10 @@ _禁用替代词_：Live Event Frame、Message、Broker Message
 由 Agent 在单个 Runtime Session 内为每个 Universal Event 原子分配的严格递增恢复游标。
 _禁用替代词_：Kafka Offset、Redis ID、Message Sequence
 
+**Message Sequence（消息序号）**:
+由 Runtime Session 为历史 Message 原子分配的严格递增查询次序；它不承担 Universal Event 的断线恢复游标语义。
+_禁用替代词_：Session Sequence、Broker Offset、Turn Sequence
+
 **Session Event Bus（会话事件总线）**:
 把 Live Event Frame 和已提交 Universal Event 从 Agent 低延迟扇出到 Gateway 的瞬时通知通道；它不是事实源。
 _禁用替代词_：Event Store、Turn Queue、SSE Connection

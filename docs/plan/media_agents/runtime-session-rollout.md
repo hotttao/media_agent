@@ -34,10 +34,10 @@
 
 ## P4：事件、历史与回放
 
-- [ ] Agent 原子分配 Session sequence 并保存 Universal Event。
-- [ ] 迁移 Message、完成项、tool result 聚合/截断规则。
-- [ ] 实现持久化后总线发布和 `after_sequence` 回放。
-- [ ] 完成临时帧不落库、断线恢复、多订阅者 HTTP/media-cli E2E，独立提交。
+- [x] Agent 原子分配 Session sequence 并保存 Universal Event。
+- [x] 迁移 Message、完成项、tool result 聚合/截断规则。
+- [x] 实现持久化后总线发布和 `after_sequence` 回放。
+- [x] 完成临时帧不落库、断线恢复、多订阅者 HTTP/media-cli E2E，独立提交。
 
 ## P5：Gateway 切换
 

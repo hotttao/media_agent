@@ -15,6 +15,7 @@ dependencies = [
     "httpx",
     "websockets",
     "agent-client-protocol>=0.11.0",
+    "redis>=5.0",
 ]
 
 [build-system]
