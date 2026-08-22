@@ -30,6 +30,7 @@ func Register(r *server.Hertz) {
 				{
 					_topology_id := _teamwork_topologies.Group("/:topology_id", _topology_idMw()...)
 					_topology_id.POST("/delete", append(_deletetopologyMw(), teamwork.DeleteTopology)...)
+					_topology_id.GET("/runtime-context", append(_getruntimecontextMw(), teamwork.GetRuntimeContext)...)
 				}
 			}
 		}

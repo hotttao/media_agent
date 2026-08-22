@@ -29,3 +29,14 @@ func TestNormalizeRoleDefaultsToUser(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimeContextRequiresInternalPrincipal(t *testing.T) {
+	if !isInternalPrincipal(Principal{UserID: "user-1", Internal: true}) {
+		t.Fatal("valid internal acting identity was rejected")
+	}
+	for _, value := range []Principal{{UserID: "user-1"}, {Internal: true}, {UserID: " ", Internal: true}} {
+		if isInternalPrincipal(value) {
+			t.Fatalf("invalid internal principal accepted: %+v", value)
+		}
+	}
+}

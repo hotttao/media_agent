@@ -55,3 +55,7 @@ func _deletetopologyMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _getruntimecontextMw() []app.HandlerFunc {
+	return []app.HandlerFunc{middleware.RequireInternal()}
+}

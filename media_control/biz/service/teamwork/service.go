@@ -28,11 +28,15 @@ func (s *Service) Create(ctx context.Context, c CreateCommand) (*d.Topology, err
 	if c.Owner == "" {
 		return nil, fmt.Errorf("owner is required")
 	}
-	if _, e := s.work.GetOwned(ctx, c.WorkspaceID, c.Owner); e != nil {
+	workspace, e := s.work.GetOwned(ctx, c.WorkspaceID, c.Owner)
+	if e != nil {
 		return nil, e
 	}
 	name, entry, ms, es, e := d.Validate(c.Name, c.EntryMemberID, c.MembersJSON, c.EdgesJSON)
 	if e != nil {
+		return nil, e
+	}
+	if e = validateMemberConfigurations(ms, workspace); e != nil {
 		return nil, e
 	}
 	now := time.Now().UTC()
@@ -67,11 +71,45 @@ func (s *Service) Update(ctx context.Context, c UpdateCommand) (*d.Topology, err
 	if e != nil {
 		return nil, e
 	}
+	workspace, e := s.work.GetOwned(ctx, v.WorkspaceID, c.Owner)
+	if e != nil {
+		return nil, e
+	}
+	if e = validateMemberConfigurations(ms, workspace); e != nil {
+		return nil, e
+	}
 	v.Name, v.EntryMemberID, v.Members, v.Edges = name, entry, ms, es
 	v.Version++
 	v.UpdatedAt = time.Now().UTC()
 	e = s.tx.RunInTx(ctx, func(tx context.Context) error { return s.repo.Update(tx, v, c.ExpectedVersion) })
 	return v, e
+}
+
+func (s *Service) RuntimeContext(ctx context.Context, id, owner string) (*d.Topology, error) {
+	v, err := s.repo.GetOwned(ctx, id, owner)
+	if err != nil {
+		return nil, err
+	}
+	if v.Status != d.StatusActive {
+		return nil, d.ErrNotFound
+	}
+	workspace, err := s.work.GetOwned(ctx, v.WorkspaceID, owner)
+	if err != nil {
+		return nil, err
+	}
+	if err = validateMemberConfigurations(v.Members, workspace); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func validateMemberConfigurations(members []d.Member, workspace *w.ConfiguredWorkspace) error {
+	for _, member := range members {
+		if member.AgentConfigID != workspace.AgentConfiguration.ID {
+			return fmt.Errorf("member %q references an agent configuration outside the workspace", member.MemberID)
+		}
+	}
+	return nil
 }
 func (s *Service) Delete(ctx context.Context, id, o string, ev int64) (*d.Topology, error) {
 	if ev <= 0 {
