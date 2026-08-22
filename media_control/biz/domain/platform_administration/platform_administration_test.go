@@ -24,4 +24,7 @@ func TestValidateSettingAndAdmin(t *testing.T) {
 	if err := (Actor{UserID: "user-1", Role: "user"}).ValidateAdmin(); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("ordinary user accepted: %v", err)
 	}
+	if err := (Actor{UserID: "observer", Role: "system", Internal: true}).ValidateSystem(); err != nil {
+		t.Fatal(err)
+	}
 }

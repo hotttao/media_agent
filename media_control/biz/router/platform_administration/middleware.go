@@ -49,3 +49,27 @@ func _updateplatformsettingMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _listclusterprojectionsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _clustersMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getclusterprojectionMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _cluster_idMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _reportclusterprojectionMw() []app.HandlerFunc {
+	return []app.HandlerFunc{middleware.RequireInternalSystem()}
+}

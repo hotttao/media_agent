@@ -12,7 +12,7 @@ Platform Setting 是 Platform Administration 的版本化命令侧聚合。本�
 | `expected_version` 乐观并发更新 | covered |
 | 普通用户管理入口拒绝 | covered |
 | 设置变更与 `PlatformSettingChanged` Outbox 原子提交 | covered |
-| Cluster 状态投影 | missing |
+| Cluster 状态投影 | covered |
 | 平台统计投影 | missing |
 | Admin Workspace 查询 | missing |
 

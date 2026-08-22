@@ -18,10 +18,20 @@ var (
 
 var settingKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,127}$`)
 
-type Actor struct{ UserID, Role string }
+type Actor struct {
+	UserID, Role string
+	Internal     bool
+}
 
 func (a Actor) ValidateAdmin() error {
 	if strings.TrimSpace(a.UserID) == "" || (a.Role != "admin" && a.Role != "system") {
+		return ErrForbidden
+	}
+	return nil
+}
+
+func (a Actor) ValidateSystem() error {
+	if strings.TrimSpace(a.UserID) == "" || a.Role != "system" || !a.Internal {
 		return ErrForbidden
 	}
 	return nil

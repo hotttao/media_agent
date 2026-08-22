@@ -15,8 +15,11 @@ import (
 )
 
 var platformAdministrationService *service.Service
+var clusterProjectionService *service.ClusterService
 
-func Configure(value *service.Service) { platformAdministrationService = value }
+func Configure(value *service.Service, clusters *service.ClusterService) {
+	platformAdministrationService, clusterProjectionService = value, clusters
+}
 
 // CreatePlatformSetting .
 // @router /api/v1/admin/platform-settings [POST]
@@ -99,7 +102,7 @@ func UpdatePlatformSetting(ctx context.Context, c *app.RequestContext) {
 }
 
 func actor(ctx context.Context) domain.Actor {
-	return domain.Actor{UserID: middleware.UserID(ctx), Role: middleware.Role(ctx)}
+	return domain.Actor{UserID: middleware.UserID(ctx), Role: middleware.Role(ctx), Internal: middleware.IsInternal(ctx)}
 }
 func toResponse(value *domain.Setting) *platform_administration.PlatformSettingResponse {
 	return &platform_administration.PlatformSettingResponse{Key: value.Key, ValueJson: value.ValueJSON, Version: value.Version, UpdatedBy: value.UpdatedBy, UpdatedAt: value.UpdatedAt.UnixMilli()}
@@ -115,4 +118,69 @@ func writeError(c *app.RequestContext, err error) {
 		status = consts.StatusConflict
 	}
 	c.JSON(status, map[string]string{"error": err.Error()})
+}
+
+// ReportClusterProjection .
+// @router /api/v1/admin/clusters/:cluster_id/report [PUT]
+func ReportClusterProjection(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req platform_administration.ReportClusterProjectionRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	value, err := clusterProjectionService.Report(ctx, actor(ctx), req.ClusterId, req.Status, req.CapacityJson, req.ObservedAt)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, toClusterResponse(value))
+}
+
+// ListClusterProjections .
+// @router /api/v1/admin/clusters [GET]
+func ListClusterProjections(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req platform_administration.ListClusterProjectionsRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	values, err := clusterProjectionService.List(ctx, actor(ctx))
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	resp := &platform_administration.ListClusterProjectionsResponse{}
+	for i := range values {
+		resp.Clusters = append(resp.Clusters, toClusterResponse(&values[i]))
+	}
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetClusterProjection .
+// @router /api/v1/admin/clusters/:cluster_id [GET]
+func GetClusterProjection(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req platform_administration.GetClusterProjectionRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	value, err := clusterProjectionService.Get(ctx, actor(ctx), req.ClusterId)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, toClusterResponse(value))
+}
+
+func toClusterResponse(value *domain.ClusterProjection) *platform_administration.ClusterProjectionResponse {
+	return &platform_administration.ClusterProjectionResponse{ClusterId: value.ClusterID, Status: string(value.Status), CapacityJson: value.CapacityJSON, ObservedAt: value.ObservedAt.UnixMilli()}
 }

@@ -18,7 +18,10 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-type Principal struct{ UserID, Role string }
+type Principal struct {
+	UserID, Role string
+	Internal     bool
+}
 
 var secret []byte
 var serviceToken string
@@ -31,13 +34,14 @@ func principal(ctx context.Context) Principal {
 	value, _ := ctx.Value(sessionKey{}).(Principal)
 	return value
 }
-func UserID(ctx context.Context) string { return principal(ctx).UserID }
-func Role(ctx context.Context) string   { return principal(ctx).Role }
+func UserID(ctx context.Context) string   { return principal(ctx).UserID }
+func Role(ctx context.Context) string     { return principal(ctx).Role }
+func IsInternal(ctx context.Context) bool { return principal(ctx).Internal }
 func Session() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		if userID, ok := internalUser(string(c.GetHeader("X-Control-Service-Token")), serviceToken, string(c.GetHeader("X-Control-Acting-User-ID"))); ok {
 			role := normalizeRole(string(c.GetHeader("X-Control-Acting-Role")))
-			c.Next(context.WithValue(ctx, sessionKey{}, Principal{UserID: userID, Role: role}))
+			c.Next(context.WithValue(ctx, sessionKey{}, Principal{UserID: userID, Role: role, Internal: true}))
 			return
 		}
 		claims := &Claims{}
@@ -53,6 +57,17 @@ func Session() app.HandlerFunc {
 			return
 		}
 		c.Next(context.WithValue(ctx, sessionKey{}, Principal{UserID: claims.Sub, Role: normalizeRole(claims.Role)}))
+	}
+}
+
+func RequireInternalSystem() app.HandlerFunc {
+	return func(ctx context.Context, c *app.RequestContext) {
+		if !IsInternal(ctx) || Role(ctx) != "system" {
+			c.JSON(consts.StatusForbidden, map[string]string{"error": "internal system identity is required"})
+			c.Abort()
+			return
+		}
+		c.Next(ctx)
 	}
 }
 

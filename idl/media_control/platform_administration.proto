@@ -24,6 +24,18 @@ service PlatformAdministrationService {
     option (api.put) = "/api/v1/admin/platform-settings/:setting_key";
     option (google.api.http) = { put: "/api/v1/admin/platform-settings/{setting_key}" body: "*" };
   }
+  rpc ReportClusterProjection(ReportClusterProjectionRequest) returns (ClusterProjectionResponse) {
+    option (api.put) = "/api/v1/admin/clusters/:cluster_id/report";
+    option (google.api.http) = { put: "/api/v1/admin/clusters/{cluster_id}/report" body: "*" };
+  }
+  rpc ListClusterProjections(ListClusterProjectionsRequest) returns (ListClusterProjectionsResponse) {
+    option (api.get) = "/api/v1/admin/clusters";
+    option (google.api.http) = { get: "/api/v1/admin/clusters" };
+  }
+  rpc GetClusterProjection(GetClusterProjectionRequest) returns (ClusterProjectionResponse) {
+    option (api.get) = "/api/v1/admin/clusters/:cluster_id";
+    option (google.api.http) = { get: "/api/v1/admin/clusters/{cluster_id}" };
+  }
 }
 
 message CreatePlatformSettingRequest { string key = 1 [(api.body) = "key"]; string value_json = 2 [(api.body) = "value_json"]; }
@@ -32,3 +44,8 @@ message GetPlatformSettingRequest { string setting_key = 1 [(api.path) = "settin
 message UpdatePlatformSettingRequest { string setting_key = 1 [(api.path) = "setting_key"]; string value_json = 2 [(api.body) = "value_json"]; int64 expected_version = 3 [(api.body) = "expected_version"]; }
 message PlatformSettingResponse { string key = 1; string value_json = 2; int64 version = 3; string updated_by = 4; int64 updated_at = 5; }
 message ListPlatformSettingsResponse { repeated PlatformSettingResponse settings = 1; }
+message ReportClusterProjectionRequest { string cluster_id = 1 [(api.path) = "cluster_id"]; string status = 2 [(api.body) = "status"]; string capacity_json = 3 [(api.body) = "capacity_json"]; int64 observed_at = 4 [(api.body) = "observed_at"]; }
+message ListClusterProjectionsRequest {}
+message GetClusterProjectionRequest { string cluster_id = 1 [(api.path) = "cluster_id"]; }
+message ClusterProjectionResponse { string cluster_id = 1; string status = 2; string capacity_json = 3; int64 observed_at = 4; }
+message ListClusterProjectionsResponse { repeated ClusterProjectionResponse clusters = 1; }

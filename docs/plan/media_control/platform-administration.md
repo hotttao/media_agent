@@ -11,6 +11,6 @@
 
 ## 后续读模型
 
-- [ ] Cluster 状态投影。
+- [x] Cluster 状态投影：内部单调上报、Admin 查询与迟到观测保护。
 - [ ] 平台统计投影。
 - [ ] Admin Workspace 查询。
