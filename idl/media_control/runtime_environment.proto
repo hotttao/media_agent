@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package media_control.runtime_environment;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/runtime_environment";
+
+service RuntimeEnvironmentService {
+  rpc CreateEnvironment(CreateEnvironmentRequest) returns (EnvironmentResponse) {
+    option (api.post) = "/api/v1/runtime-environments";
+    option (google.api.http) = { post: "/api/v1/runtime-environments" body: "*" };
+  }
+  rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse) {
+    option (api.get) = "/api/v1/runtime-environments";
+    option (google.api.http) = { get: "/api/v1/runtime-environments" };
+  }
+  rpc GetEnvironment(GetEnvironmentRequest) returns (EnvironmentResponse) {
+    option (api.get) = "/api/v1/runtime-environments/:environment_id";
+    option (google.api.http) = { get: "/api/v1/runtime-environments/{environment_id}" };
+  }
+  rpc UpdateEnvironment(UpdateEnvironmentRequest) returns (EnvironmentResponse) {
+    option (api.put) = "/api/v1/runtime-environments/:environment_id";
+    option (google.api.http) = { put: "/api/v1/runtime-environments/{environment_id}" body: "*" };
+  }
+  rpc DeleteEnvironment(DeleteEnvironmentRequest) returns (EnvironmentResponse) {
+    option (api.post) = "/api/v1/runtime-environments/:environment_id/delete";
+    option (google.api.http) = { post: "/api/v1/runtime-environments/{environment_id}/delete" body: "*" };
+  }
+  rpc ReconcilePlacement(ReconcilePlacementRequest) returns (PlacementResponse) {
+    option (api.post) = "/api/v1/workspaces/:workspace_id/placement/reconcile";
+    option (google.api.http) = { post: "/api/v1/workspaces/{workspace_id}/placement/reconcile" body: "*" };
+  }
+  rpc GetPlacementStatus(GetPlacementStatusRequest) returns (PlacementResponse) {
+    option (api.get) = "/api/v1/workspaces/:workspace_id/placement";
+    option (google.api.http) = { get: "/api/v1/workspaces/{workspace_id}/placement" };
+  }
+  rpc EnsureWorkspaceRuntimeDirectory(EnsureWorkspaceRuntimeDirectoryRequest) returns (PlacementResponse) {
+    option (api.post) = "/api/v1/workspaces/:workspace_id/runtime-directory/ensure";
+    option (google.api.http) = { post: "/api/v1/workspaces/{workspace_id}/runtime-directory/ensure" body: "*" };
+  }
+}
+
+message CreateEnvironmentRequest { string name = 1 [(api.body) = "name"]; string endpoint = 2 [(api.body) = "endpoint"]; string capacity_json = 3 [(api.body) = "capacity_json"]; }
+message ListEnvironmentsRequest {}
+message GetEnvironmentRequest { string environment_id = 1 [(api.path) = "environment_id"]; }
+message UpdateEnvironmentRequest { string environment_id = 1 [(api.path) = "environment_id"]; string name = 2 [(api.body) = "name"]; string endpoint = 3 [(api.body) = "endpoint"]; string capacity_json = 4 [(api.body) = "capacity_json"]; string status = 5 [(api.body) = "status"]; int64 expected_version = 6 [(api.body) = "expected_version"]; }
+message DeleteEnvironmentRequest { string environment_id = 1 [(api.path) = "environment_id"]; int64 expected_version = 2 [(api.body) = "expected_version"]; }
+message ReconcilePlacementRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; }
+message GetPlacementStatusRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; }
+message EnsureWorkspaceRuntimeDirectoryRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; }
+message EnvironmentResponse { string id = 1; string name = 2; string endpoint = 3; string capacity_json = 4; string status = 5; int64 version = 6; int64 created_at = 7; int64 updated_at = 8; }
+message ListEnvironmentsResponse { repeated EnvironmentResponse environments = 1; }
+message PlacementResponse { string workspace_id = 1; string environment_id = 2; string status = 3; string reason = 4; string volume_ref = 5; int64 version = 6; int64 updated_at = 7; }
