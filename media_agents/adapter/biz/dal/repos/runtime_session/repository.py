@@ -44,6 +44,24 @@ class SqlRuntimeSessionRepository:
         row = (await current_session().execute(statement)).scalar_one_or_none()
         return _turn_to_domain(row) if row is not None else None
 
+    async def get_turn(self, turn_id: str, *, for_update: bool = False) -> Turn | None:
+        statement = select(TurnRow).where(TurnRow.turn_id == turn_id)
+        if for_update:
+            statement = statement.with_for_update()
+        row = (await current_session().execute(statement)).scalar_one_or_none()
+        return _turn_to_domain(row) if row is not None else None
+
+    async def get_queue_head(self, session_id: str) -> Turn | None:
+        statement = (
+            select(TurnRow)
+            .where(TurnRow.session_id == session_id, TurnRow.status == TurnStatus.QUEUED.value)
+            .order_by(TurnRow.enqueue_sequence)
+            .limit(1)
+            .with_for_update()
+        )
+        row = (await current_session().execute(statement)).scalar_one_or_none()
+        return _turn_to_domain(row) if row is not None else None
+
     async def add_turn(self, turn: Turn, message: Message) -> None:
         db = current_session()
         db.add(
@@ -81,9 +99,30 @@ class SqlRuntimeSessionRepository:
         if row is None:
             raise RuntimeSessionAlreadyExists(session.session_id)
         row.active_turn_id = session.active_turn_id
+        row.runtime_session_id = session.runtime_session_id
         row.chat_status = session.chat_status.value
         row.next_turn_sequence = session.next_turn_sequence
         row.updated_at = session.updated_at
+        await db.flush()
+
+    async def save_execution(self, session: RuntimeSession, turn: Turn | None = None) -> None:
+        db = current_session()
+        row = await db.get(RuntimeSessionRow, session.session_id)
+        if row is None:
+            raise RuntimeSessionAlreadyExists(session.session_id)
+        row.status = session.status.value
+        row.chat_status = session.chat_status.value
+        row.active_turn_id = session.active_turn_id
+        row.runtime_session_id = session.runtime_session_id
+        row.updated_at = session.updated_at
+        if turn is not None:
+            turn_row = await db.get(TurnRow, turn.turn_id)
+            if turn_row is None:
+                raise RuntimeSessionAlreadyExists(turn.turn_id)
+            turn_row.status = turn.status.value
+            turn_row.started_at = turn.started_at
+            turn_row.finished_at = turn.finished_at
+            turn_row.error_class = turn.error_class
         await db.flush()
 
 
@@ -95,6 +134,7 @@ def _to_row(session: RuntimeSession) -> RuntimeSessionRow:
         status=session.status.value,
         chat_status=session.chat_status.value,
         active_turn_id=session.active_turn_id,
+        runtime_session_id=session.runtime_session_id,
         next_turn_sequence=session.next_turn_sequence,
         next_event_sequence=session.next_event_sequence,
         created_at=session.created_at,
@@ -112,6 +152,7 @@ def _to_domain(row: RuntimeSessionRow) -> RuntimeSession:
         status=SessionStatus(row.status),
         chat_status=ChatStatus(row.chat_status),
         active_turn_id=row.active_turn_id,
+        runtime_session_id=row.runtime_session_id,
         next_turn_sequence=row.next_turn_sequence,
         next_event_sequence=row.next_event_sequence,
         created_at=created_at,

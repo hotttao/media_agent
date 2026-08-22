@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from adapter.biz.domain.runtime_session.entity import RuntimeSession, Turn, TurnStatus
+from adapter.biz.workflow.execute_turn_flow import RuntimeCredentials
 from claude_code.agent import ClaudeCodeAgent, translate_claude_event
+from claude_code.turn_runtime import ClaudeCodeTurnRuntime
 
 
 def _fake_claude(tmp_path: Path, body: str) -> Path:
@@ -115,3 +119,40 @@ def test_translate_claude_tool_use_and_result() -> None:
 
     assert tool_events[0]["item"]["kind"] == "tool_call"  # type: ignore[index]
     assert result_events[0]["item"]["kind"] == "tool_result"  # type: ignore[index]
+
+
+@pytest.mark.asyncio
+async def test_turn_runtime_uses_new_then_resumed_runtime_handle(tmp_path: Path) -> None:
+    executable = _fake_claude(
+        tmp_path,
+        """import json, os, sys
+assert ("--session-id" in sys.argv) != ("--resume" in sys.argv)
+assert os.environ.get("ANTHROPIC_API_KEY") == "sk-ant-runtime"
+print(json.dumps({"type":"result","subtype":"success"}), flush=True)
+""",
+    )
+    runtime = ClaudeCodeTurnRuntime(ClaudeCodeAgent(str(executable), str(tmp_path)))
+    session = RuntimeSession.register(session_id="business-1", context_version=1, context_ref="ctx")
+    turn = Turn(
+        "turn-1",
+        "business-1",
+        "key",
+        1,
+        TurnStatus.RUNNING,
+        {"message": "hello"},
+        1,
+        datetime.now(UTC),
+        started_at=datetime.now(UTC),
+    )
+
+    credentials = RuntimeCredentials(api_key="sk-ant-runtime")
+    first = await runtime.prepare(session, turn, credentials)
+    assert first.handle == "business-1" and first.is_new
+    assert (await runtime.execute(first, session, turn, credentials)).status is TurnStatus.COMPLETED
+
+    resumed_session = session.attach_runtime("business-1", now=datetime.now(UTC))
+    resumed = await runtime.prepare(resumed_session, turn, credentials)
+    assert not resumed.is_new
+    assert (
+        await runtime.execute(resumed, resumed_session, turn, credentials)
+    ).status is TurnStatus.COMPLETED

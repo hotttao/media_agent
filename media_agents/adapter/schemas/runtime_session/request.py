@@ -15,3 +15,5 @@ class SubmitTurnRequest(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=128)
     context_version: int = Field(ge=1)
     input: dict[str, object]
+    api_key: str | None = Field(default=None, max_length=4096, repr=False)
+    session_token: str | None = Field(default=None, max_length=4096, repr=False)

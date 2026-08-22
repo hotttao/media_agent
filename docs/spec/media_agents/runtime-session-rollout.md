@@ -28,14 +28,14 @@ workflow 顶层开启，repository 从 context-local session 取得连接。
 | Gateway Session Registration | media_agent_gateway | agent_session | Agent Session Registration | agent_session_startup | external-owner: `media_agent_gateway` |
 | 注册 Runtime Session | media_agents | runtime_session | Runtime Session | agent_session_startup | implemented |
 | 幂等提交并排队 Turn | media_agents | runtime_session | Runtime Session / Turn Queue | execute_turn | implemented |
-| 串行声明 queued Turn | media_agents | runtime_session | Runtime Session / Turn | execute_turn | implemented（提交时声明队首；终态续跑属于 P3） |
-| 执行 Runtime Turn | media_agents | runtime_session | Turn | execute_turn | missing |
+| 串行声明 queued Turn | media_agents | runtime_session | Runtime Session / Turn | execute_turn | implemented |
+| 执行 Runtime Turn | media_agents | runtime_session | Turn | execute_turn | implemented（Codex ACP、Claude Code） |
 | 持久化 Message | media_agents | runtime_session | Message | execute_turn | partial（user Message 已迁移；assistant/tool 属于 P4） |
 | 持久化 Universal Event 与 Session sequence | media_agents | runtime_session | Universal Event | execute_turn | missing（Gateway 现存能力待迁移） |
 | 发布 Live/Universal Event | media_agents | runtime_session | Session Event Bus | execute_turn | missing |
 | 回放 Universal Event | media_agents | runtime_session | Universal Event 读模型 | execute_turn | missing |
-| 查询 Message 与 Chat Status | media_agents | runtime_session | Message / Runtime Session | execute_turn | missing |
-| 软中断当前 Turn | media_agents | runtime_session | Turn | execute_turn | missing（仅有内存 ACP cancel） |
+| 查询 Message 与 Chat Status | media_agents | runtime_session | Message / Runtime Session | execute_turn | partial（Chat Status/Turn 已实现，Message 查询属于 P4） |
+| 软中断当前 Turn | media_agents | runtime_session | Turn | execute_turn | implemented |
 | 解决 Agent Request | media_agents | runtime_session | Agent Request | execute_turn | missing |
 | Gateway Web 鉴权与 SSE framing | media_agent_gateway | agent_session | Registration/SSE adapter | run_turn | external-owner: `media_agent_gateway` |
 | Gateway 直接持久化交互事件 | media_agent_gateway | agent_session | 旧 Message/Event 写模型 | run_turn | deprecated-with-reason: ADR-0009 完成迁移后删除 |
@@ -58,8 +58,11 @@ workflow 顶层开启，repository 从 context-local session 取得连接。
 
 ### 3. Execute Turn 与终态
 
-把现有 ACP `run_turn` 放入 workflow；Runtime 调用不持有数据库事务。自然完成自动声明下一
-queued Turn，failed/interrupted 暂停队列。
+把现有 ACP `run_turn` 和 Claude Code CLI 放入统一的 Runtime port。首次执行创建并持久化
+`runtime_session_id` Runtime Handle，后续执行加载该句柄；Runtime 调用不持有数据库事务。
+API key 等秘密放在 SubmitTurn 的 write-only 执行信封中，仅在对应 Turn 的内存上下文暂存，
+禁止进入 Turn input、响应、日志或持久化表；失败/中断清除，P6 恢复按 `context_ref` 重新协调。
+自然完成自动声明下一 queued Turn，failed/interrupted 暂停队列。
 
 ### 4. Universal Event、Message 与回放
 

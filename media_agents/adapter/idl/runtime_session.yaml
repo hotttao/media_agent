@@ -56,6 +56,27 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/TurnResponse'}
         '404': {description: Not found}
+  /api/v1/runtime-sessions/{session_id}/turns/{turn_id}:
+    get:
+      operationId: getTurn
+      parameters:
+        - {in: path, name: session_id, required: true, schema: {type: string}}
+        - {in: path, name: turn_id, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Persisted Turn
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TurnResponse'}
+        '404': {description: Not found}
+  /api/v1/runtime-sessions/{session_id}/turns/{turn_id}/interrupt:
+    post:
+      operationId: interruptTurn
+      parameters:
+        - {in: path, name: session_id, required: true, schema: {type: string}}
+        - {in: path, name: turn_id, required: true, schema: {type: string}}
+      responses:
+        '202': {description: Soft interrupt accepted}
 components:
   schemas:
     SubmitTurnRequest:
@@ -66,6 +87,8 @@ components:
         idempotency_key: {type: string, maxLength: 128}
         context_version: {type: integer, minimum: 1}
         input: {type: object}
+        api_key: {type: string, maxLength: 4096, writeOnly: true}
+        session_token: {type: string, maxLength: 4096, writeOnly: true}
     TurnResponse:
       type: object
       required: [turn_id, session_id, idempotency_key, enqueue_sequence, status, context_version, input, created_at]
@@ -74,11 +97,13 @@ components:
         session_id: {type: string}
         idempotency_key: {type: string}
         enqueue_sequence: {type: integer}
-        status: {type: string, enum: [queued, running]}
+        status: {type: string, enum: [queued, running, completed, failed, interrupted, cancelled]}
         context_version: {type: integer}
         input: {type: object}
         created_at: {type: string, format: date-time}
-        started_at: {type: [string, 'null'], format: date-time}
+        started_at: {type: string, format: date-time, nullable: true}
+        finished_at: {type: string, format: date-time, nullable: true}
+        error_class: {type: string, nullable: true}
     RegisterRuntimeSessionRequest:
       type: object
       additionalProperties: false
@@ -97,6 +122,7 @@ components:
         status: {type: string, enum: [active, paused, failed, deleted]}
         chat_status: {type: string, enum: [human, agent]}
         active_turn_id: {type: string, nullable: true}
+        runtime_session_id: {type: string, nullable: true}
         next_turn_sequence: {type: integer, format: int64}
         next_event_sequence: {type: integer, format: int64}
         created_at: {type: string, format: date-time}

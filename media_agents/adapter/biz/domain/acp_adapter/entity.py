@@ -9,8 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from pydantic import BaseModel
-
 from adapter.biz.domain.acp_adapter.llm_event import ChatImageAttachment
 
 
@@ -46,7 +44,8 @@ class PromptResult:
 # ── HTTP 请求体 ────────────────────────────────────────────
 
 
-class Chat(BaseModel):
+@dataclass(frozen=True, slots=True)
+class Chat:
     """POST /chat 请求体。
 
     session_id 缺省表示新会话；session_token 是 CP 反向解析会话身份的不透明

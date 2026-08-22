@@ -8,7 +8,7 @@ import pytest
 from adapter.biz.dal.db import create_database
 from adapter.biz.dal.repos.runtime_session.repository import SqlRuntimeSessionRepository
 from adapter.biz.dal.session import TxRunner
-from adapter.biz.domain.runtime_session.entity import RuntimeSession
+from adapter.biz.domain.runtime_session.entity import RuntimeSession, TurnStatus
 from adapter.biz.domain.runtime_session.errors import ContextVersionConflict
 from adapter.biz.service.runtime_session.command import RegisterRuntimeSession, SubmitTurn
 from adapter.biz.service.runtime_session.service import RuntimeSessionService
@@ -80,6 +80,21 @@ async def test_postgresql_serializes_concurrent_turn_submissions() -> None:
                 )
             ).one()
         assert counts == (8, 8)
+        running = next(turn for turn in turns if turn.status.value == "running")
+        completed = await service.finalize_turn(session_id, running.turn_id, TurnStatus.COMPLETED)
+        assert completed.next_turn is not None
+        attached = await service.attach_runtime(
+            session_id, completed.next_turn.turn_id, "runtime-dal-1"
+        )
+        assert attached.runtime_session_id == "runtime-dal-1"
+        failed = await service.finalize_turn(
+            session_id,
+            completed.next_turn.turn_id,
+            TurnStatus.FAILED,
+            error_class="InjectedFailure",
+        )
+        assert failed.next_turn is None
+        assert (await service.get(session_id)).status.value == "paused"
     finally:
         async with engine.begin() as connection:
             await connection.execute(

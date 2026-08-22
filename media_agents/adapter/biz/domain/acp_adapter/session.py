@@ -38,8 +38,12 @@ from acp.schema import (
     UserMessageChunk,
 )
 
-from adapter.biz.domain.acp_adapter.entity import ChatImageAttachment, PromptResult, StopReason
-from adapter.biz.domain.acp_adapter.llm_event import UniversalEvent, to_event_dict
+from adapter.biz.domain.acp_adapter.entity import PromptResult, StopReason
+from adapter.biz.domain.acp_adapter.llm_event import (
+    ChatImageAttachment,
+    UniversalEvent,
+    to_event_dict,
+)
 from adapter.biz.domain.acp_adapter.translator import AcpEventTranslator
 
 if TYPE_CHECKING:

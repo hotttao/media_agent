@@ -103,7 +103,8 @@ agent 回调契约定义在 `adapter/biz/domain/acp/repository.py`。每个 agen
    隔离检查覆盖新 agent。
 
 4. 若新 agent 不走 ACP bridge（如 claude_code 自管子进程），不调 `build_app`，改用
-   `build_base_app(cfg)` 拿骨架再 include 自有路由。
+   `build_base_app(cfg, turn_runtime=...)` 拿骨架并注入 Execute Turn Runtime port，
+   再 include 自有路由。
 
 ## 强制检查
 

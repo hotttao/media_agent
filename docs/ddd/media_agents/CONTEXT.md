@@ -8,6 +8,10 @@
 Agent 内与一个 Agent Session ID 对应的持久化执行边界，拥有 Turn 队列、交互记录和事件游标。
 _禁用替代词_：Web Session、Gateway Session、Process
 
+**Runtime Handle（运行时句柄）**:
+底层 Agent Runtime 创建并返回、由 Runtime Session 持久化用于后续 Turn 加载和重启恢复的不透明会话标识；它与业务 Session ID 属于不同命名空间且不包含运行凭据。
+_禁用替代词_：Runtime Session、API Key、Process ID
+
 **Turn（交互轮次）**:
 Runtime Session 内由一次用户输入触发的一轮持久化执行请求，以 completed、failed 或 interrupted 之一结束。
 _禁用替代词_：Message、Agent Task、Job

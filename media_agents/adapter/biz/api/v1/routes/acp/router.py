@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from adapter.biz.api.v1.deps import AcpServerDep, AdapterConfigDep, AgentHooksDep
 from adapter.biz.domain.acp_adapter.entity import Chat, PromptResult
 from adapter.biz.domain.acp_adapter.errors import BridgeNotFound, LoadSessionFailed
+from adapter.biz.domain.acp_adapter.llm_event import ChatImageAttachment
 from adapter.schemas.acp.request import ChatRequest, ReloadConfigRequest
 from adapter.schemas.acp.response import (
     AgentInfo,
@@ -72,10 +73,26 @@ def build_acp_router() -> APIRouter:
             writer_id: int | None = None
             turn_task: asyncio.Task[PromptResult] | None = None
             try:
-                session, _ = await sm.chat(Chat.model_validate(body.model_dump()))
+                images = (
+                    [
+                        ChatImageAttachment(data=image.data, media_type=image.media_type)
+                        for image in body.images
+                    ]
+                    if body.images is not None
+                    else None
+                )
+                session, _ = await sm.chat(
+                    Chat(
+                        message=body.message,
+                        session_id=body.session_id,
+                        images=images,
+                        session_token=body.session_token,
+                        api_key=body.api_key,
+                    )
+                )
                 session_id = session.session_id
                 writer_id = session.stream.writer_id
-                turn_task = asyncio.create_task(sm.run_turn(session, body.message, body.images))
+                turn_task = asyncio.create_task(sm.run_turn(session, body.message, images))
                 turn_task.add_done_callback(_log_task_error)
 
                 async for chunk in session.read(keepalive_interval=KEEPALIVE_INTERVAL_S):
