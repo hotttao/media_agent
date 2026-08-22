@@ -28,9 +28,8 @@ type Schedule struct {
 	CreatedAt, UpdatedAt                                        time.Time
 }
 type Trigger struct {
-	ID, ScheduleID   string
-	DueAt, CreatedAt time.Time
-	Status           string
+	ID, ScheduleID, Status, AgentTaskID, ErrorCode string
+	DueAt, CreatedAt, UpdatedAt                    time.Time
 }
 type Repository interface {
 	Create(context.Context, *Schedule) error
@@ -39,6 +38,8 @@ type Repository interface {
 	Update(context.Context, *Schedule, int64) error
 	Delete(context.Context, *Schedule, int64) error
 	CreateTrigger(context.Context, *Trigger) error
+	GetTrigger(context.Context, string) (*Trigger, error)
+	UpdateTrigger(context.Context, *Trigger, string) error
 }
 
 func Validate(rule, tz string) (string, string, error) {

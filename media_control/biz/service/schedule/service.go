@@ -97,3 +97,38 @@ func (s *Service) RunNow(ctx context.Context, id, o string) (*d.Trigger, error) 
 	e = s.tx.RunInTx(ctx, func(tx context.Context) error { return s.repo.CreateTrigger(tx, t) })
 	return t, e
 }
+func (s *Service) ClaimDue(ctx context.Context, id, o string, dueAt time.Time) (*d.Trigger, error) {
+	v, e := s.Get(ctx, id, o)
+	if e != nil {
+		return nil, e
+	}
+	if v.Status != d.StatusActive {
+		return nil, fmt.Errorf("schedule is not active")
+	}
+	if dueAt.IsZero() {
+		return nil, fmt.Errorf("due_at is required")
+	}
+	now := time.Now().UTC()
+	t := &d.Trigger{ID: uuid.NewString(), ScheduleID: v.ID, DueAt: dueAt, Status: "pending", CreatedAt: now, UpdatedAt: now}
+	e = s.tx.RunInTx(ctx, func(tx context.Context) error { return s.repo.CreateTrigger(tx, t) })
+	return t, e
+}
+func (s *Service) RecordSubmission(ctx context.Context, id, status, taskID, errorCode string) (*d.Trigger, error) {
+	v, e := s.repo.GetTrigger(ctx, id)
+	if e != nil {
+		return nil, e
+	}
+	if v.Status != "pending" {
+		return nil, fmt.Errorf("trigger is not pending")
+	}
+	if status != "submitted" && status != "failed" {
+		return nil, fmt.Errorf("status must be submitted or failed")
+	}
+	from := v.Status
+	v.Status = status
+	v.AgentTaskID = taskID
+	v.ErrorCode = errorCode
+	v.UpdatedAt = time.Now().UTC()
+	e = s.tx.RunInTx(ctx, func(tx context.Context) error { return s.repo.UpdateTrigger(tx, v, from) })
+	return v, e
+}

@@ -11,6 +11,7 @@ import (
 	domain "media_agent/media_control/biz/domain/schedule"
 	"media_agent/media_control/biz/middleware"
 	service "media_agent/media_control/biz/service/schedule"
+	"time"
 )
 
 var scheduleService *service.Service
@@ -150,4 +151,46 @@ func writeError(c *app.RequestContext, e error) {
 		code = consts.StatusConflict
 	}
 	c.JSON(code, map[string]string{"error": e.Error()})
+}
+
+// ClaimDueSchedule .
+// @router /api/v1/schedules/:schedule_id/claim-due [POST]
+func ClaimDueSchedule(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req schedule.ClaimDueScheduleRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	v, err := scheduleService.ClaimDue(ctx, req.ScheduleId, middleware.UserID(ctx), time.UnixMilli(req.DueAt))
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusCreated, toTrigger(v))
+}
+
+// RecordTaskSubmission .
+// @router /api/v1/schedule-triggers/:trigger_id/submission [POST]
+func RecordTaskSubmission(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req schedule.RecordTaskSubmissionRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	v, err := scheduleService.RecordSubmission(ctx, req.TriggerId, req.Status, req.AgentTaskId, req.ErrorCode)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, toTrigger(v))
+}
+
+func toTrigger(v *domain.Trigger) *schedule.TriggerResponse {
+	return &schedule.TriggerResponse{Id: v.ID, ScheduleId: v.ScheduleID, DueAt: v.DueAt.UnixMilli(), Status: v.Status, CreatedAt: v.CreatedAt.UnixMilli()}
 }

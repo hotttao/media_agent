@@ -41,7 +41,21 @@ func (r *Repository) Delete(ctx context.Context, v *d.Schedule, ev int64) error 
 	return r.Update(ctx, v, ev)
 }
 func (r *Repository) CreateTrigger(ctx context.Context, v *d.Trigger) error {
-	return dal.FromContext(ctx, r.db).Create(&model.ScheduleTrigger{ID: v.ID, ScheduleID: v.ScheduleID, DueAt: v.DueAt, Status: v.Status, CreatedAt: v.CreatedAt, UpdatedAt: v.CreatedAt}).Error
+	return dal.FromContext(ctx, r.db).Create(&model.ScheduleTrigger{ID: v.ID, ScheduleID: v.ScheduleID, DueAt: v.DueAt, Status: v.Status, AgentTaskID: v.AgentTaskID, ErrorCode: v.ErrorCode, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}).Error
+}
+func (r *Repository) GetTrigger(ctx context.Context, id string) (*d.Trigger, error) {
+	var v model.ScheduleTrigger
+	if err := dal.FromContext(ctx, r.db).Where("id=?", id).First(&v).Error; err != nil {
+		return nil, d.ErrNotFound
+	}
+	return &d.Trigger{ID: v.ID, ScheduleID: v.ScheduleID, Status: v.Status, AgentTaskID: v.AgentTaskID, ErrorCode: v.ErrorCode, DueAt: v.DueAt, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}, nil
+}
+func (r *Repository) UpdateTrigger(ctx context.Context, v *d.Trigger, from string) error {
+	res := dal.FromContext(ctx, r.db).Model(&model.ScheduleTrigger{}).Where("id=? AND status=?", v.ID, from).Updates(map[string]any{"status": v.Status, "agent_task_id": v.AgentTaskID, "error_code": v.ErrorCode, "updated_at": v.UpdatedAt})
+	if res.RowsAffected == 0 {
+		return d.ErrConflict
+	}
+	return res.Error
 }
 func toDomain(v model.AgentSchedule) d.Schedule {
 	return d.Schedule{ID: v.ID, WorkspaceID: v.WorkspaceID, RequestedBy: v.RequestedBy, AgentConfigID: v.AgentConfigID, Rule: v.Rule, Timezone: v.Timezone, Status: d.Status(v.Status), NextRunAt: v.NextRunAt, Version: v.Version, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}

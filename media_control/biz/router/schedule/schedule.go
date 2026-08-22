@@ -24,11 +24,19 @@ func Register(r *server.Hertz) {
 			_v1.GET("/schedules", append(_listschedulesMw(), schedule.ListSchedules)...)
 			_v1.POST("/schedules", append(_createscheduleMw(), schedule.CreateSchedule)...)
 			{
+				_schedule_triggers := _v1.Group("/schedule-triggers", _schedule_triggersMw()...)
+				{
+					_trigger_id := _schedule_triggers.Group("/:trigger_id", _trigger_idMw()...)
+					_trigger_id.POST("/submission", append(_recordtasksubmissionMw(), schedule.RecordTaskSubmission)...)
+				}
+			}
+			{
 				_schedules := _v1.Group("/schedules", _schedulesMw()...)
 				_schedules.GET("/:schedule_id", append(_getscheduleMw(), schedule.GetSchedule)...)
 				_schedules.PUT("/:schedule_id", append(_updatescheduleMw(), schedule.UpdateSchedule)...)
 				{
 					_schedule_id := _schedules.Group("/:schedule_id", _schedule_idMw()...)
+					_schedule_id.POST("/claim-due", append(_claimduescheduleMw(), schedule.ClaimDueSchedule)...)
 					_schedule_id.POST("/delete", append(_deletescheduleMw(), schedule.DeleteSchedule)...)
 					_schedule_id.POST("/run-now", append(_runnowMw(), schedule.RunNow)...)
 				}

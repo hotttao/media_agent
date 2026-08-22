@@ -60,3 +60,23 @@ func _runnowMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _schedule_triggersMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _trigger_idMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _recordtasksubmissionMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _claimduescheduleMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

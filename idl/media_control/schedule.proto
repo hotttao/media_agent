@@ -32,6 +32,14 @@ service AgentScheduleService {
     option (api.post) = "/api/v1/schedules/:schedule_id/run-now";
     option (google.api.http) = { post: "/api/v1/schedules/{schedule_id}/run-now" body: "*" };
   }
+  rpc ClaimDueSchedule(ClaimDueScheduleRequest) returns (TriggerResponse) {
+    option (api.post) = "/api/v1/schedules/:schedule_id/claim-due";
+    option (google.api.http) = { post: "/api/v1/schedules/{schedule_id}/claim-due" body: "*" };
+  }
+  rpc RecordTaskSubmission(RecordTaskSubmissionRequest) returns (TriggerResponse) {
+    option (api.post) = "/api/v1/schedule-triggers/:trigger_id/submission";
+    option (google.api.http) = { post: "/api/v1/schedule-triggers/{trigger_id}/submission" body: "*" };
+  }
 }
 
 message CreateScheduleRequest {
@@ -51,6 +59,8 @@ message UpdateScheduleRequest {
 }
 message DeleteScheduleRequest { string schedule_id = 1 [(api.path) = "schedule_id"]; int64 expected_version = 2 [(api.body) = "expected_version"]; }
 message RunNowRequest { string schedule_id = 1 [(api.path) = "schedule_id"]; }
+message ClaimDueScheduleRequest { string schedule_id = 1 [(api.path) = "schedule_id"]; int64 due_at = 2 [(api.body) = "due_at"]; }
+message RecordTaskSubmissionRequest { string trigger_id = 1 [(api.path) = "trigger_id"]; string status = 2 [(api.body) = "status"]; string agent_task_id = 3 [(api.body) = "agent_task_id"]; string error_code = 4 [(api.body) = "error_code"]; }
 message ScheduleResponse {
   string id = 1; string workspace_id = 2; string requested_by = 3; string agent_config_id = 4;
   string rule = 5; string timezone = 6; string status = 7; int64 next_run_at = 8;
