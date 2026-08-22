@@ -1,0 +1,25 @@
+openapi: 3.0.3
+info:
+  title: Media Agents Runtime Workspace API
+  version: 1.0.0
+paths:
+  /api/v1/runtime-workspace:
+    get:
+      operationId: getRuntimeWorkspace
+      responses:
+        '200':
+          description: Mounted Workspace Runtime Directory identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeWorkspaceResponse'
+components:
+  schemas:
+    RuntimeWorkspaceResponse:
+      type: object
+      required: [workspace_id, storage_id, created_at, mount_path]
+      properties:
+        workspace_id: {type: string}
+        storage_id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        mount_path: {type: string, example: /workspace}

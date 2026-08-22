@@ -12,6 +12,7 @@ capabilities:
   streaming_deltas: true
 
 workspace:
+  id: ${oc.env:RUNTIME_WORKSPACE_ID,local}
   dir: ${oc.env:WORKSPACE_DIR,/workspace}
   keep_files:
     - AGENTS.md

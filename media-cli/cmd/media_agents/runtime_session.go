@@ -43,6 +43,19 @@ var getRuntimeSessionCmd = &cobra.Command{
 	},
 }
 
+var runtimeWorkspaceCmd = &cobra.Command{
+	Use:   "runtime-workspace",
+	Short: "查询 Agent 挂载的 Workspace Runtime Directory identity",
+}
+
+var getRuntimeWorkspaceCmd = &cobra.Command{
+	Use:   "info",
+	Short: "查询当前 Workspace Runtime Directory",
+	RunE: func(command *cobra.Command, _ []string) error {
+		return requestAndPrint(command, http.MethodGet, "/api/v1/runtime-workspace", nil)
+	},
+}
+
 func init() {
 	registerRuntimeSessionCmd.Flags().StringVar(&registerSessionID, "session-id", "", "Gateway 分配的 Session ID")
 	registerRuntimeSessionCmd.Flags().Int64Var(&registerContextVersion, "context-version", 0, "运行上下文版本")
@@ -51,7 +64,8 @@ func init() {
 	_ = registerRuntimeSessionCmd.MarkFlagRequired("context-version")
 	_ = registerRuntimeSessionCmd.MarkFlagRequired("context-ref")
 	runtimeSessionCmd.AddCommand(registerRuntimeSessionCmd, getRuntimeSessionCmd)
-	MediaAgentsCmd.AddCommand(runtimeSessionCmd)
+	runtimeWorkspaceCmd.AddCommand(getRuntimeWorkspaceCmd)
+	MediaAgentsCmd.AddCommand(runtimeSessionCmd, runtimeWorkspaceCmd)
 }
 
 func requestAndPrint(command *cobra.Command, method, path string, payload []byte) error {

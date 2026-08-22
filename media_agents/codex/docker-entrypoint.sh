@@ -2,7 +2,7 @@
 set -eu
 
 auth_source="${CODEX_AUTH_SOURCE:-/run/secrets/codex-auth.json}"
-config_dir="${CODEX_CONFIG_DIR:-/root/.codex}"
+config_dir="${CODEX_CONFIG_DIR:-${HOME:-/workspace/.home}/.codex}"
 
 mkdir -p "$config_dir" "${WORKSPACE_DIR:-/workspace}"
 if [ -f "$auth_source" ]; then

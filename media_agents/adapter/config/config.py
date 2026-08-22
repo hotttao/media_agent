@@ -7,6 +7,7 @@ packages should load their own typed config subclass via ``load_agent_config``.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TypeVar, overload
 
@@ -30,6 +31,7 @@ class AgentConfig(BaseModel):
 class WorkspaceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    id: str = "local"
     dir: str = "/workspace"
     keep_files: set[str] = Field(default_factory=lambda: {"AGENTS.md", "runtime.json"})
 
@@ -39,6 +41,18 @@ class WorkspaceConfig(BaseModel):
         if value is None:
             return set()
         return value
+
+    @field_validator("id")
+    @classmethod
+    def _validate_workspace_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if (
+            normalized in {"", ".", ".."}
+            or len(normalized) > 128
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", normalized) is None
+        ):
+            raise ConfigError("workspace.id must be a safe path segment")
+        return normalized
 
 
 class CpConfig(BaseModel):
@@ -145,6 +159,10 @@ class AdapterConfig(BaseModel):
     @property
     def workspace_dir(self) -> str:
         return self.workspace.dir
+
+    @property
+    def runtime_workspace_id(self) -> str:
+        return self.workspace.id
 
     @property
     def keep_files(self) -> set[str]:

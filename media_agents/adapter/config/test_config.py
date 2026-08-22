@@ -31,6 +31,7 @@ capabilities:
     assert cfg.agent_type == "test"
     assert cfg.agent.port == 3100
     assert cfg.workspace_dir == "/workspace"
+    assert cfg.runtime_workspace_id == "local"
     assert cfg.bridge_ttl.max_count == 10
     assert cfg.database.url.startswith("postgresql+asyncpg://")
     assert cfg.database.migrate_on_start is True
@@ -105,4 +106,29 @@ database:
     )
 
     with pytest.raises(ValueError, match="postgresql\\+asyncpg"):
+        load_agent_config(override, AdapterConfig)
+
+
+@pytest.mark.parametrize("workspace_id", ["", ".", "..", "with/slash", "with space"])
+def test_workspace_id_must_be_safe_path_segment(tmp_path: Path, workspace_id: str) -> None:
+    override = tmp_path / "config.yaml"
+    override.write_text(
+        f"""
+agent:
+  type: test
+capabilities:
+  system_prompt: true
+  mcp: true
+  skills: false
+  questions: false
+  reconnect: true
+  permissions: true
+  streaming_deltas: true
+workspace:
+  id: {workspace_id!r}
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="safe path segment"):
         load_agent_config(override, AdapterConfig)
