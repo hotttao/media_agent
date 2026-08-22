@@ -17,3 +17,14 @@ type AgentTask struct {
 }
 
 func (AgentTask) TableName() string { return "media_agent_gateway.agent_tasks" }
+
+type AgentTaskOutbox struct {
+	ID, AggregateID, EventType        string
+	Payload                           string `gorm:"type:jsonb"`
+	Attempts                          int32
+	AvailableAt, CreatedAt, UpdatedAt time.Time
+	DeliveredAt                       *time.Time
+	LastError                         *string
+}
+
+func (AgentTaskOutbox) TableName() string { return "media_agent_gateway.agent_task_outbox" }

@@ -82,6 +82,9 @@ func (r *fakeRuntime) SubmitTurn(_ context.Context, in client.SubmitTurnInput) (
 	r.submitInput = in
 	return &client.Turn{TurnID: "turn", SessionID: in.SessionID, Status: "queued"}, nil
 }
+func (r *fakeRuntime) GetTurn(_ context.Context, sessionID, turnID string) (*client.Turn, error) {
+	return &client.Turn{TurnID: turnID, SessionID: sessionID, Status: "completed"}, nil
+}
 func (r *fakeRuntime) InterruptTurn(_ context.Context, session, turn string) (bool, error) {
 	r.interruptSession, r.interruptTurn = session, turn
 	return true, nil

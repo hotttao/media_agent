@@ -76,9 +76,23 @@ func (a allowWorkspace) AuthorizeWorkspace(context.Context, string, string, stri
 	return a.err
 }
 
+type serviceOutbox struct{ events []domain.OutboxEvent }
+
+func (f *serviceOutbox) Enqueue(_ context.Context, event *domain.OutboxEvent) error {
+	f.events = append(f.events, *event)
+	return nil
+}
+func (f *serviceOutbox) ListPendingActions(context.Context, int) ([]domain.OutboxEvent, error) {
+	return nil, nil
+}
+func (f *serviceOutbox) MarkDelivered(context.Context, string, time.Time) error { return nil }
+func (f *serviceOutbox) MarkDeliveryFailed(context.Context, string, string, time.Time) error {
+	return nil
+}
+
 func TestCreateIsIdempotentAndCancel(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := New(repo, directTx{}, &fakeSessions{}, allowWorkspace{})
+	svc := New(repo, nil, directTx{}, &fakeSessions{}, allowWorkspace{})
 	cmd := CreateCommand{Owner: "user-1", WorkspaceID: "ws-1", Source: "manual", SourceResourceID: "request-1", IdempotencyKey: "key-1", InputJSON: `{"message":"hi"}`}
 	first, err := svc.Create(context.Background(), cmd)
 	if err != nil {
@@ -94,9 +108,28 @@ func TestCreateIsIdempotentAndCancel(t *testing.T) {
 	}
 }
 func TestCreateRejectsSessionWorkspaceMismatch(t *testing.T) {
-	svc := New(&fakeRepo{}, directTx{}, &fakeSessions{value: &session.Session{ID: "s-1", UserID: "user-1", WorkspaceID: "ws-2"}}, allowWorkspace{})
+	svc := New(&fakeRepo{}, nil, directTx{}, &fakeSessions{value: &session.Session{ID: "s-1", UserID: "user-1", WorkspaceID: "ws-2"}}, allowWorkspace{})
 	_, err := svc.Create(context.Background(), CreateCommand{Owner: "user-1", WorkspaceID: "ws-1", SessionID: "s-1", Source: "manual", SourceResourceID: "r", IdempotencyKey: "k", InputJSON: "{}"})
 	if !errors.Is(err, domain.ErrForbidden) {
 		t.Fatalf("expected forbidden, got %v", err)
+	}
+}
+
+func TestCreateAndRunningCancelWriteOutboxActions(t *testing.T) {
+	repo, outbox := &fakeRepo{}, &serviceOutbox{}
+	svc := New(repo, outbox, directTx{}, &fakeSessions{}, allowWorkspace{})
+	created, err := svc.Create(context.Background(), CreateCommand{Owner: "user-1", WorkspaceID: "ws-1", Source: "manual", SourceResourceID: "r", IdempotencyKey: "k", InputJSON: "{}"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(outbox.events) != 1 || outbox.events[0].EventType != "agent_task.dispatch" {
+		t.Fatalf("events=%+v", outbox.events)
+	}
+	repo.value.Status = domain.StatusRunning
+	if _, err := svc.Cancel(context.Background(), created.ID, "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(outbox.events) != 2 || outbox.events[1].EventType != "agent_task.cancel" {
+		t.Fatalf("events=%+v", outbox.events)
 	}
 }

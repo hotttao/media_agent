@@ -13,10 +13,10 @@
 
 ## P2 · Dispatch 切片
 
-- [ ] Task + Outbox 原子创建，Relay 至少一次投递。
-- [ ] queued/retry_wait 原子领取与 attempt CAS。
-- [ ] `task_id` 幂等调用 Agent SubmitTurn，保存 turn_id/waiting_turn。
-- [ ] Turn 终态事件收敛与 Replay/GetTurn 补偿。
-- [ ] 取消 queued/running/waiting_turn 的不同语义。
-- [ ] Workflow 单测、故障/重复投递测试、media-cli E2E。
-- [ ] 更新能力覆盖矩阵为无 missing，并独立提交。
+- [x] Task + Outbox 原子创建，Relay 至少一次投递。
+- [x] queued/retry_wait 原子领取与 attempt CAS。
+- [x] `task_id` 幂等调用 Agent SubmitTurn，保存 turn_id/waiting_turn。
+- [x] GetTurn 权威终态收敛与漏投补偿。
+- [x] 取消 queued/running/waiting_turn 的不同语义。
+- [x] Workflow 单测、故障/重复投递测试、media-cli E2E。
+- [x] 更新能力覆盖矩阵为无 missing，并独立提交。

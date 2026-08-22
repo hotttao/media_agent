@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
@@ -17,8 +18,10 @@ import (
 	service "media_agent/media_agent_gateway/biz/service/agent_session"
 	taskservice "media_agent/media_agent_gateway/biz/service/agent_task"
 	sharedclient "media_agent/media_agent_gateway/biz/shared/client"
+	"media_agent/media_agent_gateway/biz/shared/riverqueue"
 	"media_agent/media_agent_gateway/biz/shared/sessionevents"
 	"media_agent/media_agent_gateway/biz/workflow"
+	taskdispatch "media_agent/media_agent_gateway/biz/workflow/agent_task_dispatch"
 )
 
 func main() {
@@ -69,7 +72,26 @@ func main() {
 	}
 	control := &sharedclient.Control{BaseURL: envOr("MEDIA_CONTROL_URL", "http://127.0.0.1:8007"), ServiceToken: envOr("CONTROL_INTERNAL_TOKEN", ""), Fallback: fallbackControl}
 	sessionService := service.New(store, control)
-	taskhandler.Configure(taskservice.New(taskrepo.New(db), dal.NewTxRunner(db), store, control))
+	taskStore := taskrepo.New(db)
+	txRunner := dal.NewTxRunner(db)
+	runtimes := sharedclient.NewRuntimeRegistryFromEnvironment()
+	dispatcher := taskdispatch.NewDispatcher(taskStore, taskStore, txRunner, sessionService, runtimes)
+	dispatchCtx, cancelDispatch := context.WithCancel(context.Background())
+	taskQueue, err := riverqueue.New(dispatchCtx, dbCfg.GetDsn(), dbCfg.GetMigrateOnStart(), dispatcher.Process)
+	if err != nil {
+		log.Fatalf("init Agent Task River queue: %v", err)
+	}
+	if err := taskQueue.Start(dispatchCtx); err != nil {
+		log.Fatalf("start Agent Task River queue: %v", err)
+	}
+	defer func() {
+		cancelDispatch()
+		if err := taskQueue.Close(); err != nil {
+			log.Printf("stop Agent Task River queue: %v", err)
+		}
+	}()
+	go taskdispatch.NewLoops(taskdispatch.NewRelay(taskStore, taskQueue), dispatcher, time.Second).Run(dispatchCtx)
+	taskhandler.Configure(taskservice.New(taskStore, taskStore, txRunner, store, control))
 	var eventSource sessionevents.Source = sessionevents.New(256)
 	if redisURL := os.Getenv("MEDIA_AGENTS_REDIS_URL"); redisURL != "" {
 		redisSource, redisErr := sessionevents.NewRedisSource(
@@ -83,7 +105,7 @@ func main() {
 		eventSource = redisSource
 	}
 	defer eventSource.Close()
-	turnWorkflow := workflow.NewRunTurn(sessionService, sharedclient.NewRuntimeRegistryFromEnvironment())
+	turnWorkflow := workflow.NewRunTurn(sessionService, runtimes)
 	chathandler.Configure(sessionService, turnWorkflow, eventSource)
 
 	h := suite.NewServer()

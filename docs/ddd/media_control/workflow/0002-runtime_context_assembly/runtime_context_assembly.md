@@ -39,8 +39,8 @@ sequenceDiagram
 Assembler 不复制各 Domain 所有权，只保存组装结果及输入版本向量。读取期间任一来源 version 改变则丢弃本次结果并有限重试，不能发布混合版本快照。
 
 Provider API Key 在 Agent Configuration 事务提交后才可被读取。Assembler 只在已验证 Workspace owner
-且通过 `X-Control-Service-Token` 服务身份的同步内部响应中解密；不把明文写入快照表、Outbox、日志或错误。Gateway 不持久化明文，只将其随
-单次 `/chat` 请求传给 `agent_type` 对应 Runtime；Runtime 仅通过子进程环境使用。
+且通过 `X-Control-Service-Token` 服务身份的同步内部响应中解密；同步用户链路从 Cookie 取得 owner，异步 Worker 使用受保护的 `X-Control-Acting-User-ID` 明确代表已持久化的 Task owner。不把明文写入快照表、Outbox、日志或错误。Gateway 不持久化明文，只将其随
+单次 Agent 请求传给 `agent_type` 对应 Runtime；Runtime 仅通过子进程环境使用。
 
 ## 关键参数
 `workspace_id`、`agent_id` 定位配置；`agent_type` 只能为 `codex` 或 `claude-code`；
@@ -56,7 +56,7 @@ Provider API Key 在 Agent Configuration 事务提交后才可被读取。Assemb
 `workspace_id + agent_id + version_vector_hash` 唯一。瞬时读取和版本冲突可有限重试；缺失/非法引用不可重试并返回具体配置路径。通知失败由 Outbox 重试，不删除有效快照。
 
 ## 权限与失败
-Gateway 请求使用可配置 mTLS 服务身份；Assembler仍按传入的固定 user_id 检查 Workspace 可用性，且不信任调用方提供配置内容。用户启动链路的最终访问判断由 `agent-session-startup` 执行。公开 Workspace 查询只投影 `api_key_configured`；密钥缺失可创建 Workspace，但首次需要 Provider 鉴权的 Turn 由对应 Runtime 返回明确错误。
+Gateway 请求使用可配置内部服务身份；只有服务令牌匹配时 acting user header 才能建立身份，Assembler 仍按该固定 user_id 检查 Workspace owner，且不信任调用方提供配置内容。用户启动链路的最终访问判断由 `agent-session-startup` 执行。公开 Workspace 查询只投影 `api_key_configured`；密钥缺失可创建 Workspace，但首次需要 Provider 鉴权的 Turn 由对应 Runtime 返回明确错误。
 
 ## 结果事件
 配置变更时产生 `RuntimeContextChanged`。

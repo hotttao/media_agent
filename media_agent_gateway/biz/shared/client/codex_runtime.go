@@ -34,6 +34,11 @@ func IsDefinitiveRegistrationFailure(err error) bool {
 	return errors.As(err, &apiErr) && apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 && apiErr.StatusCode != http.StatusRequestTimeout && apiErr.StatusCode != http.StatusTooManyRequests
 }
 
+func IsDefinitiveRequestFailure(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 && apiErr.StatusCode != http.StatusRequestTimeout && apiErr.StatusCode != http.StatusTooManyRequests
+}
+
 func (r *HTTPRuntime) RegisterRuntimeSession(ctx context.Context, input RegisterRuntimeSessionInput) (*RuntimeSession, error) {
 	var output RuntimeSession
 	if err := r.doJSON(ctx, http.MethodPost, "/api/v1/runtime-sessions", input, &output); err != nil {
@@ -54,6 +59,15 @@ func (r *HTTPRuntime) SubmitTurn(ctx context.Context, input SubmitTurnInput) (*T
 	var output Turn
 	path := "/api/v1/runtime-sessions/" + url.PathEscape(input.SessionID) + "/turns"
 	if err := r.doJSON(ctx, http.MethodPost, path, input, &output); err != nil {
+		return nil, err
+	}
+	return &output, nil
+}
+
+func (r *HTTPRuntime) GetTurn(ctx context.Context, sessionID, turnID string) (*Turn, error) {
+	var output Turn
+	path := "/api/v1/runtime-sessions/" + url.PathEscape(sessionID) + "/turns/" + url.PathEscape(turnID)
+	if err := r.doJSON(ctx, http.MethodGet, path, nil, &output); err != nil {
 		return nil, err
 	}
 	return &output, nil

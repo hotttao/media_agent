@@ -37,7 +37,7 @@ sequenceDiagram
     participant Q as River
     participant W as Agent Task Worker
     participant A as media_agents
-    participant B as Session Event Bus
+    participant C as Task Reconciler
 
     U->>G: CreateTask(identity, input, idempotency_key)
     G->>DB: TX1: 创建 AgentTask + Outbox
@@ -48,8 +48,12 @@ sequenceDiagram
     W->>A: SubmitTurn(session_id, input, idempotency_key=task_id)
     A-->>W: accepted(turn_id, queued|running)
     W->>DB: TX3: 保存关联 turn_id 与 waiting_turn
-    B-->>W: TurnCompleted/Failed/Interrupted(turn_id)
-    W->>DB: TX4: CAS waiting_turn -> completed/failed + Outbox
+    loop bounded reconciliation
+        C->>DB: 查询 waiting_turn Task
+        C->>A: GetTurn(session_id, turn_id)
+        A-->>C: queued/running/completed/failed
+    end
+    C->>DB: TX4: CAS waiting_turn -> completed/failed + Outbox
 ```
 
 ### 步骤说明
@@ -57,7 +61,7 @@ sequenceDiagram
 1. Agent Task 是 Gateway 业务事实，River Job 只是可替换投递机制，Agent Turn 是独立执行事实。
 2. Worker 不直接运行 Runtime，也不尝试取得 Session 锁；它只向 Agent 提交命令。Agent 决定立即 running 或持久化 queued。
 3. `task_id` 是 SubmitTurn 幂等键。Worker 丢失、River 重复和调用超时均查询/重试同一 Turn，不创建第二个 Turn。
-4. Task 等待终态不占用数据库长事务。终态总线消息漏投时，Worker 通过 Agent GetTurn/Replay API 查询收敛。
+4. Task 等待终态不占用数据库长事务。有界 Reconciler 通过 Agent GetTurn 权威查询收敛；按 Session 的实时总线只用于交互流，不承担全局 durable consumer 职责。
 
 ## 状态与不变量
 
@@ -90,7 +94,7 @@ sequenceDiagram
 
 ## 权限与失败
 
-Web 创建使用 Cookie JWT 或用户 Service Token；Schedule 使用代表固定用户的受控凭证。Gateway 把已持久化 Task 身份与 Agent Session Registration 交叉校验后，以 mTLS 服务身份调用 Agent；Agent 调 MCP 使用 Session Token。
+Web 创建使用 Cookie JWT 或用户 Service Token；Schedule 使用代表固定用户的受控身份。Worker 用内部服务令牌与 acting user ID 向 Control 读取 Runtime Context，不持久化用户 Cookie。Gateway 把已持久化 Task 身份与 Agent Session Registration 交叉校验后，以服务身份调用 Agent。
 
 | 失败 | 处理 |
 |:---|:---|
@@ -98,7 +102,7 @@ Web 创建使用 Cookie JWT 或用户 Service Token；Schedule 使用代表固�
 | Outbox/River 不可用 | 保留 queued，Relay 重试 |
 | Agent Submit 结果不明确 | 使用 task_id 查询/重试，不创建新 Turn |
 | Turn 长时间 queued | Task 保持 waiting_turn，暴露队列状态，不在 Gateway 抢锁 |
-| 终态总线漏投 | Agent GetTurn/Replay 查询补偿 |
+| 终态通知漏投 | 有界 Reconciler 通过 Agent GetTurn 权威查询补偿 |
 | 用户取消 | 先 CAS Task，再按产品语义显式取消 queued Turn 或中断 running Turn |
 
 ## 结果事件

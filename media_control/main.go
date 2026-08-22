@@ -97,10 +97,11 @@ func main() {
 	if db == nil {
 		log.Fatal("database must be enabled")
 	}
-	middleware.Configure(cfg.GetAuth().GetJwtSecret())
+	internalToken := envOr("CONTROL_INTERNAL_TOKEN", "")
+	middleware.Configure(cfg.GetAuth().GetJwtSecret(), internalToken)
 	workspacehandler.Configure(
 		workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret()))),
-		envOr("CONTROL_INTERNAL_TOKEN", ""),
+		internalToken,
 	)
 	prompthandler.Configure(promptservice.New(promptrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	templatehandler.Configure(templateservice.New(templaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))

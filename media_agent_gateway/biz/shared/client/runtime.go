@@ -30,6 +30,7 @@ type Runtime interface {
 	RegisterRuntimeSession(context.Context, RegisterRuntimeSessionInput) (*RuntimeSession, error)
 	GetRuntimeSession(context.Context, string) (*RuntimeSession, error)
 	SubmitTurn(context.Context, SubmitTurnInput) (*Turn, error)
+	GetTurn(context.Context, string, string) (*Turn, error)
 	InterruptTurn(context.Context, string, string) (bool, error)
 	ListMessages(context.Context, string, int) ([]Message, error)
 	ReplayEvents(context.Context, string, int64, int) ([]UniversalEvent, error)
@@ -67,6 +68,7 @@ type Turn struct {
 	IdempotencyKey  string `json:"idempotency_key"`
 	EnqueueSequence int64  `json:"enqueue_sequence"`
 	Status          string `json:"status"`
+	ErrorClass      string `json:"error_class"`
 }
 
 type Message struct {

@@ -13,6 +13,7 @@ var (
 	ErrNotFound  = errors.New("agent task not found")
 	ErrForbidden = errors.New("agent task does not belong to user")
 	ErrConflict  = errors.New("agent task state conflict")
+	ErrCancelled = errors.New("agent task was cancelled during dispatch")
 )
 
 type Status string
@@ -44,6 +45,30 @@ type Repository interface {
 	ListOwned(context.Context, string, string, Status) ([]Task, error)
 	GetOwned(context.Context, string, string) (*Task, error)
 	Cancel(context.Context, *Task, []Status) error
+}
+
+// DispatchRepository persists the Task side of the cross-system dispatch workflow.
+// Every transition is a compare-and-swap so duplicate queue delivery is harmless.
+type DispatchRepository interface {
+	Get(context.Context, string) (*Task, error)
+	Claim(context.Context, string, time.Time) (*Task, error)
+	MarkWaitingTurn(context.Context, string, string, time.Time) error
+	MarkRetryWait(context.Context, string, string, string, time.Time) error
+	MarkTerminal(context.Context, string, Status, string, string, string, time.Time) error
+	ListWaitingTurn(context.Context, int) ([]Task, error)
+}
+
+type OutboxEvent struct {
+	ID, AggregateID, EventType, PayloadJSON string
+	Attempts                                int32
+	AvailableAt, CreatedAt, UpdatedAt       time.Time
+}
+
+type OutboxRepository interface {
+	Enqueue(context.Context, *OutboxEvent) error
+	ListPendingActions(context.Context, int) ([]OutboxEvent, error)
+	MarkDelivered(context.Context, string, time.Time) error
+	MarkDeliveryFailed(context.Context, string, string, time.Time) error
 }
 
 func Validate(workspaceID, source, sourceResourceID, key, input string) (string, string, string, string, string, error) {

@@ -19,6 +19,9 @@ func TestControlResolveSendsUserCookieAndServiceToken(t *testing.T) {
 		if r.Header.Get("X-Control-Service-Token") != "service-token" {
 			t.Fatalf("unexpected service token %q", r.Header.Get("X-Control-Service-Token"))
 		}
+		if r.Header.Get("X-Control-Acting-User-ID") != "user-1" {
+			t.Fatalf("unexpected acting user %q", r.Header.Get("X-Control-Acting-User-ID"))
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"workspace_id": "workspace-1", "agent_id": "claude-code",

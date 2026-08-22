@@ -18,10 +18,11 @@ type Control struct {
 func (c *Control) Default(ctx context.Context, userID string) (service.AgentContext, error) {
 	return c.Fallback.Default(ctx, userID)
 }
-func (c *Control) Resolve(ctx context.Context, _ string, workspaceID, token string) (service.AgentContext, error) {
+func (c *Control) Resolve(ctx context.Context, userID string, workspaceID, token string) (service.AgentContext, error) {
 	cli, err := controlclient.NewWorkspaceServiceClient(c.BaseURL, controlclient.WithHeader(http.Header{
-		"Cookie":                  []string{"token=" + token},
-		"X-Control-Service-Token": []string{c.ServiceToken},
+		"Cookie":                   []string{"token=" + token},
+		"X-Control-Service-Token":  []string{c.ServiceToken},
+		"X-Control-Acting-User-ID": []string{userID},
 	}))
 	if err != nil {
 		return service.AgentContext{}, err
