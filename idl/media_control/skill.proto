@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package media_control.skill;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/skill";
+
+service SkillService {
+  rpc CreateSkill(CreateSkillRequest) returns (SkillResponse) {
+    option (api.post) = "/api/v1/skills";
+    option (google.api.http) = { post: "/api/v1/skills" body: "*" };
+  }
+
+  rpc ListSkills(ListSkillsRequest) returns (ListSkillsResponse) {
+    option (api.get) = "/api/v1/skills";
+    option (google.api.http) = { get: "/api/v1/skills" };
+  }
+
+  rpc GetSkill(GetSkillRequest) returns (SkillResponse) {
+    option (api.get) = "/api/v1/skills/:skill_id";
+    option (google.api.http) = { get: "/api/v1/skills/{skill_id}" };
+  }
+
+  rpc UpdateSkill(UpdateSkillRequest) returns (SkillResponse) {
+    option (api.put) = "/api/v1/skills/:skill_id";
+    option (google.api.http) = { put: "/api/v1/skills/{skill_id}" body: "*" };
+  }
+
+  rpc SetSkillStatus(SetSkillStatusRequest) returns (SkillResponse) {
+    option (api.post) = "/api/v1/skills/:skill_id/status";
+    option (google.api.http) = { post: "/api/v1/skills/{skill_id}/status" body: "*" };
+  }
+
+  rpc ArchiveSkill(ArchiveSkillRequest) returns (SkillResponse) {
+    option (api.post) = "/api/v1/skills/:skill_id/archive";
+    option (google.api.http) = { post: "/api/v1/skills/{skill_id}/archive" body: "*" };
+  }
+}
+
+message CreateSkillRequest {
+  string workspace_id = 1 [(api.body) = "workspace_id"];
+  string name = 2 [(api.body) = "name"];
+  string content_path = 3 [(api.body) = "content_path"];
+  string checksum = 4 [(api.body) = "checksum"];
+}
+
+message ListSkillsRequest {
+  string workspace_id = 1 [(api.query) = "workspace_id"];
+}
+
+message GetSkillRequest {
+  string skill_id = 1 [(api.path) = "skill_id"];
+}
+
+message UpdateSkillRequest {
+  string skill_id = 1 [(api.path) = "skill_id"];
+  string name = 2 [(api.body) = "name"];
+  string content_path = 3 [(api.body) = "content_path"];
+  string checksum = 4 [(api.body) = "checksum"];
+  int64 expected_version = 5 [(api.body) = "expected_version"];
+}
+
+message SetSkillStatusRequest {
+  string skill_id = 1 [(api.path) = "skill_id"];
+  string status = 2 [(api.body) = "status"];
+  int64 expected_version = 3 [(api.body) = "expected_version"];
+}
+
+message ArchiveSkillRequest {
+  string skill_id = 1 [(api.path) = "skill_id"];
+  int64 expected_version = 2 [(api.body) = "expected_version"];
+}
+
+message SkillResponse {
+  string id = 1;
+  string workspace_id = 2;
+  string name = 3;
+  string content_path = 4;
+  string checksum = 5;
+  string status = 6;
+  int64 version = 7;
+  int64 created_at = 8;
+  int64 updated_at = 9;
+}
+
+message ListSkillsResponse {
+  repeated SkillResponse skills = 1;
+}
