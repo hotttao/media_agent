@@ -120,6 +120,76 @@ func TestMediaAgentsRestartMarksUnknownRunningTurnFailedE2E(t *testing.T) {
 	}
 }
 
+func TestMediaAgentsRestartCancelsPendingRequestE2E(t *testing.T) {
+	agentAddr, container := os.Getenv("MEDIA_AGENTS_PERMISSION_ADDR"), os.Getenv("MEDIA_AGENTS_PERMISSION_CONTAINER")
+	if agentAddr == "" || container == "" {
+		t.Skip("MEDIA_AGENTS_PERMISSION_ADDR and MEDIA_AGENTS_PERMISSION_CONTAINER are required")
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	sessionID := fmt.Sprintf("e2e-request-recovery-%d", time.Now().UnixNano())
+	status, body := doJSON(t, client, http.MethodPost, agentAddr+"/api/v1/runtime-sessions", map[string]any{"session_id": sessionID, "context_version": 1, "context_ref": "e2e:request-recovery:v1"})
+	if status != http.StatusCreated {
+		t.Fatalf("register: %d %s", status, body)
+	}
+	status, body = doJSON(t, client, http.MethodPost, agentAddr+"/api/v1/runtime-sessions/"+sessionID+"/turns", map[string]any{"idempotency_key": "pending-recovery", "context_version": 1, "input": map[string]any{"message": "request permission and wait"}})
+	if status != http.StatusAccepted {
+		t.Fatalf("submit: %d %s", status, body)
+	}
+	var turn struct {
+		TurnID string `json:"turn_id"`
+	}
+	if err := json.Unmarshal(body, &turn); err != nil {
+		t.Fatal(err)
+	}
+	var request struct{ RequestID, Status string }
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		status, body = doJSON(t, client, http.MethodGet, agentAddr+"/api/v1/runtime-sessions/"+sessionID+"/requests?turn_id="+turn.TurnID, nil)
+		var values []struct {
+			RequestID string `json:"request_id"`
+			Status    string `json:"status"`
+		}
+		_ = json.Unmarshal(body, &values)
+		if status == http.StatusOK && len(values) > 0 {
+			request.RequestID, request.Status = values[0].RequestID, values[0].Status
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if request.RequestID == "" || request.Status != "pending" {
+		t.Fatalf("pending Agent Request missing: %+v", request)
+	}
+	if output, err := exec.Command("docker", "restart", container).CombinedOutput(); err != nil {
+		t.Fatalf("restart: %v %s", err, output)
+	}
+	waitAgentHealthy(t, client, agentAddr)
+	pollTurn(t, client, agentAddr, sessionID, turn.TurnID, "failed")
+	status, body = doJSON(t, client, http.MethodGet, agentAddr+"/api/v1/runtime-sessions/"+sessionID+"/requests?turn_id="+turn.TurnID, nil)
+	if status != http.StatusOK || !strings.Contains(string(body), `"status":"cancelled"`) {
+		t.Fatalf("pending request was not cancelled: %d %s", status, body)
+	}
+	resolvePath := fmt.Sprintf("%s/api/v1/runtime-sessions/%s/turns/%s/requests/%s/resolve", agentAddr, sessionID, turn.TurnID, request.RequestID)
+	status, _ = doJSON(t, client, http.MethodPost, resolvePath, map[string]any{"response": map[string]any{"option_id": "allow-once"}})
+	if status != http.StatusConflict {
+		t.Fatalf("late resolve status=%d", status)
+	}
+}
+
+func waitAgentHealthy(t *testing.T, client *http.Client, agentAddr string) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if response, err := client.Get(agentAddr + "/health"); err == nil {
+			response.Body.Close()
+			if response.StatusCode == http.StatusOK {
+				return
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	t.Fatal("Agent did not become healthy after restart")
+}
+
 func TestMediaAgentsRuntimeSessionExecutionE2E(t *testing.T) {
 	agentAddr := os.Getenv("MEDIA_AGENTS_ADDR")
 	if agentAddr == "" {
