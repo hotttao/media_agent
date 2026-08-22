@@ -2,6 +2,7 @@ package media_agents
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,32 @@ import (
 
 	"media_agent/media_cli/cmd"
 )
+
+func TestSubmitTurnCommandSendsJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/runtime-sessions/session-1/turns" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["idempotency_key"] != "request-1" || body["context_version"] != float64(2) {
+			t.Fatalf("unexpected body: %+v", body)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"turn_id":"turn-1","status":"running"}`))
+	}))
+	defer server.Close()
+	oldHost := cmd.FlagHost
+	cmd.FlagHost = server.URL
+	defer func() { cmd.FlagHost = oldHost }()
+	submitTurnSessionID, submitTurnKey, submitTurnContext, submitTurnInput = "session-1", "request-1", 2, `{"text":"hello"}`
+	submitTurnCmd.SetOut(&bytes.Buffer{})
+	if err := submitTurnCmd.RunE(submitTurnCmd, nil); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestRequestAndPrintRuntimeSession(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

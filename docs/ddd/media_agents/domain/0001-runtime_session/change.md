@@ -1,5 +1,11 @@
 # Runtime Session 变更记录
 
+## 2026-08-22 · Submit Turn 持久化 FIFO 落地
+
+- 使用 Session 行锁分配严格递增 enqueue sequence，并以 partial unique index 保证至多一个 running Turn。
+- `session_id + idempotency_key` 重试返回既有 Turn，不重复写 user Message。
+- Turn、user Message、Session 计数器和首条 Turn 声明在同一 PostgreSQL 事务内提交。
+
 ## 2026-08-22 · Agent 事实库统一为 PostgreSQL
 
 - Runtime Session、Turn、Message、Universal Event 与 Agent Request 使用 Agent 自有 PostgreSQL database/schema。

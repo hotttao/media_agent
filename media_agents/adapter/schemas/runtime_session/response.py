@@ -12,3 +12,15 @@ class RuntimeSessionResponse(BaseModel):
     next_event_sequence: int
     created_at: str
     updated_at: str
+
+
+class TurnResponse(BaseModel):
+    turn_id: str
+    session_id: str
+    idempotency_key: str
+    enqueue_sequence: int
+    status: str
+    context_version: int
+    input: dict[str, object]
+    created_at: str
+    started_at: str | None

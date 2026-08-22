@@ -20,6 +20,10 @@ var (
 	registerSessionID      string
 	registerContextVersion int64
 	registerContextRef     string
+	submitTurnSessionID    string
+	submitTurnKey          string
+	submitTurnContext      int64
+	submitTurnInput        string
 )
 
 var registerRuntimeSessionCmd = &cobra.Command{
@@ -43,6 +47,24 @@ var getRuntimeSessionCmd = &cobra.Command{
 	},
 }
 
+var submitTurnCmd = &cobra.Command{
+	Use: "submit-turn", Short: "幂等提交 Turn 到持久化 FIFO",
+	RunE: func(command *cobra.Command, _ []string) error {
+		var input map[string]any
+		if err := json.Unmarshal([]byte(submitTurnInput), &input); err != nil {
+			return fmt.Errorf("invalid --input JSON: %w", err)
+		}
+		payload, err := json.Marshal(map[string]any{
+			"idempotency_key": submitTurnKey, "context_version": submitTurnContext, "input": input,
+		})
+		if err != nil {
+			return err
+		}
+		return requestAndPrint(command, http.MethodPost,
+			"/api/v1/runtime-sessions/"+submitTurnSessionID+"/turns", payload)
+	},
+}
+
 var runtimeWorkspaceCmd = &cobra.Command{
 	Use:   "runtime-workspace",
 	Short: "查询 Agent 挂载的 Workspace Runtime Directory identity",
@@ -63,7 +85,15 @@ func init() {
 	_ = registerRuntimeSessionCmd.MarkFlagRequired("session-id")
 	_ = registerRuntimeSessionCmd.MarkFlagRequired("context-version")
 	_ = registerRuntimeSessionCmd.MarkFlagRequired("context-ref")
-	runtimeSessionCmd.AddCommand(registerRuntimeSessionCmd, getRuntimeSessionCmd)
+	submitTurnCmd.Flags().StringVar(&submitTurnSessionID, "session-id", "", "Runtime Session ID")
+	submitTurnCmd.Flags().StringVar(&submitTurnKey, "idempotency-key", "", "稳定幂等键")
+	submitTurnCmd.Flags().Int64Var(&submitTurnContext, "context-version", 0, "运行上下文版本")
+	submitTurnCmd.Flags().StringVar(&submitTurnInput, "input", "", "Turn 输入 JSON object")
+	_ = submitTurnCmd.MarkFlagRequired("session-id")
+	_ = submitTurnCmd.MarkFlagRequired("idempotency-key")
+	_ = submitTurnCmd.MarkFlagRequired("context-version")
+	_ = submitTurnCmd.MarkFlagRequired("input")
+	runtimeSessionCmd.AddCommand(registerRuntimeSessionCmd, getRuntimeSessionCmd, submitTurnCmd)
 	runtimeWorkspaceCmd.AddCommand(getRuntimeWorkspaceCmd)
 	MediaAgentsCmd.AddCommand(runtimeSessionCmd, runtimeWorkspaceCmd)
 }

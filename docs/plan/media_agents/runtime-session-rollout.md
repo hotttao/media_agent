@@ -17,13 +17,13 @@
 - [x] 实现幂等 Register/Get service 和轻薄 HTTP API/OpenAPI。
 - [x] 增加 `media-cli media_agents runtime-session register/get`。
 - [x] 完成领域、service、DAL、API 与 media-cli E2E 测试。
-- [ ] 通过 Python 全量质量门禁并独立提交。
+- [x] 通过 Python 全量质量门禁并独立提交。
 
 ## P2：Submit Turn 与 FIFO
 
-- [ ] 实现 Turn Queue、幂等提交、enqueue sequence 与 running 唯一约束。
-- [ ] 原子保存 queued Turn 和 user Message；无 running 时声明队首。
-- [ ] 完成并发、事务回滚、HTTP/media-cli E2E，独立提交。
+- [x] 实现 Turn Queue、幂等提交、enqueue sequence 与 running 唯一约束。
+- [x] 原子保存 queued Turn 和 user Message；无 running 时声明队首。
+- [x] 完成并发、事务回滚、HTTP/media-cli E2E，独立提交。
 
 ## P3：Execute Turn 与终态
 

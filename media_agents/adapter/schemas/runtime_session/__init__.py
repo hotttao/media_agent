@@ -1,6 +1,11 @@
 """Runtime Session HTTP contracts."""
 
-from adapter.schemas.runtime_session.request import RegisterRuntimeSessionRequest
-from adapter.schemas.runtime_session.response import RuntimeSessionResponse
+from adapter.schemas.runtime_session.request import RegisterRuntimeSessionRequest, SubmitTurnRequest
+from adapter.schemas.runtime_session.response import RuntimeSessionResponse, TurnResponse
 
-__all__ = ["RegisterRuntimeSessionRequest", "RuntimeSessionResponse"]
+__all__ = [
+    "RegisterRuntimeSessionRequest",
+    "RuntimeSessionResponse",
+    "SubmitTurnRequest",
+    "TurnResponse",
+]

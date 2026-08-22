@@ -36,9 +36,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RuntimeSessionResponse'
+  /api/v1/runtime-sessions/{session_id}/turns:
+    post:
+      operationId: submitTurn
+      parameters:
+        - in: path
+          name: session_id
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SubmitTurnRequest'}
+      responses:
+        '202':
+          description: Turn accepted and persisted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TurnResponse'}
         '404': {description: Not found}
 components:
   schemas:
+    SubmitTurnRequest:
+      type: object
+      additionalProperties: false
+      required: [idempotency_key, context_version, input]
+      properties:
+        idempotency_key: {type: string, maxLength: 128}
+        context_version: {type: integer, minimum: 1}
+        input: {type: object}
+    TurnResponse:
+      type: object
+      required: [turn_id, session_id, idempotency_key, enqueue_sequence, status, context_version, input, created_at]
+      properties:
+        turn_id: {type: string}
+        session_id: {type: string}
+        idempotency_key: {type: string}
+        enqueue_sequence: {type: integer}
+        status: {type: string, enum: [queued, running]}
+        context_version: {type: integer}
+        input: {type: object}
+        created_at: {type: string, format: date-time}
+        started_at: {type: [string, 'null'], format: date-time}
     RegisterRuntimeSessionRequest:
       type: object
       additionalProperties: false
