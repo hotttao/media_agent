@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package media_control.agent_template;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/agent_template";
+
+service AgentTemplateService {
+  rpc CreateAgentTemplate(CreateAgentTemplateRequest) returns (AgentTemplateResponse) {
+    option (api.post) = "/api/v1/agent-templates";
+    option (google.api.http) = { post: "/api/v1/agent-templates" body: "*" };
+  }
+
+  rpc ListAgentTemplates(ListAgentTemplatesRequest) returns (ListAgentTemplatesResponse) {
+    option (api.get) = "/api/v1/agent-templates";
+    option (google.api.http) = { get: "/api/v1/agent-templates" };
+  }
+
+  rpc GetAgentTemplate(GetAgentTemplateRequest) returns (AgentTemplateResponse) {
+    option (api.get) = "/api/v1/agent-templates/:template_id";
+    option (google.api.http) = { get: "/api/v1/agent-templates/{template_id}" };
+  }
+
+  rpc UpdateAgentTemplate(UpdateAgentTemplateRequest) returns (AgentTemplateResponse) {
+    option (api.put) = "/api/v1/agent-templates/:template_id";
+    option (google.api.http) = { put: "/api/v1/agent-templates/{template_id}" body: "*" };
+  }
+
+  rpc ArchiveAgentTemplate(ArchiveAgentTemplateRequest) returns (AgentTemplateResponse) {
+    option (api.post) = "/api/v1/agent-templates/:template_id/archive";
+    option (google.api.http) = { post: "/api/v1/agent-templates/{template_id}/archive" body: "*" };
+  }
+}
+
+message CreateAgentTemplateRequest {
+  string workspace_id = 1 [(api.body) = "workspace_id"];
+  string name = 2 [(api.body) = "name"];
+  string configuration_json = 3 [(api.body) = "configuration_json"];
+}
+
+message ListAgentTemplatesRequest {
+  string workspace_id = 1 [(api.query) = "workspace_id"];
+}
+
+message GetAgentTemplateRequest {
+  string template_id = 1 [(api.path) = "template_id"];
+}
+
+message UpdateAgentTemplateRequest {
+  string template_id = 1 [(api.path) = "template_id"];
+  string name = 2 [(api.body) = "name"];
+  string configuration_json = 3 [(api.body) = "configuration_json"];
+  int64 expected_version = 4 [(api.body) = "expected_version"];
+}
+
+message ArchiveAgentTemplateRequest {
+  string template_id = 1 [(api.path) = "template_id"];
+  int64 expected_version = 2 [(api.body) = "expected_version"];
+}
+
+message AgentTemplateResponse {
+  string id = 1;
+  string workspace_id = 2;
+  string name = 3;
+  string configuration_json = 4;
+  string status = 5;
+  int64 version = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
+}
+
+message ListAgentTemplatesResponse {
+  repeated AgentTemplateResponse templates = 1;
+}
