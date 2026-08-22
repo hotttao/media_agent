@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package media_control.teamwork;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/teamwork";
+
+service TeamworkService {
+  rpc CreateTopology(CreateTopologyRequest) returns (TopologyResponse) {
+    option (api.post) = "/api/v1/teamwork-topologies";
+    option (google.api.http) = { post: "/api/v1/teamwork-topologies" body: "*" };
+  }
+  rpc ListTopologies(ListTopologiesRequest) returns (ListTopologiesResponse) {
+    option (api.get) = "/api/v1/teamwork-topologies";
+    option (google.api.http) = { get: "/api/v1/teamwork-topologies" };
+  }
+  rpc GetTopology(GetTopologyRequest) returns (TopologyResponse) {
+    option (api.get) = "/api/v1/teamwork-topologies/:topology_id";
+    option (google.api.http) = { get: "/api/v1/teamwork-topologies/{topology_id}" };
+  }
+  rpc UpdateTopology(UpdateTopologyRequest) returns (TopologyResponse) {
+    option (api.put) = "/api/v1/teamwork-topologies/:topology_id";
+    option (google.api.http) = { put: "/api/v1/teamwork-topologies/{topology_id}" body: "*" };
+  }
+  rpc DeleteTopology(DeleteTopologyRequest) returns (TopologyResponse) {
+    option (api.post) = "/api/v1/teamwork-topologies/:topology_id/delete";
+    option (google.api.http) = { post: "/api/v1/teamwork-topologies/{topology_id}/delete" body: "*" };
+  }
+}
+
+message CreateTopologyRequest { string workspace_id = 1 [(api.body) = "workspace_id"]; string name = 2 [(api.body) = "name"]; string entry_member_id = 3 [(api.body) = "entry_member_id"]; string members_json = 4 [(api.body) = "members_json"]; string edges_json = 5 [(api.body) = "edges_json"]; }
+message ListTopologiesRequest { string workspace_id = 1 [(api.query) = "workspace_id"]; }
+message GetTopologyRequest { string topology_id = 1 [(api.path) = "topology_id"]; }
+message UpdateTopologyRequest { string topology_id = 1 [(api.path) = "topology_id"]; string name = 2 [(api.body) = "name"]; string entry_member_id = 3 [(api.body) = "entry_member_id"]; string members_json = 4 [(api.body) = "members_json"]; string edges_json = 5 [(api.body) = "edges_json"]; int64 expected_version = 6 [(api.body) = "expected_version"]; }
+message DeleteTopologyRequest { string topology_id = 1 [(api.path) = "topology_id"]; int64 expected_version = 2 [(api.body) = "expected_version"]; }
+message TopologyResponse { string id = 1; string workspace_id = 2; string name = 3; string entry_member_id = 4; string members_json = 5; string edges_json = 6; int64 version = 7; string status = 8; int64 created_at = 9; int64 updated_at = 10; }
+message ListTopologiesResponse { repeated TopologyResponse topologies = 1; }
