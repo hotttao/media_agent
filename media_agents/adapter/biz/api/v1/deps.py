@@ -13,6 +13,7 @@ from fastapi import Depends, Request
 from adapter.biz.domain.acp_adapter import AcpServer
 from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks
 from adapter.biz.service.runtime_session.service import RuntimeSessionService
+from adapter.biz.workflow.execute_turn_flow import ExecuteTurnFlow
 from adapter.config.config import AdapterConfig
 from adapter.infra.runtime_workspace import RuntimeWorkspaceIdentity
 
@@ -39,8 +40,13 @@ def get_runtime_workspace(request: Request) -> RuntimeWorkspaceIdentity:
     return cast(RuntimeWorkspaceIdentity, request.app.state.runtime_workspace)
 
 
+def get_execute_turn_flow(request: Request) -> ExecuteTurnFlow:
+    return cast(ExecuteTurnFlow, request.app.state.execute_turn_flow)
+
+
 AdapterConfigDep = Annotated[AdapterConfig, Depends(get_adapter_config)]
 AcpServerDep = Annotated[AcpServer, Depends(get_acp_server)]
 AgentHooksDep = Annotated[AgentHooks, Depends(get_hooks)]
 RuntimeSessionServiceDep = Annotated[RuntimeSessionService, Depends(get_runtime_session_service)]
 RuntimeWorkspaceDep = Annotated[RuntimeWorkspaceIdentity, Depends(get_runtime_workspace)]
+ExecuteTurnFlowDep = Annotated[ExecuteTurnFlow, Depends(get_execute_turn_flow)]

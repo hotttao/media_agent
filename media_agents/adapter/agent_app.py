@@ -18,6 +18,8 @@ from adapter.biz.dal.session import TxRunner
 from adapter.biz.domain.acp_adapter import AcpServer
 from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks, BridgeFactory
 from adapter.biz.service.runtime_session.service import RuntimeSessionService
+from adapter.biz.workflow.acp_turn_runtime import AcpTurnRuntime
+from adapter.biz.workflow.execute_turn_flow import ExecuteTurnFlow, TurnRuntime
 from adapter.config.config import AdapterConfig
 from adapter.infra.logging import setup_logging
 from adapter.infra.migrations import migrate_database
@@ -37,7 +39,7 @@ def _add_common_middleware(app: FastAPI) -> None:
     )
 
 
-def build_base_app(cfg: AdapterConfig) -> FastAPI:
+def build_base_app(cfg: AdapterConfig, *, turn_runtime: TurnRuntime) -> FastAPI:
     """Build the shared FastAPI shell without ACP routes."""
 
     @asynccontextmanager
@@ -54,6 +56,9 @@ def build_base_app(cfg: AdapterConfig) -> FastAPI:
         app.state.runtime_session_service = RuntimeSessionService(
             TxRunner(session_factory), SqlRuntimeSessionRepository()
         )
+        app.state.execute_turn_flow = ExecuteTurnFlow(
+            app.state.runtime_session_service, turn_runtime
+        )
         logger.info(
             "adapter base app started: agent=%s workspace=%s",
             cfg.agent_type,
@@ -62,6 +67,7 @@ def build_base_app(cfg: AdapterConfig) -> FastAPI:
         try:
             yield
         finally:
+            await app.state.execute_turn_flow.close()
             await engine.dispose()
             logger.info("adapter base app shutdown")
 
@@ -106,6 +112,9 @@ def build_app(
         app.state.runtime_session_service = RuntimeSessionService(
             TxRunner(session_factory), SqlRuntimeSessionRepository()
         )
+        app.state.execute_turn_flow = ExecuteTurnFlow(
+            app.state.runtime_session_service, AcpTurnRuntime(acp_server)
+        )
         logger.info(
             "adapter app started: agent=%s workspace=%s",
             cfg.agent_type,
@@ -118,6 +127,7 @@ def build_app(
                 async with extra_lifespan(app):
                     yield
         finally:
+            await app.state.execute_turn_flow.close()
             acp_server.stop_evictor()
             await engine.dispose()
             logger.info("adapter app shutdown")

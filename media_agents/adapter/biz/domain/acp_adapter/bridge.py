@@ -23,8 +23,9 @@ from acp.schema import (
 )
 
 from adapter.biz.domain.acp_adapter.client import AcpClientAdapter
-from adapter.biz.domain.acp_adapter.entity import ChatImageAttachment, PromptResult, StopReason
+from adapter.biz.domain.acp_adapter.entity import PromptResult, StopReason
 from adapter.biz.domain.acp_adapter.errors import LoadSessionFailed
+from adapter.biz.domain.acp_adapter.llm_event import ChatImageAttachment
 from adapter.biz.domain.acp_adapter.session import AcpSession
 
 if TYPE_CHECKING:

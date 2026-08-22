@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Protocol, TypeVar
 from uuid import uuid4
@@ -30,6 +30,18 @@ T = TypeVar("T")
 
 class TransactionRunner(Protocol):
     async def run_in_tx(self, operation: Callable[[], Awaitable[T]]) -> T: ...
+
+
+@dataclass(frozen=True, slots=True)
+class TurnExecution:
+    session: RuntimeSession
+    turn: Turn
+
+
+@dataclass(frozen=True, slots=True)
+class TurnFinalization:
+    terminal_turn: Turn
+    next_turn: Turn | None
 
 
 class RuntimeSessionService:
@@ -84,6 +96,8 @@ class RuntimeSessionService:
             raise InvalidTurn("idempotency_key is required")
         if not command.input:
             raise InvalidTurn("input is required")
+        if _contains_secret(command.input):
+            raise InvalidTurn("input must not contain runtime credentials")
 
         async def operation() -> Turn:
             session = await self._repository.get(session_id, for_update=True)
@@ -140,3 +154,80 @@ class RuntimeSessionService:
             return turn
 
         return await self._tx.run_in_tx(operation)
+
+    async def get_turn(self, turn_id: str) -> Turn:
+        turn = await self._tx.run_in_tx(lambda: self._repository.get_turn(turn_id.strip()))
+        if turn is None:
+            raise InvalidTurn(f"turn not found: {turn_id}")
+        return turn
+
+    async def execution(self, session_id: str, turn_id: str) -> TurnExecution:
+        async def operation() -> TurnExecution:
+            session = await self._repository.get(session_id)
+            turn = await self._repository.get_turn(turn_id)
+            if session is None:
+                raise RuntimeSessionNotFound(session_id)
+            if turn is None or turn.session_id != session_id:
+                raise InvalidTurn(f"turn not found: {turn_id}")
+            if session.active_turn_id != turn_id or turn.status is not TurnStatus.RUNNING:
+                raise InvalidTurn("turn is not the active running Turn")
+            return TurnExecution(session, turn)
+
+        return await self._tx.run_in_tx(operation)
+
+    async def attach_runtime(self, session_id: str, turn_id: str, handle: str) -> RuntimeSession:
+        async def operation() -> RuntimeSession:
+            session = await self._repository.get(session_id, for_update=True)
+            if session is None:
+                raise RuntimeSessionNotFound(session_id)
+            if session.active_turn_id != turn_id:
+                raise InvalidTurn("turn is no longer active")
+            attached = session.attach_runtime(handle, now=datetime.now(UTC))
+            await self._repository.save_execution(attached)
+            return attached
+
+        return await self._tx.run_in_tx(operation)
+
+    async def finalize_turn(
+        self,
+        session_id: str,
+        turn_id: str,
+        status: TurnStatus,
+        *,
+        error_class: str | None = None,
+    ) -> TurnFinalization:
+        async def operation() -> TurnFinalization:
+            session = await self._repository.get(session_id, for_update=True)
+            turn = await self._repository.get_turn(turn_id, for_update=True)
+            if session is None:
+                raise RuntimeSessionNotFound(session_id)
+            if turn is None or turn.session_id != session_id:
+                raise InvalidTurn(f"turn not found: {turn_id}")
+            now = datetime.now(UTC)
+            terminal = turn.finish(status, now=now, error_class=error_class)
+            released = session.release_turn(terminal, now=now)
+            next_turn: Turn | None = None
+            if status is TurnStatus.COMPLETED:
+                head = await self._repository.get_queue_head(session_id)
+                if head is not None:
+                    released, next_turn = released.claim(head, now=now)
+            await self._repository.save_execution(released, terminal)
+            if next_turn is not None:
+                await self._repository.save_execution(released, next_turn)
+            return TurnFinalization(terminal, next_turn)
+
+        return await self._tx.run_in_tx(operation)
+
+
+_SECRET_KEYS = {"api_key", "apikey", "authorization", "session_token", "access_token"}
+
+
+def _contains_secret(value: object) -> bool:
+    if isinstance(value, dict):
+        return any(
+            str(key).lower() in _SECRET_KEYS or _contains_secret(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_secret(item) for item in value)
+    return False

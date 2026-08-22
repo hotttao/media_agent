@@ -7,9 +7,7 @@ agent adapters and the control plane/web UI.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
-from typing import Literal, cast
-
-from pydantic import BaseModel, Field
+from typing import Any, Literal, cast
 
 SessionEndReason = Literal["completed", "error", "interrupted"]
 """session.ended 事件的终止原因。"""
@@ -19,11 +17,12 @@ ItemRole = Literal["user", "assistant", "tool"]
 ItemStatus = Literal["in_progress", "completed", "failed"]
 
 
-class ChatImageAttachment(BaseModel):
+@dataclass(frozen=True, slots=True)
+class ChatImageAttachment:
     """对标 ChatImageAttachment：base64 编码的图片附件。"""
 
-    data: str = Field(..., description="base64 encoded image bytes")
-    media_type: str = Field(..., description="image/png | image/jpeg | image/gif | image/webp")
+    data: str
+    media_type: str
 
 
 @dataclass(slots=True)
@@ -110,7 +109,7 @@ def to_event_dict(event: UniversalEvent) -> dict[str, object]:
 
     def compact(value: object) -> object:
         if is_dataclass(value):
-            value = asdict(value)
+            value = asdict(cast(Any, value))
         if isinstance(value, dict):
             return {key: compact(item) for key, item in value.items() if item is not None}
         if isinstance(value, list):

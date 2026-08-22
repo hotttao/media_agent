@@ -44,6 +44,9 @@ sequenceDiagram
     A-->>G: accepted(turn_id, queued|running, queue_position)
 
     opt 本 Turn 被声明为 running
+        A->>R: Create/Load(runtime_session_id, context_ref)
+        R-->>A: runtime_session_id
+        A->>DB: 首次创建时持久化 Runtime handle
         A->>R: Execute(turn_id, context_version, input)
         loop Runtime 输出
             R-->>A: Runtime frame
@@ -92,6 +95,7 @@ sequenceDiagram
 4. 发布失败不把已提交事件回滚或把 Turn 标成失败；Gateway 通过 replay、缺口检测和周期补查取得事实。
 5. 所有终止路径先停止 timer 并 flush 已接收工具快照，再提交终态。只有自然 completed 自动拉起下一 queued Turn；failed/interrupted 暂停队列，避免未知副作用后继续级联执行。
 6. 重复 Submit、Runtime 重放和总线重复投递都以业务 ID/sequence 收敛，消息中间件的 offset 不属于业务幂等键。
+7. 底层 Runtime 会话 ID 由 Runtime adapter 返回并持久化，不得从业务 Session ID 推导。Gateway 把已授权的 API key/Session Token 放在 SubmitTurn 的 write-only 执行信封中；Agent 只在对应 Turn 执行前以内存暂存，禁止写入 input、Message、事件或数据库。进程丢失后的凭据重取由恢复阶段按 `context_ref` 协调。
 
 ## 状态与不变量
 
@@ -111,6 +115,8 @@ sequenceDiagram
 | enqueue_sequence | Agent DB | Agent 调度器 | Session 内 FIFO 次序 |
 | sequence | Agent DB | Gateway、UI | Universal Event 恢复游标 |
 | context_version | Session Registration | Runtime | 本 Turn 固定运行配置版本 |
+| Runtime Handle | Runtime adapter | Agent | 后续 Turn 加载同一底层会话的不透明标识 |
+| execution credentials | Gateway write-only envelope | Runtime adapter | 仅对应 Turn 的进程内 API key/Session Token |
 
 ## 一致性边界
 
@@ -137,7 +143,7 @@ PostgreSQL 与 Session Event Bus 不组成分布式事务。publish 失败时保
 
 ## 权限与失败
 
-Gateway 先完成 Web 用户与 Session Registration 的资源授权，再以 mTLS 服务身份调用 Agent，并传递不可由请求体覆盖的代表用户、Workspace、Session 和 context version。Agent 校验调用服务身份及 Runtime Session 注册关系；工具访问继续使用 Session Token，由资源所属服务执行最终授权。
+Gateway 先完成 Web 用户与 Session Registration 的资源授权，再以 mTLS 服务身份调用 Agent，并传递不可由持久化 input 覆盖的代表用户、Workspace、Session、context version 和 write-only 执行凭据。Agent 校验调用服务身份及 Runtime Session 注册关系；API key 只进入 Runtime 子进程环境，工具访问继续使用 Session Token，由资源所属服务执行最终授权。
 
 | 失败 | 分类 | 处理 |
 |:---|:---|:---|

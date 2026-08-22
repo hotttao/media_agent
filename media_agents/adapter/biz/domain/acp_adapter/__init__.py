@@ -23,8 +23,9 @@ import logging
 from typing import TYPE_CHECKING
 
 from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks, BridgeFactory
-from adapter.biz.domain.acp_adapter.entity import Chat, ChatImageAttachment, PromptResult
+from adapter.biz.domain.acp_adapter.entity import Chat, PromptResult
 from adapter.biz.domain.acp_adapter.errors import BridgeNotFound, LoadSessionFailed
+from adapter.biz.domain.acp_adapter.llm_event import ChatImageAttachment
 from adapter.biz.domain.acp_adapter.session import AcpSession, SessionStream
 from adapter.biz.shared.clock import Clock, SystemClock
 from adapter.biz.shared.id import new_session_id

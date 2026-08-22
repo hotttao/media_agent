@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -24,6 +25,10 @@ var (
 	submitTurnKey          string
 	submitTurnContext      int64
 	submitTurnInput        string
+	getTurnSessionID       string
+	getTurnID              string
+	interruptTurnSessionID string
+	interruptTurnID        string
 )
 
 var registerRuntimeSessionCmd = &cobra.Command{
@@ -56,12 +61,29 @@ var submitTurnCmd = &cobra.Command{
 		}
 		payload, err := json.Marshal(map[string]any{
 			"idempotency_key": submitTurnKey, "context_version": submitTurnContext, "input": input,
+			"api_key": os.Getenv("MEDIA_AGENT_API_KEY"), "session_token": os.Getenv("MEDIA_AGENT_SESSION_TOKEN"),
 		})
 		if err != nil {
 			return err
 		}
 		return requestAndPrint(command, http.MethodPost,
 			"/api/v1/runtime-sessions/"+submitTurnSessionID+"/turns", payload)
+	},
+}
+
+var getTurnCmd = &cobra.Command{
+	Use: "get-turn", Short: "查询持久化 Turn",
+	RunE: func(command *cobra.Command, _ []string) error {
+		return requestAndPrint(command, http.MethodGet,
+			"/api/v1/runtime-sessions/"+getTurnSessionID+"/turns/"+getTurnID, nil)
+	},
+}
+
+var interruptTurnCmd = &cobra.Command{
+	Use: "interrupt-turn", Short: "软中断当前 running Turn",
+	RunE: func(command *cobra.Command, _ []string) error {
+		return requestAndPrint(command, http.MethodPost,
+			"/api/v1/runtime-sessions/"+interruptTurnSessionID+"/turns/"+interruptTurnID+"/interrupt", []byte(`{}`))
 	},
 }
 
@@ -93,7 +115,15 @@ func init() {
 	_ = submitTurnCmd.MarkFlagRequired("idempotency-key")
 	_ = submitTurnCmd.MarkFlagRequired("context-version")
 	_ = submitTurnCmd.MarkFlagRequired("input")
-	runtimeSessionCmd.AddCommand(registerRuntimeSessionCmd, getRuntimeSessionCmd, submitTurnCmd)
+	getTurnCmd.Flags().StringVar(&getTurnSessionID, "session-id", "", "Runtime Session ID")
+	getTurnCmd.Flags().StringVar(&getTurnID, "turn-id", "", "Turn ID")
+	interruptTurnCmd.Flags().StringVar(&interruptTurnSessionID, "session-id", "", "Runtime Session ID")
+	interruptTurnCmd.Flags().StringVar(&interruptTurnID, "turn-id", "", "Turn ID")
+	_ = getTurnCmd.MarkFlagRequired("session-id")
+	_ = getTurnCmd.MarkFlagRequired("turn-id")
+	_ = interruptTurnCmd.MarkFlagRequired("session-id")
+	_ = interruptTurnCmd.MarkFlagRequired("turn-id")
+	runtimeSessionCmd.AddCommand(registerRuntimeSessionCmd, getRuntimeSessionCmd, submitTurnCmd, getTurnCmd, interruptTurnCmd)
 	runtimeWorkspaceCmd.AddCommand(getRuntimeWorkspaceCmd)
 	MediaAgentsCmd.AddCommand(runtimeSessionCmd, runtimeWorkspaceCmd)
 }

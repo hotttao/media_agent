@@ -23,6 +23,21 @@ message = sys.argv[-1]
 if message == "wait-for-interrupt":
     time.sleep(30)
     raise SystemExit(0)
+if message.startswith("slow-success"):
+    time.sleep(0.5)
+if message == "fail-turn":
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": "fixture failure",
+            }
+        ),
+        flush=True,
+    )
+    raise SystemExit(0)
 
 answer = f"Claude fixture: {message}"
 payload = {

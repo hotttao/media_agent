@@ -2,7 +2,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from adapter.biz.domain.runtime_session.entity import ChatStatus, RuntimeSession, SessionStatus
+from adapter.biz.domain.runtime_session.entity import (
+    ChatStatus,
+    RuntimeSession,
+    SessionStatus,
+    Turn,
+    TurnStatus,
+)
 from adapter.biz.domain.runtime_session.errors import InvalidRuntimeSession
 
 
@@ -19,6 +25,7 @@ def test_register_creates_active_human_controlled_session() -> None:
     assert session.status is SessionStatus.ACTIVE
     assert session.chat_status is ChatStatus.HUMAN
     assert session.active_turn_id is None
+    assert session.runtime_session_id is None
     assert session.next_turn_sequence == 1
     assert session.next_event_sequence == 1
     assert session.created_at == now
@@ -41,3 +48,19 @@ def test_register_rejects_invalid_identity_and_context(
             context_version=context_version,
             context_ref=context_ref,
         )
+
+
+def test_runtime_handle_is_immutable_and_failure_pauses_session() -> None:
+    now = datetime(2026, 8, 22, 10, 30, tzinfo=UTC)
+    queued = Turn("turn-1", "session-1", "key", 1, TurnStatus.QUEUED, {"message": "hi"}, 1, now)
+    session = RuntimeSession.register(
+        session_id="session-1", context_version=1, context_ref="ctx", now=now
+    ).attach_runtime("runtime-1", now=now)
+    session, running = session.claim(queued, now=now)
+    failed = running.finish(TurnStatus.FAILED, now=now, error_class="RuntimeFailure")
+    paused = session.release_turn(failed, now=now)
+
+    assert paused.status is SessionStatus.PAUSED
+    assert paused.chat_status is ChatStatus.HUMAN
+    with pytest.raises(InvalidRuntimeSession, match="cannot be replaced"):
+        paused.attach_runtime("runtime-2", now=now)

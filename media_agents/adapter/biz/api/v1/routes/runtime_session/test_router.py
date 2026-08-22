@@ -4,7 +4,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from adapter.biz.api.v1.deps import get_runtime_session_service
+from adapter.biz.api.v1.deps import get_execute_turn_flow, get_runtime_session_service
 from adapter.biz.api.v1.routes.runtime_session.router import build_runtime_session_router
 from adapter.biz.domain.runtime_session.entity import RuntimeSession, Turn, TurnStatus
 from adapter.biz.domain.runtime_session.errors import (
@@ -33,18 +33,30 @@ class FakeService:
             raise RuntimeSessionNotFound(session_id)
         return self.value
 
-    async def submit_turn(self, command: object) -> Turn:
-        return Turn(
-            turn_id="turn-1",
-            session_id="session-1",
-            idempotency_key="request-1",
-            enqueue_sequence=1,
-            status=TurnStatus.RUNNING,
-            input={"text": "hello"},
-            context_version=1,
-            created_at=datetime(2026, 8, 22, tzinfo=UTC),
-            started_at=datetime(2026, 8, 22, tzinfo=UTC),
-        )
+    async def get_turn(self, turn_id: str) -> Turn:
+        return _turn()
+
+
+class FakeFlow:
+    async def submit(self, command: object, credentials: object = None) -> Turn:
+        return _turn()
+
+    async def interrupt(self, session_id: str, turn_id: str) -> bool:
+        return True
+
+
+def _turn() -> Turn:
+    return Turn(
+        turn_id="turn-1",
+        session_id="session-1",
+        idempotency_key="request-1",
+        enqueue_sequence=1,
+        status=TurnStatus.RUNNING,
+        input={"text": "hello"},
+        context_version=1,
+        created_at=datetime(2026, 8, 22, tzinfo=UTC),
+        started_at=datetime(2026, 8, 22, tzinfo=UTC),
+    )
 
 
 @pytest.mark.asyncio
@@ -56,6 +68,7 @@ async def test_register_get_and_conflict_mapping() -> None:
         return service
 
     app.dependency_overrides[get_runtime_session_service] = override_service
+    app.dependency_overrides[get_execute_turn_flow] = lambda: FakeFlow()
     app.include_router(build_runtime_session_router())
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -92,6 +105,11 @@ async def test_register_get_and_conflict_mapping() -> None:
         assert turn.status_code == 202
         assert turn.json()["status"] == "running"
 
+        fetched_turn = await client.get("/api/v1/runtime-sessions/session-1/turns/turn-1")
+        assert fetched_turn.status_code == 200
+        interrupted = await client.post("/api/v1/runtime-sessions/session-1/turns/turn-1/interrupt")
+        assert interrupted.json() == {"interrupted": True}
+
 
 @pytest.mark.asyncio
 async def test_get_missing_runtime_session_returns_not_found() -> None:
@@ -102,6 +120,7 @@ async def test_get_missing_runtime_session_returns_not_found() -> None:
         return service
 
     app.dependency_overrides[get_runtime_session_service] = override_service
+    app.dependency_overrides[get_execute_turn_flow] = lambda: FakeFlow()
     app.include_router(build_runtime_session_router())
 
     async with httpx.AsyncClient(

@@ -1,5 +1,17 @@
 # Execute Turn 变更记录
 
+## 2026-08-22 · Codex ACP 与 Claude Code 执行编排落地
+
+- 两种 Runtime 通过统一 port 接入 Execute Turn Flow，所有外部调用均位于数据库事务外。
+- workflow 在后台串行排空 completed 队列；Runtime 失败和确认中断提交稳定终态并暂停队列。
+- SubmitTurn write-only 信封支持 API key/Session Token，秘密不进入 input、响应、日志或 PostgreSQL，失败/中断后清除内存副本。
+
+## 2026-08-22 · 增加 Runtime handle 建立步骤
+
+- 首个 Turn 创建底层 Runtime 会话并持久化返回句柄；后续 Turn 加载该句柄。
+- Runtime 调用保持在数据库事务外，只有句柄和终态属于 Agent 事务事实。
+- 执行凭据通过 write-only 信封传入并仅在 Turn 内存上下文暂存，禁止随持久化 input 传入；重启恢复按版本化 `context_ref` 重新协调。
+
 ## 2026-08-22 · TX-ENQUEUE 与首次 TX-CLAIM 落地
 
 - Agent HTTP API 接受幂等 SubmitTurn，并原子持久化 queued Turn 与 user Message。

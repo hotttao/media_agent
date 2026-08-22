@@ -35,10 +35,10 @@ Runtime Session 拥有同一 Agent Session 的 Turn 接受与串行调度、Mess
 
 | 能力 | 说明 | 对外接口/函数 |
 |:---|:---|:---|
-| 注册运行会话 | 使用稳定 Session ID 和版本化上下文创建 Runtime Session | 待 IDL 定义 |
-| 提交 Turn | 幂等创建 Queued Turn，并在可执行时声明队首为 running | 待 IDL 定义 |
-| 中断 Turn | 软中断当前 running Turn | 现有 Runtime interrupt 接口演进 |
-| 查询 Turn | 返回 Turn 与队列状态，用于结果不明确时协调 | 待 IDL 定义 |
+| 注册运行会话 | 使用稳定 Session ID 和版本化上下文创建 Runtime Session | `POST /api/v1/runtime-sessions` |
+| 提交 Turn | 幂等创建 Queued Turn，并在可执行时声明队首为 running | `POST /api/v1/runtime-sessions/{session_id}/turns` |
+| 中断 Turn | 软中断当前 running Turn | `POST /api/v1/runtime-sessions/{session_id}/turns/{turn_id}/interrupt` |
+| 查询 Turn | 返回 Turn 与队列状态，用于结果不明确时协调 | `GET /api/v1/runtime-sessions/{session_id}/turns/{turn_id}` |
 | 查询事件 | 按 Session sequence 回放 Universal Event | 待 IDL 定义 |
 | 查询历史 | 返回 Message 与 Chat Status | 待 IDL 定义 |
 | 解决 Agent Request | 持久化用户对确认、输入或权限请求的响应 | 现有 respond 接口演进 |
@@ -96,6 +96,7 @@ stateDiagram-v2
 | status | text | active/paused/failed/deleted |
 | chat_status | text | human/agent；可查询交互控制投影 |
 | active_turn_id | text nullable | 当前 running Turn |
+| runtime_session_id | text nullable | 底层 Runtime 返回的可恢复会话句柄；不得假设等于业务 session_id |
 | next_turn_sequence | bigint | 下一条 Turn enqueue sequence |
 | next_event_sequence | bigint | 下一条 Universal Event sequence |
 | created_at | timestamptz | 创建时间 |
@@ -177,6 +178,12 @@ Message 是面向历史查询的稳定模型；Universal Event 是恢复与订�
 2. 原子分配 `enqueue_sequence`，写入 queued Turn 和 user Message。
 3. 若不存在 running Turn 且队列未暂停，同一调度临界区把队首声明为 running，并设置 `chat_status=agent`。
 4. 返回稳定 `turn_id`、`queued|running` 和队列位置；调用方断线不影响状态。
+
+### Runtime Session Handle
+
+- 首次执行前 `runtime_session_id` 可以为空；Runtime 创建会话后必须先持久化其返回句柄，再接受后续 Turn 完成事实。
+- 后续 Turn 和进程重启恢复只能使用已持久化句柄加载 Runtime 会话。业务 `session_id`、Gateway Registration ID 与底层 Runtime 句柄是不同命名空间。
+- API key、Session Token 等短期凭据不属于 Turn input、Message 或该句柄。它们通过 write-only 执行信封到达 workflow，只在对应 Turn 的进程内执行上下文暂存；失败/中断立即清除，重启恢复时按 `context_ref` 重新协调。
 
 ### Runtime Event Durability
 

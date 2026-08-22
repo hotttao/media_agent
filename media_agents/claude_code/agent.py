@@ -43,9 +43,10 @@ class ClaudeCodeAgent:
         message: str,
         session_id: str | None,
         api_key: str | None,
+        resume: bool = True,
     ) -> AsyncIterator[dict[str, object]]:
         runtime_session_id = session_id or str(uuid.uuid4())
-        args = self._command(message, session_id, runtime_session_id)
+        args = self._command(message, session_id if resume else None, runtime_session_id)
         env = os.environ.copy()
         if api_key:
             env["ANTHROPIC_API_KEY"] = api_key

@@ -27,9 +27,10 @@
 
 ## P3：Execute Turn 与终态
 
-- [ ] ACP Runtime 接入 execute_turn workflow，事务外执行。
-- [ ] 实现 completed/failed/interrupted 与队列暂停/自然完成续跑。
-- [ ] 完成故障、中断、排队顺序 HTTP/media-cli E2E，独立提交。
+- [x] Codex ACP 与 Claude Code Runtime 接入 execute_turn workflow，事务外执行。
+- [x] 持久化 Runtime Handle；运行凭据只在执行期解析且不进入 Turn input。
+- [x] 实现 completed/failed/interrupted 与队列暂停/自然完成续跑。
+- [x] 完成故障、中断、排队顺序 HTTP/media-cli E2E，独立提交。
 
 ## P4：事件、历史与回放
 
