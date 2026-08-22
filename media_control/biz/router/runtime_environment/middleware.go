@@ -90,3 +90,28 @@ func _ensureworkspaceruntimedirectoryMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _listenvironmenttokensMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _issueenvironmenttokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _tokensMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _token_idMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _revokeenvironmenttokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

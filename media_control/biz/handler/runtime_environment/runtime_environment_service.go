@@ -182,10 +182,79 @@ func toPlacementResponse(v *domain.Placement) *runtime_environment.PlacementResp
 }
 func writeError(c *app.RequestContext, e error) {
 	code := consts.StatusBadRequest
-	if errors.Is(e, domain.ErrNotFound) || errors.Is(e, domain.ErrPlacementNotFound) {
+	if errors.Is(e, domain.ErrNotFound) || errors.Is(e, domain.ErrPlacementNotFound) || errors.Is(e, domain.ErrTokenNotFound) {
 		code = consts.StatusNotFound
 	} else if errors.Is(e, domain.ErrConflict) {
 		code = consts.StatusConflict
 	}
 	c.JSON(code, map[string]string{"error": e.Error()})
+}
+
+// IssueEnvironmentToken .
+// @router /api/v1/runtime-environments/:environment_id/tokens [POST]
+func IssueEnvironmentToken(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req runtime_environment.IssueEnvironmentTokenRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	v, err := runtimeEnvironmentService.IssueToken(ctx, req.EnvironmentId, req.Name, middleware.UserID(ctx))
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusCreated, &runtime_environment.IssuedEnvironmentTokenResponse{Metadata: toTokenResponse(v.Metadata), Token: v.Token})
+}
+
+// ListEnvironmentTokens .
+// @router /api/v1/runtime-environments/:environment_id/tokens [GET]
+func ListEnvironmentTokens(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req runtime_environment.ListEnvironmentTokensRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	vs, err := runtimeEnvironmentService.ListTokens(ctx, req.EnvironmentId)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	resp := &runtime_environment.ListEnvironmentTokensResponse{}
+	for i := range vs {
+		resp.Tokens = append(resp.Tokens, toTokenResponse(&vs[i]))
+	}
+	c.JSON(consts.StatusOK, resp)
+}
+
+// RevokeEnvironmentToken .
+// @router /api/v1/runtime-environments/:environment_id/tokens/:token_id/revoke [POST]
+func RevokeEnvironmentToken(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req runtime_environment.RevokeEnvironmentTokenRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	v, err := runtimeEnvironmentService.RevokeToken(ctx, req.EnvironmentId, req.TokenId)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, toTokenResponse(v))
+}
+
+func toTokenResponse(v *domain.Token) *runtime_environment.EnvironmentTokenResponse {
+	response := &runtime_environment.EnvironmentTokenResponse{Id: v.ID, EnvironmentId: v.EnvironmentID, Name: v.Name, CreatedBy: v.CreatedBy, CreatedAt: v.CreatedAt.UnixMilli()}
+	if v.RevokedAt != nil {
+		response.RevokedAt = v.RevokedAt.UnixMilli()
+	}
+	return response
 }

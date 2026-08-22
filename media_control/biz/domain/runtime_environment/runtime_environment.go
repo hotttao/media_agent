@@ -12,6 +12,7 @@ import (
 var (
 	ErrNotFound          = errors.New("runtime environment not found")
 	ErrPlacementNotFound = errors.New("workspace placement not found")
+	ErrTokenNotFound     = errors.New("environment token not found")
 	ErrConflict          = errors.New("runtime environment version conflict")
 )
 
@@ -44,6 +45,12 @@ type Placement struct {
 	Version                                       int64
 	UpdatedAt                                     time.Time
 }
+type Token struct {
+	ID, EnvironmentID, Name, TokenHash, CreatedBy string
+	CreatedAt                                     time.Time
+	RevokedAt                                     *time.Time
+}
+type EnvironmentPrincipal struct{ EnvironmentID string }
 
 type Repository interface {
 	CreateEnvironment(context.Context, *Environment) error
@@ -53,6 +60,22 @@ type Repository interface {
 	DeleteEnvironment(context.Context, *Environment, int64) error
 	FindPlacement(context.Context, string) (*Placement, error)
 	UpsertPlacement(context.Context, *Placement, int64) error
+	CreateToken(context.Context, *Token) error
+	ListActiveTokens(context.Context, string) ([]Token, error)
+	GetToken(context.Context, string, string) (*Token, error)
+	RevokeToken(context.Context, *Token) error
+	FindActiveTokenByHash(context.Context, string) (*EnvironmentPrincipal, error)
+}
+
+func ValidateToken(name, createdBy string) (string, string, error) {
+	name, createdBy = strings.TrimSpace(name), strings.TrimSpace(createdBy)
+	if name == "" || createdBy == "" {
+		return "", "", errors.New("name and created_by are required")
+	}
+	if len(name) > 128 {
+		return "", "", errors.New("token name must not exceed 128 characters")
+	}
+	return name, createdBy, nil
 }
 
 func Validate(name, endpoint, capacity string) (string, string, string, error) {

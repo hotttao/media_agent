@@ -2,6 +2,9 @@ package runtime_environment
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"github.com/google/uuid"
 	"media_agent/media_control/biz/dal"
@@ -18,13 +21,78 @@ type UpdateCommand struct {
 	ExpectedVersion                          int64
 }
 type Service struct {
-	repo d.Repository
-	tx   dal.TxRunner
-	work w.Repository
+	repo       d.Repository
+	tx         dal.TxRunner
+	work       w.Repository
+	issueToken func() (string, error)
 }
 
 func New(repo d.Repository, tx dal.TxRunner, work w.Repository) *Service {
-	return &Service{repo: repo, tx: tx, work: work}
+	return &Service{repo: repo, tx: tx, work: work, issueToken: generateEnvironmentToken}
+}
+
+type IssuedToken struct {
+	Metadata *d.Token
+	Token    string
+}
+
+func (s *Service) IssueToken(ctx context.Context, environmentID, name, createdBy string) (*IssuedToken, error) {
+	if _, err := s.repo.GetEnvironment(ctx, strings.TrimSpace(environmentID)); err != nil {
+		return nil, err
+	}
+	name, createdBy, err := d.ValidateToken(name, createdBy)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := s.issueToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate environment token: %w", err)
+	}
+	now := time.Now().UTC()
+	v := &d.Token{ID: uuid.NewString(), EnvironmentID: strings.TrimSpace(environmentID), Name: name, TokenHash: hashEnvironmentToken(raw), CreatedBy: createdBy, CreatedAt: now}
+	if err := s.tx.RunInTx(ctx, func(tx context.Context) error { return s.repo.CreateToken(tx, v) }); err != nil {
+		return nil, err
+	}
+	return &IssuedToken{Metadata: v, Token: raw}, nil
+}
+func (s *Service) ListTokens(ctx context.Context, environmentID string) ([]d.Token, error) {
+	environmentID = strings.TrimSpace(environmentID)
+	if _, err := s.repo.GetEnvironment(ctx, environmentID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListActiveTokens(ctx, environmentID)
+}
+func (s *Service) RevokeToken(ctx context.Context, environmentID, tokenID string) (*d.Token, error) {
+	v, err := s.repo.GetToken(ctx, strings.TrimSpace(tokenID), strings.TrimSpace(environmentID))
+	if err != nil {
+		return nil, err
+	}
+	if v.RevokedAt != nil {
+		return v, nil
+	}
+	now := time.Now().UTC()
+	v.RevokedAt = &now
+	if err := s.tx.RunInTx(ctx, func(tx context.Context) error { return s.repo.RevokeToken(tx, v) }); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+func (s *Service) VerifyToken(ctx context.Context, raw string) (*d.EnvironmentPrincipal, error) {
+	if len(raw) != 68 || !strings.HasPrefix(raw, "env_") {
+		return nil, d.ErrTokenNotFound
+	}
+	return s.repo.FindActiveTokenByHash(ctx, hashEnvironmentToken(raw))
+}
+func generateEnvironmentToken() (string, error) {
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return "", err
+	}
+	return "env_" + hex.EncodeToString(secret), nil
+}
+func hashEnvironmentToken(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
 }
 func (s *Service) Create(ctx context.Context, c CreateCommand) (*d.Environment, error) {
 	name, endpoint, capacity, e := d.Validate(c.Name, c.Endpoint, c.CapacityJSON)

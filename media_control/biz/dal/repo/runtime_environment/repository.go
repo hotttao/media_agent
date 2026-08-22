@@ -2,6 +2,8 @@ package runtime_environment
 
 import (
 	"context"
+	"errors"
+
 	"gorm.io/gorm"
 	"media_agent/media_control/biz/dal"
 	"media_agent/media_control/biz/dal/model"
@@ -72,6 +74,57 @@ func (r *Repository) UpsertPlacement(ctx context.Context, v *d.Placement, expect
 	}
 	return res.Error
 }
+func (r *Repository) CreateToken(ctx context.Context, v *d.Token) error {
+	return dal.FromContext(ctx, r.db).Create(&model.EnvironmentToken{ID: v.ID, EnvironmentID: v.EnvironmentID, Name: v.Name, TokenHash: v.TokenHash, CreatedBy: v.CreatedBy, CreatedAt: v.CreatedAt, RevokedAt: v.RevokedAt}).Error
+}
+func (r *Repository) ListActiveTokens(ctx context.Context, environmentID string) ([]d.Token, error) {
+	var rows []model.EnvironmentToken
+	if err := dal.FromContext(ctx, r.db).Where("environment_id = ? AND revoked_at IS NULL", environmentID).Order("created_at DESC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]d.Token, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toToken(row))
+	}
+	return out, nil
+}
+func (r *Repository) GetToken(ctx context.Context, id, environmentID string) (*d.Token, error) {
+	var row model.EnvironmentToken
+	if err := dal.FromContext(ctx, r.db).Where("id = ? AND environment_id = ?", id, environmentID).First(&row).Error; err != nil {
+		return nil, d.ErrTokenNotFound
+	}
+	v := toToken(row)
+	return &v, nil
+}
+func (r *Repository) RevokeToken(ctx context.Context, v *d.Token) error {
+	result := dal.FromContext(ctx, r.db).Model(&model.EnvironmentToken{}).
+		Where("id = ? AND environment_id = ? AND revoked_at IS NULL", v.ID, v.EnvironmentID).
+		Update("revoked_at", v.RevokedAt)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected > 0 {
+		return nil
+	}
+	current, err := r.GetToken(ctx, v.ID, v.EnvironmentID)
+	if err == nil && current.RevokedAt != nil {
+		return nil
+	}
+	return d.ErrTokenNotFound
+}
+func (r *Repository) FindActiveTokenByHash(ctx context.Context, hash string) (*d.EnvironmentPrincipal, error) {
+	var row model.EnvironmentToken
+	err := dal.FromContext(ctx, r.db).Table("environment_tokens AS t").
+		Select("t.*").Joins("JOIN runtime_environments AS e ON e.id = t.environment_id").
+		Where("t.token_hash = ? AND t.revoked_at IS NULL", hash).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, d.ErrTokenNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &d.EnvironmentPrincipal{EnvironmentID: row.EnvironmentID}, nil
+}
 func nullable(v string) *string {
 	if v == "" {
 		return nil
@@ -88,4 +141,7 @@ func toPlacement(v model.WorkspacePlacement) *d.Placement {
 		e = *v.EnvironmentID
 	}
 	return &d.Placement{WorkspaceID: v.WorkspaceID, EnvironmentID: e, Status: d.PlacementStatus(v.Status), Reason: v.Reason, VolumeRef: v.VolumeRef, Version: v.Version, UpdatedAt: v.UpdatedAt}
+}
+func toToken(v model.EnvironmentToken) d.Token {
+	return d.Token{ID: v.ID, EnvironmentID: v.EnvironmentID, Name: v.Name, TokenHash: v.TokenHash, CreatedBy: v.CreatedBy, CreatedAt: v.CreatedAt, RevokedAt: v.RevokedAt}
 }
