@@ -47,16 +47,18 @@ Agent Task 负责一次异步 Agent 执行请求的持久化、调度、取消�
 | source_resource_id | text | 来源业务记录 ID |
 | idempotency_key | text | 来源内幂等键 |
 | input | jsonb | 不含凭据的执行输入快照 |
-| status | text | pending/running/succeeded/failed/cancelled |
+| status | text | queued/running/waiting_turn/retry_wait/completed/failed/cancelled |
 | attempt | integer | 当前执行次数 |
+| turn_id | text nullable | Agent 接受任务后关联的唯一 Turn |
 | result_ref | jsonb nullable | 结果资源引用 |
 | error_code | text nullable | 稳定错误码 |
 | error_message | text nullable | 脱敏错误说明 |
 | created_at | timestamptz | 创建时间 |
 | started_at | timestamptz nullable | 首次开始时间 |
 | finished_at | timestamptz nullable | 终态时间 |
+| updated_at | timestamptz | 最近状态更新时间 |
 
-状态机：`pending -> running -> succeeded | failed | cancelled`；失败可在重试预算内回到 `pending`。
+状态机：`queued -> running -> waiting_turn -> completed | failed | cancelled`；瞬时投递失败可由 `running -> retry_wait -> running`。终态不可互相覆盖，晚到 Turn 事件不得改写终态。
 
 ### UUID 生成规则
 
@@ -66,6 +68,7 @@ Agent Task 负责一次异步 Agent 执行请求的持久化、调度、取消�
 
 ### DispatchAgentTask
 
-1. 原子领取 pending Task，重复领取返回当前状态。
-2. 事务外启动或复用 Runtime 并提交执行。
-3. 结果回调按 task ID 与 attempt 幂等更新；过期 attempt 不覆盖新状态。
+1. 原子领取 queued/retry_wait Task，递增 attempt；重复领取返回当前状态。
+2. 事务外使用 `task_id` 作为幂等键向 Agent 提交 Turn；Agent 决定立即执行或进入持久化 FIFO。
+3. Agent 接受后保存唯一 `turn_id` 并进入 waiting_turn，不占用数据库事务等待执行。
+4. Turn 终态事件或补偿查询按 task ID、turn ID 与 attempt 幂等收敛；过期 attempt 和晚到事件不覆盖新状态。

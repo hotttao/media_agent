@@ -32,3 +32,8 @@ func (c *Control) Resolve(ctx context.Context, _ string, workspaceID, token stri
 	}
 	return service.AgentContext{WorkspaceID: value.WorkspaceId, AgentID: value.AgentId, AgentType: value.AgentType, APIKey: value.ApiKey, ContextVersion: value.ContextVersion}, nil
 }
+
+func (c *Control) AuthorizeWorkspace(ctx context.Context, userID, workspaceID, token string) error {
+	_, err := c.Resolve(ctx, userID, workspaceID, token)
+	return err
+}

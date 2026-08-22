@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package media_agent_gateway.agent_task;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_agent_gateway/agent_task";
+
+service AgentTaskService {
+  rpc CreateTask(CreateTaskRequest) returns (TaskResponse) {
+    option (api.post) = "/api/v1/agent-tasks";
+    option (google.api.http) = { post: "/api/v1/agent-tasks" body: "*" };
+  }
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {
+    option (api.get) = "/api/v1/agent-tasks";
+    option (google.api.http) = { get: "/api/v1/agent-tasks" };
+  }
+  rpc GetTask(GetTaskRequest) returns (TaskResponse) {
+    option (api.get) = "/api/v1/agent-tasks/:task_id";
+    option (google.api.http) = { get: "/api/v1/agent-tasks/{task_id}" };
+  }
+  rpc CancelTask(CancelTaskRequest) returns (TaskResponse) {
+    option (api.post) = "/api/v1/agent-tasks/:task_id/cancel";
+    option (google.api.http) = { post: "/api/v1/agent-tasks/{task_id}/cancel" body: "*" };
+  }
+}
+
+message CreateTaskRequest {
+  string workspace_id = 1 [(api.body) = "workspace_id"];
+  string session_id = 2 [(api.body) = "session_id"];
+  string source = 3 [(api.body) = "source"];
+  string source_resource_id = 4 [(api.body) = "source_resource_id"];
+  string idempotency_key = 5 [(api.body) = "idempotency_key"];
+  string input_json = 6 [(api.body) = "input_json"];
+}
+message ListTasksRequest { string workspace_id = 1 [(api.query) = "workspace_id"]; string status = 2 [(api.query) = "status"]; }
+message GetTaskRequest { string task_id = 1 [(api.path) = "task_id"]; }
+message CancelTaskRequest { string task_id = 1 [(api.path) = "task_id"]; }
+message TaskResponse {
+  string id = 1; string workspace_id = 2; string requested_by = 3; string session_id = 4;
+  string source = 5; string source_resource_id = 6; string idempotency_key = 7;
+  string input_json = 8; string status = 9; int32 attempt = 10; string turn_id = 11;
+  string result_ref_json = 12; string error_code = 13; string error_message = 14;
+  int64 created_at = 15; int64 started_at = 16; int64 finished_at = 17; int64 updated_at = 18;
+}
+message ListTasksResponse { repeated TaskResponse tasks = 1; }
