@@ -22,3 +22,21 @@ type BatchRunItem struct {
 }
 
 func (BatchRunItem) TableName() string { return "media_agent_gateway.batch_run_items" }
+
+type BatchRunOutbox struct {
+	ID, BatchRunID, Action            string
+	Payload                           string `gorm:"type:jsonb"`
+	Attempts                          int32
+	AvailableAt, CreatedAt, UpdatedAt time.Time
+	DeliveredAt                       *time.Time
+	LastError                         *string
+}
+
+func (BatchRunOutbox) TableName() string { return "media_agent_gateway.batch_run_outbox" }
+
+type BatchRunInbox struct {
+	EventID, BatchRunID, ItemKey string
+	CreatedAt                    time.Time
+}
+
+func (BatchRunInbox) TableName() string { return "media_agent_gateway.batch_run_inbox" }

@@ -40,7 +40,13 @@ func (f *fakeRepo) GetOwned(_ context.Context, id, owner string) (*domain.BatchR
 	}
 	return f.value, nil
 }
-func (f *fakeRepo) CancelCreating(_ context.Context, value *domain.BatchRun) error {
+func (f *fakeRepo) Cancel(_ context.Context, value *domain.BatchRun) error {
+	for i := range value.Items {
+		if value.Items[i].AgentTaskID == "" {
+			value.Items[i].Status = domain.ItemCancelled
+			value.CancelledCount++
+		}
+	}
 	f.value = value
 	return nil
 }
@@ -75,7 +81,7 @@ func (f *fakeSessions) TransitionStatus(context.Context, string, string, string,
 
 func TestCreateIsIdempotentAndCancelFreezesItems(t *testing.T) {
 	repo := &fakeRepo{}
-	service := New(repo, directTx{}, &fakeSessions{session: &sessiondomain.Session{ID: "session", UserID: "user", WorkspaceID: "workspace"}})
+	service := New(repo, nil, directTx{}, &fakeSessions{session: &sessiondomain.Session{ID: "session", UserID: "user", WorkspaceID: "workspace"}})
 	command := CreateCommand{Owner: "user", WorkspaceID: "workspace", IdempotencyKey: "key", Items: []domain.Item{{ItemKey: "one", SessionID: "session", InputJSON: `{"message":"hi"}`}}}
 	first, err := service.Create(context.Background(), command)
 	if err != nil {
@@ -92,7 +98,7 @@ func TestCreateIsIdempotentAndCancelFreezesItems(t *testing.T) {
 }
 
 func TestCreateRejectsSessionWorkspaceMismatch(t *testing.T) {
-	service := New(&fakeRepo{}, directTx{}, &fakeSessions{session: &sessiondomain.Session{ID: "session", UserID: "user", WorkspaceID: "other"}})
+	service := New(&fakeRepo{}, nil, directTx{}, &fakeSessions{session: &sessiondomain.Session{ID: "session", UserID: "user", WorkspaceID: "other"}})
 	_, err := service.Create(context.Background(), CreateCommand{Owner: "user", WorkspaceID: "workspace", IdempotencyKey: "key", Items: []domain.Item{{ItemKey: "one", SessionID: "session", InputJSON: "{}"}}})
 	if !errors.Is(err, domain.ErrForbidden) {
 		t.Fatalf("error=%v", err)

@@ -38,7 +38,7 @@ sequenceDiagram
 
 ### 步骤说明
 1. TX1 冻结输入顺序，后续重试始终产生相同 `item_key`。
-2. 拆分不是一个大事务；每页提交游标，进程退出后从最后游标继续。
+2. 拆分不是一个大事务；每个 Item 提交一次游标，进程退出后从最后游标继续。
 3. Batch 终态由 BatchRun Domain 根据所有 Item 状态决定，Workflow 只投递 Task 和应用结果事件。
 
 ## 关键参数
@@ -51,14 +51,14 @@ Batch 为 `creating -> running -> completed/partial_failed/failed/cancelled`。�
 | 事务 | 原子事实 | 事务外动作 |
 |:---|:---|:---|
 | TX1 | Batch、冻结输入、拆分游标 | 创建 Task |
-| TX2..N | 一页 BatchItem、task_id、next_cursor | 下一页拆分 |
+| TX2..N | 单个 BatchItem、task_id、next_cursor | 下一项拆分 |
 | TX-PROJECT | Inbox、Item 终态、聚合计数、可能的 Batch 终态 | 结果通知 |
 
 ## 幂等、重试与补偿
 `owner + idempotency_key` 去重 Batch；`batch_id + item_key` 去重 Task；`event_id` 去重终态事件。拆分失败从持久化游标继续，不删除已创建 Task。投影计数不一致时从 BatchItem 重建，而非手工补数。
 
 ## 权限与失败
-创建和查询按 Batch 所属 Workspace 授权；内部拆分使用 mTLS 服务身份，但代表用户/Workspace 取自 Batch 事实。
+创建和查询按 Batch 所属 Workspace 授权；内部拆分使用 Control Service Token 与 acting-user 身份，代表用户/Workspace 取自 Batch 事实。
 
 | 失败 | 处理 |
 |:---|:---|
@@ -67,5 +67,5 @@ Batch 为 `creating -> running -> completed/partial_failed/failed/cancelled`。�
 | 单个 Task 失败 | Item failed，最终可能 partial_failed |
 | 重复/晚到事件 | Inbox 去重；终态不反转 |
 
-## 结果事件
-产生 `BatchRunCompleted`、`BatchRunPartiallyFailed` 或 `BatchRunCancelled`。
+## 结果事实
+本切片将 `completed`、`partial_failed`、`failed` 或 `cancelled` 写入 Batch 投影并由查询 API 暴露；暂不对外发布独立 Batch 结果事件。
