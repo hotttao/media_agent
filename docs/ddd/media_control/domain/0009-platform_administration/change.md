@@ -21,3 +21,10 @@
 - decimal string 无损写入 PostgreSQL `numeric`，避免 API 浮点精度丢失。
 - internal-system 单调刷新 `refreshed_at`；Admin/System 可按指标与周期区间查询。
 - 增加维度键顺序幂等、迟到刷新、越权拒绝及真实 HTTP E2E。
+
+## 2026-08-22 · Admin Workspace Query
+
+- 新增跨 owner 的 Workspace 管理查询，支持 owner、desired state、agent type 组合过滤和有界分页。
+- 只读组合 Agent Context version 与可选 Placement 摘要，不修改权威 Domain 事实。
+- SQL select 和响应 DTO 均排除加密 API Key、明文凭据及 Session Token。
+- 增加双 owner/双 agent 类型过滤、普通用户拒绝、分页上限和敏感字段真实 HTTP E2E。

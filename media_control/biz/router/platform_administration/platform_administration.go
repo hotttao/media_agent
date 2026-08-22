@@ -27,6 +27,7 @@ func Register(r *server.Hertz) {
 				_admin.GET("/platform-settings", append(_listplatformsettingsMw(), platform_administration.ListPlatformSettings)...)
 				_admin.POST("/platform-settings", append(_createplatformsettingMw(), platform_administration.CreatePlatformSetting)...)
 				_admin.GET("/platform-statistics", append(_listplatformstatisticsMw(), platform_administration.ListPlatformStatistics)...)
+				_admin.GET("/workspaces", append(_listadminworkspacesMw(), platform_administration.ListAdminWorkspaces)...)
 				{
 					_clusters := _admin.Group("/clusters", _clustersMw()...)
 					_clusters.GET("/:cluster_id", append(_getclusterprojectionMw(), platform_administration.GetClusterProjection)...)

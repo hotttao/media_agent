@@ -17,9 +17,10 @@ import (
 var platformAdministrationService *service.Service
 var clusterProjectionService *service.ClusterService
 var platformStatisticsService *service.StatisticsService
+var adminWorkspaceService *service.AdminWorkspaceService
 
-func Configure(value *service.Service, clusters *service.ClusterService, statistics *service.StatisticsService) {
-	platformAdministrationService, clusterProjectionService, platformStatisticsService = value, clusters, statistics
+func Configure(value *service.Service, clusters *service.ClusterService, statistics *service.StatisticsService, workspaces *service.AdminWorkspaceService) {
+	platformAdministrationService, clusterProjectionService, platformStatisticsService, adminWorkspaceService = value, clusters, statistics, workspaces
 }
 
 // CreatePlatformSetting .
@@ -230,4 +231,31 @@ func ListPlatformStatistics(ctx context.Context, c *app.RequestContext) {
 
 func toStatisticResponse(value *domain.PlatformStatistic) *platform_administration.PlatformStatisticResponse {
 	return &platform_administration.PlatformStatisticResponse{MetricKey: value.MetricKey, PeriodStart: value.PeriodStart.UnixMilli(), DimensionsJson: value.DimensionsJSON, Value: value.Value, RefreshedAt: value.RefreshedAt.UnixMilli()}
+}
+
+// ListAdminWorkspaces .
+// @router /api/v1/admin/workspaces [GET]
+func ListAdminWorkspaces(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req platform_administration.ListAdminWorkspacesRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	values, total, filter, err := adminWorkspaceService.List(ctx, actor(ctx), req.OwnerUserId, req.DesiredState, req.AgentType, req.PageSize, req.PageOffset)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	resp := &platform_administration.ListAdminWorkspacesResponse{Total: total, PageSize: filter.PageSize, PageOffset: filter.PageOffset}
+	for i := range values {
+		resp.Workspaces = append(resp.Workspaces, toAdminWorkspaceResponse(&values[i]))
+	}
+	c.JSON(consts.StatusOK, resp)
+}
+
+func toAdminWorkspaceResponse(value *domain.AdminWorkspace) *platform_administration.AdminWorkspaceResponse {
+	return &platform_administration.AdminWorkspaceResponse{WorkspaceId: value.WorkspaceID, OwnerUserId: value.OwnerUserID, Name: value.Name, DesiredState: value.DesiredState, WorkspaceVersion: value.WorkspaceVersion, AgentId: value.AgentID, AgentType: value.AgentType, ContextVersion: value.ContextVersion, EnvironmentId: value.EnvironmentID, PlacementStatus: value.PlacementStatus, UpdatedAt: value.UpdatedAt.UnixMilli()}
 }
