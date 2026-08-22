@@ -1,0 +1,25 @@
+syntax = "proto3";
+package media_control.afs_binding;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_control/afs_binding";
+service AfsBindingService {
+ rpc CreateBinding(CreateBindingRequest) returns (BindingResponse){option(api.post)="/api/v1/afs-bindings";option(google.api.http)={post:"/api/v1/afs-bindings" body:"*"};}
+ rpc ListBindings(ListBindingsRequest) returns (ListBindingsResponse){option(api.get)="/api/v1/afs-bindings";option(google.api.http)={get:"/api/v1/afs-bindings"};}
+ rpc DeleteBinding(DeleteBindingRequest) returns (BindingResponse){option(api.post)="/api/v1/afs-bindings/:binding_id/delete";option(google.api.http)={post:"/api/v1/afs-bindings/{binding_id}/delete" body:"*"};}
+ rpc ListMembers(ListMembersRequest) returns (ListMembersResponse){option(api.get)="/api/v1/afs-bindings/:binding_id/members";option(google.api.http)={get:"/api/v1/afs-bindings/{binding_id}/members"};}
+ rpc AddMember(AddMemberRequest) returns (MemberResponse){option(api.post)="/api/v1/afs-bindings/:binding_id/members";option(google.api.http)={post:"/api/v1/afs-bindings/{binding_id}/members" body:"*"};}
+ rpc RemoveMember(RemoveMemberRequest) returns (MemberResponse){option(api.post)="/api/v1/afs-bindings/:binding_id/members/:subject_id/remove";option(google.api.http)={post:"/api/v1/afs-bindings/{binding_id}/members/{subject_id}/remove" body:"*"};}
+ rpc ReconcileBinding(ReconcileBindingRequest) returns (BindingResponse){option(api.post)="/api/v1/afs-bindings/:binding_id/reconcile";option(google.api.http)={post:"/api/v1/afs-bindings/{binding_id}/reconcile" body:"*"};}
+}
+message CreateBindingRequest{string workspace_id=1[(api.body)="workspace_id"];string external_ref=2[(api.body)="external_ref"];string desired_state=3[(api.body)="desired_state"];}
+message ListBindingsRequest{string workspace_id=1[(api.query)="workspace_id"];}
+message DeleteBindingRequest{string binding_id=1[(api.path)="binding_id"];}
+message ListMembersRequest{string binding_id=1[(api.path)="binding_id"];}
+message AddMemberRequest{string binding_id=1[(api.path)="binding_id"];string subject_id=2[(api.body)="subject_id"];string subject_type=3[(api.body)="subject_type"];string external_member_ref=4[(api.body)="external_member_ref"];}
+message RemoveMemberRequest{string binding_id=1[(api.path)="binding_id"];string subject_id=2[(api.path)="subject_id"];}
+message ReconcileBindingRequest{string binding_id=1[(api.path)="binding_id"];string observed_state=2[(api.body)="observed_state"];}
+message BindingResponse{string id=1;string workspace_id=2;string external_ref=3;string desired_state=4;string observed_state=5;int64 version=6;int64 created_at=7;int64 updated_at=8;}
+message ListBindingsResponse{repeated BindingResponse bindings=1;}
+message MemberResponse{string binding_id=1;string subject_id=2;string subject_type=3;string external_member_ref=4;string status=5;int64 updated_at=6;}
+message ListMembersResponse{repeated MemberResponse members=1;}

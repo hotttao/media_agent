@@ -1,0 +1,3 @@
+CREATE TABLE IF NOT EXISTS afs_bindings(id text PRIMARY KEY,workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,external_ref text NOT NULL,desired_state text NOT NULL DEFAULT 'active',observed_state text NOT NULL DEFAULT 'unknown',version bigint NOT NULL DEFAULT 1,created_at timestamptz NOT NULL,updated_at timestamptz NOT NULL);
+CREATE TABLE IF NOT EXISTS afs_binding_members(binding_id text NOT NULL REFERENCES afs_bindings(id) ON DELETE CASCADE,subject_id text NOT NULL,subject_type text NOT NULL,external_member_ref text,status text NOT NULL DEFAULT 'pending',updated_at timestamptz NOT NULL,PRIMARY KEY(binding_id,subject_id));
+CREATE INDEX IF NOT EXISTS idx_afs_bindings_workspace ON afs_bindings(workspace_id,updated_at DESC);

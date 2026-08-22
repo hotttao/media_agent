@@ -9,6 +9,7 @@ import (
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_control/biz/dal"
+	afsrepo "media_agent/media_control/biz/dal/repo/afs_binding"
 	templaterepo "media_agent/media_control/biz/dal/repo/agent_template"
 	credentialrepo "media_agent/media_control/biz/dal/repo/credential_reference"
 	memoryrepo "media_agent/media_control/biz/dal/repo/memory_store"
@@ -22,6 +23,7 @@ import (
 	teamworkrepo "media_agent/media_control/biz/dal/repo/teamwork"
 	repo "media_agent/media_control/biz/dal/repo/workspace"
 	metadaterepo "media_agent/media_control/biz/dal/repo/workspace_metadata"
+	afshandler "media_agent/media_control/biz/handler/afs_binding"
 	templatehandler "media_agent/media_control/biz/handler/agent_template"
 	credentialhandler "media_agent/media_control/biz/handler/credential_reference"
 	memoryhandler "media_agent/media_control/biz/handler/memory_store"
@@ -36,6 +38,7 @@ import (
 	workspacehandler "media_agent/media_control/biz/handler/workspace"
 	metadatahandler "media_agent/media_control/biz/handler/workspace_metadata"
 	"media_agent/media_control/biz/middleware"
+	afsservice "media_agent/media_control/biz/service/afs_binding"
 	templateservice "media_agent/media_control/biz/service/agent_template"
 	credentialservice "media_agent/media_control/biz/service/credential_reference"
 	memoryservice "media_agent/media_control/biz/service/memory_store"
@@ -108,6 +111,7 @@ func main() {
 	metadatahandler.Configure(metadataservice.New(metadaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	sharehandler.Configure(shareservice.New(sharerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	exporthandler.Configure(exportservice.New(exportrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
+	afshandler.Configure(afsservice.New(afsrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 
 	h := suite.NewServer()
 	register(h)
