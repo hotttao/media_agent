@@ -17,7 +17,7 @@ Agent Task 负责一次异步 Agent 执行请求的持久化、调度、取消�
 
 ### 做什么
 - 按幂等键创建 Agent Task。
-- 通过 River 分发、续租和重试任务。
+- 通过 Outbox/River 分发和重试任务。
 - 记录取消、完成与失败结果。
 
 ### 不做什么
@@ -58,11 +58,11 @@ Agent Task 负责一次异步 Agent 执行请求的持久化、调度、取消�
 | finished_at | timestamptz nullable | 终态时间 |
 | updated_at | timestamptz | 最近状态更新时间 |
 
-状态机：`queued -> running -> waiting_turn -> completed | failed | cancelled`；瞬时投递失败可由 `running -> retry_wait -> running`。终态不可互相覆盖，晚到 Turn 事件不得改写终态。
+状态机：`queued -> running -> waiting_turn -> completed | failed | cancelled`；瞬时投递失败可由 `running -> retry_wait -> running`。终态不可互相覆盖，晚到 Turn 结果不得改写终态。
 
 ### UUID 生成规则
 
-`agent_task_id = ULID()`；River payload 只保存 task ID。
+`agent_task_id = UUID v4`；River payload 只保存 action 与 task ID。
 
 ## 能力详细说明
 
@@ -71,4 +71,4 @@ Agent Task 负责一次异步 Agent 执行请求的持久化、调度、取消�
 1. 原子领取 queued/retry_wait Task，递增 attempt；重复领取返回当前状态。
 2. 事务外使用 `task_id` 作为幂等键向 Agent 提交 Turn；Agent 决定立即执行或进入持久化 FIFO。
 3. Agent 接受后保存唯一 `turn_id` 并进入 waiting_turn，不占用数据库事务等待执行。
-4. Turn 终态事件或补偿查询按 task ID、turn ID 与 attempt 幂等收敛；过期 attempt 和晚到事件不覆盖新状态。
+4. 有界 Reconciler 通过 Agent GetTurn 权威查询按 task ID 与 turn ID 幂等收敛；重复查询和晚到结果不覆盖终态。

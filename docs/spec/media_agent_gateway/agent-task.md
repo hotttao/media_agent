@@ -10,18 +10,18 @@ Agent Task 是 Gateway 持有的异步执行请求。Gateway 保存请求身份�
 |:---|:---|:---|:---|:---|
 | Create/Get/List/Cancel Task | media_agent_gateway | agent_task/AgentTask | 无（单聚合） | covered |
 | 幂等创建 `(requested_by, source, source_resource_id, idempotency_key)` | media_agent_gateway | agent_task/AgentTask | 无 | covered |
-| queued/retry_wait 原子领取 | media_agent_gateway | agent_task/AgentTask | agent_task_dispatch | missing |
+| queued/retry_wait 原子领取 | media_agent_gateway | agent_task/AgentTask | agent_task_dispatch | covered |
 | 向 Agent SubmitTurn，`task_id` 作为幂等键 | media_agents | runtime_session/Turn | agent_task_dispatch | covered（Agent API 已存在） |
-| 保存 turn_id 与 waiting_turn | media_agent_gateway | agent_task/AgentTask | agent_task_dispatch | missing |
-| Turn 终态收敛与漏投补偿查询 | media_agent_gateway + media_agents | AgentTask + Turn | agent_task_dispatch | missing |
+| 保存 turn_id 与 waiting_turn | media_agent_gateway | agent_task/AgentTask | agent_task_dispatch | covered |
+| GetTurn 权威终态收敛与漏投补偿查询 | media_agent_gateway + media_agents | AgentTask + Turn | agent_task_dispatch | covered |
 | Agent FIFO、Message、Universal Event 持久化 | media_agents | runtime_session | execute_turn | covered |
-| River Job 投递 | 基础设施 | 无 | agent_task_dispatch | missing |
+| River Job 投递 | 基础设施 | 无 | agent_task_dispatch | covered |
 
-只要矩阵仍有 `missing`，Agent Task 设计不得声明完成。
+当前 Agent Task 能力矩阵无 `missing`。
 
 ## 数据模型
 
-`agent_tasks` 包含：id、workspace_id、requested_by、可选 session_id、source、source_resource_id、idempotency_key、JSONB input、status、attempt、可选 turn_id/result_ref/error_code/error_message、created_at/started_at/finished_at/updated_at。终态为 completed/failed/cancelled。
+`agent_tasks` 包含：id、workspace_id、requested_by、可选 session_id、source、source_resource_id、idempotency_key、JSONB input、status、attempt、可选 turn_id/result_ref/error_code/error_message、created_at/started_at/finished_at/updated_at。终态为 completed/failed/cancelled。`agent_task_outbox` 保存 dispatch/cancel 与终态事件；River 表只保存可重试 Job。
 
 管理切片先实现表、单聚合命令与 HTTP API；Dispatch 切片增加 Outbox/River adapter、认领、SubmitTurn 和终态收敛。
 
@@ -30,14 +30,14 @@ Agent Task 是 Gateway 持有的异步执行请求。Gateway 保存请求身份�
 - `POST /api/v1/agent-tasks`：按幂等键创建或返回既有 Task。
 - `GET /api/v1/agent-tasks?workspace_id=...`：仅查询调用者任务。
 - `GET /api/v1/agent-tasks/:task_id`：仅查询调用者任务。
-- `POST /api/v1/agent-tasks/:task_id/cancel`：queued/retry_wait 直接取消；running/waiting_turn 记录取消意图，Dispatch Workflow 调 Agent 取消/中断并收敛。
+- `POST /api/v1/agent-tasks/:task_id/cancel`：先 CAS 为 cancelled 并原子写 cancel Outbox；queued/retry_wait 的 Job no-op，已关联 Turn 的 running/waiting_turn 由 River Job 显式中断。
 
 响应不得包含 Cookie、Session Token、Platform Token、Provider API Key 或其他凭据。`input_json` 必须是 JSON object。
 
 ## 状态与并发
 
 - 创建初态 queued，attempt=0。
-- 管理切片允许 queued/retry_wait -> cancelled；重复取消返回当前 cancelled。
+- queued/retry_wait/running/waiting_turn 均可 CAS -> cancelled；重复取消返回当前 cancelled。
 - Dispatch 通过状态 CAS：queued/retry_wait -> running -> waiting_turn -> terminal。
 - task_id 作为 Agent SubmitTurn 幂等键；一个 Task 最多一个有效 turn_id。
 - 终态不可互相覆盖；晚到事件和过期 attempt no-op。
@@ -50,5 +50,6 @@ Agent Task 是 Gateway 持有的异步执行请求。Gateway 保存请求身份�
 - Service：`media_agent_gateway/biz/service/agent_task`
 - Handler/Router：Hertz 生成骨架与 middleware 扩展点
 - Workflow：`media_agent_gateway/biz/workflow/agent_task_dispatch`
-- Migration：`media_agent_gateway/migrations/000005_agent_tasks.*.sql`
+- River adapter：`media_agent_gateway/biz/shared/riverqueue`
+- Migration：`media_agent_gateway/migrations/000005_agent_tasks.*.sql` 与 `000006_agent_task_outbox.*.sql`
 - HTTP E2E：`media-cli/e2e/media_agent_gateway_agent_task_e2e_test.go`
