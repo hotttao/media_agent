@@ -85,9 +85,13 @@ async def test_acp_runtime_creates_executes_and_interrupts_with_ephemeral_creden
     assert observed_key == ["sk-acp"]
     assert hooks.token == "session-token"
     assert (
-        await runtime.execute(prepared, session, turn, credentials)
+        await runtime.execute(prepared, session, turn, credentials, _ignore_event)
     ).status is TurnStatus.COMPLETED
     assert await runtime.interrupt(prepared.handle)
     assert (
-        await runtime.execute(prepared, session, turn, credentials)
+        await runtime.execute(prepared, session, turn, credentials, _ignore_event)
     ).status is TurnStatus.INTERRUPTED
+
+
+async def _ignore_event(payload: dict[str, object]) -> None:
+    pass

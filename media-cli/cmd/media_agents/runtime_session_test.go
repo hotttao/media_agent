@@ -101,6 +101,35 @@ func TestGetAndInterruptTurnCommands(t *testing.T) {
 	}
 }
 
+func TestReplayEventsAndListMessagesCommands(t *testing.T) {
+	requests := make([]string, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.URL.RequestURI())
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+	oldHost := cmd.FlagHost
+	cmd.FlagHost = server.URL
+	defer func() { cmd.FlagHost = oldHost }()
+	replayEventsSessionID, replayAfterSequence, replayLimit = "session-1", 7, 25
+	listMessagesSessionID, listMessagesLimit = "session-1", 30
+	replayEventsCmd.SetOut(&bytes.Buffer{})
+	listMessagesCmd.SetOut(&bytes.Buffer{})
+	if err := replayEventsCmd.RunE(replayEventsCmd, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := listMessagesCmd.RunE(listMessagesCmd, nil); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"/api/v1/runtime-sessions/session-1/events?after_sequence=7&limit=25",
+		"/api/v1/runtime-sessions/session-1/messages?limit=30",
+	}
+	if len(requests) != len(want) || requests[0] != want[0] || requests[1] != want[1] {
+		t.Fatalf("unexpected requests: %v", requests)
+	}
+}
+
 func TestRequestAndPrintRuntimeWorkspace(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/runtime-workspace" {

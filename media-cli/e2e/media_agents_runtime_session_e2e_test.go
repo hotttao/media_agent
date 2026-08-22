@@ -93,6 +93,68 @@ func TestMediaAgentsRuntimeSessionExecutionE2E(t *testing.T) {
 	if completedSession.Status != "active" || completedSession.ChatStatus != "human" || completedSession.RuntimeSessionID == "" {
 		t.Fatalf("unexpected completed session: %+v", completedSession)
 	}
+	status, eventBody := doJSON(t, client, http.MethodGet,
+		agentAddr+"/api/v1/runtime-sessions/"+sessionID+"/events?after_sequence=0&limit=200", nil)
+	if status != http.StatusOK {
+		t.Fatalf("replay events: status=%d body=%s", status, eventBody)
+	}
+	var events []struct {
+		Sequence  int64          `json:"sequence"`
+		EventType string         `json:"event_type"`
+		Payload   map[string]any `json:"payload"`
+	}
+	if err := json.Unmarshal(eventBody, &events); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) < 8 {
+		t.Fatalf("expected lifecycle and completed events, got %s", eventBody)
+	}
+	for index, event := range events {
+		if event.Sequence != int64(index+1) {
+			t.Fatalf("non-contiguous Session sequence at %d: %+v", index, events)
+		}
+		if event.EventType == "item.started" || event.EventType == "item.delta" {
+			t.Fatalf("Live Event Frame was persisted: %+v", event)
+		}
+	}
+	after := events[len(events)-2].Sequence
+	status, replayTail := doJSON(t, client, http.MethodGet,
+		fmt.Sprintf("%s/api/v1/runtime-sessions/%s/events?after_sequence=%d&limit=200", agentAddr, sessionID, after), nil)
+	if status != http.StatusOK {
+		t.Fatalf("tail replay: status=%d body=%s", status, replayTail)
+	}
+	var tail []struct {
+		Sequence int64 `json:"sequence"`
+	}
+	if err := json.Unmarshal(replayTail, &tail); err != nil {
+		t.Fatal(err)
+	}
+	if len(tail) != 1 || tail[0].Sequence != events[len(events)-1].Sequence {
+		t.Fatalf("unexpected tail replay: %s", replayTail)
+	}
+	status, messageBody := doJSON(t, client, http.MethodGet,
+		agentAddr+"/api/v1/runtime-sessions/"+sessionID+"/messages?limit=200", nil)
+	if status != http.StatusOK {
+		t.Fatalf("list messages: status=%d body=%s", status, messageBody)
+	}
+	var messages []struct {
+		Sequence int64  `json:"sequence"`
+		Role     string `json:"role"`
+	}
+	if err := json.Unmarshal(messageBody, &messages); err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 4 {
+		t.Fatalf("expected two user and two assistant Messages: %s", messageBody)
+	}
+	for index, message := range messages {
+		if message.Sequence != int64(index+1) {
+			t.Fatalf("non-contiguous Message sequence: %+v", messages)
+		}
+	}
+	if strings.Contains(string(eventBody), "e2e-secret-not-persisted") || strings.Contains(string(messageBody), "e2e-secret-not-persisted") {
+		t.Fatal("runtime API key leaked into durable history")
+	}
 	payload["context_version"] = 2
 	status, body = doJSON(t, client, http.MethodPost, agentAddr+"/api/v1/runtime-sessions", payload)
 	if status != http.StatusConflict {
@@ -174,6 +236,84 @@ func TestMediaAgentsRuntimeSessionInterruptAndFailureE2E(t *testing.T) {
 	failed := pollTurn(t, client, agentAddr, failedSessionID, failedTurn.TurnID, "failed")
 	if !strings.Contains(string(failed), `"error_class":"provider_error"`) {
 		t.Fatalf("missing stable error class: %s", failed)
+	}
+}
+
+func TestMediaAgentsToolResultAggregationE2E(t *testing.T) {
+	agentAddr := os.Getenv("MEDIA_AGENTS_ADDR")
+	if agentAddr == "" {
+		t.Skip("MEDIA_AGENTS_ADDR is required")
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	sessionID := fmt.Sprintf("e2e-tool-result-%d", time.Now().UnixNano())
+	status, body := doJSON(t, client, http.MethodPost, agentAddr+"/api/v1/runtime-sessions",
+		map[string]any{"session_id": sessionID, "context_version": 1, "context_ref": "e2e:tool-result:v1"})
+	if status != http.StatusCreated {
+		t.Fatalf("register: status=%d body=%s", status, body)
+	}
+	status, body = doJSON(t, client, http.MethodPost,
+		agentAddr+"/api/v1/runtime-sessions/"+sessionID+"/turns",
+		map[string]any{"idempotency_key": "tool-stream", "context_version": 1,
+			"input": map[string]any{"message": "tool-stream"}})
+	if status != http.StatusAccepted {
+		t.Fatalf("submit: status=%d body=%s", status, body)
+	}
+	var turn struct {
+		TurnID string `json:"turn_id"`
+	}
+	if err := json.Unmarshal(body, &turn); err != nil {
+		t.Fatal(err)
+	}
+	pollTurn(t, client, agentAddr, sessionID, turn.TurnID, "completed")
+	status, body = doJSON(t, client, http.MethodGet,
+		agentAddr+"/api/v1/runtime-sessions/"+sessionID+"/events?after_sequence=0&limit=200", nil)
+	if status != http.StatusOK {
+		t.Fatalf("replay: status=%d body=%s", status, body)
+	}
+	var events []struct {
+		EventType string `json:"event_type"`
+		Payload   struct {
+			Item struct {
+				Kind    string `json:"kind"`
+				Content []struct {
+					Output        string `json:"output"`
+					Truncated     bool   `json:"truncated"`
+					OriginalBytes int    `json:"original_bytes"`
+					StoredBytes   int    `json:"stored_bytes"`
+				} `json:"content"`
+			} `json:"item"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal(body, &events); err != nil {
+		t.Fatal(err)
+	}
+	toolResults := make([]struct {
+		Output        string
+		Truncated     bool
+		OriginalBytes int
+		StoredBytes   int
+	}, 0, 2)
+	for _, event := range events {
+		if event.EventType != "item.completed" || event.Payload.Item.Kind != "tool_result" {
+			continue
+		}
+		part := event.Payload.Item.Content[0]
+		toolResults = append(toolResults, struct {
+			Output        string
+			Truncated     bool
+			OriginalBytes int
+			StoredBytes   int
+		}{part.Output, part.Truncated, part.OriginalBytes, part.StoredBytes})
+	}
+	if len(toolResults) != 2 || toolResults[0].Output != "first-snapshot" {
+		t.Fatalf("expected first and latest snapshots only: %+v", toolResults)
+	}
+	latest := toolResults[1]
+	if !latest.Truncated || latest.OriginalBytes <= 32768 || latest.StoredBytes > 32768 || len(latest.Output) != latest.StoredBytes {
+		t.Fatalf("invalid UTF-8-safe truncation metadata: %+v", latest)
+	}
+	if strings.Contains(latest.Output, "middle-snapshot") {
+		t.Fatalf("intermediate snapshot was not coalesced: %+v", toolResults)
 	}
 }
 

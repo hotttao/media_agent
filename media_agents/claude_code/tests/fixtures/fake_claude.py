@@ -38,6 +38,44 @@ if message == "fail-turn":
         flush=True,
     )
     raise SystemExit(0)
+if message == "tool-stream":
+    print(
+        json.dumps(
+            {
+                "type": "assistant",
+                "session_id": session_id,
+                "message": {
+                    "id": "tool-message",
+                    "content": [
+                        {"type": "tool_use", "id": "call-stream", "name": "Read", "input": {}}
+                    ],
+                },
+            }
+        ),
+        flush=True,
+    )
+    for output in ("first-snapshot", "middle-snapshot", "末" * 20_000):
+        print(
+            json.dumps(
+                {
+                    "type": "user",
+                    "session_id": session_id,
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "call-stream",
+                                "content": output,
+                            }
+                        ]
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+    print(json.dumps({"type": "result", "subtype": "success"}), flush=True)
+    raise SystemExit(0)
 
 answer = f"Claude fixture: {message}"
 payload = {

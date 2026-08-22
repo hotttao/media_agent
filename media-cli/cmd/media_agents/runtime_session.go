@@ -29,6 +29,11 @@ var (
 	getTurnID              string
 	interruptTurnSessionID string
 	interruptTurnID        string
+	replayEventsSessionID  string
+	replayAfterSequence    int64
+	replayLimit            int
+	listMessagesSessionID  string
+	listMessagesLimit      int
 )
 
 var registerRuntimeSessionCmd = &cobra.Command{
@@ -87,6 +92,24 @@ var interruptTurnCmd = &cobra.Command{
 	},
 }
 
+var replayEventsCmd = &cobra.Command{
+	Use: "events", Short: "按 Session sequence 回放持久化 Universal Event",
+	RunE: func(command *cobra.Command, _ []string) error {
+		path := fmt.Sprintf("/api/v1/runtime-sessions/%s/events?after_sequence=%d&limit=%d",
+			replayEventsSessionID, replayAfterSequence, replayLimit)
+		return requestAndPrint(command, http.MethodGet, path, nil)
+	},
+}
+
+var listMessagesCmd = &cobra.Command{
+	Use: "messages", Short: "查询 Runtime Session 的稳定 Message 历史",
+	RunE: func(command *cobra.Command, _ []string) error {
+		path := fmt.Sprintf("/api/v1/runtime-sessions/%s/messages?limit=%d",
+			listMessagesSessionID, listMessagesLimit)
+		return requestAndPrint(command, http.MethodGet, path, nil)
+	},
+}
+
 var runtimeWorkspaceCmd = &cobra.Command{
 	Use:   "runtime-workspace",
 	Short: "查询 Agent 挂载的 Workspace Runtime Directory identity",
@@ -123,7 +146,15 @@ func init() {
 	_ = getTurnCmd.MarkFlagRequired("turn-id")
 	_ = interruptTurnCmd.MarkFlagRequired("session-id")
 	_ = interruptTurnCmd.MarkFlagRequired("turn-id")
-	runtimeSessionCmd.AddCommand(registerRuntimeSessionCmd, getRuntimeSessionCmd, submitTurnCmd, getTurnCmd, interruptTurnCmd)
+	replayEventsCmd.Flags().StringVar(&replayEventsSessionID, "session-id", "", "Runtime Session ID")
+	replayEventsCmd.Flags().Int64Var(&replayAfterSequence, "after-sequence", 0, "只返回该游标之后的事件")
+	replayEventsCmd.Flags().IntVar(&replayLimit, "limit", 200, "最多返回事件数")
+	listMessagesCmd.Flags().StringVar(&listMessagesSessionID, "session-id", "", "Runtime Session ID")
+	listMessagesCmd.Flags().IntVar(&listMessagesLimit, "limit", 200, "最多返回 Message 数")
+	_ = replayEventsCmd.MarkFlagRequired("session-id")
+	_ = listMessagesCmd.MarkFlagRequired("session-id")
+	runtimeSessionCmd.AddCommand(registerRuntimeSessionCmd, getRuntimeSessionCmd, submitTurnCmd,
+		getTurnCmd, interruptTurnCmd, replayEventsCmd, listMessagesCmd)
 	runtimeWorkspaceCmd.AddCommand(getRuntimeWorkspaceCmd)
 	MediaAgentsCmd.AddCommand(runtimeSessionCmd, runtimeWorkspaceCmd)
 }

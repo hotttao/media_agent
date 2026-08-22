@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from adapter.biz.domain.runtime_session.entity import Message, RuntimeSession, Turn
+from adapter.biz.domain.runtime_session.entity import Message, RuntimeSession, Turn, UniversalEvent
 
 
 class RuntimeSessionRepository(Protocol):
@@ -25,3 +25,15 @@ class RuntimeSessionRepository(Protocol):
     async def get_queue_head(self, session_id: str) -> Turn | None: ...
 
     async def save_execution(self, session: RuntimeSession, turn: Turn | None = None) -> None: ...
+
+    async def add_event(
+        self, session: RuntimeSession, event: UniversalEvent, message: Message | None = None
+    ) -> None: ...
+
+    async def find_completed_item(self, turn_id: str, item_id: str) -> UniversalEvent | None: ...
+
+    async def list_events_after(
+        self, session_id: str, after_sequence: int, limit: int
+    ) -> list[UniversalEvent]: ...
+
+    async def list_messages(self, session_id: str, limit: int) -> list[Message]: ...

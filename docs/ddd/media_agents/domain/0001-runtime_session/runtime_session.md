@@ -39,15 +39,15 @@ Runtime Session 拥有同一 Agent Session 的 Turn 接受与串行调度、Mess
 | 提交 Turn | 幂等创建 Queued Turn，并在可执行时声明队首为 running | `POST /api/v1/runtime-sessions/{session_id}/turns` |
 | 中断 Turn | 软中断当前 running Turn | `POST /api/v1/runtime-sessions/{session_id}/turns/{turn_id}/interrupt` |
 | 查询 Turn | 返回 Turn 与队列状态，用于结果不明确时协调 | `GET /api/v1/runtime-sessions/{session_id}/turns/{turn_id}` |
-| 查询事件 | 按 Session sequence 回放 Universal Event | 待 IDL 定义 |
-| 查询历史 | 返回 Message 与 Chat Status | 待 IDL 定义 |
+| 查询事件 | 按 Session sequence 回放 Universal Event | `GET /api/v1/runtime-sessions/{session_id}/events` |
+| 查询历史 | 返回 Message 与 Chat Status | `GET /api/v1/runtime-sessions/{session_id}/messages`、Runtime Session 查询 |
 | 解决 Agent Request | 持久化用户对确认、输入或权限请求的响应 | 现有 respond 接口演进 |
 
 ## 聚合与不变量
 
 | 聚合根 | 包含对象 | 一致性边界 | 核心不变量 |
 |:---|:---|:---|:---|
-| Runtime Session | Turn Queue、Chat Status、Sequence Counter | 入队、声明执行与终态释放 | 同一 Session 最多一个 running Turn；enqueue sequence 与 event sequence 各自严格递增 |
+| Runtime Session | Turn Queue、Chat Status、Sequence Counter | 入队、声明执行与终态释放 | 同一 Session 最多一个 running Turn；enqueue、event 与 message sequence 各自严格递增 |
 | Turn | Message 引用、Agent Request、执行结果 | 单次 Turn 状态变化 | 终态不可覆盖；Turn 固定属于一个 Runtime Session |
 | Universal Event | Event payload | 单事件提交 | sequence 唯一且只有数据库提交后才能发布 |
 
@@ -99,6 +99,7 @@ stateDiagram-v2
 | runtime_session_id | text nullable | 底层 Runtime 返回的可恢复会话句柄；不得假设等于业务 session_id |
 | next_turn_sequence | bigint | 下一条 Turn enqueue sequence |
 | next_event_sequence | bigint | 下一条 Universal Event sequence |
+| next_message_sequence | bigint | 下一条 Message 查询 sequence；与事件恢复游标独立 |
 | created_at | timestamptz | 创建时间 |
 | updated_at | timestamptz | 更新时间 |
 
@@ -137,6 +138,7 @@ stateDiagram-v2
 | created_at | timestamptz | 创建时间 |
 
 Message 是面向历史查询的稳定模型；Universal Event 是恢复与订阅事实。Message 只能由 Turn 输入或已提交的完成事件生成，禁止两条独立写路径产生矛盾。
+`UNIQUE (session_id, sequence)` 约束 Message Sequence；序号在持有 Runtime Session 行锁的事务内从 `next_message_sequence` 分配，禁止使用 `MAX(sequence)+1`。
 
 ### `universal_events`
 

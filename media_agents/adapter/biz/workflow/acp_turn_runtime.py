@@ -11,6 +11,7 @@ from adapter.biz.workflow.execute_turn_flow import (
     RuntimePreparation,
     RuntimeResult,
 )
+from adapter.biz.workflow.turn_event_sink import RuntimeEventHandler
 
 
 class AcpTurnRuntime:
@@ -40,6 +41,7 @@ class AcpTurnRuntime:
         session: RuntimeSession,
         turn: Turn,
         credentials: RuntimeCredentials,
+        event_handler: RuntimeEventHandler,
     ) -> RuntimeResult:
         runtime_session = self._server.get(preparation.handle)
         if runtime_session is None:
@@ -47,7 +49,11 @@ class AcpTurnRuntime:
         message = turn.input.get("message")
         if not isinstance(message, str) or not message.strip():
             raise InvalidTurn("Turn input.message is required")
-        result = await self._server.run_turn(runtime_session, message)
+        runtime_session.set_event_observer(event_handler)
+        try:
+            result = await self._server.run_turn(runtime_session, message)
+        finally:
+            runtime_session.set_event_observer(None)
         status = (
             TurnStatus.INTERRUPTED
             if result.stop_reason is StopReason.CANCELLED

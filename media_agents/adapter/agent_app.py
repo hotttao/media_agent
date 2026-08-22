@@ -20,14 +20,40 @@ from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks, BridgeFactory
 from adapter.biz.service.runtime_session.service import RuntimeSessionService
 from adapter.biz.workflow.acp_turn_runtime import AcpTurnRuntime
 from adapter.biz.workflow.execute_turn_flow import ExecuteTurnFlow, TurnRuntime
+from adapter.biz.workflow.turn_event_sink import TurnEventSink
 from adapter.config.config import AdapterConfig
 from adapter.infra.logging import setup_logging
 from adapter.infra.migrations import migrate_database
 from adapter.infra.runtime_workspace import ensure_runtime_workspace
+from adapter.session_event_bus import InMemorySessionEventBus, RedisSessionEventBus
 
 logger = logging.getLogger(__name__)
 
 ExtraLifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
+
+
+def _event_bus(cfg: AdapterConfig) -> InMemorySessionEventBus | RedisSessionEventBus:
+    if cfg.event_bus.redis_url:
+        return RedisSessionEventBus(cfg.event_bus.redis_url, cfg.event_bus.channel_prefix)
+    return InMemorySessionEventBus()
+
+
+def _execute_turn_flow(
+    cfg: AdapterConfig, service: RuntimeSessionService, runtime: TurnRuntime
+) -> tuple[ExecuteTurnFlow, InMemorySessionEventBus | RedisSessionEventBus]:
+    bus = _event_bus(cfg)
+
+    def sink_factory(session_id: str, turn_id: str) -> TurnEventSink:
+        return TurnEventSink(
+            service,
+            bus,
+            session_id,
+            turn_id,
+            tool_result_max_bytes=cfg.event_bus.tool_result_max_bytes,
+            tool_result_window_ms=cfg.event_bus.tool_result_window_ms,
+        )
+
+    return ExecuteTurnFlow(service, runtime, sink_factory), bus
 
 
 def _add_common_middleware(app: FastAPI) -> None:
@@ -56,8 +82,8 @@ def build_base_app(cfg: AdapterConfig, *, turn_runtime: TurnRuntime) -> FastAPI:
         app.state.runtime_session_service = RuntimeSessionService(
             TxRunner(session_factory), SqlRuntimeSessionRepository()
         )
-        app.state.execute_turn_flow = ExecuteTurnFlow(
-            app.state.runtime_session_service, turn_runtime
+        app.state.execute_turn_flow, app.state.session_event_bus = _execute_turn_flow(
+            cfg, app.state.runtime_session_service, turn_runtime
         )
         logger.info(
             "adapter base app started: agent=%s workspace=%s",
@@ -68,6 +94,7 @@ def build_base_app(cfg: AdapterConfig, *, turn_runtime: TurnRuntime) -> FastAPI:
             yield
         finally:
             await app.state.execute_turn_flow.close()
+            await app.state.session_event_bus.close()
             await engine.dispose()
             logger.info("adapter base app shutdown")
 
@@ -112,8 +139,8 @@ def build_app(
         app.state.runtime_session_service = RuntimeSessionService(
             TxRunner(session_factory), SqlRuntimeSessionRepository()
         )
-        app.state.execute_turn_flow = ExecuteTurnFlow(
-            app.state.runtime_session_service, AcpTurnRuntime(acp_server)
+        app.state.execute_turn_flow, app.state.session_event_bus = _execute_turn_flow(
+            cfg, app.state.runtime_session_service, AcpTurnRuntime(acp_server)
         )
         logger.info(
             "adapter app started: agent=%s workspace=%s",
@@ -128,6 +155,7 @@ def build_app(
                     yield
         finally:
             await app.state.execute_turn_flow.close()
+            await app.state.session_event_bus.close()
             acp_server.stop_evictor()
             await engine.dispose()
             logger.info("adapter app shutdown")

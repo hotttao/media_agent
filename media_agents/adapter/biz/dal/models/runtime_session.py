@@ -22,6 +22,7 @@ class RuntimeSessionRow(Base):
     runtime_session_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     next_turn_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
     next_event_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    next_message_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -70,4 +71,23 @@ class MessageRow(Base):
     role: Mapped[str] = mapped_column(String(16), nullable=False)
     content_ref: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class UniversalEventRow(Base):
+    __tablename__ = "universal_events"
+    __table_args__ = (
+        UniqueConstraint("session_id", "sequence", name="uq_universal_events_session_sequence"),
+        Index("ix_universal_events_session_sequence", "session_id", "sequence"),
+        {"schema": "media_agents"},
+    )
+
+    event_id: Mapped[str] = mapped_column("id", String(64), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("media_agents.runtime_sessions.session_id"), nullable=False
+    )
+    turn_id: Mapped[str | None] = mapped_column(ForeignKey("media_agents.turns.id"))
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    event_type: Mapped[str] = mapped_column("type", String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

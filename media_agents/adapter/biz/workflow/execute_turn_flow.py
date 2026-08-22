@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
 from adapter.biz.domain.runtime_session.entity import RuntimeSession, Turn, TurnStatus
 from adapter.biz.domain.runtime_session.errors import InvalidTurn
 from adapter.biz.service.runtime_session.command import SubmitTurn
-from adapter.biz.service.runtime_session.service import TurnExecution, TurnFinalization
+from adapter.biz.service.runtime_session.service import (
+    TurnExecution,
+    TurnFinalization,
+    TurnSubmission,
+)
+from adapter.biz.workflow.turn_event_sink import RuntimeEventHandler, TurnEventSink
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +50,14 @@ class TurnRuntime(Protocol):
         session: RuntimeSession,
         turn: Turn,
         credentials: RuntimeCredentials,
+        event_handler: RuntimeEventHandler,
     ) -> RuntimeResult: ...
 
     async def interrupt(self, handle: str) -> bool: ...
 
 
 class RuntimeSessionUseCases(Protocol):
-    async def submit_turn(self, command: SubmitTurn) -> Turn: ...
+    async def submit_turn_details(self, command: SubmitTurn) -> TurnSubmission: ...
 
     async def execution(self, session_id: str, turn_id: str) -> TurnExecution: ...
 
@@ -65,13 +72,20 @@ class RuntimeSessionUseCases(Protocol):
         status: TurnStatus,
         *,
         error_class: str | None = None,
+        terminal_payload: dict[str, object] | None = None,
     ) -> TurnFinalization: ...
 
 
 class ExecuteTurnFlow:
-    def __init__(self, service: RuntimeSessionUseCases, runtime: TurnRuntime) -> None:
+    def __init__(
+        self,
+        service: RuntimeSessionUseCases,
+        runtime: TurnRuntime,
+        sink_factory: Callable[[str, str], TurnEventSink],
+    ) -> None:
         self._service = service
         self._runtime = runtime
+        self._sink_factory = sink_factory
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._scheduled_turns: set[str] = set()
         self._credentials: dict[str, RuntimeCredentials] = {}
@@ -83,7 +97,11 @@ class ExecuteTurnFlow:
         self, command: SubmitTurn, credentials: RuntimeCredentials | None = None
     ) -> Turn:
         async with self._session_lock(command.session_id):
-            turn = await self._service.submit_turn(command)
+            submission = await self._service.submit_turn_details(command)
+            turn = submission.turn
+            publisher = self._sink_factory(turn.session_id, turn.turn_id)
+            for event in submission.events:
+                await publisher.publish_committed(event)
             self._turn_sessions[turn.turn_id] = turn.session_id
             if credentials is not None and (credentials.api_key or credentials.session_token):
                 self._credentials[turn.turn_id] = credentials
@@ -150,6 +168,7 @@ class ExecuteTurnFlow:
             self._scheduled_turns.add(current_turn_id)
             execution = await self._service.execution(session_id, current_turn_id)
             credentials = self._credentials.get(current_turn_id, RuntimeCredentials())
+            sink = self._sink_factory(session_id, current_turn_id)
             try:
                 preparation = await self._runtime.prepare(
                     execution.session, execution.turn, credentials
@@ -162,7 +181,9 @@ class ExecuteTurnFlow:
                 elif session.runtime_session_id != preparation.handle:
                     raise InvalidTurn("Runtime returned a different persisted handle")
                 runtime_task = asyncio.create_task(
-                    self._runtime.execute(preparation, session, execution.turn, credentials)
+                    self._runtime.execute(
+                        preparation, session, execution.turn, credentials, sink.accept
+                    )
                 )
                 await asyncio.sleep(0)
                 if current_turn_id in self._interrupt_requested:
@@ -174,7 +195,9 @@ class ExecuteTurnFlow:
                     TurnStatus.INTERRUPTED,
                 }:
                     raise InvalidTurn("Runtime returned a non-terminal status")
+                await sink.flush()
             except asyncio.CancelledError:
+                await sink.discard()
                 raise
             except Exception as error:
                 result = RuntimeResult(TurnStatus.FAILED, _stable_error_class(error))
@@ -184,7 +207,10 @@ class ExecuteTurnFlow:
                     current_turn_id,
                     result.status,
                     error_class=result.error_class,
+                    terminal_payload=sink.terminal_payload,
                 )
+            for event in finalized.events:
+                await sink.publish_committed(event)
             current_turn_id = (
                 finalized.next_turn.turn_id if finalized.next_turn is not None else None
             )

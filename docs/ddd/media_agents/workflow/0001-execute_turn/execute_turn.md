@@ -122,9 +122,9 @@ sequenceDiagram
 
 | 事务 | 原子提交事实 | 不包含的外部副作用 |
 |:---|:---|:---|
-| TX-ENQUEUE | Queued Turn、User Message、enqueue sequence | Runtime 执行、总线发布 |
+| TX-ENQUEUE | Queued Turn、User Message、enqueue sequence、message sequence | Runtime 执行、总线发布 |
 | TX-CLAIM | 队首 running、active_turn_id、chat_status=agent | Runtime 执行 |
-| TX-EVENT | Session sequence、Universal Event、可选 Message | 总线发布、SSE 写入 |
+| TX-EVENT | Session sequence、Universal Event、可选 Message 及 message sequence | 总线发布、SSE 写入 |
 | TX-SNAPSHOT | 规范化工具结果快照和新 sequence | 总线发布 |
 | TX-FINAL | 已 flush 事件之后的 Turn 终态、chat_status、终态事件 | 总线发布、Analytics 更新、下一 Turn 执行 |
 

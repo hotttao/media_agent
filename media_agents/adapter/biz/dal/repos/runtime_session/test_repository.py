@@ -95,8 +95,18 @@ async def test_postgresql_serializes_concurrent_turn_submissions() -> None:
         )
         assert failed.next_turn is None
         assert (await service.get(session_id)).status.value == "paused"
+        events = await service.replay_events(session_id, 0, limit=100)
+        assert [event.sequence for event in events] == list(range(1, len(events) + 1))
+        assert [
+            event.sequence
+            for event in await service.replay_events(session_id, events[-2].sequence, limit=100)
+        ] == [events[-1].sequence]
     finally:
         async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM media_agents.universal_events WHERE session_id=:id"),
+                {"id": session_id},
+            )
             await connection.execute(
                 text("DELETE FROM media_agents.messages WHERE session_id=:id"), {"id": session_id}
             )

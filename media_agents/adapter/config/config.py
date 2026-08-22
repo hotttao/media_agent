@@ -107,6 +107,17 @@ class DatabaseConfig(BaseModel):
         return normalized
 
 
+class EventBusConfig(BaseModel):
+    """Ephemeral Session Event Bus; PostgreSQL remains the recovery source."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    redis_url: str | None = None
+    channel_prefix: str = "media-agents:session-events"
+    tool_result_max_bytes: int = Field(default=32 * 1024, gt=0)
+    tool_result_window_ms: int = Field(default=300, ge=0)
+
+
 class RuntimeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -143,6 +154,7 @@ class AdapterConfig(BaseModel):
     bridge_ttl: BridgeTtlConfig = Field(default_factory=BridgeTtlConfig)
     keepalive: KeepaliveConfig = Field(default_factory=KeepaliveConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    event_bus: EventBusConfig = Field(default_factory=EventBusConfig)
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)

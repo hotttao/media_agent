@@ -1,5 +1,13 @@
 # Execute Turn 变更记录
 
+## 2026-08-22 · Runtime 事件持久化与提交后发布落地
+
+- TX-ENQUEUE 和 TX-EVENT 均在 Session 行锁内分配 Message Sequence。
+- Universal Event 仍只推进 Session Sequence；Message 查询顺序不参与事件回放去重。
+- Codex ACP 与 Claude Code 的运行事件统一进入 Turn Event Sink；Live Frame 直接发布，权威事件提交 PostgreSQL 后发布。
+- Tool Result 首次快照立即提交，后续按 300ms 合并最新值，终态前强制 flush 并执行 UTF-8 安全截断。
+- Redis Pub/Sub 只承担多订阅者瞬时扇出；发布失败不回滚事实，调用方通过 Agent 回放接口恢复。
+
 ## 2026-08-22 · Codex ACP 与 Claude Code 执行编排落地
 
 - 两种 Runtime 通过统一 port 接入 Execute Turn Flow，所有外部调用均位于数据库事务外。

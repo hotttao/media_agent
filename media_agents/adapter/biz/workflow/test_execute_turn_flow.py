@@ -5,15 +5,26 @@ from datetime import UTC, datetime
 
 import pytest
 
-from adapter.biz.domain.runtime_session.entity import RuntimeSession, Turn, TurnStatus
+from adapter.biz.domain.runtime_session.entity import (
+    RuntimeSession,
+    Turn,
+    TurnStatus,
+    UniversalEvent,
+)
 from adapter.biz.service.runtime_session.command import SubmitTurn
-from adapter.biz.service.runtime_session.service import TurnExecution, TurnFinalization
+from adapter.biz.service.runtime_session.service import (
+    TurnExecution,
+    TurnFinalization,
+    TurnSubmission,
+)
 from adapter.biz.workflow.execute_turn_flow import (
     ExecuteTurnFlow,
     RuntimeCredentials,
     RuntimePreparation,
     RuntimeResult,
 )
+from adapter.biz.workflow.turn_event_sink import RuntimeEventHandler, TurnEventSink
+from adapter.session_event_bus import InMemorySessionEventBus
 
 
 def _turn(turn_id: str, sequence: int, status: TurnStatus) -> Turn:
@@ -39,8 +50,13 @@ class ScriptService:
         self.session = replace(self.session, active_turn_id="turn-1")
         self.finalized: list[tuple[str, TurnStatus]] = []
 
-    async def submit_turn(self, command: SubmitTurn) -> Turn:
-        return self.turns[0]
+    async def submit_turn_details(self, command: SubmitTurn) -> TurnSubmission:
+        return TurnSubmission(self.turns[0], ())
+
+    async def persist_runtime_event(
+        self, session_id: str, turn_id: str, payload: dict[str, object]
+    ) -> UniversalEvent:
+        raise AssertionError("script runtime emitted an unexpected event")
 
     async def execution(self, session_id: str, turn_id: str) -> TurnExecution:
         turn = next(turn for turn in self.turns if turn.turn_id == turn_id)
@@ -57,6 +73,7 @@ class ScriptService:
         status: TurnStatus,
         *,
         error_class: str | None = None,
+        terminal_payload: dict[str, object] | None = None,
     ) -> TurnFinalization:
         self.finalized.append((turn_id, status))
         terminal = next(turn for turn in self.turns if turn.turn_id == turn_id)
@@ -89,6 +106,7 @@ class ScriptRuntime:
         session: RuntimeSession,
         turn: Turn,
         credentials: RuntimeCredentials,
+        event_handler: RuntimeEventHandler,
     ) -> RuntimeResult:
         self.calls.append(f"execute:{turn.turn_id}")
         return RuntimeResult(self.statuses.pop(0))
@@ -102,7 +120,12 @@ class ScriptRuntime:
 async def test_flow_executes_outside_state_transactions_and_drains_fifo() -> None:
     service = ScriptService()
     runtime = ScriptRuntime([TurnStatus.COMPLETED, TurnStatus.COMPLETED])
-    flow = ExecuteTurnFlow(service, runtime)
+    bus = InMemorySessionEventBus()
+    flow = ExecuteTurnFlow(
+        service,
+        runtime,
+        lambda session_id, turn_id: TurnEventSink(service, bus, session_id, turn_id),
+    )
 
     await flow.submit(SubmitTurn("session-1", "one", 1, {"message": "one"}))
     await flow.wait("session-1")
@@ -119,7 +142,12 @@ async def test_flow_executes_outside_state_transactions_and_drains_fifo() -> Non
 async def test_flow_maps_runtime_failure_and_interrupts_by_persisted_handle() -> None:
     service = ScriptService()
     runtime = ScriptRuntime([TurnStatus.FAILED])
-    flow = ExecuteTurnFlow(service, runtime)
+    bus = InMemorySessionEventBus()
+    flow = ExecuteTurnFlow(
+        service,
+        runtime,
+        lambda session_id, turn_id: TurnEventSink(service, bus, session_id, turn_id),
+    )
     service.session = service.session.attach_runtime("runtime-1", now=datetime.now(UTC))
 
     assert await flow.interrupt("session-1", "turn-1")
