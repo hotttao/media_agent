@@ -14,6 +14,7 @@
 | Session Event sequence | Chat App | 当前 Session 的内存游标；只有带 SSE id 的 Universal Event 推进，断线时作为恢复参数 |
 | 输入框、流式增量、错误提示 | 对应 App | 内存；由独立 Session Event Subscription 驱动 |
 | Turn interrupting 请求态 | Chat App | 内存；仅用于防止重复提交，不替代服务端 Turn/Chat Status |
+| Agent Request 请求、响应与状态 | `media_agents` | Agent PostgreSQL；Chat App 仅查询 pending 投影并提交 resolve |
 
 localStorage key 必须带版本与 Workspace ID。Profile 包含 `layoutId`、`slots` 与预留的 `instances`；恢复数据必须迁移版本并校验已注册 App、允许的 Slot 和单实例约束，解析失败回退默认值。不得写入 API Key、消息正文或服务端授权事实。
 

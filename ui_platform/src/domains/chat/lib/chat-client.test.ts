@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   decodeSessionEventFrame,
   interruptTurn,
+  listAgentRequests,
+  resolveAgentRequest,
 } from "@/domains/chat/lib/chat-client";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -62,5 +64,31 @@ describe("interruptTurn", () => {
       "/api/chat/sessions/session-1/interrupt",
       expect.objectContaining({ method: "POST", credentials: "include" }),
     );
+  });
+});
+
+describe("Agent Requests", () => {
+  it("lists requests and resolves through the Gateway API", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ requests: [] }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ request_id: "request-1", status: "resolved" }), {
+          status: 200,
+        }),
+      );
+
+    await expect(listAgentRequests("session/1", "turn/1")).resolves.toEqual([]);
+    await expect(
+      resolveAgentRequest("session/1", "turn/1", "request/1", { option_id: "allow" }),
+    ).resolves.toMatchObject({ request_id: "request-1", status: "resolved" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/chat/sessions/session/1/requests?turn_id=turn%2F1",
+    );
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "POST" });
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      response_json: JSON.stringify({ option_id: "allow" }),
+    });
   });
 });

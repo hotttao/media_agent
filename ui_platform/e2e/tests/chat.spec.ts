@@ -44,6 +44,62 @@ async function mockWorkspace(page: Page, sessions = [session]) {
 }
 
 test.describe("workspace platform", () => {
+  test("renders and resolves a pending Agent Request", {
+    tag: "@C000009",
+  }, async ({ page }) => {
+    await mockWorkspace(page);
+    await page.route(
+      `**/api/chat/sessions/${session.id}/requests*`,
+      (route) =>
+        route.fulfill({
+          json: {
+            requests: [
+              {
+                request_id: "request-e2e",
+                session_id: session.id,
+                turn_id: "turn-e2e",
+                request_type: "permission",
+                payload: {
+                  question: "Allow the agent to run this command?",
+                  options: [{ option_id: "allow", label: "Allow once" }],
+                },
+                status: "pending",
+                response: null,
+                resolved_at: null,
+                created_at: "2026-08-22T00:00:00Z",
+              },
+            ],
+          },
+        }),
+    );
+    await page.route(
+      `**/api/chat/sessions/${session.id}/turns/turn-e2e/requests/request-e2e/resolve`,
+      async (route) => {
+        expect(route.request().postDataJSON()).toEqual({
+          response_json: JSON.stringify({ option_id: "allow" }),
+        });
+        await route.fulfill({
+          json: {
+            request_id: "request-e2e",
+            session_id: session.id,
+            turn_id: "turn-e2e",
+            request_type: "permission",
+            payload: {},
+            status: "resolved",
+            response: { option_id: "allow" },
+            resolved_at: "2026-08-22T00:00:01Z",
+            created_at: "2026-08-22T00:00:00Z",
+          },
+        });
+      },
+    );
+    await page.goto(`/w/${workspace.id}`);
+
+    await expect(page.getByText("Allow the agent to run this command?")).toBeVisible();
+    await page.getByRole("button", { name: "Allow once" }).click();
+    await expect(page.getByText("Allow the agent to run this command?")).toHaveCount(0);
+  });
+
   test("opens a workspace through the switcher and keeps it in the URL", {
     tag: "@C000001",
   }, async ({ page }) => {

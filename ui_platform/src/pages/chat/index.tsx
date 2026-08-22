@@ -22,17 +22,21 @@ import { createPortal } from "react-dom";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { MessageBubble } from "@/domains/chat/components/message-bubble";
+import { AgentRequestCard } from "@/domains/chat/components/agent-request-card";
 import {
   createClientId,
   createSession,
   interruptTurn,
   itemText,
   listMessages,
+  listAgentRequests,
   listSessions,
   runTurn,
+  resolveAgentRequest,
   subscribeSessionEvents,
 } from "@/domains/chat/lib/chat-client";
 import type {
+  AgentRequest,
   ChatMessage,
   ChatSession,
   UniversalEvent,
@@ -62,6 +66,8 @@ interface WorkspaceRuntime {
   addSession(): Promise<void>;
   send(text: string): Promise<void>;
   interrupt(): Promise<void>;
+  requests: AgentRequest[];
+  resolveRequest(request: AgentRequest, response: Record<string, unknown>): Promise<void>;
   openSettings(): void;
 }
 
@@ -141,6 +147,8 @@ function ChatApp() {
     addSession,
     send,
     interrupt,
+    requests,
+    resolveRequest,
   } = useRuntime();
   const [input, setInput] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
@@ -218,6 +226,16 @@ function ChatApp() {
           </button>
         </div>
       )}
+      {requests
+        .filter((request) => request.status === "pending")
+        .map((request) => (
+          <div key={request.request_id} className="mb-3">
+            <AgentRequestCard
+              request={request}
+              onResolve={(response) => resolveRequest(request, response)}
+            />
+          </div>
+        ))}
       <form
         onSubmit={submit}
         className="flex items-end gap-2 rounded-2xl border bg-white p-2 shadow-lg shadow-slate-200/60"
@@ -458,6 +476,7 @@ export function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
+  const [requests, setRequests] = useState<AgentRequest[]>([]);
   const [error, setError] = useState("");
   const [dialog, setDialog] = useState<"create" | "edit" | null>(null);
   const requestVersion = useRef(0);
@@ -479,6 +498,7 @@ export function ChatPage() {
       setSessionId("");
       setHistoryReadySessionId("");
       setMessages([]);
+      setRequests([]);
       setStreaming(false);
       setInterrupting(false);
       return;
@@ -512,8 +532,13 @@ export function ChatPage() {
             seedCompletedItems(history, itemMessageIds.current);
             setMessages(history);
             setHistoryReadySessionId(selected.id);
+            const pending = await listAgentRequests(selected.id);
+            if (version === requestVersion.current) setRequests(pending);
           }
-        } else setSearchParams({}, { replace: true });
+        } else {
+          setRequests([]);
+          setSearchParams({}, { replace: true });
+        }
       })
       .catch((cause: Error) => {
         if (version === requestVersion.current) setError(cause.message);
@@ -540,6 +565,7 @@ export function ChatPage() {
           "agent",
       );
       setInterrupting(false);
+      setRequests([]);
       setSearchParams({ session: nextId }, { replace: true });
       const values = await listMessages(nextId);
       if (version === requestVersion.current) {
@@ -548,6 +574,8 @@ export function ChatPage() {
         seedCompletedItems(values, itemMessageIds.current);
         setMessages(values);
         setHistoryReadySessionId(nextId);
+        const pending = await listAgentRequests(nextId);
+        if (version === requestVersion.current) setRequests(pending);
       }
     },
     [sessions, setSearchParams],
@@ -578,6 +606,11 @@ export function ChatPage() {
           if (targetSession !== activeSessionId.current) return;
           seedCompletedItems(history, itemMessageIds.current);
           setMessages(history);
+        });
+      }
+      if (event.type === "agent.requested" || event.type === "agent.request.resolved") {
+        void listAgentRequests(targetSession).then((values) => {
+          if (targetSession === activeSessionId.current) setRequests(values);
         });
       }
       if (event.type === "error") {
@@ -746,6 +779,25 @@ export function ChatPage() {
       }
     }
   }
+  async function resolveRequest(
+    request: AgentRequest,
+    response: Record<string, unknown>,
+  ) {
+    const targetSession = activeSessionId.current;
+    const resolved = await resolveAgentRequest(
+      targetSession,
+      request.turn_id,
+      request.request_id,
+      response,
+    );
+    if (targetSession === activeSessionId.current) {
+      setRequests((current) =>
+        current.map((item) =>
+          item.request_id === resolved.request_id ? resolved : item,
+        ),
+      );
+    }
+  }
   function saved(value: Workspace) {
     setWorkspaces((current) =>
       current.some((item) => item.id === value.id)
@@ -769,6 +821,8 @@ export function ChatPage() {
         addSession,
         send,
         interrupt,
+        requests,
+        resolveRequest,
         openSettings: () => setDialog("edit"),
       }
     : null;
