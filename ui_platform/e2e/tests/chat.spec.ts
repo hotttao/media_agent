@@ -35,6 +35,9 @@ async function mockWorkspace(page: Page, sessions = [session]) {
   await page.route("**/api/chat/sessions/*/messages", (route) =>
     route.fulfill({ json: { messages: [] } }),
   );
+  await page.route("**/api/chat/sessions/*/requests*", (route) =>
+    route.fulfill({ json: { requests: [] } }),
+  );
   await page.route("**/api/chat/sessions/*/events*", (route) =>
     route.fulfill({
       contentType: "text/event-stream",
