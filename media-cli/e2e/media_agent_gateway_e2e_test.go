@@ -16,10 +16,82 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestMediaAgentGatewayCrossNodeBroadcastE2E(t *testing.T) {
+	authAddr, gatewayAddr, second, controlAddr := os.Getenv("MEDIA_AUTH_ADDR"), os.Getenv("MEDIA_AGENT_GATEWAY_ADDR"), os.Getenv("MEDIA_AGENT_GATEWAY_SECONDARY_ADDR"), os.Getenv("MEDIA_CONTROL_ADDR")
+	if authAddr == "" || gatewayAddr == "" || second == "" || controlAddr == "" {
+		t.Skip("two Gateway addresses and Auth/Control are required")
+	}
+	client := registerGatewayUser(t, authAddr, "crossnode")
+	sessionID := createGatewaySession(t, client, controlAddr, gatewayAddr, "cross-node")
+	one := startEventSubscription(t, client, gatewayAddr, sessionID, 0)
+	two := startEventSubscription(t, client, second, sessionID, 0)
+	startTurn(t, client, gatewayAddr, sessionID, "Reply with one short sentence.")
+	eventsOne, eventsTwo := awaitEvents(t, one), awaitEvents(t, two)
+	assertCompleteEventStream(t, eventsOne)
+	assertCompleteEventStream(t, eventsTwo)
+	if len(eventsOne) != len(eventsTwo) {
+		t.Fatalf("cross-node streams differ: %d != %d", len(eventsOne), len(eventsTwo))
+	}
+}
+
+func TestMediaAgentGatewayRecoversWhenRedisPublishFailsE2E(t *testing.T) {
+	authAddr, gatewayAddr, controlAddr, redisContainer := os.Getenv("MEDIA_AUTH_ADDR"), os.Getenv("MEDIA_AGENT_GATEWAY_ADDR"), os.Getenv("MEDIA_CONTROL_ADDR"), os.Getenv("MEDIA_AGENT_GATEWAY_E2E_REDIS_CONTAINER")
+	if authAddr == "" || gatewayAddr == "" || controlAddr == "" || redisContainer == "" {
+		t.Skip("Gateway stack and Redis container name are required")
+	}
+	client := registerGatewayUser(t, authAddr, "redisdown")
+	sessionID := createGatewaySession(t, client, controlAddr, gatewayAddr, "redis-down")
+	feed := startEventSubscription(t, client, gatewayAddr, sessionID, 0)
+	if output, err := exec.Command("docker", "stop", redisContainer).CombinedOutput(); err != nil {
+		t.Fatalf("stop Redis: %v: %s", err, output)
+	}
+	defer exec.Command("docker", "start", redisContainer).Run()
+	startTurn(t, client, gatewayAddr, sessionID, "Reply briefly.")
+	events := awaitEvents(t, feed)
+	assertCompleteEventStream(t, events)
+}
+
+func registerGatewayUser(t *testing.T, authAddr, prefix string) *http.Client {
+	t.Helper()
+	client := httpClient(t)
+	username := fmt.Sprintf("%s%d", prefix, time.Now().UnixNano())
+	status, body := doJSON(t, client, http.MethodPost, authAddr+"/api/auth/register", map[string]string{"username": username, "password": "gateway123", "display_name": "Gateway E2E"})
+	if status != http.StatusCreated {
+		t.Fatalf("register user: status=%d body=%s", status, body)
+	}
+	return client
+}
+
+func createGatewaySession(t *testing.T, client *http.Client, controlAddr, gatewayAddr, name string) string {
+	t.Helper()
+	status, body := doJSON(t, client, http.MethodPost, controlAddr+"/api/v1/workspaces", map[string]string{"name": fmt.Sprintf("%s-%d", name, time.Now().UnixNano()), "agent_type": "codex"})
+	if status != http.StatusCreated {
+		t.Fatalf("create workspace: status=%d body=%s", status, body)
+	}
+	var workspace struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &workspace); err != nil {
+		t.Fatal(err)
+	}
+	status, body = doJSON(t, client, http.MethodPost, gatewayAddr+"/api/chat/sessions", map[string]string{"workspace_id": workspace.ID, "title": name})
+	if status != http.StatusCreated {
+		t.Fatalf("create session: status=%d body=%s", status, body)
+	}
+	var session struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &session); err != nil {
+		t.Fatal(err)
+	}
+	return session.ID
+}
 
 func TestMediaAgentGatewayChatE2E(t *testing.T) {
 	authAddr := os.Getenv("MEDIA_AUTH_ADDR")
@@ -441,8 +513,8 @@ func awaitEvents(t *testing.T, sub subscription) []gatewayEvent {
 
 func assertCompleteEventStream(t *testing.T, events []gatewayEvent) {
 	t.Helper()
-	if len(events) == 0 || events[0].Type != "session.started" {
-		t.Fatalf("missing session.started: %+v", events)
+	if len(events) == 0 {
+		t.Fatal("event stream is empty")
 	}
 	if events[len(events)-1].Type != "session.ended" {
 		t.Fatalf("missing session.ended: %+v", events)

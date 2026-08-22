@@ -4,24 +4,105 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
-
-	sharedsse "media_agent/media_agent_gateway/biz/shared/sse"
 )
 
 type HTTPRuntime struct {
 	AgentType string
 	BaseURL   string
-	SSE       *sharedsse.Client
 	HTTP      *http.Client
 }
 
-func (r *HTTPRuntime) Interrupt(ctx context.Context, runtimeSessionID string) (bool, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(r.BaseURL, "/")+"/sessions/"+runtimeSessionID+"/interrupt", nil)
-	if err != nil {
+type APIError struct {
+	AgentType  string
+	StatusCode int
+	Status     string
+	Body       string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("%s Agent API returned %s: %s", e.AgentType, e.Status, e.Body)
+}
+
+func IsDefinitiveRegistrationFailure(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 && apiErr.StatusCode != http.StatusRequestTimeout && apiErr.StatusCode != http.StatusTooManyRequests
+}
+
+func (r *HTTPRuntime) RegisterRuntimeSession(ctx context.Context, input RegisterRuntimeSessionInput) (*RuntimeSession, error) {
+	var output RuntimeSession
+	if err := r.doJSON(ctx, http.MethodPost, "/api/v1/runtime-sessions", input, &output); err != nil {
+		return nil, err
+	}
+	return &output, nil
+}
+
+func (r *HTTPRuntime) GetRuntimeSession(ctx context.Context, sessionID string) (*RuntimeSession, error) {
+	var output RuntimeSession
+	if err := r.doJSON(ctx, http.MethodGet, "/api/v1/runtime-sessions/"+url.PathEscape(sessionID), nil, &output); err != nil {
+		return nil, err
+	}
+	return &output, nil
+}
+
+func (r *HTTPRuntime) SubmitTurn(ctx context.Context, input SubmitTurnInput) (*Turn, error) {
+	var output Turn
+	path := "/api/v1/runtime-sessions/" + url.PathEscape(input.SessionID) + "/turns"
+	if err := r.doJSON(ctx, http.MethodPost, path, input, &output); err != nil {
+		return nil, err
+	}
+	return &output, nil
+}
+
+func (r *HTTPRuntime) InterruptTurn(ctx context.Context, sessionID, turnID string) (bool, error) {
+	var output struct {
+		Interrupted bool `json:"interrupted"`
+	}
+	path := "/api/v1/runtime-sessions/" + url.PathEscape(sessionID) + "/turns/" + url.PathEscape(turnID) + "/interrupt"
+	if err := r.doJSON(ctx, http.MethodPost, path, map[string]any{}, &output); err != nil {
 		return false, err
+	}
+	return output.Interrupted, nil
+}
+
+func (r *HTTPRuntime) ListMessages(ctx context.Context, sessionID string, limit int) ([]Message, error) {
+	var output []Message
+	path := fmt.Sprintf("/api/v1/runtime-sessions/%s/messages?limit=%d", url.PathEscape(sessionID), limit)
+	if err := r.doJSON(ctx, http.MethodGet, path, nil, &output); err != nil {
+		return nil, err
+	}
+	return output, nil
+}
+
+func (r *HTTPRuntime) ReplayEvents(ctx context.Context, sessionID string, afterSequence int64, limit int) ([]UniversalEvent, error) {
+	var output []UniversalEvent
+	path := fmt.Sprintf("/api/v1/runtime-sessions/%s/events?after_sequence=%d&limit=%d", url.PathEscape(sessionID), afterSequence, limit)
+	if err := r.doJSON(ctx, http.MethodGet, path, nil, &output); err != nil {
+		return nil, err
+	}
+	return output, nil
+}
+
+func (r *HTTPRuntime) doJSON(ctx context.Context, method, path string, input, output any) error {
+	var body io.Reader
+	if input != nil {
+		encoded, err := json.Marshal(input)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(encoded)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(r.BaseURL, "/")+path, body)
+	if err != nil {
+		return err
+	}
+	if input != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	httpClient := r.HTTP
 	if httpClient == nil {
@@ -29,46 +110,12 @@ func (r *HTTPRuntime) Interrupt(ctx context.Context, runtimeSessionID string) (b
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return false, err
+		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("%s runtime interrupt returned %s", r.AgentType, resp.Status)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 8*1024))
+		return &APIError{AgentType: r.AgentType, StatusCode: resp.StatusCode, Status: resp.Status, Body: strings.TrimSpace(string(data))}
 	}
-	var result struct {
-		Success     bool `json:"success"`
-		Interrupted bool `json:"interrupted"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return false, err
-	}
-	return result.Success && result.Interrupted, nil
-}
-
-func (*HTTPRuntime) EventPersistenceCapabilities() EventPersistenceCapabilities {
-	return EventPersistenceCapabilities{MaxToolResultBytes: 32 * 1024}
-}
-
-func (r *HTTPRuntime) Chat(ctx context.Context, input ChatInput, consume func(json.RawMessage) error) error {
-	body, err := json.Marshal(input)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(r.BaseURL, "/")+"/chat", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-	transport := r.SSE
-	if transport == nil {
-		transport = &sharedsse.Client{}
-	}
-	return transport.Stream(ctx, req, func(event sharedsse.Event) error {
-		raw := json.RawMessage(event.Data)
-		if !json.Valid(raw) {
-			return fmt.Errorf("%s runtime emitted invalid Universal Event JSON", r.AgentType)
-		}
-		return consume(raw)
-	})
+	return json.NewDecoder(resp.Body).Decode(output)
 }

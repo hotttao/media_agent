@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
@@ -19,12 +20,12 @@ import (
 
 var sessions *service.Service
 var runTurn *workflow.RunTurn
-var eventHub *sessionevents.Broadcaster
+var eventStream *workflow.EventStream
 
-func Configure(sessionService *service.Service, turnFlow *workflow.RunTurn, hub *sessionevents.Broadcaster) {
+func Configure(sessionService *service.Service, turnFlow *workflow.RunTurn, source sessionevents.Source) {
 	sessions = sessionService
 	runTurn = turnFlow
-	eventHub = hub
+	eventStream = workflow.NewEventStream(turnFlow, source)
 }
 
 func GetDefaultSession(ctx context.Context, c *app.RequestContext) {
@@ -33,7 +34,12 @@ func GetDefaultSession(ctx context.Context, c *app.RequestContext) {
 		writeError(c, err)
 		return
 	}
-	c.JSON(consts.StatusOK, toSessionResponse(value))
+	state, err := runTurn.Register(ctx, value, string(c.Cookie("token")))
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, toSessionResponse(value, state.ChatStatus))
 }
 
 func CreateSession(ctx context.Context, c *app.RequestContext) {
@@ -50,7 +56,12 @@ func CreateSession(ctx context.Context, c *app.RequestContext) {
 		writeError(c, err)
 		return
 	}
-	c.JSON(consts.StatusCreated, toSessionResponse(value))
+	state, err := runTurn.Register(ctx, value, string(c.Cookie("token")))
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusCreated, toSessionResponse(value, state.ChatStatus))
 }
 
 func ListSessions(ctx context.Context, c *app.RequestContext) {
@@ -66,7 +77,11 @@ func ListSessions(ctx context.Context, c *app.RequestContext) {
 	}
 	resp := &chatpb.ListSessionsResponse{Sessions: make([]*chatpb.SessionResponse, 0, len(values))}
 	for i := range values {
-		resp.Sessions = append(resp.Sessions, toSessionResponse(&values[i]))
+		chatStatus := domain.ChatStatusHuman
+		if state, stateErr := runTurn.State(ctx, values[i].ID, middleware.UserID(ctx)); stateErr == nil {
+			chatStatus = state.ChatStatus
+		}
+		resp.Sessions = append(resp.Sessions, toSessionResponse(&values[i], chatStatus))
 	}
 	c.JSON(consts.StatusOK, resp)
 }
@@ -77,14 +92,15 @@ func ListMessages(ctx context.Context, c *app.RequestContext) {
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	values, err := sessions.Messages(ctx, req.SessionId, middleware.UserID(ctx))
+	values, err := runTurn.Messages(ctx, req.SessionId, middleware.UserID(ctx))
 	if err != nil {
 		writeError(c, err)
 		return
 	}
 	resp := &chatpb.ListMessagesResponse{Messages: make([]*chatpb.MessageResponse, 0, len(values))}
 	for _, value := range values {
-		resp.Messages = append(resp.Messages, &chatpb.MessageResponse{Id: value.ID, TurnId: value.TurnID, Role: value.Role, ContentJson: string(value.Content), Sequence: value.Sequence, CreatedAt: value.CreatedAt.UnixMilli()})
+		createdAt, _ := time.Parse(time.RFC3339, value.CreatedAt)
+		resp.Messages = append(resp.Messages, &chatpb.MessageResponse{Id: value.MessageID, TurnId: value.TurnID, Role: value.Role, ContentJson: messageContent(value.Role, value.ContentRef), Sequence: value.Sequence, CreatedAt: createdAt.UnixMilli()})
 	}
 	c.JSON(consts.StatusOK, resp)
 }
@@ -103,7 +119,7 @@ func RunTurn(ctx context.Context, c *app.RequestContext) {
 		writeError(c, err)
 		return
 	}
-	c.JSON(consts.StatusAccepted, &chatpb.RunTurnResponse{TurnId: turn.ID, Status: "accepted"})
+	c.JSON(consts.StatusAccepted, &chatpb.RunTurnResponse{TurnId: turn.TurnID, Status: turn.Status})
 }
 
 func InterruptTurn(ctx context.Context, c *app.RequestContext) {
@@ -115,16 +131,16 @@ func InterruptTurn(ctx context.Context, c *app.RequestContext) {
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	turn, err := runTurn.Interrupt(ctx, req.SessionId, middleware.UserID(ctx))
+	turn, err := runTurn.Interrupt(ctx, req.SessionId, middleware.UserID(ctx), string(c.Cookie("token")))
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-	c.JSON(consts.StatusAccepted, &chatpb.InterruptTurnResponse{TurnId: turn.ID, Status: "interrupting"})
+	c.JSON(consts.StatusAccepted, &chatpb.InterruptTurnResponse{TurnId: turn.TurnID, Status: "interrupting"})
 }
 
-func toSessionResponse(value *domain.Session) *chatpb.SessionResponse {
-	return &chatpb.SessionResponse{Id: value.ID, WorkspaceId: value.WorkspaceID, AgentId: value.AgentID, AgentType: value.AgentType, Title: value.Title, Status: value.Status, ChatStatus: value.ChatStatus, CreatedAt: value.CreatedAt.UnixMilli(), UpdatedAt: value.UpdatedAt.UnixMilli()}
+func toSessionResponse(value *domain.Session, chatStatus string) *chatpb.SessionResponse {
+	return &chatpb.SessionResponse{Id: value.ID, WorkspaceId: value.WorkspaceID, AgentId: value.AgentID, AgentType: value.AgentType, Title: value.Title, Status: value.Status, ChatStatus: chatStatus, CreatedAt: value.CreatedAt.UnixMilli(), UpdatedAt: value.UpdatedAt.UnixMilli()}
 }
 
 func writeError(c *app.RequestContext, err error) {
@@ -136,6 +152,9 @@ func writeError(c *app.RequestContext, err error) {
 		status = consts.StatusForbidden
 	}
 	if errors.Is(err, domain.ErrTurnInFlight) || errors.Is(err, domain.ErrAlreadyExists) {
+		status = consts.StatusConflict
+	}
+	if errors.Is(err, domain.ErrInactive) {
 		status = consts.StatusConflict
 	}
 	c.JSON(status, map[string]string{"error": err.Error()})
@@ -152,10 +171,7 @@ func SubscribeEvents(ctx context.Context, c *app.RequestContext) {
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	subscription := eventHub.Subscribe(req.SessionId)
-	defer subscription.Close()
-	replay, err := sessions.EventsAfter(ctx, req.SessionId, middleware.UserID(ctx), req.AfterSequence)
-	if err != nil {
+	if _, err := sessions.Authorize(ctx, req.SessionId, middleware.UserID(ctx)); err != nil {
 		writeError(c, err)
 		return
 	}
@@ -163,38 +179,28 @@ func SubscribeEvents(ctx context.Context, c *app.RequestContext) {
 	if err := writer.WriteEvent("", "ready", []byte(`{}`)); err != nil {
 		return
 	}
-	cursor := req.AfterSequence
-	for _, event := range replay {
-		if err := writer.WriteEvent(strconv.FormatInt(event.Sequence, 10), "message", event.Payload); err != nil {
-			return
+	_ = eventStream.Stream(ctx, req.SessionId, middleware.UserID(ctx), req.AfterSequence, func(event workflow.StreamEvent) error {
+		if event.Heartbeat {
+			return writer.WriteEvent("", "heartbeat", []byte(`{}`))
 		}
-		cursor = event.Sequence
-	}
-	heartbeat := time.NewTicker(15 * time.Second)
-	defer heartbeat.Stop()
-	for {
-		select {
-		case event, ok := <-subscription.Events:
-			if !ok {
-				return
-			}
-			if event.Sequence == 0 {
-				if err := writer.WriteEvent("", "message", event.Payload); err != nil {
-					return
-				}
-				continue
-			}
-			if event.Sequence <= cursor {
-				continue
-			}
-			if err := writer.WriteEvent(strconv.FormatInt(event.Sequence, 10), "message", event.Payload); err != nil {
-				return
-			}
-			cursor = event.Sequence
-		case <-heartbeat.C:
-			if err := writer.WriteEvent("", "heartbeat", []byte(`{}`)); err != nil {
-				return
-			}
+		id := ""
+		if event.Sequence > 0 {
+			id = strconv.FormatInt(event.Sequence, 10)
 		}
+		return writer.WriteEvent(id, "message", event.Payload)
+	})
+}
+
+func messageContent(role string, content json.RawMessage) string {
+	if role != "user" {
+		return string(content)
 	}
+	var input struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(content, &input) != nil || input.Message == "" {
+		return string(content)
+	}
+	encoded, _ := json.Marshal([]map[string]string{{"type": "text", "text": input.Message}})
+	return string(encoded)
 }

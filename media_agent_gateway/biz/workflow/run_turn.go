@@ -2,101 +2,186 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
-	"time"
+	"strings"
+
+	"github.com/google/uuid"
 
 	domain "media_agent/media_agent_gateway/biz/domain/agent_session"
 	service "media_agent/media_agent_gateway/biz/service/agent_session"
 	"media_agent/media_agent_gateway/biz/shared/client"
-	"media_agent/media_agent_gateway/biz/shared/sessionevents"
 )
 
-const turnTimeout = 24 * time.Hour
-const toolResultCoalesceWindow = 300 * time.Millisecond
-
+// RunTurn authorizes Gateway registrations and delegates all execution facts to Agent.
 type RunTurn struct {
 	sessions *service.Service
 	runtimes client.Registry
-	events   *sessionevents.Broadcaster
 }
 
-func NewRunTurn(sessions *service.Service, runtimes client.Registry, events *sessionevents.Broadcaster) *RunTurn {
-	return &RunTurn{sessions: sessions, runtimes: runtimes, events: events}
+func NewRunTurn(sessions *service.Service, runtimes client.Registry) *RunTurn {
+	return &RunTurn{sessions: sessions, runtimes: runtimes}
 }
 
-// Start commits the Turn before dispatch and deliberately detaches Runtime
-// execution from the initiating HTTP request. Subscribers observe progress via
-// the Session event stream.
-func (w *RunTurn) Start(ctx context.Context, sessionID, userID, authToken, key, message string) (*domain.Turn, error) {
-	session, turn, err := w.sessions.StartTurn(ctx, sessionID, userID, key, message)
+func (w *RunTurn) Register(ctx context.Context, session *domain.Session, authToken string) (*client.RuntimeSession, error) {
+	if session.Status != domain.StatusStarting && session.Status != domain.StatusActive {
+		return nil, domain.ErrInactive
+	}
+	_, runtime, err := w.runtime(ctx, session, authToken)
 	if err != nil {
 		return nil, err
 	}
-	runtimeContext, err := w.sessions.RuntimeContext(ctx, session, authToken)
+	state, err := runtime.RegisterRuntimeSession(ctx, client.RegisterRuntimeSessionInput{
+		SessionID:      session.ID,
+		ContextVersion: session.ContextVersion,
+		ContextRef: fmt.Sprintf(
+			"workspace:%s/agent:%s/context:%d",
+			session.WorkspaceID,
+			session.AgentID,
+			session.ContextVersion,
+		),
+	})
 	if err != nil {
-		_ = w.sessions.FinishTurn(context.WithoutCancel(ctx), turn.ID, "failed")
+		// A transport or server failure is outcome-unknown: preserve starting so the
+		// same session_id can be reconciled. A definitive client error is failed.
+		if client.IsDefinitiveRegistrationFailure(err) && session.Status == domain.StatusStarting {
+			_ = w.sessions.TransitionStatus(ctx, session, domain.StatusFailed)
+		}
 		return nil, err
 	}
-	runtime, ok := w.runtimes.Get(session.AgentType)
-	if !ok {
-		_ = w.sessions.FinishTurn(context.WithoutCancel(ctx), turn.ID, "failed")
-		return nil, fmt.Errorf("agent runtime %q is not registered", session.AgentType)
+	if state.SessionID != session.ID || state.ContextVersion != session.ContextVersion {
+		if session.Status == domain.StatusStarting {
+			_ = w.sessions.TransitionStatus(ctx, session, domain.StatusFailed)
+		}
+		return nil, fmt.Errorf("Agent returned an incompatible Runtime Session registration")
 	}
-	go w.execute(session, turn, runtimeContext, runtime, message)
-	return turn, nil
+	if session.Status == domain.StatusStarting {
+		if err := w.sessions.TransitionStatus(ctx, session, domain.StatusActive); err != nil {
+			return nil, err
+		}
+	}
+	return state, nil
 }
 
-func (w *RunTurn) Interrupt(ctx context.Context, sessionID, userID string) (*domain.Turn, error) {
-	session, turn, err := w.sessions.RunningTurn(ctx, sessionID, userID)
+func (w *RunTurn) Start(ctx context.Context, sessionID, userID, authToken, key, message string) (*client.Turn, error) {
+	session, err := w.sessions.Authorize(ctx, sessionID, userID)
 	if err != nil {
 		return nil, err
 	}
-	if session.RuntimeSessionID == "" {
+	runtimeContext, runtime, err := w.runtime(ctx, session, authToken)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := w.Register(ctx, session, authToken); err != nil {
+		return nil, err
+	}
+	if session.Status != domain.StatusActive {
+		return nil, domain.ErrInactive
+	}
+	if strings.TrimSpace(key) == "" {
+		key = uuid.NewString()
+	}
+	return runtime.SubmitTurn(ctx, client.SubmitTurnInput{
+		SessionID:      session.ID,
+		IdempotencyKey: key,
+		ContextVersion: session.ContextVersion,
+		Input:          map[string]any{"message": message},
+		APIKey:         runtimeContext.APIKey,
+		SessionToken:   authToken,
+	})
+}
+
+func (w *RunTurn) Interrupt(ctx context.Context, sessionID, userID, authToken string) (*client.Turn, error) {
+	session, err := w.sessions.Authorize(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if session.Status != domain.StatusActive {
+		return nil, domain.ErrInactive
+	}
+	_, runtime, err := w.runtime(ctx, session, authToken)
+	if err != nil {
+		return nil, err
+	}
+	state, err := runtime.GetRuntimeSession(ctx, session.ID)
+	if err != nil {
+		return nil, err
+	}
+	if state.ActiveTurnID == "" {
 		return nil, domain.ErrNotFound
 	}
-	runtime, ok := w.runtimes.Get(session.AgentType)
-	if !ok {
-		return nil, fmt.Errorf("agent runtime %q is not registered", session.AgentType)
-	}
-	interrupted, err := runtime.Interrupt(ctx, session.RuntimeSessionID)
+	interrupted, err := runtime.InterruptTurn(ctx, session.ID, state.ActiveTurnID)
 	if err != nil {
 		return nil, err
 	}
 	if !interrupted {
 		return nil, domain.ErrNotFound
 	}
-	return turn, nil
+	return &client.Turn{TurnID: state.ActiveTurnID, SessionID: session.ID, Status: "interrupting"}, nil
 }
 
-func (w *RunTurn) execute(session *domain.Session, turn *domain.Turn, runtimeContext service.AgentContext, runtime client.Runtime, message string) {
-	ctx, cancel := context.WithTimeout(context.Background(), turnTimeout)
-	defer cancel()
-	capabilities := client.PersistenceCapabilities(runtime)
-	sink := newTurnEventSink(ctx, session.ID, turn.ID, w.sessions, w.events, capabilities.MaxToolResultBytes, toolResultCoalesceWindow)
-	err := runtime.Chat(ctx, client.ChatInput{Message: message, SessionID: session.RuntimeSessionID, APIKey: runtimeContext.APIKey}, sink.Accept)
-	if flushErr := sink.Flush(); flushErr != nil && err == nil {
-		err = flushErr
+func (w *RunTurn) Messages(ctx context.Context, sessionID, userID string) ([]client.Message, error) {
+	session, runtime, err := w.authorizedRuntime(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
 	}
-	status := "completed"
-	reason := "completed"
-	if sink.TerminalReason() == "interrupted" {
-		status = "interrupted"
-		reason = "interrupted"
-	} else if err != nil {
-		status = "failed"
-		reason = "error"
-		raw, _ := json.Marshal(map[string]any{"type": "error", "message": err.Error()})
-		if persistErr := sink.persistAndPublish(raw); persistErr != nil {
-			log.Printf("persist turn %s failure: runtime=%v persist=%v", turn.ID, err, persistErr)
+	return runtime.ListMessages(ctx, session.ID, 1000)
+}
+
+func (w *RunTurn) EventsAfter(ctx context.Context, sessionID, userID string, afterSequence int64) ([]client.UniversalEvent, error) {
+	session, runtime, err := w.authorizedRuntime(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
+	}
+	const pageSize = 1000
+	result := make([]client.UniversalEvent, 0, pageSize)
+	cursor := afterSequence
+	for {
+		page, replayErr := runtime.ReplayEvents(ctx, session.ID, cursor, pageSize)
+		if replayErr != nil {
+			return nil, replayErr
 		}
+		result = append(result, page...)
+		if len(page) < pageSize {
+			return result, nil
+		}
+		if page[len(page)-1].Sequence <= cursor {
+			return nil, fmt.Errorf("Agent replay cursor did not advance")
+		}
+		cursor = page[len(page)-1].Sequence
 	}
-	terminalRaw := sink.Terminal(reason)
-	terminalEvent, finalizeErr := w.sessions.FinalizeTurn(context.Background(), session.ID, turn.ID, status, terminalRaw)
-	if finalizeErr != nil {
-		log.Printf("finalize turn %s: %v", turn.ID, finalizeErr)
-		return
+}
+
+func (w *RunTurn) State(ctx context.Context, sessionID, userID string) (*client.RuntimeSession, error) {
+	session, runtime, err := w.authorizedRuntime(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
 	}
-	w.events.Publish(session.ID, sessionevents.Event{Sequence: terminalEvent.Sequence, Payload: append([]byte(nil), terminalRaw...)})
+	return runtime.GetRuntimeSession(ctx, session.ID)
+}
+
+func (w *RunTurn) authorizedRuntime(ctx context.Context, sessionID, userID string) (*domain.Session, client.Runtime, error) {
+	session, err := w.sessions.Authorize(ctx, sessionID, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	runtime, ok := w.runtimes.Get(session.AgentType)
+	if !ok {
+		return nil, nil, fmt.Errorf("agent runtime %q is not registered", session.AgentType)
+	}
+	return session, runtime, nil
+}
+
+func (w *RunTurn) runtime(ctx context.Context, session *domain.Session, authToken string) (service.AgentContext, client.Runtime, error) {
+	runtimeContext, err := w.sessions.RuntimeContext(ctx, session, authToken)
+	if err != nil {
+		return service.AgentContext{}, nil, err
+	}
+	if runtimeContext.AgentType != session.AgentType || runtimeContext.AgentID != session.AgentID || runtimeContext.ContextVersion != session.ContextVersion {
+		return service.AgentContext{}, nil, fmt.Errorf("Agent Session context version no longer matches its Registration")
+	}
+	runtime, ok := w.runtimes.Get(session.AgentType)
+	if !ok {
+		return service.AgentContext{}, nil, fmt.Errorf("agent runtime %q is not registered", session.AgentType)
+	}
+	return runtimeContext, runtime, nil
 }

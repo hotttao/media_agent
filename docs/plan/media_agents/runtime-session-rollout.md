@@ -41,10 +41,10 @@
 
 ## P5：Gateway 切换
 
-- [ ] Gateway 改为 Agent 命令/查询代理和 SSE framing。
-- [ ] 实现先订阅后回放、sequence 去重、缺口/终态/周期补查。
-- [ ] 迁移历史数据并删除 Gateway 旧写入口。
-- [ ] 完成跨 Gateway 节点及发布失败恢复 E2E，独立提交。
+- [x] Gateway 改为 Agent 命令/查询代理和 SSE framing。
+- [x] 实现先订阅后回放、sequence 去重、缺口/终态/周期补查。
+- [x] 提供双 PostgreSQL 可重入历史迁移、验证和显式清理工具，并删除 Gateway 旧写入口。
+- [x] 完成跨 Gateway 节点及发布失败恢复 E2E，独立提交。
 
 ## P6：Agent Request 与重启恢复
 

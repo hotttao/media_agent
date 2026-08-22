@@ -30,3 +30,11 @@
 - [x] 通过真实 PostgreSQL testcontainers 查询证明 User/Assistant Message 与 Universal Event 完整保存。
 - [x] 运行 Harness 强制检查、前端 build/test 与端到端场景。
 - [x] 通过真实 Codex Runtime 验证 Live Event Frame 不回放、软中断终态、Chat Status 恢复与持久化事件回放。
+
+## P5 · Agent 事实所有权切换
+
+- [x] Session 创建/默认 Session 以同一 ID 幂等注册 Agent Runtime Session。
+- [x] Turn、Interrupt、Message 和 Replay 改为授权后的 Agent API 代理。
+- [x] SSE 改为先订阅 Redis Session Event Bus、再回放、按 sequence 去重与缺口/终态/周期补查。
+- [x] 提供双库回填/校验/显式清理工具，停止并删除 Gateway Turn/Message/Universal Event 写入口。
+- [x] 完成双 Gateway、Redis 发布失败、断线恢复和 media-cli HTTP/SSE E2E，独立提交。

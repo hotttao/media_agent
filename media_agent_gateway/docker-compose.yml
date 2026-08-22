@@ -1,4 +1,15 @@
 services:
+  session_event_bus:
+    image: redis:7-alpine
+    network_mode: host
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    restart: unless-stopped
+
   codex_agent:
     build:
       context: ../media_agents
@@ -14,6 +25,7 @@ services:
       MOCK_MEDIA_CONTROL: "true"
       CODEX_AUX_PROCESSES: "false"
       MEDIA_AGENTS_DB_URL: postgresql+asyncpg://media_auth:media_auth@127.0.0.1:5432/media_auth
+      MEDIA_AGENTS_REDIS_URL: redis://127.0.0.1:6379/0
       ALL_PROXY: ${CODEX_DOCKER_PROXY:-socks5://127.0.0.1:7891}
     volumes:
       - ${CODEX_AUTH_FILE:-/home/tao/.codex/auth.json}:/run/secrets/codex-auth.json:ro
@@ -25,6 +37,9 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
+    depends_on:
+      session_event_bus:
+        condition: service_healthy
 
   claude_code_agent:
     build:
@@ -39,6 +54,7 @@ services:
       SESSION_STORE_DIR: /workspace/.home/.claude/projects
       CLAUDE_CODE_BIN: ${CLAUDE_CODE_BIN:-claude}
       MEDIA_AGENTS_DB_URL: postgresql+asyncpg://media_auth:media_auth@127.0.0.1:5432/media_auth
+      MEDIA_AGENTS_REDIS_URL: redis://127.0.0.1:6379/0
       ALL_PROXY: ${CLAUDE_CODE_DOCKER_PROXY:-socks5://127.0.0.1:7891}
     volumes:
       - ${WORKSPACE_ROOT:-/workspace}/${RUNTIME_WORKSPACE_ID:-local}:/workspace
@@ -49,6 +65,9 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
+    depends_on:
+      session_event_bus:
+        condition: service_healthy
 
   media_agent_gateway:
     build:
@@ -67,12 +86,15 @@ services:
       CLAUDE_CODE_RUNTIME_URL: http://host.docker.internal:3003
       MEDIA_CONTROL_URL: http://host.docker.internal:8007
       CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
+      MEDIA_AGENTS_REDIS_URL: redis://host.docker.internal:6379/0
       LOG_DIR: /media_logs/media-agent-gateway
     volumes:
       - ../media_logs/media-agent-gateway:/media_logs/media-agent-gateway
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      session_event_bus:
+        condition: service_healthy
       codex_agent:
         condition: service_healthy
       claude_code_agent:

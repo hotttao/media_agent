@@ -53,6 +53,16 @@ migrate-up:
 migrate-down:
 	migrate -path migrations -database "$$PG_DSN" down 1
 
+.PHONY: migrate-agent-history verify-agent-history cleanup-agent-history
+migrate-agent-history:
+	go run ./cmd/agent-history-migrate --mode import
+
+verify-agent-history:
+	go run ./cmd/agent-history-migrate --mode verify
+
+cleanup-agent-history:
+	go run ./cmd/agent-history-migrate --mode cleanup --confirm-drop-legacy-history
+
 .PHONY: lefthook-install
 lefthook-install:
 	go install github.com/evilmartians/lefthook@latest
