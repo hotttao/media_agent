@@ -9,6 +9,10 @@ class InvalidRuntimeSession(RuntimeSessionError):
     """Registration data violates an aggregate invariant."""
 
 
+class InvalidTurn(RuntimeSessionError):
+    """Submitted Turn violates an aggregate invariant."""
+
+
 class RuntimeSessionNotFound(RuntimeSessionError):
     def __init__(self, session_id: str) -> None:
         super().__init__(f"runtime session not found: {session_id}")

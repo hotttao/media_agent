@@ -21,6 +21,41 @@ class ChatStatus(StrEnum):
     AGENT = "agent"
 
 
+class TurnStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    INTERRUPTED = "interrupted"
+    CANCELLED = "cancelled"
+
+
+@dataclass(frozen=True, slots=True)
+class Turn:
+    turn_id: str
+    session_id: str
+    idempotency_key: str
+    enqueue_sequence: int
+    status: TurnStatus
+    input: dict[str, object]
+    context_version: int
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    error_class: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Message:
+    message_id: str
+    session_id: str
+    turn_id: str
+    role: str
+    content_ref: dict[str, object]
+    sequence: int
+    created_at: datetime
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeSession:
     session_id: str

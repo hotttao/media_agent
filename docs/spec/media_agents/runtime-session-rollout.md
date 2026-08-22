@@ -26,11 +26,11 @@ workflow 顶层开启，repository 从 context-local session 取得连接。
 | 原能力/设计能力 | 目标限界上下文 | Domain | 聚合/读模型 | Workflow | 状态 |
 |:---|:---|:---|:---|:---|:---|
 | Gateway Session Registration | media_agent_gateway | agent_session | Agent Session Registration | agent_session_startup | external-owner: `media_agent_gateway` |
-| 注册 Runtime Session | media_agents | runtime_session | Runtime Session | agent_session_startup | missing |
-| 幂等提交并排队 Turn | media_agents | runtime_session | Runtime Session / Turn Queue | execute_turn | missing |
-| 串行声明 queued Turn | media_agents | runtime_session | Runtime Session / Turn | execute_turn | missing |
+| 注册 Runtime Session | media_agents | runtime_session | Runtime Session | agent_session_startup | implemented |
+| 幂等提交并排队 Turn | media_agents | runtime_session | Runtime Session / Turn Queue | execute_turn | implemented |
+| 串行声明 queued Turn | media_agents | runtime_session | Runtime Session / Turn | execute_turn | implemented（提交时声明队首；终态续跑属于 P3） |
 | 执行 Runtime Turn | media_agents | runtime_session | Turn | execute_turn | missing |
-| 持久化 Message | media_agents | runtime_session | Message | execute_turn | missing（Gateway 现存能力待迁移） |
+| 持久化 Message | media_agents | runtime_session | Message | execute_turn | partial（user Message 已迁移；assistant/tool 属于 P4） |
 | 持久化 Universal Event 与 Session sequence | media_agents | runtime_session | Universal Event | execute_turn | missing（Gateway 现存能力待迁移） |
 | 发布 Live/Universal Event | media_agents | runtime_session | Session Event Bus | execute_turn | missing |
 | 回放 Universal Event | media_agents | runtime_session | Universal Event 读模型 | execute_turn | missing |

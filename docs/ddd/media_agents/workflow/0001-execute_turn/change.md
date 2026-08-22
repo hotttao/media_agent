@@ -1,5 +1,11 @@
 # Execute Turn 变更记录
 
+## 2026-08-22 · TX-ENQUEUE 与首次 TX-CLAIM 落地
+
+- Agent HTTP API 接受幂等 SubmitTurn，并原子持久化 queued Turn 与 user Message。
+- 无 active Turn 时在同一调度临界区声明队首 running；已有 active Turn 时保持 FIFO queued。
+- 并发、重复提交、事务回滚与真实 HTTP media-cli E2E 已覆盖；Runtime 执行与终态留在下一切片。
+
 ## 2026-08-22 · 执行事实库统一为 PostgreSQL
 
 - TX-ENQUEUE、TX-CLAIM、TX-EVENT、TX-SNAPSHOT 与 TX-FINAL 均提交到 Agent 自有 PostgreSQL。

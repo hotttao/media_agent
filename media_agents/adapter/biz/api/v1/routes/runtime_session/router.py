@@ -3,15 +3,16 @@
 from fastapi import APIRouter, HTTPException, status
 
 from adapter.biz.api.v1.deps import RuntimeSessionServiceDep
-from adapter.biz.domain.runtime_session.entity import RuntimeSession
+from adapter.biz.domain.runtime_session.entity import RuntimeSession, Turn
 from adapter.biz.domain.runtime_session.errors import (
     ContextVersionConflict,
     InvalidRuntimeSession,
+    InvalidTurn,
     RuntimeSessionNotFound,
 )
-from adapter.biz.service.runtime_session.command import RegisterRuntimeSession
-from adapter.schemas.runtime_session.request import RegisterRuntimeSessionRequest
-from adapter.schemas.runtime_session.response import RuntimeSessionResponse
+from adapter.biz.service.runtime_session.command import RegisterRuntimeSession, SubmitTurn
+from adapter.schemas.runtime_session.request import RegisterRuntimeSessionRequest, SubmitTurnRequest
+from adapter.schemas.runtime_session.response import RuntimeSessionResponse, TurnResponse
 
 
 def build_runtime_session_router() -> APIRouter:
@@ -40,6 +41,22 @@ def build_runtime_session_router() -> APIRouter:
         except RuntimeSessionNotFound as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
 
+    @router.post(
+        "/{session_id}/turns", response_model=TurnResponse, status_code=status.HTTP_202_ACCEPTED
+    )
+    async def submit_turn(
+        session_id: str, body: SubmitTurnRequest, service: RuntimeSessionServiceDep
+    ) -> TurnResponse:
+        try:
+            command = SubmitTurn(session_id=session_id, **body.model_dump())
+            return _turn_response(await service.submit_turn(command))
+        except RuntimeSessionNotFound as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except InvalidTurn as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        except ContextVersionConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
     return router
 
 
@@ -55,4 +72,18 @@ def _response(value: RuntimeSession) -> RuntimeSessionResponse:
         next_event_sequence=value.next_event_sequence,
         created_at=value.created_at.isoformat(),
         updated_at=value.updated_at.isoformat(),
+    )
+
+
+def _turn_response(value: Turn) -> TurnResponse:
+    return TurnResponse(
+        turn_id=value.turn_id,
+        session_id=value.session_id,
+        idempotency_key=value.idempotency_key,
+        enqueue_sequence=value.enqueue_sequence,
+        status=value.status.value,
+        context_version=value.context_version,
+        input=value.input,
+        created_at=value.created_at.isoformat(),
+        started_at=value.started_at.isoformat() if value.started_at else None,
     )

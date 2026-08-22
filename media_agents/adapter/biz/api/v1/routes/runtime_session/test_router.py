@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 from adapter.biz.api.v1.deps import get_runtime_session_service
 from adapter.biz.api.v1.routes.runtime_session.router import build_runtime_session_router
-from adapter.biz.domain.runtime_session.entity import RuntimeSession
+from adapter.biz.domain.runtime_session.entity import RuntimeSession, Turn, TurnStatus
 from adapter.biz.domain.runtime_session.errors import (
     ContextVersionConflict,
     RuntimeSessionNotFound,
@@ -32,6 +32,19 @@ class FakeService:
         if self.value is None or session_id != self.value.session_id:
             raise RuntimeSessionNotFound(session_id)
         return self.value
+
+    async def submit_turn(self, command: object) -> Turn:
+        return Turn(
+            turn_id="turn-1",
+            session_id="session-1",
+            idempotency_key="request-1",
+            enqueue_sequence=1,
+            status=TurnStatus.RUNNING,
+            input={"text": "hello"},
+            context_version=1,
+            created_at=datetime(2026, 8, 22, tzinfo=UTC),
+            started_at=datetime(2026, 8, 22, tzinfo=UTC),
+        )
 
 
 @pytest.mark.asyncio
@@ -71,6 +84,13 @@ async def test_register_get_and_conflict_mapping() -> None:
             },
         )
         assert conflict.status_code == 409
+
+        turn = await client.post(
+            "/api/v1/runtime-sessions/session-1/turns",
+            json={"idempotency_key": "request-1", "context_version": 1, "input": {"text": "hello"}},
+        )
+        assert turn.status_code == 202
+        assert turn.json()["status"] == "running"
 
 
 @pytest.mark.asyncio

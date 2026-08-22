@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 
@@ -7,11 +8,17 @@ import pytest
 from adapter.biz.dal.db import create_database
 from adapter.biz.dal.repos.runtime_session.repository import SqlRuntimeSessionRepository
 from adapter.biz.dal.session import TxRunner
+from adapter.biz.domain.runtime_session.entity import RuntimeSession
 from adapter.biz.domain.runtime_session.errors import ContextVersionConflict
-from adapter.biz.service.runtime_session.command import RegisterRuntimeSession
+from adapter.biz.service.runtime_session.command import RegisterRuntimeSession, SubmitTurn
 from adapter.biz.service.runtime_session.service import RuntimeSessionService
 from adapter.infra.migrations import migrate_database
 from sqlalchemy import text
+
+
+class FailingSubmissionRepository(SqlRuntimeSessionRepository):
+    async def save_submission(self, session: RuntimeSession) -> None:
+        raise RuntimeError("injected submission failure")
 
 
 @pytest.mark.asyncio
@@ -38,5 +45,85 @@ async def test_postgresql_repository_persists_idempotent_registration() -> None:
             await connection.execute(
                 text("DELETE FROM media_agents.runtime_sessions WHERE session_id = :session_id"),
                 {"session_id": session_id},
+            )
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_postgresql_serializes_concurrent_turn_submissions() -> None:
+    database_url = os.environ.get("MEDIA_AGENTS_TEST_DB_URL")
+    if not database_url:
+        pytest.skip("MEDIA_AGENTS_TEST_DB_URL is required for PostgreSQL DAL integration")
+    await migrate_database(database_url)
+    engine, session_factory = create_database(database_url)
+    service = RuntimeSessionService(TxRunner(session_factory), SqlRuntimeSessionRepository())
+    session_id = f"fifo-{uuid.uuid4()}"
+    await service.register(RegisterRuntimeSession(session_id, 1, "dal:context:v1"))
+    try:
+        commands = [
+            SubmitTurn(session_id, f"key-{index}", 1, {"text": str(index)}) for index in range(8)
+        ]
+        turns = await asyncio.gather(*(service.submit_turn(command) for command in commands))
+        repeated = await service.submit_turn(commands[0])
+
+        assert repeated.turn_id == turns[0].turn_id
+        assert sorted(turn.enqueue_sequence for turn in turns) == list(range(1, 9))
+        assert sum(turn.status.value == "running" for turn in turns) == 1
+        async with engine.connect() as connection:
+            counts = (
+                await connection.execute(
+                    text(
+                        "SELECT (SELECT count(*) FROM media_agents.turns WHERE session_id=:id), "
+                        "(SELECT count(*) FROM media_agents.messages WHERE session_id=:id)"
+                    ),
+                    {"id": session_id},
+                )
+            ).one()
+        assert counts == (8, 8)
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM media_agents.messages WHERE session_id=:id"), {"id": session_id}
+            )
+            await connection.execute(
+                text("DELETE FROM media_agents.turns WHERE session_id=:id"), {"id": session_id}
+            )
+            await connection.execute(
+                text("DELETE FROM media_agents.runtime_sessions WHERE session_id=:id"),
+                {"id": session_id},
+            )
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_postgresql_rolls_back_turn_and_message_together() -> None:
+    database_url = os.environ.get("MEDIA_AGENTS_TEST_DB_URL")
+    if not database_url:
+        pytest.skip("MEDIA_AGENTS_TEST_DB_URL is required for PostgreSQL DAL integration")
+    await migrate_database(database_url)
+    engine, session_factory = create_database(database_url)
+    normal = RuntimeSessionService(TxRunner(session_factory), SqlRuntimeSessionRepository())
+    failing = RuntimeSessionService(TxRunner(session_factory), FailingSubmissionRepository())
+    session_id = f"rollback-{uuid.uuid4()}"
+    await normal.register(RegisterRuntimeSession(session_id, 1, "dal:context:v1"))
+    try:
+        with pytest.raises(RuntimeError, match="injected"):
+            await failing.submit_turn(SubmitTurn(session_id, "key", 1, {"text": "rollback"}))
+        async with engine.connect() as connection:
+            counts = (
+                await connection.execute(
+                    text(
+                        "SELECT (SELECT count(*) FROM media_agents.turns WHERE session_id=:id), "
+                        "(SELECT count(*) FROM media_agents.messages WHERE session_id=:id)"
+                    ),
+                    {"id": session_id},
+                )
+            ).one()
+        assert counts == (0, 0)
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM media_agents.runtime_sessions WHERE session_id=:id"),
+                {"id": session_id},
             )
         await engine.dispose()
