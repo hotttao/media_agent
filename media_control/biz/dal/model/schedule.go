@@ -12,8 +12,8 @@ type AgentSchedule struct {
 func (AgentSchedule) TableName() string { return "agent_schedules" }
 
 type ScheduleTrigger struct {
-	ID, ScheduleID, Status      string
-	DueAt, CreatedAt, UpdatedAt time.Time
+	ID, ScheduleID, Status, AgentTaskID, ErrorCode string
+	DueAt, CreatedAt, UpdatedAt                    time.Time
 }
 
 func (ScheduleTrigger) TableName() string { return "schedule_triggers" }
