@@ -12,6 +12,7 @@ import (
 	afsrepo "media_agent/media_control/biz/dal/repo/afs_binding"
 	templaterepo "media_agent/media_control/biz/dal/repo/agent_template"
 	credentialrepo "media_agent/media_control/biz/dal/repo/credential_reference"
+	grantrepo "media_agent/media_control/biz/dal/repo/environment_grant"
 	memoryrepo "media_agent/media_control/biz/dal/repo/memory_store"
 	promptrepo "media_agent/media_control/biz/dal/repo/prompt"
 	providerrepo "media_agent/media_control/biz/dal/repo/provider"
@@ -26,6 +27,7 @@ import (
 	afshandler "media_agent/media_control/biz/handler/afs_binding"
 	templatehandler "media_agent/media_control/biz/handler/agent_template"
 	credentialhandler "media_agent/media_control/biz/handler/credential_reference"
+	granthandler "media_agent/media_control/biz/handler/environment_grant"
 	memoryhandler "media_agent/media_control/biz/handler/memory_store"
 	prompthandler "media_agent/media_control/biz/handler/prompt"
 	providerhandler "media_agent/media_control/biz/handler/provider"
@@ -41,6 +43,7 @@ import (
 	afsservice "media_agent/media_control/biz/service/afs_binding"
 	templateservice "media_agent/media_control/biz/service/agent_template"
 	credentialservice "media_agent/media_control/biz/service/credential_reference"
+	grantservice "media_agent/media_control/biz/service/environment_grant"
 	memoryservice "media_agent/media_control/biz/service/memory_store"
 	promptservice "media_agent/media_control/biz/service/prompt"
 	providerservice "media_agent/media_control/biz/service/provider"
@@ -112,6 +115,7 @@ func main() {
 	sharehandler.Configure(shareservice.New(sharerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	exporthandler.Configure(exportservice.New(exportrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	afshandler.Configure(afsservice.New(afsrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
+	granthandler.Configure(grantservice.New(grantrepo.New(db), dal.NewTxRunner(db)))
 
 	h := suite.NewServer()
 	register(h)

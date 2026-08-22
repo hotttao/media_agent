@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS environment_grants(id text PRIMARY KEY,environment_id text NOT NULL REFERENCES runtime_environments(id) ON DELETE CASCADE,subject_id text NOT NULL,subject_type text NOT NULL,permission text NOT NULL,status text NOT NULL DEFAULT 'active',created_at timestamptz NOT NULL,revoked_at timestamptz,UNIQUE(environment_id,subject_id));
