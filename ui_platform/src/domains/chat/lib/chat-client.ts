@@ -1,4 +1,5 @@
 import type {
+  AgentRequest,
   ChatMessage,
   ChatSession,
   UniversalEvent,
@@ -63,6 +64,39 @@ export async function listMessages(sessionId: string): Promise<ChatMessage[]> {
   );
   const body = (await response.json()) as { messages?: ChatMessage[] };
   return body.messages ?? [];
+}
+
+export async function listAgentRequests(
+  sessionId: string,
+  turnId?: string,
+): Promise<AgentRequest[]> {
+  const query = turnId ? `?turn_id=${encodeURIComponent(turnId)}` : "";
+  const response = await checked(
+    await fetch(`/api/chat/sessions/${sessionId}/requests${query}`, {
+      credentials: "include",
+    }),
+  );
+  const body = (await response.json()) as { requests?: AgentRequest[] };
+  return body.requests ?? [];
+}
+
+export async function resolveAgentRequest(
+  sessionId: string,
+  turnId: string,
+  requestId: string,
+  response: Record<string, unknown>,
+): Promise<AgentRequest> {
+  return checked(
+    await fetch(
+      `/api/chat/sessions/${sessionId}/turns/${turnId}/requests/${requestId}/resolve`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response_json: JSON.stringify(response) }),
+      },
+    ),
+  ).then((value) => value.json());
 }
 
 export async function runTurn(

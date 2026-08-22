@@ -17,6 +17,8 @@
 7. [extension-model.md](extension-model.md)
 8. 需求涉及的用户旅程与 `decisions/`
 
+Agent Request 交互见 [agent-request-flow.md](agent-request-flow.md)。
+
 ## 设计与验证
 
 | 设计对象 | 主要验证 |

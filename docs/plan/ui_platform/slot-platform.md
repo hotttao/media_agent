@@ -23,3 +23,10 @@
 - [x] Dock/Picker/Empty/fill E2E。
 - [x] 移动端 Dock E2E。
 - [x] TypeScript、Vitest、Dependency Cruiser、production build 全部通过。
+
+## P1：Agent Request 交互
+
+- [x] Chat App 查询并展示 Agent pending Request。
+- [x] 支持 permission、confirm、input resolve，并保持秘密不进入浏览器持久化。
+- [x] 覆盖组件与客户端 API 测试。
+- [ ] 在提供 E2E 认证凭据后运行 Playwright 交互测试。

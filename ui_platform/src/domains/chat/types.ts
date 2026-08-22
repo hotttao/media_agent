@@ -19,6 +19,20 @@ export interface ChatMessage {
   created_at: number;
 }
 
+export type AgentRequestType = "confirm" | "input" | "permission" | string;
+
+export interface AgentRequest {
+  request_id: string;
+  session_id: string;
+  turn_id: string;
+  request_type: AgentRequestType;
+  payload: Record<string, unknown>;
+  status: "pending" | "resolved" | "cancelled" | "expired" | string;
+  response: Record<string, unknown> | null;
+  resolved_at: string | null;
+  created_at: string;
+}
+
 export interface UniversalEvent {
   type: string;
   item_id?: string;
