@@ -25,11 +25,11 @@ workflow 顶层开启，repository 从 context-local session 取得连接。
 
 | 原能力/设计能力 | 目标限界上下文 | Domain | 聚合/读模型 | Workflow | 状态 |
 |:---|:---|:---|:---|:---|:---|
-| Gateway Session Registration | media_agent_gateway | agent_session | Agent Session Registration | agent_session_startup | external-owner: `media_agent_gateway` |
+| Gateway Session Registration | media_agent_gateway | agent_session | Agent Session Registration | agent_session_startup | external-owner |
 | 注册 Runtime Session | media_agents | runtime_session | Runtime Session | agent_session_startup | covered |
 | 幂等提交并排队 Turn | media_agents | runtime_session | Runtime Session / Turn Queue | execute_turn | covered |
 | 串行声明 queued Turn | media_agents | runtime_session | Runtime Session / Turn | execute_turn | covered |
-| 执行 Runtime Turn | media_agents | runtime_session | Turn | execute_turn | covered（Codex ACP、Claude Code） |
+| 执行 Runtime Turn | media_agents | runtime_session | Turn | execute_turn | covered |
 | 持久化 Message | media_agents | runtime_session | Message | execute_turn | covered |
 | 持久化 Universal Event 与 Session sequence | media_agents | runtime_session | Universal Event | execute_turn | covered |
 | 发布 Live/Universal Event | media_agents | runtime_session | Session Event Bus | execute_turn | covered |
@@ -37,8 +37,12 @@ workflow 顶层开启，repository 从 context-local session 取得连接。
 | 查询 Message 与 Chat Status | media_agents | runtime_session | Message / Runtime Session | execute_turn | covered |
 | 软中断当前 Turn | media_agents | runtime_session | Turn | execute_turn | covered |
 | 解决 Agent Request | media_agents | runtime_session | Agent Request | execute_turn | missing |
-| Gateway Web 鉴权与 SSE framing | media_agent_gateway | agent_session | Registration/SSE adapter | run_turn | external-owner: `media_agent_gateway` |
-| Gateway 直接持久化交互事件 | media_agent_gateway | agent_session | 旧 Message/Event 写模型 | run_turn | deprecated-with-reason: ADR-0009 完成迁移后删除 |
+| Gateway Web 鉴权与 SSE framing | media_agent_gateway | agent_session | Registration/SSE adapter | run_turn | external-owner |
+| Gateway 直接持久化交互事件 | media_agent_gateway | agent_session | 旧 Message/Event 写模型 | run_turn | deprecated-with-reason |
+
+补充说明：Runtime Turn 已覆盖 Codex ACP 与 Claude Code；两个 Gateway 能力由
+`media_agent_gateway` 拥有。Gateway 直接持久化交互事件依据 ADR-0009 废弃，P5 已删除运行时
+写入口，并提供双库历史回填、验证与显式清理工具。
 
 在所有 `missing` 被实现或明确移交前，本迁移不得宣称完成。
 

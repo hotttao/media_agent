@@ -2,62 +2,56 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
-
-	sharedsse "media_agent/media_agent_gateway/biz/shared/sse"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return fn(req) }
 
-func TestCodexRuntimeConsumesSSEInOrder(t *testing.T) {
+func TestHTTPRuntimeUsesAgentRuntimeSessionAPI(t *testing.T) {
+	requests := make([]string, 0, 4)
 	httpClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.Method != http.MethodPost || req.URL.Path != "/chat" {
-			t.Fatalf("unexpected request %s %s", req.Method, req.URL.Path)
+		requests = append(requests, req.Method+" "+req.URL.RequestURI())
+		body := `{"session_id":"session/1","status":"active","chat_status":"human","context_version":7}`
+		switch req.URL.Path {
+		case "/api/v1/runtime-sessions/session/1/turns":
+			body = `{"turn_id":"turn-1","session_id":"session/1","status":"queued"}`
+		case "/api/v1/runtime-sessions/session/1/messages":
+			body = `[]`
+		case "/api/v1/runtime-sessions/session/1/events":
+			body = `[]`
 		}
-		stream := "event: message\ndata: {\"type\":\"session.started\"}\n\nevent: message\ndata: {\"type\":\"session.ended\",\"reason\":\"completed\"}\n\n"
-		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
 	})}
+	runtime := &HTTPRuntime{AgentType: "codex", BaseURL: "http://agent.test", HTTP: httpClient}
 
-	var eventTypes []string
-	runtime := &HTTPRuntime{AgentType: "codex", BaseURL: "http://runtime.test", SSE: &sharedsse.Client{HTTP: httpClient}}
-	err := runtime.Chat(context.Background(), ChatInput{Message: "hello"}, func(raw json.RawMessage) error {
-		var event struct {
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal(raw, &event); err != nil {
-			return err
-		}
-		eventTypes = append(eventTypes, event.Type)
-		return nil
-	})
-	if err != nil {
+	if _, err := runtime.GetRuntimeSession(context.Background(), "session/1"); err != nil {
 		t.Fatal(err)
 	}
-	if len(eventTypes) != 2 || eventTypes[0] != "session.started" || eventTypes[1] != "session.ended" {
-		t.Fatalf("unexpected events: %v", eventTypes)
-	}
-}
-
-func TestCodexRuntimeInterruptsRuntimeSession(t *testing.T) {
-	httpClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.Method != http.MethodPost || req.URL.Path != "/sessions/runtime-1/interrupt" {
-			t.Fatalf("unexpected request %s %s", req.Method, req.URL.Path)
-		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"success":true,"interrupted":true}`))}, nil
-	})}
-	runtime := &HTTPRuntime{AgentType: "codex", BaseURL: "http://runtime.test", HTTP: httpClient}
-	ok, err := runtime.Interrupt(context.Background(), "runtime-1")
-	if err != nil {
+	if _, err := runtime.SubmitTurn(context.Background(), SubmitTurnInput{SessionID: "session/1", IdempotencyKey: "key", ContextVersion: 7, Input: map[string]any{"message": "hi"}}); err != nil {
 		t.Fatal(err)
 	}
-	if !ok {
-		t.Fatal("interrupt was not accepted")
+	if _, err := runtime.ListMessages(context.Background(), "session/1", 20); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.ReplayEvents(context.Background(), "session/1", 4, 20); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"GET /api/v1/runtime-sessions/session%2F1",
+		"POST /api/v1/runtime-sessions/session%2F1/turns",
+		"GET /api/v1/runtime-sessions/session%2F1/messages?limit=20",
+		"GET /api/v1/runtime-sessions/session%2F1/events?after_sequence=4&limit=20",
+	}
+	for i := range want {
+		if requests[i] != want[i] {
+			t.Fatalf("request[%d]=%q, want %q", i, requests[i], want[i])
+		}
 	}
 }
 
@@ -65,16 +59,10 @@ func TestRuntimeRegistryRegistersBothSupportedAgentTypes(t *testing.T) {
 	t.Setenv("CODEX_RUNTIME_URL", "http://codex.test")
 	t.Setenv("CLAUDE_CODE_RUNTIME_URL", "http://claude.test")
 	registry := NewRuntimeRegistryFromEnvironment()
-
-	for agentType, wantURL := range map[string]string{
-		"codex": "http://codex.test", "claude-code": "http://claude.test",
-	} {
+	for agentType, wantURL := range map[string]string{"codex": "http://codex.test", "claude-code": "http://claude.test"} {
 		runtime, ok := registry.Get(agentType)
-		if !ok {
-			t.Fatalf("runtime %q is not registered", agentType)
-		}
-		httpRuntime, ok := runtime.(*HTTPRuntime)
-		if !ok || httpRuntime.AgentType != agentType || httpRuntime.BaseURL != wantURL {
+		httpRuntime, typed := runtime.(*HTTPRuntime)
+		if !ok || !typed || httpRuntime.AgentType != agentType || httpRuntime.BaseURL != wantURL {
 			t.Fatalf("unexpected runtime %q: %#v", agentType, runtime)
 		}
 	}

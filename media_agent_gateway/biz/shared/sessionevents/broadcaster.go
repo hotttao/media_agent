@@ -1,6 +1,9 @@
 package sessionevents
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 const defaultBuffer = 128
 
@@ -16,7 +19,16 @@ type Subscription struct {
 	cancel func()
 }
 
-func (s Subscription) Close() { s.cancel() }
+func (s Subscription) Close() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+}
+
+type Source interface {
+	Open(context.Context, string) (Subscription, error)
+	Close() error
+}
 
 type Broadcaster struct {
 	mu          sync.Mutex
@@ -47,6 +59,12 @@ func (b *Broadcaster) Subscribe(sessionID string) Subscription {
 		once.Do(func() { b.remove(sessionID, id) })
 	}}
 }
+
+func (b *Broadcaster) Open(_ context.Context, sessionID string) (Subscription, error) {
+	return b.Subscribe(sessionID), nil
+}
+
+func (b *Broadcaster) Close() error { return nil }
 
 func (b *Broadcaster) Publish(sessionID string, event Event) {
 	b.mu.Lock()

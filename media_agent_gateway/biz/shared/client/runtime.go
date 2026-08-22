@@ -5,15 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-
-	sharedsse "media_agent/media_agent_gateway/biz/shared/sse"
 )
-
-type ChatInput struct {
-	Message   string `json:"message"`
-	SessionID string `json:"session_id,omitempty"`
-	APIKey    string `json:"api_key,omitempty"`
-}
 
 type Registry map[string]Runtime
 
@@ -21,8 +13,8 @@ func (r Registry) Get(agentType string) (Runtime, bool) { value, ok := r[agentTy
 
 func NewRuntimeRegistryFromEnvironment() Registry {
 	return Registry{
-		"codex":       &HTTPRuntime{AgentType: "codex", BaseURL: envValue("CODEX_RUNTIME_URL", "http://127.0.0.1:3001"), SSE: &sharedsse.Client{HTTP: &http.Client{}}},
-		"claude-code": &HTTPRuntime{AgentType: "claude-code", BaseURL: envValue("CLAUDE_CODE_RUNTIME_URL", "http://127.0.0.1:3003"), SSE: &sharedsse.Client{HTTP: &http.Client{}}},
+		"codex":       &HTTPRuntime{AgentType: "codex", BaseURL: envValue("CODEX_RUNTIME_URL", "http://127.0.0.1:3001"), HTTP: &http.Client{}},
+		"claude-code": &HTTPRuntime{AgentType: "claude-code", BaseURL: envValue("CLAUDE_CODE_RUNTIME_URL", "http://127.0.0.1:3003"), HTTP: &http.Client{}},
 	}
 }
 
@@ -33,27 +25,64 @@ func envValue(name, fallback string) string {
 	return fallback
 }
 
-// Runtime is the Agent-independent streaming boundary used by workflows.
-// Codex, Goose, Claude, and future clients implement only request differences.
+// Runtime is the Agent-owned Runtime Session API used by Gateway workflows.
 type Runtime interface {
-	Chat(context.Context, ChatInput, func(json.RawMessage) error) error
-	Interrupt(context.Context, string) (bool, error)
+	RegisterRuntimeSession(context.Context, RegisterRuntimeSessionInput) (*RuntimeSession, error)
+	GetRuntimeSession(context.Context, string) (*RuntimeSession, error)
+	SubmitTurn(context.Context, SubmitTurnInput) (*Turn, error)
+	InterruptTurn(context.Context, string, string) (bool, error)
+	ListMessages(context.Context, string, int) ([]Message, error)
+	ReplayEvents(context.Context, string, int64, int) ([]UniversalEvent, error)
 }
 
-type EventPersistenceCapabilities struct {
-	MaxToolResultBytes int
+type RegisterRuntimeSessionInput struct {
+	SessionID      string `json:"session_id"`
+	ContextVersion int64  `json:"context_version"`
+	ContextRef     string `json:"context_ref"`
 }
 
-type EventPersistenceCapabilityProvider interface {
-	EventPersistenceCapabilities() EventPersistenceCapabilities
+type RuntimeSession struct {
+	SessionID        string `json:"session_id"`
+	Status           string `json:"status"`
+	ChatStatus       string `json:"chat_status"`
+	ActiveTurnID     string `json:"active_turn_id"`
+	RuntimeSessionID string `json:"runtime_session_id"`
+	ContextVersion   int64  `json:"context_version"`
 }
 
-func PersistenceCapabilities(runtime Runtime) EventPersistenceCapabilities {
-	if provider, ok := runtime.(EventPersistenceCapabilityProvider); ok {
-		capabilities := provider.EventPersistenceCapabilities()
-		if capabilities.MaxToolResultBytes > 0 {
-			return capabilities
-		}
-	}
-	return EventPersistenceCapabilities{MaxToolResultBytes: 32 * 1024}
+type SubmitTurnInput struct {
+	SessionID      string         `json:"-"`
+	IdempotencyKey string         `json:"idempotency_key"`
+	ContextVersion int64          `json:"context_version"`
+	Input          map[string]any `json:"input"`
+	APIKey         string         `json:"api_key,omitempty"`
+	SessionToken   string         `json:"session_token,omitempty"`
+}
+
+type Turn struct {
+	TurnID          string `json:"turn_id"`
+	SessionID       string `json:"session_id"`
+	IdempotencyKey  string `json:"idempotency_key"`
+	EnqueueSequence int64  `json:"enqueue_sequence"`
+	Status          string `json:"status"`
+}
+
+type Message struct {
+	MessageID  string          `json:"message_id"`
+	SessionID  string          `json:"session_id"`
+	TurnID     string          `json:"turn_id"`
+	Role       string          `json:"role"`
+	ContentRef json.RawMessage `json:"content_ref"`
+	Sequence   int64           `json:"sequence"`
+	CreatedAt  string          `json:"created_at"`
+}
+
+type UniversalEvent struct {
+	EventID   string          `json:"event_id"`
+	SessionID string          `json:"session_id"`
+	TurnID    string          `json:"turn_id"`
+	Sequence  int64           `json:"sequence"`
+	EventType string          `json:"event_type"`
+	Payload   json.RawMessage `json:"payload"`
+	CreatedAt string          `json:"created_at"`
 }

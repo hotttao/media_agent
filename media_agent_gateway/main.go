@@ -65,10 +65,22 @@ func main() {
 		AgentID:     envOr("DEFAULT_AGENT_ID", "codex"),
 	}
 	control := &sharedclient.Control{BaseURL: envOr("MEDIA_CONTROL_URL", "http://127.0.0.1:8007"), ServiceToken: envOr("CONTROL_INTERNAL_TOKEN", ""), Fallback: fallbackControl}
-	sessionService := service.New(store, dal.NewTxRunner(db), control)
-	eventHub := sessionevents.New(256)
-	turnWorkflow := workflow.NewRunTurn(sessionService, sharedclient.NewRuntimeRegistryFromEnvironment(), eventHub)
-	chathandler.Configure(sessionService, turnWorkflow, eventHub)
+	sessionService := service.New(store, control)
+	var eventSource sessionevents.Source = sessionevents.New(256)
+	if redisURL := os.Getenv("MEDIA_AGENTS_REDIS_URL"); redisURL != "" {
+		redisSource, redisErr := sessionevents.NewRedisSource(
+			redisURL,
+			envOr("MEDIA_AGENTS_EVENT_CHANNEL_PREFIX", "media-agents:session-events"),
+			256,
+		)
+		if redisErr != nil {
+			log.Fatalf("init Session Event Bus: %v", redisErr)
+		}
+		eventSource = redisSource
+	}
+	defer eventSource.Close()
+	turnWorkflow := workflow.NewRunTurn(sessionService, sharedclient.NewRuntimeRegistryFromEnvironment())
+	chathandler.Configure(sessionService, turnWorkflow, eventSource)
 
 	h := suite.NewServer()
 	register(h)

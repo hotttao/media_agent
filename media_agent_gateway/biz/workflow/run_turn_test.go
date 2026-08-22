@@ -1,0 +1,186 @@
+package workflow
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"testing"
+	"time"
+
+	domain "media_agent/media_agent_gateway/biz/domain/agent_session"
+	service "media_agent/media_agent_gateway/biz/service/agent_session"
+	"media_agent/media_agent_gateway/biz/shared/client"
+)
+
+type workflowRepo struct{ session *domain.Session }
+
+func (r *workflowRepo) FindLatestUsable(context.Context, string) (*domain.Session, error) {
+	if r.session == nil {
+		return nil, domain.ErrNotFound
+	}
+	return r.session, nil
+}
+func (r *workflowRepo) ListOwned(context.Context, string, string) ([]domain.Session, error) {
+	if r.session == nil {
+		return nil, nil
+	}
+	return []domain.Session{*r.session}, nil
+}
+func (r *workflowRepo) CreateSession(_ context.Context, s *domain.Session) error {
+	r.session = s
+	return nil
+}
+func (r *workflowRepo) GetOwned(_ context.Context, id, user string) (*domain.Session, error) {
+	if r.session == nil || r.session.ID != id {
+		return nil, domain.ErrNotFound
+	}
+	if r.session.UserID != user {
+		return nil, domain.ErrForbidden
+	}
+	return r.session, nil
+}
+func (r *workflowRepo) TransitionStatus(_ context.Context, id, from, to string, at time.Time) error {
+	if r.session == nil || r.session.ID != id || r.session.Status != from {
+		return domain.ErrNotFound
+	}
+	r.session.Status, r.session.UpdatedAt = to, at
+	return nil
+}
+
+type workflowContexts struct{ value service.AgentContext }
+
+func (c workflowContexts) Default(context.Context, string) (service.AgentContext, error) {
+	return c.value, nil
+}
+func (c workflowContexts) Resolve(context.Context, string, string, string) (service.AgentContext, error) {
+	return c.value, nil
+}
+
+type fakeRuntime struct {
+	registerInput                   client.RegisterRuntimeSessionInput
+	registerState                   *client.RuntimeSession
+	registerErr                     error
+	submitInput                     client.SubmitTurnInput
+	state                           client.RuntimeSession
+	interruptSession, interruptTurn string
+	messages                        []client.Message
+	eventPages                      map[int64][]client.UniversalEvent
+	replay                          func(int64) []client.UniversalEvent
+}
+
+func (r *fakeRuntime) RegisterRuntimeSession(_ context.Context, in client.RegisterRuntimeSessionInput) (*client.RuntimeSession, error) {
+	r.registerInput = in
+	return r.registerState, r.registerErr
+}
+func (r *fakeRuntime) GetRuntimeSession(context.Context, string) (*client.RuntimeSession, error) {
+	return &r.state, nil
+}
+func (r *fakeRuntime) SubmitTurn(_ context.Context, in client.SubmitTurnInput) (*client.Turn, error) {
+	r.submitInput = in
+	return &client.Turn{TurnID: "turn", SessionID: in.SessionID, Status: "queued"}, nil
+}
+func (r *fakeRuntime) InterruptTurn(_ context.Context, session, turn string) (bool, error) {
+	r.interruptSession, r.interruptTurn = session, turn
+	return true, nil
+}
+func (r *fakeRuntime) ListMessages(context.Context, string, int) ([]client.Message, error) {
+	return r.messages, nil
+}
+func (r *fakeRuntime) ReplayEvents(_ context.Context, _ string, after int64, _ int) ([]client.UniversalEvent, error) {
+	if r.replay != nil {
+		return r.replay(after), nil
+	}
+	return r.eventPages[after], nil
+}
+
+func newWorkflowFixture(status string) (*RunTurn, *workflowRepo, *fakeRuntime) {
+	session := &domain.Session{ID: "session", UserID: "user", WorkspaceID: "workspace", AgentID: "agent", AgentType: "codex", ContextVersion: 7, Status: status}
+	repo := &workflowRepo{session: session}
+	runtime := &fakeRuntime{registerState: &client.RuntimeSession{SessionID: "session", ContextVersion: 7, Status: "active", ChatStatus: "human"}}
+	contexts := workflowContexts{value: service.AgentContext{WorkspaceID: "workspace", AgentID: "agent", AgentType: "codex", ContextVersion: 7, APIKey: "secret-api-key"}}
+	return NewRunTurn(service.New(repo, contexts), client.Registry{"codex": runtime}), repo, runtime
+}
+
+func TestRegisterActivatesOnlyAfterCompatibleAgentRegistration(t *testing.T) {
+	flow, repo, runtime := newWorkflowFixture(domain.StatusStarting)
+	if _, err := flow.Register(context.Background(), repo.session, "session-token"); err != nil {
+		t.Fatal(err)
+	}
+	if repo.session.Status != domain.StatusActive {
+		t.Fatalf("status=%q", repo.session.Status)
+	}
+	if runtime.registerInput.SessionID != "session" || runtime.registerInput.ContextVersion != 7 || runtime.registerInput.ContextRef != "workspace:workspace/agent:agent/context:7" {
+		t.Fatalf("input=%+v", runtime.registerInput)
+	}
+}
+
+func TestRegisterKeepsStartingForOutcomeUnknownAndFailsDefinitiveConflict(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"transport", errors.New("connection reset"), domain.StatusStarting},
+		{"server", &client.APIError{StatusCode: http.StatusServiceUnavailable}, domain.StatusStarting},
+		{"conflict", &client.APIError{StatusCode: http.StatusConflict}, domain.StatusFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			flow, repo, runtime := newWorkflowFixture(domain.StatusStarting)
+			runtime.registerErr = tc.err
+			runtime.registerState = nil
+			if _, err := flow.Register(context.Background(), repo.session, ""); err == nil {
+				t.Fatal("expected error")
+			}
+			if repo.session.Status != tc.want {
+				t.Fatalf("status=%q, want %q", repo.session.Status, tc.want)
+			}
+		})
+	}
+}
+
+func TestStartDelegatesSecretsAndFactsToAgent(t *testing.T) {
+	flow, repo, runtime := newWorkflowFixture(domain.StatusActive)
+	turn, err := flow.Start(context.Background(), "session", "user", "session-token", "idem", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.TurnID != "turn" || runtime.submitInput.IdempotencyKey != "idem" || runtime.submitInput.APIKey != "secret-api-key" || runtime.submitInput.SessionToken != "session-token" {
+		t.Fatalf("submit=%+v turn=%+v", runtime.submitInput, turn)
+	}
+	encoded, _ := json.Marshal(repo.session)
+	if string(encoded) == "" || contains(string(encoded), "secret") {
+		t.Fatalf("Registration persisted a secret: %s", encoded)
+	}
+}
+
+func TestFailedRegistrationCannotSubmitTurn(t *testing.T) {
+	flow, _, runtime := newWorkflowFixture(domain.StatusFailed)
+	if _, err := flow.Start(context.Background(), "session", "user", "token", "key", "hello"); err != domain.ErrInactive {
+		t.Fatalf("error=%v", err)
+	}
+	if runtime.submitInput.SessionID != "" {
+		t.Fatal("failed Registration reached Agent SubmitTurn")
+	}
+}
+
+func TestInterruptUsesAgentActiveTurn(t *testing.T) {
+	flow, _, runtime := newWorkflowFixture(domain.StatusActive)
+	runtime.state.ActiveTurnID = "turn-active"
+	turn, err := flow.Interrupt(context.Background(), "session", "user", "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.TurnID != "turn-active" || runtime.interruptSession != "session" || runtime.interruptTurn != "turn-active" {
+		t.Fatalf("turn=%+v interrupt=%s/%s", turn, runtime.interruptSession, runtime.interruptTurn)
+	}
+}
+
+func contains(value, needle string) bool {
+	for i := 0; i+len(needle) <= len(value); i++ {
+		if value[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
+}
