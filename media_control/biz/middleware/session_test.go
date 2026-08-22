@@ -18,3 +18,14 @@ func TestInternalUserRequiresTokenAndActingIdentity(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeRoleDefaultsToUser(t *testing.T) {
+	if normalizeRole(" admin ") != "admin" || normalizeRole("system") != "system" {
+		t.Fatal("admin roles were not preserved")
+	}
+	for _, role := range []string{"", "owner", "ADMIN"} {
+		if normalizeRole(role) != "user" {
+			t.Fatalf("role %q did not default to user", role)
+		}
+	}
+}

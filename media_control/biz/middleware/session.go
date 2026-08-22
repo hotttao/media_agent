@@ -13,9 +13,12 @@ import (
 
 type sessionKey struct{}
 type Claims struct {
-	Sub string `json:"sub"`
+	Sub  string `json:"sub"`
+	Role string `json:"role"`
 	jwt.RegisteredClaims
 }
+
+type Principal struct{ UserID, Role string }
 
 var secret []byte
 var serviceToken string
@@ -24,11 +27,17 @@ func Configure(jwtSecret, internalToken string) {
 	secret = []byte(jwtSecret)
 	serviceToken = internalToken
 }
-func UserID(ctx context.Context) string { value, _ := ctx.Value(sessionKey{}).(string); return value }
+func principal(ctx context.Context) Principal {
+	value, _ := ctx.Value(sessionKey{}).(Principal)
+	return value
+}
+func UserID(ctx context.Context) string { return principal(ctx).UserID }
+func Role(ctx context.Context) string   { return principal(ctx).Role }
 func Session() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		if userID, ok := internalUser(string(c.GetHeader("X-Control-Service-Token")), serviceToken, string(c.GetHeader("X-Control-Acting-User-ID"))); ok {
-			c.Next(context.WithValue(ctx, sessionKey{}, userID))
+			role := normalizeRole(string(c.GetHeader("X-Control-Acting-Role")))
+			c.Next(context.WithValue(ctx, sessionKey{}, Principal{UserID: userID, Role: role}))
 			return
 		}
 		claims := &Claims{}
@@ -43,7 +52,30 @@ func Session() app.HandlerFunc {
 			c.Abort()
 			return
 		}
-		c.Next(context.WithValue(ctx, sessionKey{}, claims.Sub))
+		c.Next(context.WithValue(ctx, sessionKey{}, Principal{UserID: claims.Sub, Role: normalizeRole(claims.Role)}))
+	}
+}
+
+func RequireAdmin() app.HandlerFunc {
+	return func(ctx context.Context, c *app.RequestContext) {
+		role := Role(ctx)
+		if role != "admin" && role != "system" {
+			c.JSON(consts.StatusForbidden, map[string]string{"error": "platform administrator role is required"})
+			c.Abort()
+			return
+		}
+		c.Next(ctx)
+	}
+}
+
+func normalizeRole(role string) string {
+	switch strings.TrimSpace(role) {
+	case "admin":
+		return "admin"
+	case "system":
+		return "system"
+	default:
+		return "user"
 	}
 }
 
