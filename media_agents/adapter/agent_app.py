@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from adapter.biz.api.v1.routes.acp.router import build_acp_router
 from adapter.biz.api.v1.routes.runtime_session.router import build_runtime_session_router
+from adapter.biz.api.v1.routes.runtime_workspace.router import build_runtime_workspace_router
 from adapter.biz.dal.db import create_database
 from adapter.biz.dal.repos.runtime_session.repository import SqlRuntimeSessionRepository
 from adapter.biz.dal.session import TxRunner
@@ -20,6 +21,7 @@ from adapter.biz.service.runtime_session.service import RuntimeSessionService
 from adapter.config.config import AdapterConfig
 from adapter.infra.logging import setup_logging
 from adapter.infra.migrations import migrate_database
+from adapter.infra.runtime_workspace import ensure_runtime_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,7 @@ def build_base_app(cfg: AdapterConfig) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         setup_logging()
+        app.state.runtime_workspace = ensure_runtime_workspace(cfg.workspace.dir, cfg.workspace.id)
         engine, session_factory = create_database(cfg.database.url, echo=cfg.database.echo)
         if cfg.database.migrate_on_start:
             await migrate_database(cfg.database.url)
@@ -65,6 +68,7 @@ def build_base_app(cfg: AdapterConfig) -> FastAPI:
     app = FastAPI(lifespan=lifespan)
     _add_common_middleware(app)
     app.include_router(build_runtime_session_router())
+    app.include_router(build_runtime_workspace_router())
     return app
 
 
@@ -85,6 +89,7 @@ def build_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         setup_logging()
+        app.state.runtime_workspace = ensure_runtime_workspace(cfg.workspace.dir, cfg.workspace.id)
         engine, session_factory = create_database(cfg.database.url, echo=cfg.database.echo)
         if cfg.database.migrate_on_start:
             await migrate_database(cfg.database.url)
@@ -121,4 +126,5 @@ def build_app(
     _add_common_middleware(app)
     app.include_router(build_acp_router())
     app.include_router(build_runtime_session_router())
+    app.include_router(build_runtime_workspace_router())
     return app

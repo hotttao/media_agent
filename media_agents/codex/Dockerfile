@@ -23,12 +23,13 @@ WORKDIR /app/media_agents
 COPY . ./
 RUN uv sync --frozen --package codex --no-dev
 
-RUN mkdir -p /root/.codex /workspace
+RUN mkdir -p /workspace/.home/.codex
 
 ENV PATH="/app/media_agents/.venv/bin:${PATH}" \
     PYTHONPATH="/app/media_agents" \
     UV_DEFAULT_INDEX="https://mirrors.aliyun.com/pypi/simple/" \
-    CODEX_CONFIG_DIR="/root/.codex" \
+    HOME="/workspace/.home" \
+    CODEX_CONFIG_DIR="/workspace/.home/.codex" \
     WORKSPACE_DIR="/workspace" \
     MOCK_MEDIA_CONTROL="true" \
     CODEX_AUX_PROCESSES="false" \

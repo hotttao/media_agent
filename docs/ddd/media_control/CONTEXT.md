@@ -12,6 +12,10 @@ _禁用替代词_：Tenant、Project、Environment
 可承载 Agent Runtime 的执行环境定义，包含连接、容量和可用状态。
 _禁用替代词_：Workspace、Runner
 
+**Workspace Runtime Directory（工作空间运行目录）**:
+由单个 Workspace 独占、跨 Agent 容器重启保留的文件状态边界；同一 Workspace 的 Agent Runtime 在容器内统一通过 `/workspace` 访问。
+_禁用替代词_：Shared Volume、Agent Session Store、UI Profile
+
 **Placement（运行放置）**:
 Workspace 到 Runtime Environment 的当前调度结果。
 _禁用替代词_：Deployment、Assignment

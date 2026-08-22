@@ -14,5 +14,5 @@ capabilities:
 codex:
   program: ${oc.env:CODEX_ACP_BIN,codex-acp}
   initial_agent_mode: ${oc.env:CODEX_INITIAL_AGENT_MODE,agent-full-access}
-  config_dir: ${oc.env:CODEX_CONFIG_DIR,/root/.codex}
+  config_dir: ${oc.env:CODEX_CONFIG_DIR,/workspace/.home/.codex}
   disable_response_storage: true

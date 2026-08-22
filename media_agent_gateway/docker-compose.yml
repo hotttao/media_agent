@@ -5,9 +5,11 @@ services:
       dockerfile: codex/Dockerfile
     image: media-agent-codex:local
     environment:
-      PORT: "3001"
-      CODEX_CONFIG_DIR: /root/.codex
+      PORT: "${CODEX_AGENT_PORT:-3001}"
+      HOME: /workspace/.home
+      CODEX_CONFIG_DIR: /workspace/.home/.codex
       CODEX_AUTH_SOURCE: /run/secrets/codex-auth.json
+      RUNTIME_WORKSPACE_ID: ${RUNTIME_WORKSPACE_ID:-local}
       WORKSPACE_DIR: /workspace
       MOCK_MEDIA_CONTROL: "true"
       CODEX_AUX_PROCESSES: "false"
@@ -15,10 +17,10 @@ services:
       ALL_PROXY: ${CODEX_DOCKER_PROXY:-socks5://127.0.0.1:7891}
     volumes:
       - ${CODEX_AUTH_FILE:-/home/tao/.codex/auth.json}:/run/secrets/codex-auth.json:ro
-      - codex_workspace:/workspace
+      - ${WORKSPACE_ROOT:-/workspace}/${RUNTIME_WORKSPACE_ID:-local}:/workspace
     network_mode: host
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3001/health', timeout=2)"]
+      test: ["CMD-SHELL", "python -c \"import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ['PORT'] + '/health', timeout=2)\""]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -48,6 +50,3 @@ services:
       codex_agent:
         condition: service_healthy
     restart: unless-stopped
-
-volumes:
-  codex_workspace:

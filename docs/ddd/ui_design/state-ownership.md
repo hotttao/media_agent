@@ -3,6 +3,7 @@
 | 状态 | 所有者 | 持久化 |
 |:---|:---|:---|
 | Workspace 名称、Agent 类型、是否配置 API Key | `media_control` | 服务端数据库 |
+| Workspace Runtime Directory 与 mount identity | Runtime Environment / Runtime Controller | 服务端基础设施；UI 不读取路径、不持久化副本 |
 | API Key 明文 | Workspace 设置表单到服务端的单向命令 | 不在浏览器持久化、不回显 |
 | Session、消息和 turn | `media_agent_gateway` | 服务端数据库/运行时 |
 | Session Chat Status | `media_agent_gateway` | 服务端数据库；UI 只读取 human/agent 投影判断后台 Turn 是否仍在运行 |

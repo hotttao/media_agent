@@ -14,6 +14,7 @@ from adapter.biz.domain.acp_adapter import AcpServer
 from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks
 from adapter.biz.service.runtime_session.service import RuntimeSessionService
 from adapter.config.config import AdapterConfig
+from adapter.infra.runtime_workspace import RuntimeWorkspaceIdentity
 
 
 def get_adapter_config(request: Request) -> AdapterConfig:
@@ -34,7 +35,12 @@ def get_runtime_session_service(request: Request) -> RuntimeSessionService:
     return cast(RuntimeSessionService, request.app.state.runtime_session_service)
 
 
+def get_runtime_workspace(request: Request) -> RuntimeWorkspaceIdentity:
+    return cast(RuntimeWorkspaceIdentity, request.app.state.runtime_workspace)
+
+
 AdapterConfigDep = Annotated[AdapterConfig, Depends(get_adapter_config)]
 AcpServerDep = Annotated[AcpServer, Depends(get_acp_server)]
 AgentHooksDep = Annotated[AgentHooks, Depends(get_hooks)]
 RuntimeSessionServiceDep = Annotated[RuntimeSessionService, Depends(get_runtime_session_service)]
+RuntimeWorkspaceDep = Annotated[RuntimeWorkspaceIdentity, Depends(get_runtime_workspace)]
