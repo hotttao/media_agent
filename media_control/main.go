@@ -16,6 +16,7 @@ import (
 	providerrepo "media_agent/media_control/biz/dal/repo/provider"
 	runtimerepo "media_agent/media_control/biz/dal/repo/runtime_environment"
 	schedulerepo "media_agent/media_control/biz/dal/repo/schedule"
+	sharerepo "media_agent/media_control/biz/dal/repo/share_metadata"
 	skillrepo "media_agent/media_control/biz/dal/repo/skill"
 	teamworkrepo "media_agent/media_control/biz/dal/repo/teamwork"
 	repo "media_agent/media_control/biz/dal/repo/workspace"
@@ -27,6 +28,7 @@ import (
 	providerhandler "media_agent/media_control/biz/handler/provider"
 	runtimehandler "media_agent/media_control/biz/handler/runtime_environment"
 	schedulehandler "media_agent/media_control/biz/handler/schedule"
+	sharehandler "media_agent/media_control/biz/handler/share_metadata"
 	skillhandler "media_agent/media_control/biz/handler/skill"
 	teamworkhandler "media_agent/media_control/biz/handler/teamwork"
 	workspacehandler "media_agent/media_control/biz/handler/workspace"
@@ -39,6 +41,7 @@ import (
 	providerservice "media_agent/media_control/biz/service/provider"
 	runtimeservice "media_agent/media_control/biz/service/runtime_environment"
 	scheduleservice "media_agent/media_control/biz/service/schedule"
+	shareservice "media_agent/media_control/biz/service/share_metadata"
 	skillservice "media_agent/media_control/biz/service/skill"
 	teamworkservice "media_agent/media_control/biz/service/teamwork"
 	workspaceservice "media_agent/media_control/biz/service/workspace"
@@ -100,6 +103,7 @@ func main() {
 	runtimehandler.Configure(runtimeservice.New(runtimerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	teamworkhandler.Configure(teamworkservice.New(teamworkrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	metadatahandler.Configure(metadataservice.New(metadaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))
+	sharehandler.Configure(shareservice.New(sharerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 
 	h := suite.NewServer()
 	register(h)
