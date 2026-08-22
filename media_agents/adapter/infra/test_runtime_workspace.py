@@ -1,11 +1,12 @@
 import json
+from pathlib import Path
 
 import pytest
 
 from adapter.infra.runtime_workspace import RuntimeWorkspaceError, ensure_runtime_workspace
 
 
-def test_runtime_workspace_reuses_identity_across_restart(tmp_path) -> None:
+def test_runtime_workspace_reuses_identity_across_restart(tmp_path: Path) -> None:
     first = ensure_runtime_workspace(tmp_path, "workspace-1")
     second = ensure_runtime_workspace(tmp_path, "workspace-1")
 
@@ -14,14 +15,14 @@ def test_runtime_workspace_reuses_identity_across_restart(tmp_path) -> None:
     assert first.mount_path == str(tmp_path.resolve())
 
 
-def test_runtime_workspace_rejects_mount_owned_by_another_workspace(tmp_path) -> None:
+def test_runtime_workspace_rejects_mount_owned_by_another_workspace(tmp_path: Path) -> None:
     ensure_runtime_workspace(tmp_path, "workspace-1")
 
     with pytest.raises(RuntimeWorkspaceError, match="identity conflict"):
         ensure_runtime_workspace(tmp_path, "workspace-2")
 
 
-def test_runtime_workspace_rejects_corrupt_identity(tmp_path) -> None:
+def test_runtime_workspace_rejects_corrupt_identity(tmp_path: Path) -> None:
     metadata = tmp_path / ".media-agent"
     metadata.mkdir()
     (metadata / "workspace.json").write_text(json.dumps({"version": 1}), encoding="utf-8")
