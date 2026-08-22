@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package media_control.schedule;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/schedule";
+
+service AgentScheduleService {
+  rpc CreateSchedule(CreateScheduleRequest) returns (ScheduleResponse) {
+    option (api.post) = "/api/v1/schedules";
+    option (google.api.http) = { post: "/api/v1/schedules" body: "*" };
+  }
+  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse) {
+    option (api.get) = "/api/v1/schedules";
+    option (google.api.http) = { get: "/api/v1/schedules" };
+  }
+  rpc GetSchedule(GetScheduleRequest) returns (ScheduleResponse) {
+    option (api.get) = "/api/v1/schedules/:schedule_id";
+    option (google.api.http) = { get: "/api/v1/schedules/{schedule_id}" };
+  }
+  rpc UpdateSchedule(UpdateScheduleRequest) returns (ScheduleResponse) {
+    option (api.put) = "/api/v1/schedules/:schedule_id";
+    option (google.api.http) = { put: "/api/v1/schedules/{schedule_id}" body: "*" };
+  }
+  rpc DeleteSchedule(DeleteScheduleRequest) returns (ScheduleResponse) {
+    option (api.post) = "/api/v1/schedules/:schedule_id/delete";
+    option (google.api.http) = { post: "/api/v1/schedules/{schedule_id}/delete" body: "*" };
+  }
+  rpc RunNow(RunNowRequest) returns (TriggerResponse) {
+    option (api.post) = "/api/v1/schedules/:schedule_id/run-now";
+    option (google.api.http) = { post: "/api/v1/schedules/{schedule_id}/run-now" body: "*" };
+  }
+}
+
+message CreateScheduleRequest {
+  string workspace_id = 1 [(api.body) = "workspace_id"];
+  string agent_config_id = 2 [(api.body) = "agent_config_id"];
+  string rule = 3 [(api.body) = "rule"];
+  string timezone = 4 [(api.body) = "timezone"];
+}
+message ListSchedulesRequest { string workspace_id = 1 [(api.query) = "workspace_id"]; }
+message GetScheduleRequest { string schedule_id = 1 [(api.path) = "schedule_id"]; }
+message UpdateScheduleRequest {
+  string schedule_id = 1 [(api.path) = "schedule_id"];
+  string rule = 2 [(api.body) = "rule"];
+  string timezone = 3 [(api.body) = "timezone"];
+  string status = 4 [(api.body) = "status"];
+  int64 expected_version = 5 [(api.body) = "expected_version"];
+}
+message DeleteScheduleRequest { string schedule_id = 1 [(api.path) = "schedule_id"]; int64 expected_version = 2 [(api.body) = "expected_version"]; }
+message RunNowRequest { string schedule_id = 1 [(api.path) = "schedule_id"]; }
+message ScheduleResponse {
+  string id = 1; string workspace_id = 2; string requested_by = 3; string agent_config_id = 4;
+  string rule = 5; string timezone = 6; string status = 7; int64 next_run_at = 8;
+  int64 version = 9; int64 created_at = 10; int64 updated_at = 11;
+}
+message ListSchedulesResponse { repeated ScheduleResponse schedules = 1; }
+message TriggerResponse { string id = 1; string schedule_id = 2; int64 due_at = 3; string status = 4; int64 created_at = 5; }
