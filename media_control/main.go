@@ -14,6 +14,7 @@ import (
 	memoryrepo "media_agent/media_control/biz/dal/repo/memory_store"
 	promptrepo "media_agent/media_control/biz/dal/repo/prompt"
 	providerrepo "media_agent/media_control/biz/dal/repo/provider"
+	runtimerepo "media_agent/media_control/biz/dal/repo/runtime_environment"
 	schedulerepo "media_agent/media_control/biz/dal/repo/schedule"
 	skillrepo "media_agent/media_control/biz/dal/repo/skill"
 	repo "media_agent/media_control/biz/dal/repo/workspace"
@@ -22,6 +23,7 @@ import (
 	memoryhandler "media_agent/media_control/biz/handler/memory_store"
 	prompthandler "media_agent/media_control/biz/handler/prompt"
 	providerhandler "media_agent/media_control/biz/handler/provider"
+	runtimehandler "media_agent/media_control/biz/handler/runtime_environment"
 	schedulehandler "media_agent/media_control/biz/handler/schedule"
 	skillhandler "media_agent/media_control/biz/handler/skill"
 	workspacehandler "media_agent/media_control/biz/handler/workspace"
@@ -31,6 +33,7 @@ import (
 	memoryservice "media_agent/media_control/biz/service/memory_store"
 	promptservice "media_agent/media_control/biz/service/prompt"
 	providerservice "media_agent/media_control/biz/service/provider"
+	runtimeservice "media_agent/media_control/biz/service/runtime_environment"
 	scheduleservice "media_agent/media_control/biz/service/schedule"
 	skillservice "media_agent/media_control/biz/service/skill"
 	workspaceservice "media_agent/media_control/biz/service/workspace"
@@ -88,6 +91,7 @@ func main() {
 	credentialhandler.Configure(credentialservice.New(credentialrepo.New(db), dal.NewTxRunner(db), repo.New(db), providerrepo.New(db)))
 	memoryhandler.Configure(memoryservice.New(memoryrepo.New(db), dal.NewTxRunner(db), repo.New(db), credentialrepo.New(db)))
 	schedulehandler.Configure(scheduleservice.New(schedulerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
+	runtimehandler.Configure(runtimeservice.New(runtimerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 
 	h := suite.NewServer()
 	register(h)
