@@ -1,0 +1,15 @@
+syntax = "proto3";
+package media_control.environment_grant;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_control/environment_grant";
+service EnvironmentGrantService {
+ rpc CreateGrant(CreateGrantRequest) returns (GrantResponse){option(api.post)="/api/v1/runtime-environments/:environment_id/grants";option(google.api.http)={post:"/api/v1/runtime-environments/{environment_id}/grants" body:"*"};}
+ rpc ListGrants(ListGrantsRequest) returns (ListGrantsResponse){option(api.get)="/api/v1/runtime-environments/:environment_id/grants";option(google.api.http)={get:"/api/v1/runtime-environments/{environment_id}/grants"};}
+ rpc RevokeGrant(RevokeGrantRequest) returns (GrantResponse){option(api.post)="/api/v1/runtime-environments/:environment_id/grants/:grant_id/revoke";option(google.api.http)={post:"/api/v1/runtime-environments/{environment_id}/grants/{grant_id}/revoke" body:"*"};}
+}
+message CreateGrantRequest{string environment_id=1[(api.path)="environment_id"];string subject_id=2[(api.body)="subject_id"];string subject_type=3[(api.body)="subject_type"];string permission=4[(api.body)="permission"];}
+message ListGrantsRequest{string environment_id=1[(api.path)="environment_id"];}
+message RevokeGrantRequest{string environment_id=1[(api.path)="environment_id"];string grant_id=2[(api.path)="grant_id"];}
+message GrantResponse{string id=1;string environment_id=2;string subject_id=3;string subject_type=4;string permission=5;string status=6;int64 created_at=7;int64 revoked_at=8;}
+message ListGrantsResponse{repeated GrantResponse grants=1;}
