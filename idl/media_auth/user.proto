@@ -7,7 +7,7 @@ option go_package = "media_auth/user";
 // UserService -- 用户管理（admin 鉴权：session + role==admin）。
 // ListUsers 分页+搜索（无 analytics，media_auth 不 own workspaces/sessions）。
 // CreateUser 建 user/admin（argon2 hash）。
-// DeleteUser 删 user（FK CASCADE 清 service_tokens/identities/team_members/oauth/mcp）。
+// DeleteUser 不可逆软删除 user，并可靠撤销认证凭据；历史关系保留。
 // ChangeUserPassword admin 改他人密码（仅本地密码账号）。
 service UserService {
   rpc ListUsers(ListUsersRequest) returns(ListUsersResponse) {
@@ -68,4 +68,8 @@ message ApiUser {
   string auth_source = 6;    // password | ldap | wecom
   string created_at = 7;
   optional string last_login_at = 8;
+  string status = 9;          // active | disabled | deleted
+  int64 auth_version = 10;
+  optional string deleted_at = 11;
+  optional string deleted_by = 12;
 }

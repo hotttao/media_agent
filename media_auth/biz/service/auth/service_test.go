@@ -94,14 +94,15 @@ func (r *fakeRepo) CreateUser(_ context.Context, username, displayName, password
 func (r *fakeRepo) ListUsers(_ context.Context, q, sort, order string, page, pageSize int) ([]domainauth.User, int, error) {
 	return nil, 0, nil
 }
-func (r *fakeRepo) DeleteUser(_ context.Context, id string) error {
+func (r *fakeRepo) SoftDeleteUser(_ context.Context, id, deletedBy string) (domainauth.User, error) {
 	if u, ok := r.users[id]; ok {
-		delete(r.users, id)
-		delete(r.byName, u.Username)
-		return nil
+		u.Status, u.AuthVersion, u.DeletedBy = domainauth.UserStatusDeleted, u.AuthVersion+1, deletedBy
+		r.users[id] = u
+		return u, nil
 	}
-	return domainauth.ErrUserNotFound
+	return domainauth.User{}, domainauth.ErrUserNotFound
 }
+func (r *fakeRepo) CountActiveAdmins(context.Context) (int, error) { return 2, nil }
 
 type fakeSigner struct{}
 

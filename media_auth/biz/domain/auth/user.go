@@ -20,7 +20,20 @@ type User struct {
 	AutoEvolution   bool
 	CreatedAt       time.Time
 	LastLoginAt     time.Time // 零值 = 从未登录
+	Status          string
+	AuthVersion     int64
+	DisabledAt      *time.Time
+	DeletedAt       *time.Time
+	DeletedBy       string
 }
+
+const (
+	UserStatusActive   = "active"
+	UserStatusDisabled = "disabled"
+	UserStatusDeleted  = "deleted"
+)
+
+func (u User) IsActive() bool { return u.Status == "" || u.Status == UserStatusActive }
 
 // HasPassword 是否有本地密码（决定 auth_source 与能否改密）。
 func (u User) HasPassword() bool { return u.PasswordHash != "" }
@@ -79,9 +92,10 @@ type UserRepo interface {
 	// q 匹配 username/display_name/email（ILIKE）；sort ∈ {created, name, last_active}；
 	// order ∈ {asc, desc}；page/pageSize 分页。返回 (users, total)。
 	ListUsers(ctx context.Context, q, sort, order string, page, pageSize int) ([]User, int, error)
-	// DeleteUser 按 id 删 user（FK CASCADE 清 service_tokens/user_identities/team_members/
-	// oauth_*/mcp_oauth_tokens）。0 行返回 ErrUserNotFound。
-	DeleteUser(ctx context.Context, id string) error
+	// SoftDeleteUser 把 active 用户置为不可逆 deleted，并递增 auth_version。
+	SoftDeleteUser(ctx context.Context, id, deletedBy string) (User, error)
+	// CountActiveAdmins 统计仍可用的平台管理员，用于保护最后一个管理员。
+	CountActiveAdmins(ctx context.Context) (int, error)
 	// SetPassword 更新 password_hash（改密）。
 	SetPassword(ctx context.Context, id, passwordHash string) error
 	// SetDefaultPrompt 更新 default_prompt_id（promptID 空串=清除）。
@@ -90,6 +104,22 @@ type UserRepo interface {
 	SetAutoEvolution(ctx context.Context, id string, autoEvolution bool) error
 	// UpdateLastLogin 更新 last_login_at = now（本地登录成功后）。
 	UpdateLastLogin(ctx context.Context, id string) error
+}
+
+// AccessRevocationEvent 是软删除事务写出的访问撤销事件。
+type AccessRevocationEvent struct {
+	ID          string
+	UserID      string
+	AuthVersion int64
+	Attempts    int
+}
+
+// AccessRevocationOutbox 保存并驱动本服务内的可靠凭据撤销。
+type AccessRevocationOutbox interface {
+	Enqueue(ctx context.Context, event AccessRevocationEvent) error
+	ClaimPending(ctx context.Context, limit int) ([]AccessRevocationEvent, error)
+	MarkDelivered(ctx context.Context, id string) error
+	MarkFailed(ctx context.Context, id, message string) error
 }
 
 // domain 错误。repo 实现用 errors.Is 透传，service/handler 据此映射 HTTP 状态。

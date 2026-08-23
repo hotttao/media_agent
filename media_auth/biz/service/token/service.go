@@ -56,7 +56,11 @@ func (s *Service) VerifyToken(ctx context.Context, plaintext string) (VerifyResu
 	}
 	// 取 user display_name 作 name 字段（缺失则空）。
 	name := ""
-	if u, err := s.userRepo.FindByID(ctx, t.CreatedBy); err == nil {
+	u, userErr := s.userRepo.FindByID(ctx, t.CreatedBy)
+	if userErr != nil || !u.IsActive() {
+		return VerifyResult{Active: false}, nil
+	}
+	if userErr == nil {
 		name = u.DisplayName
 	}
 	return VerifyResult{
@@ -67,4 +71,10 @@ func (s *Service) VerifyToken(ctx context.Context, plaintext string) (VerifyResu
 		Role:      "user",
 		TokenType: "service_token",
 	}, nil
+}
+
+// ValidateSession 让旧 JWT 在用户软删除或 auth_version 递增后立即失效。
+func (s *Service) ValidateSession(ctx context.Context, sess domainauth.Session) bool {
+	u, err := s.userRepo.FindByID(ctx, sess.Sub)
+	return err == nil && u.IsActive() && u.AuthVersion == sess.AuthVersion
 }

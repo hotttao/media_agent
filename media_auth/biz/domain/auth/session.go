@@ -12,12 +12,13 @@ import "time"
 // 与 control-plane JwtPayload 对齐：sub=db user id, username, name(display_name), email, role, exp。
 // 不可变；续期由 SessionSigner.Renew 产出新 token，不改本对象。
 type Session struct {
-	Sub      string    // db user id
-	Username string    // 登录账号名
-	Name     string    // 展示名（display_name）
-	Email    string    // 可空
-	Role     string    // user | admin | system
-	Exp      time.Time // 过期时间
+	Sub         string    // db user id
+	Username    string    // 登录账号名
+	Name        string    // 展示名（display_name）
+	Email       string    // 可空
+	Role        string    // user | admin | system
+	AuthVersion int64     // 凭据版本；用户撤销访问时递增
+	Exp         time.Time // 过期时间
 }
 
 // SessionSigner 是 session JWT 的签发/验签接口（HS256）。

@@ -85,6 +85,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 
 	// repo + service + handler 回填。
 	userRepo := dalauth.NewRepo(db)
+	accessOutbox := dalauth.NewAccessRevocationOutbox(db)
 	authSvc := authservice.NewService(userRepo, signer, ldapCli)
 	authhandler.AuthSvc = authSvc
 
@@ -109,10 +110,6 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	// internal token service：复用 service_token TokenRepo + auth UserRepo（不新建 domain）。
 	tokenSvc := tokenservice.NewService(stRepo, userRepo)
 	tokenhandler.TokenSvc = tokenSvc
-
-	// user 管理服务（admin）：复用 auth UserRepo。
-	userSvc := userservice.NewService(userRepo)
-	userhandler.UserSvc = userSvc
 
 	// 重新装配 session middleware（支持 cookie JWT + Bearer service token）。
 	SessionMiddleware = middleware.SessionWithToken(signer, tokenSvc)
@@ -150,6 +147,12 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	mcpoauthhandler.McpOAuthSvc = mcpSvc
 	mcpFlow := workflow.NewMcpOAuthConnect(mcpSvc)
 	mcpoauthhandler.McpOAuthFlow = mcpFlow
+
+	// 用户软删除：提交 User + Outbox，worker 最终一致撤销各认证域凭据。
+	userDeleteFlow := workflow.NewUserSoftDelete(userRepo, accessOutbox, stRepo, oauthRepo, mcpRepo, txRunner)
+	userSvc := userservice.NewService(userRepo, userDeleteFlow)
+	userhandler.UserSvc = userSvc
+	go userDeleteFlow.Run(context.Background())
 }
 
 // startOAuthCleanup 每小时删过期 oauth authorization_code / refresh_token（对齐 control-plane setInterval）。

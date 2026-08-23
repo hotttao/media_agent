@@ -95,6 +95,8 @@ type McpRepo interface {
 	RecordRefreshFailure(ctx context.Context, userID, serverOrigin string) (failCount int, firstFailAt *time.Time, err error)
 	// DeleteToken 删 token。
 	DeleteToken(ctx context.Context, userID, serverOrigin string) error
+	// DeleteTokensForUser 删除用户的全部 MCP OAuth token；重复调用幂等。
+	DeleteTokensForUser(ctx context.Context, userID string) error
 }
 
 // domain 错误。

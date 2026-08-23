@@ -131,11 +131,12 @@ func (s *Service) Login(ctx context.Context, cmd LoginCommand) (ApiUser, string,
 
 	// 5. 签 session。
 	sess := domainauth.Session{
-		Sub:      u.ID,
-		Username: u.Username,
-		Name:     u.DisplayName,
-		Email:    u.Email,
-		Role:     u.Role,
+		Sub:         u.ID,
+		Username:    u.Username,
+		Name:        u.DisplayName,
+		Email:       u.Email,
+		Role:        u.Role,
+		AuthVersion: u.AuthVersion,
 	}
 	token, err := s.signer.Sign(sess)
 	if err != nil {
@@ -181,11 +182,12 @@ func (s *Service) Register(ctx context.Context, cmd RegisterCommand) (ApiUser, s
 	}
 	// 签 session（自动登录）。
 	sess := domainauth.Session{
-		Sub:      u.ID,
-		Username: u.Username,
-		Name:     u.DisplayName,
-		Email:    u.Email,
-		Role:     u.Role,
+		Sub:         u.ID,
+		Username:    u.Username,
+		Name:        u.DisplayName,
+		Email:       u.Email,
+		Role:        u.Role,
+		AuthVersion: u.AuthVersion,
 	}
 	token, err := s.signer.Sign(sess)
 	if err != nil {

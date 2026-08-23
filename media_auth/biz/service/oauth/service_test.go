@@ -125,7 +125,8 @@ func (r *fakeRepo) GetUserByID(_ context.Context, id string) (domainoauth.User, 
 	}
 	return u, nil
 }
-func (r *fakeRepo) CleanupExpired(context.Context) error { return nil }
+func (r *fakeRepo) CleanupExpired(context.Context) error                { return nil }
+func (r *fakeRepo) RevokeUserCredentials(context.Context, string) error { return nil }
 
 // ── helpers ──────────────────────────────────────────────────────────
 
@@ -400,6 +401,12 @@ func TestGetUserInfo(t *testing.T) {
 	_, err = svc.GetUserInfo(context.Background(), "not-a-jwt")
 	if !oauthErrIs(err, "invalid_token") {
 		t.Errorf("bad token: want invalid_token, got %v", err)
+	}
+	// 用户进入 deleted 后，同一个已签 access token 立即失效。
+	repo.seedUser(domainoauth.User{ID: "u1", Username: "alice", Status: "deleted", AuthVersion: 1})
+	_, err = svc.GetUserInfo(context.Background(), access)
+	if !oauthErrIs(err, "invalid_token") {
+		t.Errorf("revoked user: want invalid_token, got %v", err)
 	}
 }
 

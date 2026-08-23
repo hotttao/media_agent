@@ -348,6 +348,10 @@ func (s *Service) GetUserInfo(ctx context.Context, accessToken string) (UserInfo
 	if err != nil {
 		return UserInfo{}, oauthErr("invalid_token", "", 401)
 	}
+	u, err := s.repo.GetUserByID(ctx, sess.Sub)
+	if err != nil || (u.Status != "" && u.Status != "active") || u.AuthVersion != sess.AuthVersion {
+		return UserInfo{}, oauthErr("invalid_token", "", 401)
+	}
 	return UserInfo{
 		Sub:      sess.Sub,
 		Username: sess.Username,
@@ -474,12 +478,16 @@ func toClientView(c domainoauth.Client) ClientView {
 
 // issueAccess 签发 access token（HS256 JWT，accessTTL）。
 func (s *Service) issueAccess(u domainoauth.User) (string, error) {
+	if u.Status != "" && u.Status != "active" {
+		return "", oauthErr("invalid_grant", "user access revoked", 400)
+	}
 	return s.signer.IssueAccessToken(domainauth.Session{
-		Sub:      u.ID,
-		Username: u.Username,
-		Name:     u.DisplayName,
-		Email:    u.Email,
-		Role:     u.Role,
+		Sub:         u.ID,
+		Username:    u.Username,
+		Name:        u.DisplayName,
+		Email:       u.Email,
+		Role:        u.Role,
+		AuthVersion: u.AuthVersion,
 	})
 }
 

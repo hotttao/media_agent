@@ -74,16 +74,24 @@ func (r *fakeRepo) ListUsers(_ context.Context, q, sort, order string, page, pag
 	}
 	return out, len(out), nil
 }
-func (r *fakeRepo) DeleteUser(_ context.Context, id string) error {
+func (r *fakeRepo) SoftDeleteUser(_ context.Context, id, deletedBy string) (domainauth.User, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	u, ok := r.users[id]
 	if !ok {
-		return domainauth.ErrUserNotFound
+		return domainauth.User{}, domainauth.ErrUserNotFound
 	}
-	delete(r.users, id)
-	delete(r.byName, u.Username)
-	return nil
+	u.Status, u.AuthVersion, u.DeletedBy = domainauth.UserStatusDeleted, u.AuthVersion+1, deletedBy
+	r.users[id] = u
+	return u, nil
+}
+func (r *fakeRepo) CountActiveAdmins(context.Context) (int, error) { return 2, nil }
+
+type fakeDeleter struct{ repo *fakeRepo }
+
+func (d fakeDeleter) Delete(ctx context.Context, currentUserID, targetID string) error {
+	_, err := d.repo.SoftDeleteUser(ctx, targetID, currentUserID)
+	return err
 }
 func (r *fakeRepo) SetPassword(_ context.Context, id, passwordHash string) error {
 	r.mu.Lock()
@@ -197,7 +205,8 @@ func TestCreateUser_UsernameTaken(t *testing.T) {
 }
 
 func TestDeleteUser_CannotDeleteSelf(t *testing.T) {
-	svc := NewService(newFakeRepo(domainauth.User{ID: "u1", Username: "alice", Role: "admin"}))
+	repo := newFakeRepo(domainauth.User{ID: "u1", Username: "alice", Role: "admin"})
+	svc := NewService(repo, fakeDeleter{repo})
 	err := svc.DeleteUser(context.Background(), "admin", "u1", "u1")
 	if err == nil {
 		t.Errorf("delete self: want error")
@@ -209,19 +218,21 @@ func TestDeleteUser_Success(t *testing.T) {
 		domainauth.User{ID: "u1", Username: "alice", Role: "admin"},
 		domainauth.User{ID: "u2", Username: "bob", Role: "user"},
 	)
-	svc := NewService(repo)
+	svc := NewService(repo, fakeDeleter{repo})
 	// u1 (admin) 删 u2（非自己）。
 	if err := svc.DeleteUser(context.Background(), "admin", "u1", "u2"); err != nil {
 		t.Errorf("delete: %v", err)
 	}
-	// u2 应已删。
-	if _, err := repo.FindByID(context.Background(), "u2"); !errors.Is(err, domainauth.ErrUserNotFound) {
-		t.Errorf("after delete: want ErrUserNotFound, got %v", err)
+	// u2 应保留且进入 deleted 终态。
+	u2, err := repo.FindByID(context.Background(), "u2")
+	if err != nil || u2.Status != domainauth.UserStatusDeleted {
+		t.Errorf("after delete: got user=%+v err=%v", u2, err)
 	}
 }
 
 func TestDeleteUser_NotFound(t *testing.T) {
-	svc := NewService(newFakeRepo())
+	repo := newFakeRepo()
+	svc := NewService(repo, fakeDeleter{repo})
 	err := svc.DeleteUser(context.Background(), "admin", "u1", "nope")
 	if !errors.Is(err, ErrUserNotFound) {
 		t.Errorf("want ErrUserNotFound, got %v", err)

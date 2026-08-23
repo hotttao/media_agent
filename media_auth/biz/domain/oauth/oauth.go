@@ -62,6 +62,8 @@ type User struct {
 	DisplayName string
 	Email       string // 空串 = NULL
 	Role        string
+	Status      string
+	AuthVersion int64
 }
 
 // OAuthRepo 是 oauth 领域的仓储接口（由 dal/repo/oauth 实现）。
@@ -89,6 +91,8 @@ type OAuthRepo interface {
 	GetUserByID(ctx context.Context, id string) (User, error)
 	// CleanupExpired 删过期 auth_code + refresh_token（每小时调一次）。
 	CleanupExpired(ctx context.Context) error
+	// RevokeUserCredentials 删除用户尚未消费的授权码与 refresh token；重复调用幂等。
+	RevokeUserCredentials(ctx context.Context, userID string) error
 }
 
 // domain 错误。

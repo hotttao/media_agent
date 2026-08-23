@@ -148,6 +148,12 @@ func (r *repo) EnsurePlatformToken(ctx context.Context, userID string) (string, 
 	return r.GetPlatformToken(ctx, userID)
 }
 
+func (r *repo) RevokeAllForUser(ctx context.Context, userID string) error {
+	return dal.FromContext(ctx, r.db).Model(&model.ServiceToken{}).
+		Where("created_by = ? AND revoked_at IS NULL", userID).
+		Update("revoked_at", time.Now()).Error
+}
+
 // ── row → domain 转换 ────────────────────────────────────────────────
 
 func rowToDomain(row *model.ServiceToken) domainst.Token {

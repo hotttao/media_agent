@@ -130,6 +130,8 @@ func toApiUser(v userservice.UserView) *userpb.ApiUser {
 		Role:        v.Role,
 		AuthSource:  v.AuthSource,
 		CreatedAt:   v.CreatedAt,
+		Status:      v.Status,
+		AuthVersion: v.AuthVersion,
 	}
 	if v.Email != "" {
 		e := v.Email
@@ -137,6 +139,12 @@ func toApiUser(v userservice.UserView) *userpb.ApiUser {
 	}
 	if v.LastLoginAt != "" {
 		out.LastLoginAt = &v.LastLoginAt
+	}
+	if v.DeletedAt != "" {
+		out.DeletedAt = &v.DeletedAt
+	}
+	if v.DeletedBy != "" {
+		out.DeletedBy = &v.DeletedBy
 	}
 	return out
 }

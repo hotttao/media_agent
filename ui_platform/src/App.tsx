@@ -15,6 +15,7 @@ import { LoginPage } from "@/pages/auth/login";
 import { RegisterPage } from "@/pages/auth/register";
 import { ChatPage } from "@/pages/chat";
 import { OAuthAuthorizePage } from "@/pages/oauth/authorize";
+import { UsersListPage } from "@/pages/users/list";
 
 export default function App() {
   return (
@@ -26,6 +27,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <OAuthAuthorizePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute>
+            <UsersListPage />
           </ProtectedRoute>
         }
       />

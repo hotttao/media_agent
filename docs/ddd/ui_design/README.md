@@ -4,7 +4,7 @@
 
 ## 当前范围
 
-当前 UI Platform 提供 Workspace Shell，以及 Sessions、Chat、Workspace Settings 三个内置 App。暂不实现 plugin loader、内置工具 App、复杂 Workspace 配置、拖拽布局和弹出窗口。
+当前 UI Platform 提供 Workspace Shell，以及 Sessions、Chat、Workspace Settings 三个内置 App；管理员还可从 Menubar 进入平台级 User Management 页面。User Management 不属于某个 Workspace，因此不占用 Workspace Slot。暂不实现 plugin loader、内置工具 App、复杂 Workspace 配置、拖拽布局和弹出窗口。
 
 ## 阅读顺序
 
@@ -26,6 +26,7 @@ Agent Request 交互见 [agent-request-flow.md](agent-request-flow.md)。
 | Slot 状态转换、Profile 归一化 | 单元测试 |
 | App Window、空态、表单状态 | 组件测试 |
 | 创建/更新 Workspace、切换 Session、Chat | Playwright E2E |
+| 用户列表、创建与软删除确认 | Playwright E2E |
 | HTTP 接口和凭证安全 | `media-cli` HTTP E2E |
 
 计划、实现规格和审查产物分别保留在 `docs/plan`、`docs/spec`、`docs/review`。

@@ -187,6 +187,33 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/auth/register:
+        post:
+            tags:
+                - AuthService
+            description: |-
+                POST /api/auth/register -- 自服务注册（建本地账号 role=user，自动登录下发 cookie）。
+                 公开端点（在 skip list），无需 session。
+            operationId: AuthService_Register
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RegisterRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegisterResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/auth/wecom/authorize:
         get:
             tags:
@@ -261,6 +288,55 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/GetEnabledResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/invites/{token}:
+        get:
+            tags:
+                - TeamService
+            description: 邀请预览与接受 —— 走 /api/invites/* 前缀,鉴权主体是"持 token 的任意已登录 user",非 team admin。
+            operationId: TeamService_PreviewInvite
+            parameters:
+                - name: token
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiTeamInvitePreview'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/invites/{token}/accept:
+        post:
+            tags:
+                - TeamService
+            operationId: TeamService_AcceptInvite
+            parameters:
+                - name: token
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AcceptInviteResponse'
                 default:
                     description: Default error response
                     content:
@@ -471,6 +547,71 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/oauth/clients:
+        get:
+            tags:
+                - OAuthClientService
+            operationId: OAuthClientService_ListClients
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListClientsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - OAuthClientService
+            operationId: OAuthClientService_CreateClient
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateClientRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateClientResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/oauth/clients/{id}:
+        delete:
+            tags:
+                - OAuthClientService
+            operationId: OAuthClientService_RevokeClient
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RevokeClientResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/oauth/token:
         post:
             tags:
@@ -639,8 +780,541 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/teams:
+        get:
+            tags:
+                - TeamService
+            operationId: TeamService_ListMyTeams
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMyTeamsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - TeamService
+            operationId: TeamService_CreateTeam
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateTeamRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiTeam'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/teams/{id}:
+        get:
+            tags:
+                - TeamService
+            operationId: TeamService_GetTeam
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiTeam'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - TeamService
+            operationId: TeamService_DeleteTeam
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeleteTeamResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        patch:
+            tags:
+                - TeamService
+            operationId: TeamService_UpdateTeam
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateTeamRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiTeam'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/teams/{id}/invites:
+        get:
+            tags:
+                - TeamService
+            operationId: TeamService_ListInvites
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListInvitesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - TeamService
+            operationId: TeamService_CreateInvite
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateInviteRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiTeamInvite'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/teams/{id}/invites/{token}:
+        delete:
+            tags:
+                - TeamService
+            operationId: TeamService_RevokeInvite
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: token
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RevokeInviteResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/teams/{id}/members:
+        get:
+            tags:
+                - TeamService
+            operationId: TeamService_ListMembers
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMembersResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - TeamService
+            operationId: TeamService_AddMember
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AddMemberRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiTeamMember'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/teams/{id}/members/{user_id}:
+        delete:
+            tags:
+                - TeamService
+            operationId: TeamService_RemoveMember
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: user_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: user_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoveMemberResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        patch:
+            tags:
+                - TeamService
+            operationId: TeamService_UpdateMemberRole
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: user_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateMemberRoleRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UpdateMemberRoleResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/users:
+        get:
+            tags:
+                - UserService
+            operationId: UserService_ListUsers
+            parameters:
+                - name: q
+                  in: query
+                  schema:
+                    type: string
+                - name: sort
+                  in: query
+                  schema:
+                    type: string
+                - name: order
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUsersResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - UserService
+            operationId: UserService_CreateUser
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateUserRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiUser'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/users/{id}:
+        delete:
+            tags:
+                - UserService
+            operationId: UserService_DeleteUser
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DeleteUserResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/users/{id}/password:
+        put:
+            tags:
+                - UserService
+            operationId: UserService_ChangeUserPassword
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ChangeUserPasswordRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ChangeUserPasswordResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
 components:
     schemas:
+        AcceptInviteResponse:
+            type: object
+            properties:
+                team_id:
+                    type: string
+                already_member:
+                    type: boolean
+        AddMemberRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                user_id:
+                    type: string
+                role:
+                    type: string
+        ApiOAuthClient:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                redirect_uris:
+                    type: array
+                    items:
+                        type: string
+                homepage_url:
+                    type: string
+                description:
+                    type: string
+                created_by:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        ApiTeam:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                created_by:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+                my_role:
+                    type: string
+                member_count:
+                    type: integer
+                    format: int32
+        ApiTeamInvite:
+            type: object
+            properties:
+                token:
+                    type: string
+                team_id:
+                    type: string
+                created_by:
+                    type: string
+                created_by_name:
+                    type: string
+                expires_at:
+                    type: string
+                created_at:
+                    type: string
+        ApiTeamInvitePreview:
+            type: object
+            properties:
+                team_id:
+                    type: string
+                team_name:
+                    type: string
+                inviter_name:
+                    type: string
+                expires_at:
+                    type: string
+                already_member:
+                    type: boolean
+        ApiTeamMember:
+            type: object
+            properties:
+                user_id:
+                    type: string
+                user_name:
+                    type: string
+                role:
+                    type: string
+                joined_at:
+                    type: string
         ApiUser:
             type: object
             properties:
@@ -701,6 +1375,18 @@ components:
             properties:
                 success:
                     type: boolean
+        ChangeUserPasswordRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                password:
+                    type: string
+        ChangeUserPasswordResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
         ConnectionStatus:
             type: object
             properties:
@@ -708,6 +1394,34 @@ components:
                     type: boolean
                 expires_at:
                     type: string
+        CreateClientRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                redirect_uris:
+                    type: array
+                    items:
+                        type: string
+                homepage_url:
+                    type: string
+                description:
+                    type: string
+        CreateClientResponse:
+            type: object
+            properties:
+                client:
+                    $ref: '#/components/schemas/ApiOAuthClient'
+                client_secret:
+                    type: string
+        CreateInviteRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                expires_in_days:
+                    type: integer
+                    format: int32
         CreateServiceTokenRequest:
             type: object
             properties:
@@ -725,7 +1439,37 @@ components:
                     description: tos_xxx 明文,仅本次响应可见
                 created_at:
                     type: string
+        CreateTeamRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                description:
+                    type: string
+        CreateUserRequest:
+            type: object
+            properties:
+                username:
+                    type: string
+                display_name:
+                    type: string
+                password:
+                    type: string
+                email:
+                    type: string
+                role:
+                    type: string
         DeleteIdentityResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        DeleteTeamResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        DeleteUserResponse:
             type: object
             properties:
                 success:
@@ -808,6 +1552,13 @@ components:
             description: |-
                 HandleCallbackResponse —— handler 返回完整 HTML 字符串(200),HTML 含
                  window.opener.postMessage(...) + window.close()。
+        ListClientsResponse:
+            type: object
+            properties:
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ApiOAuthClient'
         ListIdentitiesResponse:
             type: object
             properties:
@@ -815,6 +1566,27 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/UserIdentity'
+        ListInvitesResponse:
+            type: object
+            properties:
+                invites:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ApiTeamInvite'
+        ListMembersResponse:
+            type: object
+            properties:
+                members:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ApiTeamMember'
+        ListMyTeamsResponse:
+            type: object
+            properties:
+                teams:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ApiTeam'
         ListServiceTokensResponse:
             type: object
             properties:
@@ -822,6 +1594,22 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ServiceTokenRecord'
+        ListUsersResponse:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ApiUser'
+                total:
+                    type: integer
+                    format: int32
+                page:
+                    type: integer
+                    format: int32
+                page_size:
+                    type: integer
+                    format: int32
         LoginRequest:
             type: object
             properties:
@@ -850,6 +1638,37 @@ components:
                     type: string
                 email:
                     type: string
+        RegisterRequest:
+            type: object
+            properties:
+                username:
+                    type: string
+                password:
+                    type: string
+                display_name:
+                    type: string
+                email:
+                    type: string
+        RegisterResponse:
+            type: object
+            properties:
+                user:
+                    $ref: '#/components/schemas/ApiUser'
+        RemoveMemberResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        RevokeClientResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        RevokeInviteResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
         RevokeServiceTokenResponse:
             type: object
             properties:
@@ -919,6 +1738,29 @@ components:
             properties:
                 success:
                     type: boolean
+        UpdateMemberRoleRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                user_id:
+                    type: string
+                role:
+                    type: string
+        UpdateMemberRoleResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        UpdateTeamRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
         UserIdentity:
             type: object
             properties:
@@ -957,6 +1799,11 @@ tags:
          DB 表:mcp_oauth_clients / mcp_oauth_tokens,详见 services/mcp-oauth.ts。
 
          与 oauth.proto(OAuth Provider AS)角色相反,不要混用类型。
+    - name: OAuthClientService
+      description: |-
+        OAuth2 client 管理（oauth_clients 表的 CRUD）。admin 鉴权（session + role==admin）。
+         CreateClient 生成 client_secret（明文仅本次返回，DB 存 SHA-256 hash）。
+         RevokeClient 硬删 client（FK ON DELETE CASCADE 清 auth_codes + refresh_tokens）。
     - name: OAuthProviderService
       description: |-
         OAuthProviderService —— media_auth 作为 OAuth2 Authorization Server,
@@ -979,6 +1826,18 @@ tags:
            * LIST 只返 id/name/created_at/revoked_at/is_platform,绝不返 hash
            * DELETE 仅能撤销非 platform 的自己 token(is_platform = false 的 DB 约束)
            * 每用户至多一个 active platform token(DB 唯一部分索引保证)
+    - name: TeamService
+      description: |-
+        Team CRUD + 成员管理 + 邀请签发与撤销。创建者自动成为首任 admin。
+         末位 admin 保护:UpdateMemberRole / RemoveMember 拒绝把唯一 admin 降级或移除。
+         鉴权:每个 handler 内部 getMembership(teamID, session.sub) → 0/403/admin。
+    - name: UserService
+      description: |-
+        UserService -- 用户管理（admin 鉴权：session + role==admin）。
+         ListUsers 分页+搜索（无 analytics，media_auth 不 own workspaces/sessions）。
+         CreateUser 建 user/admin（argon2 hash）。
+         DeleteUser 不可逆软删除 user，并可靠撤销认证凭据；历史关系保留。
+         ChangeUserPassword admin 改他人密码（仅本地密码账号）。
     - name: WeComService
       description: |-
         WeComService —— 企微 corp OAuth 流程。

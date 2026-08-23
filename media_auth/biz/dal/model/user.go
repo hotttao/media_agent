@@ -20,6 +20,11 @@ type User struct {
 	AutoEvolution   bool       `gorm:"column:auto_evolution;not null;default:false"`
 	CreatedAt       time.Time  `gorm:"column:created_at"`
 	LastLoginAt     *time.Time `gorm:"column:last_login_at"`
+	Status          string     `gorm:"column:status;not null;default:active"`
+	AuthVersion     int64      `gorm:"column:auth_version;not null;default:1"`
+	DisabledAt      *time.Time `gorm:"column:disabled_at"`
+	DeletedAt       *time.Time `gorm:"column:deleted_at"`
+	DeletedBy       *string    `gorm:"column:deleted_by"`
 }
 
 // TableName 固定表名（与 migration 一致，含 media_auth schema 前缀）。

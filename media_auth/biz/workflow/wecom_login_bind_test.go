@@ -118,10 +118,16 @@ func (r *fakeUserRepo) CreateUser(_ context.Context, username, displayName, pass
 func (r *fakeUserRepo) ListUsers(context.Context, string, string, string, int, int) ([]domainauth.User, int, error) {
 	return nil, 0, nil
 }
-func (r *fakeUserRepo) DeleteUser(_ context.Context, id string) error {
-	delete(r.users, id)
-	return nil
+func (r *fakeUserRepo) SoftDeleteUser(_ context.Context, id, by string) (domainauth.User, error) {
+	u, ok := r.users[id]
+	if !ok {
+		return domainauth.User{}, domainauth.ErrUserNotFound
+	}
+	u.Status, u.AuthVersion, u.DeletedBy = domainauth.UserStatusDeleted, u.AuthVersion+1, by
+	r.users[id] = u
+	return u, nil
 }
+func (r *fakeUserRepo) CountActiveAdmins(context.Context) (int, error) { return 2, nil }
 
 type fakeEnsurer struct {
 	called bool

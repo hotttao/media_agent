@@ -48,6 +48,8 @@ type TokenRepo interface {
 	// EnsurePlatformToken 确保 user 拥有 active platform token：存在则返回其明文；不存在则建。
 	// 并发冲突由 DB 部分唯一索引兜底（ON CONFLICT DO NOTHING 后回读）。
 	EnsurePlatformToken(ctx context.Context, userID string) (string, error)
+	// RevokeAllForUser 撤销用户的全部 Service/Platform Token；重复调用幂等。
+	RevokeAllForUser(ctx context.Context, userID string) error
 }
 
 // domain 错误。
