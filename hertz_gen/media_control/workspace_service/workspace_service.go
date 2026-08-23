@@ -23,6 +23,8 @@ type Client interface {
 
 	GetWorkspace(context context.Context, req *workspace.GetWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error)
 
+	UpdateWorkspace(context context.Context, req *workspace.UpdateWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error)
+
 	GetRuntimeContext(context context.Context, req *workspace.GetRuntimeContextRequest, reqOpt ...config.RequestOption) (resp *workspace.RuntimeContextResponse, rawResponse *protocol.Response, err error)
 }
 
@@ -109,6 +111,30 @@ func (s *WorkspaceServiceClient) GetWorkspace(context context.Context, req *work
 	return resp, rawResponse, nil
 }
 
+func (s *WorkspaceServiceClient) UpdateWorkspace(context context.Context, req *workspace.UpdateWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &workspace.WorkspaceResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"workspace_id": req.GetWorkspaceId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("PUT", "/api/v1/workspaces/:workspace_id")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
 func (s *WorkspaceServiceClient) GetRuntimeContext(context context.Context, req *workspace.GetRuntimeContextRequest, reqOpt ...config.RequestOption) (resp *workspace.RuntimeContextResponse, rawResponse *protocol.Response, err error) {
 	httpResp := &workspace.RuntimeContextResponse{}
 	ret, err := s.client.r().
@@ -150,6 +176,10 @@ func ListWorkspaces(context context.Context, req *workspace.ListWorkspacesReques
 
 func GetWorkspace(context context.Context, req *workspace.GetWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error) {
 	return defaultClient.GetWorkspace(context, req, reqOpt...)
+}
+
+func UpdateWorkspace(context context.Context, req *workspace.UpdateWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.UpdateWorkspace(context, req, reqOpt...)
 }
 
 func GetRuntimeContext(context context.Context, req *workspace.GetRuntimeContextRequest, reqOpt ...config.RequestOption) (resp *workspace.RuntimeContextResponse, rawResponse *protocol.Response, err error) {

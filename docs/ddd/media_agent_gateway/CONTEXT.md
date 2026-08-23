@@ -40,6 +40,10 @@ _禁用替代词_：Teamwork、Turn Queue
 Teamwork 拓扑版本与实际 Agent Session 之间的运行期关联。
 _禁用替代词_：Teamwork Topology、Team Membership
 
+**Allowed Topology Version（允许拓扑版本）**:
+Gateway 已确认可供新 Agent Task 使用的 Teamwork Topology 最新版本；旧版本只影响新任务准入，不中断已经开始的 Turn。
+_禁用替代词_：Runtime Context、Topology Snapshot、Current Turn Version
+
 **Platform MCP（平台 MCP）**:
 Gateway 内置、通过 Session Token 调用的平台级工具集合。
 _禁用替代词_：Business MCP、External MCP

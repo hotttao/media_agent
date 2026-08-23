@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
@@ -58,7 +59,9 @@ import (
 	teamworkservice "media_agent/media_control/biz/service/teamwork"
 	workspaceservice "media_agent/media_control/biz/service/workspace"
 	metadataservice "media_agent/media_control/biz/service/workspace_metadata"
+	sharedclient "media_agent/media_control/biz/shared/client"
 	"media_agent/media_control/biz/shared/secret"
+	teamworkchange "media_agent/media_control/biz/workflow/teamwork_change"
 )
 
 func main() {
@@ -116,7 +119,15 @@ func main() {
 	memoryhandler.Configure(memoryservice.New(memoryrepo.New(db), dal.NewTxRunner(db), repo.New(db), credentialrepo.New(db)))
 	schedulehandler.Configure(scheduleservice.New(schedulerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	runtimehandler.Configure(runtimeservice.New(runtimerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
-	teamworkhandler.Configure(teamworkservice.New(teamworkrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
+	teamworkStore := teamworkrepo.New(db)
+	teamworkhandler.Configure(teamworkservice.New(teamworkStore, teamworkStore, dal.NewTxRunner(db), repo.New(db)))
+	eventCtx, cancelEvents := context.WithCancel(context.Background())
+	defer cancelEvents()
+	teamworkPublisher, err := sharedclient.NewTeamworkEventPublisher(envOr("MEDIA_AGENT_GATEWAY_URL", "http://127.0.0.1:8006"), internalToken)
+	if err != nil {
+		log.Fatalf("init Teamwork event publisher: %v", err)
+	}
+	go teamworkchange.NewRelay(teamworkStore, teamworkPublisher).Run(eventCtx, time.Second)
 	metadatahandler.Configure(metadataservice.New(metadaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	sharehandler.Configure(shareservice.New(sharerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	exporthandler.Configure(exportservice.New(exportrepo.New(db), dal.NewTxRunner(db), repo.New(db)))

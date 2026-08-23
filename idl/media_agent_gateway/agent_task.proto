@@ -33,6 +33,8 @@ message CreateTaskRequest {
   string source_resource_id = 4 [(api.body) = "source_resource_id"];
   string idempotency_key = 5 [(api.body) = "idempotency_key"];
   string input_json = 6 [(api.body) = "input_json"];
+  string topology_id = 7 [(api.body) = "topology_id"];
+  int64 topology_version = 8 [(api.body) = "topology_version"];
 }
 message ListTasksRequest { string workspace_id = 1 [(api.query) = "workspace_id"]; string status = 2 [(api.query) = "status"]; }
 message GetTaskRequest { string task_id = 1 [(api.path) = "task_id"]; }
@@ -43,5 +45,6 @@ message TaskResponse {
   string input_json = 8; string status = 9; int32 attempt = 10; string turn_id = 11;
   string result_ref_json = 12; string error_code = 13; string error_message = 14;
   int64 created_at = 15; int64 started_at = 16; int64 finished_at = 17; int64 updated_at = 18;
+  string topology_id = 19; int64 topology_version = 20;
 }
 message ListTasksResponse { repeated TaskResponse tasks = 1; }

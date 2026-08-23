@@ -30,12 +30,14 @@ import (
 	// Init(cfg) 由 main 显式调用（不依赖 init()）。
 	_ "media_agent/media_cli/cmd/client"
 	_ "media_agent/media_cli/cmd/infra"
+	_ "media_agent/media_cli/cmd/media_agent_gateway"     // Agent Gateway 接口 e2e
 	_ "media_agent/media_cli/cmd/media_agents"            // Agent Runtime 内部 API e2e
 	_ "media_agent/media_cli/cmd/media_auth"              // media_auth 接口 e2e 一级子命令
 	_ "media_agent/media_cli/cmd/media_auth/auth"         // auth 子命令挂到 MediaAuthCmd
 	_ "media_agent/media_cli/cmd/media_auth/oauth_client" // oauth-client 子命令挂到 MediaAuthCmd
 	_ "media_agent/media_cli/cmd/media_auth/team"         // team 子命令挂到 MediaAuthCmd
 	_ "media_agent/media_cli/cmd/media_auth/user"         // user 子命令挂到 MediaAuthCmd
+	_ "media_agent/media_cli/cmd/media_control"           // Media Control 接口 e2e
 	_ "media_agent/media_cli/cmd/media_example"
 	// hello 是 media_example 的子包（service 二级）；父包 init() 把它挂到 MediaExampleCmd。
 	_ "media_agent/media_cli/cmd/media_example/hello"
@@ -50,15 +52,21 @@ import (
 	_ "media_agent/media_cli/cmd/media_workflow"
 
 	clisub "media_agent/media_cli/cmd/client"
+	gatewaycmd "media_agent/media_cli/cmd/media_agent_gateway"
 	authsub "media_agent/media_cli/cmd/media_auth/auth"
 	oauthclientsub "media_agent/media_cli/cmd/media_auth/oauth_client"
 	teamsub "media_agent/media_cli/cmd/media_auth/team"
 	usersub "media_agent/media_cli/cmd/media_auth/user"
+	controlcmd "media_agent/media_cli/cmd/media_control"
 	hellosub "media_agent/media_cli/cmd/media_example/hello"
 	wfsub "media_agent/media_cli/cmd/media_workflow"
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	// 1. chdir 到 media-cli/，让 config.NewLoader 的相对路径 (./.env, ./conf/<env>.yaml) 能解析到。
 	if err := chdirToMediaCLI(); err != nil {
 		log.Fatalf("locate media-cli/: %v", err)
@@ -105,6 +113,12 @@ func main() {
 		oauthclientsub.Init(cfg) // oauth-client 共享同一 cookie store
 		usersub.Init(cfg)        // user 管理共享同一 cookie store
 	}
+	if cfg.GetClient()["media_control"] != nil {
+		controlcmd.Init(cfg)
+	}
+	if cfg.GetClient()["media_agent_gateway"] != nil {
+		gatewaycmd.Init(cfg)
+	}
 
 	// 4.3 media_workflow caller: reachability + workflow job typed client。
 	//     gate on media_materials + media_workflow 都配置（dev 缺 media_workflow 段则跳过）。
@@ -113,7 +127,11 @@ func main() {
 	}
 
 	// 5. 启动 cobra 命令树。
-	cmd.Execute()
+	if err := cmd.Execute(); err != nil {
+		log.Printf("media-cli: %v", err)
+		return 1
+	}
+	return 0
 }
 
 // chdirToMediaCLI 把工作目录切到 media-cli/，让 config.NewLoader 的相对路径解析到。

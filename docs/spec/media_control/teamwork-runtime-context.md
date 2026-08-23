@@ -16,4 +16,4 @@
 - 按 acting user 校验 Topology 所属 Workspace；只返回 `active` topology。
 - 返回 `topology_id`、`workspace_id`、`topology_version`、`entry_member_id`、`members_json` 和 `edges_json`。
 - 投影只描述拓扑，不返回 Agent Configuration 密文或解密后的 Provider API Key；成员运行配置继续通过 Workspace Runtime Context 获取。
-- 此切片不改变 Gateway 准入版本；拓扑变更事件和 Gateway Inbox 在后续独立切片实现。
+- 本切片本身不改变 Gateway 准入版本；后续 `docs/spec/teamwork-runtime-change.md` 已通过版本化 Outbox/Inbox 实现该协作。

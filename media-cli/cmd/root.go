@@ -42,10 +42,4 @@ func RegisterCmd(c *cobra.Command) {
 // 设计：observability 初始化（globalhertz.InitLogger + InitOTel）由 main.go 在
 // cmd.Execute() 之前完成；shutdown 在 main.go 的 defer 里调用。本包不持有
 // shutdown 闭包（避免"乱倒配置 / 全局 var"模式——参考 cmd/observability.go 注释）。
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		// cobra 已自动打印错误到 stderr；这里只决定 exit code。
-		// main.go 的 defer 仍会跑（globalhertz shutdown）。
-		_ = err
-	}
-}
+func Execute() error { return rootCmd.Execute() }

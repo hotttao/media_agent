@@ -13,9 +13,11 @@ import (
 	repo "media_agent/media_agent_gateway/biz/dal/repo/agent_session"
 	taskrepo "media_agent/media_agent_gateway/biz/dal/repo/agent_task"
 	batchrepo "media_agent/media_agent_gateway/biz/dal/repo/batch_run"
+	teamworkrepo "media_agent/media_agent_gateway/biz/dal/repo/teamwork_runtime"
 	taskhandler "media_agent/media_agent_gateway/biz/handler/agent_task"
 	batchhandler "media_agent/media_agent_gateway/biz/handler/batch_run"
 	chathandler "media_agent/media_agent_gateway/biz/handler/chat"
+	teamworkhandler "media_agent/media_agent_gateway/biz/handler/teamwork_runtime"
 	"media_agent/media_agent_gateway/biz/middleware"
 	service "media_agent/media_agent_gateway/biz/service/agent_session"
 	taskservice "media_agent/media_agent_gateway/biz/service/agent_task"
@@ -26,6 +28,7 @@ import (
 	"media_agent/media_agent_gateway/biz/workflow"
 	taskdispatch "media_agent/media_agent_gateway/biz/workflow/agent_task_dispatch"
 	batchdispatch "media_agent/media_agent_gateway/biz/workflow/batch_run_dispatch"
+	teamworkchange "media_agent/media_agent_gateway/biz/workflow/teamwork_runtime_change"
 )
 
 func main() {
@@ -68,7 +71,8 @@ func main() {
 		log.Fatal("database must be enabled")
 	}
 
-	middleware.Configure(cfg.GetAuth().GetJwtSecret())
+	internalToken := envOr("CONTROL_INTERNAL_TOKEN", "")
+	middleware.Configure(cfg.GetAuth().GetJwtSecret(), internalToken)
 	store := repo.New(db)
 	fallbackControl := sharedclient.MockControl{
 		WorkspaceID: envOr("DEFAULT_WORKSPACE_ID", "default"),
@@ -78,9 +82,10 @@ func main() {
 	sessionService := service.New(store, control)
 	taskStore := taskrepo.New(db)
 	batchStore := batchrepo.New(db)
+	teamworkStore := teamworkrepo.New(db)
 	txRunner := dal.NewTxRunner(db)
 	runtimes := sharedclient.NewRuntimeRegistryFromEnvironment()
-	taskApplication := taskservice.New(taskStore, taskStore, txRunner, store, control)
+	taskApplication := taskservice.New(taskStore, taskStore, txRunner, store, control, teamworkStore)
 	batchApplication := batchservice.New(batchStore, batchStore, txRunner, store)
 	taskDispatcher := taskdispatch.NewDispatcher(taskStore, taskStore, txRunner, sessionService, runtimes)
 	batchDispatcher := batchdispatch.NewDispatcher(batchStore, txRunner, taskApplication)
@@ -102,6 +107,7 @@ func main() {
 	go batchdispatch.NewLoops(batchdispatch.NewRelay(batchStore, taskQueue), batchdispatch.NewProjector(taskStore, batchStore, txRunner), time.Second).Run(dispatchCtx)
 	taskhandler.Configure(taskApplication)
 	batchhandler.Configure(batchApplication)
+	teamworkhandler.Configure(teamworkchange.New(teamworkStore, taskStore, taskStore, txRunner))
 	var eventSource sessionevents.Source = sessionevents.New(256)
 	if redisURL := os.Getenv("MEDIA_AGENTS_REDIS_URL"); redisURL != "" {
 		redisSource, redisErr := sessionevents.NewRedisSource(

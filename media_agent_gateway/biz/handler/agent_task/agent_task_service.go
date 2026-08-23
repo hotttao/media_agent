@@ -29,7 +29,7 @@ func CreateTask(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	v, err := tasks.Create(ctx, service.CreateCommand{Owner: middleware.UserID(ctx), AuthToken: string(c.Cookie("token")), WorkspaceID: req.WorkspaceId, SessionID: req.SessionId, Source: req.Source, SourceResourceID: req.SourceResourceId, IdempotencyKey: req.IdempotencyKey, InputJSON: req.InputJson})
+	v, err := tasks.Create(ctx, service.CreateCommand{Owner: middleware.UserID(ctx), AuthToken: string(c.Cookie("token")), WorkspaceID: req.WorkspaceId, SessionID: req.SessionId, Source: req.Source, SourceResourceID: req.SourceResourceId, IdempotencyKey: req.IdempotencyKey, InputJSON: req.InputJson, TopologyID: req.TopologyId, TopologyVersion: req.TopologyVersion})
 	if err != nil {
 		writeError(c, err)
 		return
@@ -99,7 +99,7 @@ func CancelTask(ctx context.Context, c *app.RequestContext) {
 }
 
 func toResponse(v *domain.Task) *agent_task.TaskResponse {
-	r := &agent_task.TaskResponse{Id: v.ID, WorkspaceId: v.WorkspaceID, RequestedBy: v.RequestedBy, SessionId: v.SessionID, Source: v.Source, SourceResourceId: v.SourceResourceID, IdempotencyKey: v.IdempotencyKey, InputJson: v.InputJSON, Status: string(v.Status), Attempt: v.Attempt, TurnId: v.TurnID, ResultRefJson: v.ResultRefJSON, ErrorCode: v.ErrorCode, ErrorMessage: v.ErrorMessage, CreatedAt: v.CreatedAt.UnixMilli(), UpdatedAt: v.UpdatedAt.UnixMilli()}
+	r := &agent_task.TaskResponse{Id: v.ID, WorkspaceId: v.WorkspaceID, RequestedBy: v.RequestedBy, SessionId: v.SessionID, Source: v.Source, SourceResourceId: v.SourceResourceID, IdempotencyKey: v.IdempotencyKey, InputJson: v.InputJSON, Status: string(v.Status), Attempt: v.Attempt, TurnId: v.TurnID, ResultRefJson: v.ResultRefJSON, ErrorCode: v.ErrorCode, ErrorMessage: v.ErrorMessage, CreatedAt: v.CreatedAt.UnixMilli(), UpdatedAt: v.UpdatedAt.UnixMilli(), TopologyId: v.TopologyID, TopologyVersion: v.TopologyVersion}
 	if v.StartedAt != nil {
 		r.StartedAt = v.StartedAt.UnixMilli()
 	}
