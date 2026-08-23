@@ -16,13 +16,14 @@ type UpdateCommand struct {
 	ExpectedVersion                                        int64
 }
 type Service struct {
-	repo d.Repository
-	tx   dal.TxRunner
-	work w.Repository
+	repo   d.Repository
+	outbox d.OutboxRepository
+	tx     dal.TxRunner
+	work   w.Repository
 }
 
-func New(r d.Repository, tx dal.TxRunner, work w.Repository) *Service {
-	return &Service{repo: r, tx: tx, work: work}
+func New(r d.Repository, outbox d.OutboxRepository, tx dal.TxRunner, work w.Repository) *Service {
+	return &Service{repo: r, outbox: outbox, tx: tx, work: work}
 }
 func (s *Service) Create(ctx context.Context, c CreateCommand) (*d.Topology, error) {
 	if c.Owner == "" {
@@ -41,7 +42,12 @@ func (s *Service) Create(ctx context.Context, c CreateCommand) (*d.Topology, err
 	}
 	now := time.Now().UTC()
 	v := &d.Topology{ID: uuid.NewString(), WorkspaceID: c.WorkspaceID, Name: name, EntryMemberID: entry, Members: ms, Edges: es, Version: 1, Status: d.StatusActive, CreatedAt: now, UpdatedAt: now}
-	e = s.tx.RunInTx(ctx, func(tx context.Context) error { return s.repo.Create(tx, v) })
+	e = s.tx.RunInTx(ctx, func(tx context.Context) error {
+		if err := s.repo.Create(tx, v); err != nil {
+			return err
+		}
+		return s.enqueueChange(tx, v)
+	})
 	return v, e
 }
 func (s *Service) List(ctx context.Context, o, wid string) ([]d.Topology, error) {
@@ -81,7 +87,12 @@ func (s *Service) Update(ctx context.Context, c UpdateCommand) (*d.Topology, err
 	v.Name, v.EntryMemberID, v.Members, v.Edges = name, entry, ms, es
 	v.Version++
 	v.UpdatedAt = time.Now().UTC()
-	e = s.tx.RunInTx(ctx, func(tx context.Context) error { return s.repo.Update(tx, v, c.ExpectedVersion) })
+	e = s.tx.RunInTx(ctx, func(tx context.Context) error {
+		if err := s.repo.Update(tx, v, c.ExpectedVersion); err != nil {
+			return err
+		}
+		return s.enqueueChange(tx, v)
+	})
 	return v, e
 }
 
@@ -125,6 +136,24 @@ func (s *Service) Delete(ctx context.Context, id, o string, ev int64) (*d.Topolo
 	v.Status = d.StatusDeleted
 	v.Version++
 	v.UpdatedAt = time.Now().UTC()
-	e = s.tx.RunInTx(ctx, func(tx context.Context) error { return s.repo.Delete(tx, v, ev) })
+	e = s.tx.RunInTx(ctx, func(tx context.Context) error {
+		if err := s.repo.Delete(tx, v, ev); err != nil {
+			return err
+		}
+		return s.enqueueChange(tx, v)
+	})
 	return v, e
+}
+
+func (s *Service) enqueueChange(ctx context.Context, v *d.Topology) error {
+	if s.outbox == nil {
+		return nil
+	}
+	now := time.Now().UTC()
+	return s.outbox.Enqueue(ctx, &d.ChangeEvent{
+		ID: uuid.NewString(), WorkspaceID: v.WorkspaceID, TopologyID: v.ID, TopologyVersion: v.Version, Status: string(v.Status),
+		EventType:   "teamwork_topology.changed",
+		PayloadJSON: fmt.Sprintf(`{"workspace_id":%q,"topology_id":%q,"topology_version":%d,"status":%q}`, v.WorkspaceID, v.ID, v.Version, v.Status),
+		AvailableAt: now, CreatedAt: now, UpdatedAt: now,
+	})
 }

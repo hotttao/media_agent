@@ -84,6 +84,21 @@ func (r *Repository) Cancel(ctx context.Context, v *domain.Task, from []domain.S
 	return nil
 }
 
+func (r *Repository) CancelStaleTopology(ctx context.Context, topologyID string, allowedVersion int64, now time.Time) ([]domain.Task, error) {
+	var rows []model.AgentTask
+	result := dal.FromContext(ctx, r.db).Model(&rows).Clauses(clause.Returning{}).
+		Where("topology_id = ? AND topology_version < ? AND status IN ?", topologyID, allowedVersion, []string{string(domain.StatusQueued), string(domain.StatusRetryWait)}).
+		Updates(map[string]any{"status": domain.StatusCancelled, "error_code": "topology_version_superseded", "error_message": "A newer Teamwork Topology version is required", "finished_at": now, "updated_at": now})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	tasks := make([]domain.Task, 0, len(rows))
+	for _, row := range rows {
+		tasks = append(tasks, *toDomain(row))
+	}
+	return tasks, nil
+}
+
 func (r *Repository) Get(ctx context.Context, id string) (*domain.Task, error) {
 	var row model.AgentTask
 	err := dal.FromContext(ctx, r.db).Where("id = ?", id).First(&row).Error
@@ -250,10 +265,22 @@ func (r *Repository) ListPendingBatchTerminal(ctx context.Context, limit int) ([
 	return result, nil
 }
 func toRow(v *domain.Task) *model.AgentTask {
-	return &model.AgentTask{ID: v.ID, WorkspaceID: v.WorkspaceID, RequestedBy: v.RequestedBy, SessionID: nullable(v.SessionID), Source: v.Source, SourceResourceID: v.SourceResourceID, IdempotencyKey: v.IdempotencyKey, Input: v.InputJSON, Status: string(v.Status), Attempt: v.Attempt, TurnID: nullable(v.TurnID), ResultRef: nullable(v.ResultRefJSON), ErrorCode: nullable(v.ErrorCode), ErrorMessage: nullable(v.ErrorMessage), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, StartedAt: v.StartedAt, FinishedAt: v.FinishedAt}
+	return &model.AgentTask{ID: v.ID, WorkspaceID: v.WorkspaceID, RequestedBy: v.RequestedBy, SessionID: nullable(v.SessionID), TopologyID: nullable(v.TopologyID), TopologyVersion: nullableInt64(v.TopologyVersion), Source: v.Source, SourceResourceID: v.SourceResourceID, IdempotencyKey: v.IdempotencyKey, Input: v.InputJSON, Status: string(v.Status), Attempt: v.Attempt, TurnID: nullable(v.TurnID), ResultRef: nullable(v.ResultRefJSON), ErrorCode: nullable(v.ErrorCode), ErrorMessage: nullable(v.ErrorMessage), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, StartedAt: v.StartedAt, FinishedAt: v.FinishedAt}
 }
 func toDomain(v model.AgentTask) *domain.Task {
-	return &domain.Task{ID: v.ID, WorkspaceID: v.WorkspaceID, RequestedBy: v.RequestedBy, SessionID: value(v.SessionID), Source: v.Source, SourceResourceID: v.SourceResourceID, IdempotencyKey: v.IdempotencyKey, InputJSON: v.Input, Status: domain.Status(v.Status), Attempt: v.Attempt, TurnID: value(v.TurnID), ResultRefJSON: value(v.ResultRef), ErrorCode: value(v.ErrorCode), ErrorMessage: value(v.ErrorMessage), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, StartedAt: v.StartedAt, FinishedAt: v.FinishedAt}
+	return &domain.Task{ID: v.ID, WorkspaceID: v.WorkspaceID, RequestedBy: v.RequestedBy, SessionID: value(v.SessionID), TopologyID: value(v.TopologyID), TopologyVersion: valueInt64(v.TopologyVersion), Source: v.Source, SourceResourceID: v.SourceResourceID, IdempotencyKey: v.IdempotencyKey, InputJSON: v.Input, Status: domain.Status(v.Status), Attempt: v.Attempt, TurnID: value(v.TurnID), ResultRefJSON: value(v.ResultRef), ErrorCode: value(v.ErrorCode), ErrorMessage: value(v.ErrorMessage), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt, StartedAt: v.StartedAt, FinishedAt: v.FinishedAt}
+}
+func nullableInt64(v int64) *int64 {
+	if v == 0 {
+		return nil
+	}
+	return &v
+}
+func valueInt64(v *int64) int64 {
+	if v == nil {
+		return 0
+	}
+	return *v
 }
 func nullable(v string) *string {
 	if v == "" {

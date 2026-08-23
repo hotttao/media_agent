@@ -5,6 +5,8 @@ import "time"
 type AgentTask struct {
 	ID, WorkspaceID, RequestedBy             string
 	SessionID                                *string
+	TopologyID                               *string
+	TopologyVersion                          *int64
 	Source, SourceResourceID, IdempotencyKey string
 	Input                                    string `gorm:"type:jsonb"`
 	Status                                   string

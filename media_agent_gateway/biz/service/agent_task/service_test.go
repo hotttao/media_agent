@@ -76,6 +76,10 @@ func (a allowWorkspace) AuthorizeWorkspace(context.Context, string, string, stri
 	return a.err
 }
 
+type allowTopology struct{ err error }
+
+func (a allowTopology) AuthorizeTopology(context.Context, string, string, int64) error { return a.err }
+
 type serviceOutbox struct{ events []domain.OutboxEvent }
 
 func (f *serviceOutbox) Enqueue(_ context.Context, event *domain.OutboxEvent) error {
@@ -92,7 +96,7 @@ func (f *serviceOutbox) MarkDeliveryFailed(context.Context, string, string, time
 
 func TestCreateIsIdempotentAndCancel(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := New(repo, nil, directTx{}, &fakeSessions{}, allowWorkspace{})
+	svc := New(repo, nil, directTx{}, &fakeSessions{}, allowWorkspace{}, nil)
 	cmd := CreateCommand{Owner: "user-1", WorkspaceID: "ws-1", Source: "manual", SourceResourceID: "request-1", IdempotencyKey: "key-1", InputJSON: `{"message":"hi"}`}
 	first, err := svc.Create(context.Background(), cmd)
 	if err != nil {
@@ -108,7 +112,7 @@ func TestCreateIsIdempotentAndCancel(t *testing.T) {
 	}
 }
 func TestCreateRejectsSessionWorkspaceMismatch(t *testing.T) {
-	svc := New(&fakeRepo{}, nil, directTx{}, &fakeSessions{value: &session.Session{ID: "s-1", UserID: "user-1", WorkspaceID: "ws-2"}}, allowWorkspace{})
+	svc := New(&fakeRepo{}, nil, directTx{}, &fakeSessions{value: &session.Session{ID: "s-1", UserID: "user-1", WorkspaceID: "ws-2"}}, allowWorkspace{}, nil)
 	_, err := svc.Create(context.Background(), CreateCommand{Owner: "user-1", WorkspaceID: "ws-1", SessionID: "s-1", Source: "manual", SourceResourceID: "r", IdempotencyKey: "k", InputJSON: "{}"})
 	if !errors.Is(err, domain.ErrForbidden) {
 		t.Fatalf("expected forbidden, got %v", err)
@@ -117,7 +121,7 @@ func TestCreateRejectsSessionWorkspaceMismatch(t *testing.T) {
 
 func TestCreateAndRunningCancelWriteOutboxActions(t *testing.T) {
 	repo, outbox := &fakeRepo{}, &serviceOutbox{}
-	svc := New(repo, outbox, directTx{}, &fakeSessions{}, allowWorkspace{})
+	svc := New(repo, outbox, directTx{}, &fakeSessions{}, allowWorkspace{}, nil)
 	created, err := svc.Create(context.Background(), CreateCommand{Owner: "user-1", WorkspaceID: "ws-1", Source: "manual", SourceResourceID: "r", IdempotencyKey: "k", InputJSON: "{}"})
 	if err != nil {
 		t.Fatal(err)
@@ -131,5 +135,22 @@ func TestCreateAndRunningCancelWriteOutboxActions(t *testing.T) {
 	}
 	if len(outbox.events) != 3 || outbox.events[1].EventType != "agent_task.cancel" || outbox.events[2].EventType != "agent_task.cancelled" {
 		t.Fatalf("events=%+v", outbox.events)
+	}
+}
+
+func TestCreateRequiresAllowedTopologyVersion(t *testing.T) {
+	command := CreateCommand{Owner: "user-1", WorkspaceID: "ws-1", Source: "manual", SourceResourceID: "r", IdempotencyKey: "k", InputJSON: "{}", TopologyID: "topology-1", TopologyVersion: 2}
+	svc := New(&fakeRepo{}, nil, directTx{}, &fakeSessions{}, allowWorkspace{}, allowTopology{})
+	created, err := svc.Create(context.Background(), command)
+	if err != nil || created.TopologyID != "topology-1" || created.TopologyVersion != 2 {
+		t.Fatalf("created=%+v err=%v", created, err)
+	}
+	svc = New(&fakeRepo{}, nil, directTx{}, &fakeSessions{}, allowWorkspace{}, allowTopology{err: errors.New("stale")})
+	if _, err = svc.Create(context.Background(), command); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("stale topology error=%v", err)
+	}
+	command.TopologyVersion = 0
+	if _, err = svc.Create(context.Background(), command); err == nil {
+		t.Fatal("partial topology reference was accepted")
 	}
 }

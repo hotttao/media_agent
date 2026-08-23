@@ -26,4 +26,16 @@ type TeamworkEdge struct {
 	Configuration                              datatypes.JSON
 }
 
+type TeamworkTopologyOutbox struct {
+	ID, WorkspaceID, TopologyID, EventType, Status string
+	TopologyVersion                                int64
+	Payload                                        datatypes.JSON
+	Attempts                                       int32
+	AvailableAt, CreatedAt, UpdatedAt              time.Time
+	DeliveredAt                                    *time.Time
+	LastError                                      *string
+}
+
+func (TeamworkTopologyOutbox) TableName() string { return "teamwork_topology_outbox" }
+
 func (TeamworkEdge) TableName() string { return "teamwork_edges" }

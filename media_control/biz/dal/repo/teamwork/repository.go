@@ -7,6 +7,7 @@ import (
 	"media_agent/media_control/biz/dal"
 	"media_agent/media_control/biz/dal/model"
 	d "media_agent/media_control/biz/domain/teamwork"
+	"time"
 )
 
 type Repository struct{ db *gorm.DB }
@@ -30,6 +31,41 @@ func (r *Repository) Create(ctx context.Context, v *d.Topology) error {
 		}
 		return nil
 	})
+}
+
+func (r *Repository) Enqueue(ctx context.Context, event *d.ChangeEvent) error {
+	return dal.FromContext(ctx, r.db).Create(&model.TeamworkTopologyOutbox{
+		ID: event.ID, WorkspaceID: event.WorkspaceID, TopologyID: event.TopologyID, TopologyVersion: event.TopologyVersion,
+		Status: event.Status, EventType: event.EventType, Payload: []byte(event.PayloadJSON),
+		Attempts: event.Attempts, AvailableAt: event.AvailableAt, CreatedAt: event.CreatedAt, UpdatedAt: event.UpdatedAt,
+	}).Error
+}
+
+func (r *Repository) ListPending(ctx context.Context, limit int) ([]d.ChangeEvent, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
+	var rows []model.TeamworkTopologyOutbox
+	err := dal.FromContext(ctx, r.db).Table("teamwork_topology_outbox AS o").Select("o.*").
+		Where("o.delivered_at IS NULL AND o.available_at <= ?", time.Now().UTC()).
+		Where("NOT EXISTS (SELECT 1 FROM teamwork_topology_outbox AS earlier WHERE earlier.topology_id = o.topology_id AND earlier.delivered_at IS NULL AND earlier.topology_version < o.topology_version)").
+		Order("o.created_at ASC").Limit(limit).Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make([]d.ChangeEvent, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, d.ChangeEvent{ID: row.ID, WorkspaceID: row.WorkspaceID, TopologyID: row.TopologyID, TopologyVersion: row.TopologyVersion, Status: row.Status, EventType: row.EventType, PayloadJSON: string(row.Payload), Attempts: row.Attempts, AvailableAt: row.AvailableAt, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+	}
+	return result, nil
+}
+
+func (r *Repository) MarkDelivered(ctx context.Context, id string, now time.Time) error {
+	return dal.FromContext(ctx, r.db).Model(&model.TeamworkTopologyOutbox{}).Where("id = ? AND delivered_at IS NULL", id).Updates(map[string]any{"delivered_at": now, "updated_at": now}).Error
+}
+
+func (r *Repository) MarkDeliveryFailed(ctx context.Context, id, message string, now time.Time) error {
+	return dal.FromContext(ctx, r.db).Model(&model.TeamworkTopologyOutbox{}).Where("id = ? AND delivered_at IS NULL", id).Updates(map[string]any{"attempts": gorm.Expr("attempts + 1"), "last_error": message, "available_at": now.Add(time.Second), "updated_at": now}).Error
 }
 func (r *Repository) ListOwned(ctx context.Context, o, w string) (out []d.Topology, err error) {
 	var rows []model.TeamworkTopology

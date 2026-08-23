@@ -31,6 +31,10 @@ Teamwork 负责多 Agent 的成员集合、协作边和拓扑版本，是运行�
 | 管理成员 | 修改 Agent 成员和协作边 | `UpdateMembers/UpdateEdges` |
 | 获取运行配置 | 通过内部 acting-user 身份返回当前 active 版本的只读拓扑 | `TeamworkService.GetRuntimeContext` |
 
+## 领域事件
+
+`TeamworkTopologyChanged` 在 Topology Create、Update、Delete 的同一事务写入 Outbox，载荷只包含 `event_id`、`workspace_id`、`topology_id`、`topology_version` 和 `status`。事件不包含成员配置、Runtime Context 或 Provider API Key。
+
 ## 数据模型
 
 ### `teamwork_topologies`

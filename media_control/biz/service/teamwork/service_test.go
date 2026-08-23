@@ -68,6 +68,20 @@ type directTx struct{}
 
 func (directTx) RunInTx(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
 
+type fakeOutbox struct{ events []domain.ChangeEvent }
+
+func (f *fakeOutbox) Enqueue(_ context.Context, event *domain.ChangeEvent) error {
+	f.events = append(f.events, *event)
+	return nil
+}
+func (f *fakeOutbox) ListPending(context.Context, int) ([]domain.ChangeEvent, error) {
+	return nil, nil
+}
+func (f *fakeOutbox) MarkDelivered(context.Context, string, time.Time) error { return nil }
+func (f *fakeOutbox) MarkDeliveryFailed(context.Context, string, string, time.Time) error {
+	return nil
+}
+
 func configuredWorkspace() *workspace.ConfiguredWorkspace {
 	return &workspace.ConfiguredWorkspace{
 		Workspace:          workspace.Workspace{ID: "workspace-1", OwnerUserID: "owner-1", DesiredState: "running", Version: 1},
@@ -85,7 +99,7 @@ func activeTopology() *domain.Topology {
 
 func TestRuntimeContext(t *testing.T) {
 	repository := &fakeTopologyRepository{value: activeTopology()}
-	service := New(repository, directTx{}, &fakeWorkspaceRepository{value: configuredWorkspace()})
+	service := New(repository, nil, directTx{}, &fakeWorkspaceRepository{value: configuredWorkspace()})
 
 	value, err := service.RuntimeContext(context.Background(), "topology-1", "owner-1")
 	if err != nil || value.ID != "topology-1" || value.Version != 4 || value.EntryMemberID != "writer" {
@@ -100,7 +114,7 @@ func TestRuntimeContext(t *testing.T) {
 
 func TestRuntimeContextRejectsForeignConfiguration(t *testing.T) {
 	repository := &fakeTopologyRepository{}
-	service := New(repository, directTx{}, &fakeWorkspaceRepository{value: configuredWorkspace()})
+	service := New(repository, nil, directTx{}, &fakeWorkspaceRepository{value: configuredWorkspace()})
 	members := `[{"member_id":"writer","agent_config_id":"foreign-config","name":"Writer"}]`
 	_, err := service.Create(context.Background(), CreateCommand{Owner: "owner-1", WorkspaceID: "workspace-1", Name: "writers", EntryMemberID: "writer", MembersJSON: members, EdgesJSON: `[]`})
 	if err == nil {
@@ -110,5 +124,25 @@ func TestRuntimeContextRejectsForeignConfiguration(t *testing.T) {
 	_, err = service.Update(context.Background(), UpdateCommand{ID: "topology-1", Owner: "owner-1", Name: "writers", EntryMemberID: "writer", MembersJSON: members, EdgesJSON: `[]`, ExpectedVersion: 4})
 	if err == nil {
 		t.Fatal("foreign agent configuration was accepted on update")
+	}
+}
+
+func TestTopologyWritesChangeOutbox(t *testing.T) {
+	repository, outbox := &fakeTopologyRepository{}, &fakeOutbox{}
+	service := New(repository, outbox, directTx{}, &fakeWorkspaceRepository{value: configuredWorkspace()})
+	members := `[{"member_id":"writer","agent_config_id":"config-1","name":"Writer"}]`
+	created, err := service.Create(context.Background(), CreateCommand{Owner: "owner-1", WorkspaceID: "workspace-1", Name: "writers", EntryMemberID: "writer", MembersJSON: members, EdgesJSON: `[]`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := service.Update(context.Background(), UpdateCommand{ID: created.ID, Owner: "owner-1", Name: "writers-v2", EntryMemberID: "writer", MembersJSON: members, EdgesJSON: `[]`, ExpectedVersion: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.Delete(context.Background(), updated.ID, "owner-1", 2); err != nil {
+		t.Fatal(err)
+	}
+	if len(outbox.events) != 3 || outbox.events[0].TopologyVersion != 1 || outbox.events[1].TopologyVersion != 2 || outbox.events[2].TopologyVersion != 3 || outbox.events[2].Status != "deleted" {
+		t.Fatalf("events=%+v", outbox.events)
 	}
 }

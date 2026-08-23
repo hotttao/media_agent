@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package media_agent_gateway.teamwork_runtime;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_agent_gateway/teamwork_runtime";
+
+service TeamworkRuntimeService {
+  rpc ApplyTopologyChanged(ApplyTopologyChangedRequest) returns (ApplyTopologyChangedResponse) {
+    option (api.post) = "/api/v1/internal/teamwork-topology-events";
+    option (google.api.http) = { post: "/api/v1/internal/teamwork-topology-events" body: "*" };
+  }
+}
+
+message ApplyTopologyChangedRequest {
+  string event_id = 1 [(api.body) = "event_id"];
+  string topology_id = 2 [(api.body) = "topology_id"];
+  int64 topology_version = 3 [(api.body) = "topology_version"];
+  string status = 4 [(api.body) = "status"];
+  string workspace_id = 5 [(api.body) = "workspace_id"];
+}
+
+message ApplyTopologyChangedResponse {
+  bool applied = 1;
+  int32 cancelled_task_count = 2;
+}

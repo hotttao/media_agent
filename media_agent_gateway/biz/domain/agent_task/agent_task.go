@@ -30,6 +30,8 @@ const (
 
 type Task struct {
 	ID, WorkspaceID, RequestedBy, SessionID        string
+	TopologyID                                     string
+	TopologyVersion                                int64
 	Source, SourceResourceID, IdempotencyKey       string
 	InputJSON                                      string
 	Status                                         Status
@@ -56,6 +58,9 @@ type DispatchRepository interface {
 	MarkRetryWait(context.Context, string, string, string, time.Time) error
 	MarkTerminal(context.Context, string, Status, string, string, string, time.Time) error
 	ListWaitingTurn(context.Context, int) ([]Task, error)
+}
+type TopologyCancellationRepository interface {
+	CancelStaleTopology(context.Context, string, int64, time.Time) ([]Task, error)
 }
 
 type OutboxEvent struct {
@@ -88,6 +93,17 @@ func Validate(workspaceID, source, sourceResourceID, key, input string) (string,
 		return "", "", "", "", "", errors.New("input_json must be a JSON object")
 	}
 	return workspaceID, source, sourceResourceID, key, input, nil
+}
+
+func ValidateTopology(topologyID string, topologyVersion int64) (string, int64, error) {
+	topologyID = strings.TrimSpace(topologyID)
+	if topologyID == "" && topologyVersion == 0 {
+		return "", 0, nil
+	}
+	if topologyID == "" || topologyVersion <= 0 {
+		return "", 0, errors.New("topology_id and positive topology_version must be provided together")
+	}
+	return topologyID, topologyVersion, nil
 }
 func ParseStatus(value string) (Status, error) {
 	if strings.TrimSpace(value) == "" {

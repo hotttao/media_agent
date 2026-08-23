@@ -4,7 +4,7 @@
 // 后续 me/change-password 依赖 cookie）。media-cli 每次命令是独立进程，进程内内存在
 // 命令间丢失，故 cookie 需持久化落盘跨命令复用——login 一次，后续命令直接带 cookie。
 //
-// 隔离：按 host 区分（cookie 本就 host-scoped）。落盘 media-cli/.cookies/<host>/cookies.json，
+// 隔离：按 hostname 区分（HTTP Cookie 不按端口隔离）。落盘 media-cli/.cookies/<hostname>/cookies.json，
 // 文件权限 0600，不进版本库（.gitignore 忽略 .cookies/）。
 //
 // middleware：注入 typed client（WithHertzClientMiddleware），每请求从 store 取该 host cookie
@@ -14,6 +14,7 @@ package cookie
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,13 +35,13 @@ type cookieEntry struct {
 	Secure   bool   `json:"secure,omitempty"`
 }
 
-// Store 是按 host 隔离的持久化 cookie 存储。
+// Store 是按 hostname 隔离的持久化 cookie 存储。
 type Store struct {
 	mu  sync.Mutex
 	dir string // .cookies 根目录
 }
 
-// New 构造 Store，cookie 落盘到 rootDir/.cookies/<host>/cookies.json。
+// New 构造 Store，cookie 落盘到 rootDir/.cookies/<hostname>/cookies.json。
 func New(rootDir string) *Store {
 	return &Store{dir: filepath.Join(rootDir, ".cookies")}
 }
@@ -143,10 +144,17 @@ func mergeCookies(existing, new []cookieEntry) []cookieEntry {
 	return out
 }
 
-// hostDir 返回该 host 的 cookie 目录路径。
+// hostDir 返回该服务地址所属 hostname 的 cookie 目录路径。
 func (s *Store) hostDir(host string) string {
-	// host 形如 http://127.0.0.1:8888，规范化为文件名安全的形式。
-	safe := strings.NewReplacer("http://", "", "https://", "", ":", "_", "/", "").Replace(host)
+	// Cookie 的 host-only 作用域不包含端口：登录服务与其他服务只要位于同一
+	// hostname，就必须跨进程复用同一份会话 Cookie。
+	safe := ""
+	if parsed, err := url.Parse(host); err == nil {
+		safe = parsed.Hostname()
+	}
+	if safe == "" {
+		safe = strings.NewReplacer("http://", "", "https://", "", ":", "_", "/", "").Replace(host)
+	}
 	return filepath.Join(s.dir, safe)
 }
 

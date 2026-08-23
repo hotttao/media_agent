@@ -40,12 +40,24 @@ type Topology struct {
 	Status                               Status
 	CreatedAt, UpdatedAt                 time.Time
 }
+type ChangeEvent struct {
+	ID, WorkspaceID, TopologyID, EventType, Status, PayloadJSON string
+	TopologyVersion                                             int64
+	Attempts                                                    int32
+	AvailableAt, CreatedAt, UpdatedAt                           time.Time
+}
 type Repository interface {
 	Create(context.Context, *Topology) error
 	ListOwned(context.Context, string, string) ([]Topology, error)
 	GetOwned(context.Context, string, string) (*Topology, error)
 	Update(context.Context, *Topology, int64) error
 	Delete(context.Context, *Topology, int64) error
+}
+type OutboxRepository interface {
+	Enqueue(context.Context, *ChangeEvent) error
+	ListPending(context.Context, int) ([]ChangeEvent, error)
+	MarkDelivered(context.Context, string, time.Time) error
+	MarkDeliveryFailed(context.Context, string, string, time.Time) error
 }
 
 func Validate(name, entry, membersJSON, edgesJSON string) (string, string, []Member, []Edge, error) {
