@@ -30,6 +30,8 @@ type Client interface {
 	ChangePassword(context context.Context, req *auth.ChangePasswordRequest, reqOpt ...config.RequestOption) (resp *auth.ChangePasswordResponse, rawResponse *protocol.Response, err error)
 
 	SetDefaultPrompt(context context.Context, req *auth.SetDefaultPromptRequest, reqOpt ...config.RequestOption) (resp *auth.SetDefaultPromptResponse, rawResponse *protocol.Response, err error)
+
+	GetJwks(context context.Context, req *auth.GetJwksRequest, reqOpt ...config.RequestOption) (resp *auth.GetJwksResponse, rawResponse *protocol.Response, err error)
 }
 
 type AuthServiceClient struct {
@@ -201,6 +203,28 @@ func (s *AuthServiceClient) SetDefaultPrompt(context context.Context, req *auth.
 	return resp, rawResponse, nil
 }
 
+func (s *AuthServiceClient) GetJwks(context context.Context, req *auth.GetJwksRequest, reqOpt ...config.RequestOption) (resp *auth.GetJwksResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &auth.GetJwksResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/auth/.well-known/jwks.json")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
 var defaultClient, _ = NewAuthServiceClient("")
 
 func ConfigDefaultClient(ops ...Option) (err error) {
@@ -234,4 +258,8 @@ func ChangePassword(context context.Context, req *auth.ChangePasswordRequest, re
 
 func SetDefaultPrompt(context context.Context, req *auth.SetDefaultPromptRequest, reqOpt ...config.RequestOption) (resp *auth.SetDefaultPromptResponse, rawResponse *protocol.Response, err error) {
 	return defaultClient.SetDefaultPrompt(context, req, reqOpt...)
+}
+
+func GetJwks(context context.Context, req *auth.GetJwksRequest, reqOpt ...config.RequestOption) (resp *auth.GetJwksResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.GetJwks(context, req, reqOpt...)
 }

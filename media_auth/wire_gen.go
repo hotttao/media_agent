@@ -88,6 +88,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	accessOutbox := dalauth.NewAccessRevocationOutbox(db)
 	authSvc := authservice.NewService(userRepo, signer, ldapCli)
 	authhandler.AuthSvc = authSvc
+	authhandler.JWKProvider = signer
 
 	// identity domain：repo + service + handler 回填；service 同时作 AuthSourceResolver 注入 auth。
 	identityRepo := dalidentity.NewRepo(db)

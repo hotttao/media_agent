@@ -6,6 +6,24 @@ info:
     title: ""
     version: 0.0.1
 paths:
+    /api/auth/.well-known/jwks.json:
+        get:
+            tags:
+                - AuthService
+            operationId: AuthService_GetJwks
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetJwksResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/auth/identities:
         get:
             tags:
@@ -1533,6 +1551,13 @@ components:
             properties:
                 enabled:
                     type: boolean
+        GetJwksResponse:
+            type: object
+            properties:
+                keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/JsonWebKey'
         GoogleProtobufAny:
             type: object
             properties:
@@ -1552,6 +1577,21 @@ components:
             description: |-
                 HandleCallbackResponse —— handler 返回完整 HTML 字符串(200),HTML 含
                  window.opener.postMessage(...) + window.close()。
+        JsonWebKey:
+            type: object
+            properties:
+                kty:
+                    type: string
+                use:
+                    type: string
+                alg:
+                    type: string
+                kid:
+                    type: string
+                n:
+                    type: string
+                e:
+                    type: string
         ListClientsResponse:
             type: object
             properties:

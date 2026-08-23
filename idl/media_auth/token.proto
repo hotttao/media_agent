@@ -24,7 +24,18 @@ service TokenService {
   rpc VerifyToken(VerifyTokenRequest) returns(VerifyTokenResponse) {
     option (api.post) = "/internal/token/verify";
   };
+  // POST /internal/token/platform —— 供旧 control-plane 获取用户 Platform Token。
+  rpc GetPlatformToken(GetPlatformTokenRequest) returns(GetPlatformTokenResponse) {
+    option (api.post) = "/internal/token/platform";
+  };
+  rpc VerifySession(VerifySessionRequest) returns(VerifyTokenResponse) {
+    option (api.post) = "/internal/token/session";
+  };
 }
+
+message GetPlatformTokenRequest { string user_id = 1; }
+message GetPlatformTokenResponse { string token = 1; }
+message VerifySessionRequest { string token = 1; }
 
 message VerifyTokenRequest {
   // tos_xxx 明文;media_auth 内部 sha256 后查 service_tokens.token_hash,

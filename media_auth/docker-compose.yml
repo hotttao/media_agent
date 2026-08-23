@@ -11,6 +11,7 @@ services:
       SERVER_ADDR: :8001
       CONSUL_ENABLED: 'false'
       MEDIA_AUTH_DB_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_auth?sslmode=disable
+      MEDIA_AUTH_INTERNAL_TOKEN: ${MEDIA_AUTH_INTERNAL_TOKEN:-dev-media-auth-internal-token}
       LOG_DIR: /media_logs/media-auth
     volumes:
     - ../media_logs/media-auth:/media_logs/media-auth

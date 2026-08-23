@@ -2,12 +2,72 @@
 package session
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	configpb "media_agent/hertz_gen/config"
 	"media_agent/media_auth/biz/domain/auth"
 )
+
+func TestSignerRS256AndLegacyDualVerification(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	privatePath := filepath.Join(dir, "private.pem")
+	publicPath := filepath.Join(dir, "public.pem")
+	privatePEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: mustPKCS8(t, key)})
+	publicDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicDER})
+	if err := os.WriteFile(privatePath, privatePEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(publicPath, publicPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rs, err := NewSigner(&configpb.AuthConfig{JwtSecret: "legacy", JwtPrivateKeyFile: privatePath, JwtPublicKeyFile: publicPath, JwtKeyId: "key-1", AcceptLegacyHs256: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := rs.Sign(auth.Session{Sub: "u1", AuthVersion: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := rs.Verify(token); err != nil || got.Sub != "u1" || got.AuthVersion != 2 {
+		t.Fatalf("got=%+v err=%v", got, err)
+	}
+	if jwk := rs.JWK(); jwk == nil || jwk.Kid != "key-1" || jwk.Alg != "RS256" || jwk.N == "" {
+		t.Fatalf("jwk=%+v", jwk)
+	}
+	legacy, _ := NewSigner(&configpb.AuthConfig{JwtSecret: "legacy"})
+	legacyToken, _ := legacy.Sign(auth.Session{Sub: "old"})
+	if _, err := rs.Verify(legacyToken); err != nil {
+		t.Fatalf("dual verify legacy: %v", err)
+	}
+	rs.acceptLegacy = false
+	if _, err := rs.Verify(legacyToken); err == nil {
+		t.Fatal("legacy token accepted after dual-verification window")
+	}
+}
+
+func mustPKCS8(t *testing.T, key *rsa.PrivateKey) []byte {
+	t.Helper()
+	value, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
 
 func TestSigner_SignVerify(t *testing.T) {
 	s, err := NewSigner(&configpb.AuthConfig{JwtSecret: "test-secret", JwtExpiresInSeconds: 3600})

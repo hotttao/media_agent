@@ -1,6 +1,6 @@
 # media_auth 落地计划 (plan)
 
-> 状态：P1 已落地；P2/P3/P4 仍按灰度与数据迁移计划推进
+> 状态：P1/P2 已落地；P3 已具备迁移工具与兼容投影，待生产迁移窗口；P4 已具备 RS256 双验与远程会话校验，事件化撤销缓存仍待评估
 > 范围：按 [spec/media_auth/impl.md](../../spec/media_auth/impl.md) 把 control-plane 认证鉴权能力抽成独立 media_auth Go/Hertz 微服务。
 > 规范依据（裁决优先级）：`harness/contributing/architecture.md`（层边界/import，冲突时优先）> `server.md`（服务端治理收口）> `idl.md`（IDL 约束）> `config.md`（配置 schema）。
 > 领域模型：`docs/ddd/media_auth/`（CONTEXT / 6 domain / 4 workflow）；架构决策：`docs/ddd/adr/0001`、`docs/ddd/adr/0002`。
@@ -62,24 +62,29 @@
 
 ## 2. P2 — control_plane 接入 media_auth
 
-- [ ] control_plane 网关反代 4 前缀（`/api/auth` `/api/oauth` `/api/service-tokens` `/api/mcp-oauth`）→ media_auth
-- [ ] control_plane 中间件：Bearer service_token 改调 `VerifyToken` RPC（mTLS），不再直读 `service_tokens`；cookie/bearer JWT 仍本地 HS256 验
-- [ ] control_plane 取 platform token 改调 media_auth `getPlatformToken` 内部接口
-- [ ] 前端适配 identity 路径：`DELETE /api/auth/wecom/identity` → `DELETE /api/auth/identities/:provider`（破坏性）
-- [ ] `default_prompt_name` 改由网关层补（media_auth 只返 `default_prompt_id`）
-- [ ] 灰度：4 前缀按 feature flag 切换反代/本地，回滚可控
+- [x] control_plane 网关反代 4 前缀（`/api/auth` `/api/oauth` `/api/service-tokens` `/api/mcp-oauth`）→ media_auth
+- [x] control_plane 中间件：Bearer service_token 可切换为调用 `VerifyToken` 内部 API，不再直读 `service_tokens`
+- [x] control_plane 取 platform token 可切换为调用 media_auth 内部接口
+- [x] 前端适配 identity 路径：`DELETE /api/auth/wecom/identity` → `DELETE /api/auth/identities/:provider`（破坏性）
+- [x] `default_prompt_name` 由网关层补（media_auth 只返 `default_prompt_id`）
+- [x] 灰度：4 前缀、service token、session、platform token 均有独立 feature flag，回滚可控
 
 ## 3. P3 — 数据所有权迁移
 
-- [ ] media_auth 接管 8 表（DB 物理独立 或 同库 `media_auth` schema）
-- [ ] control_plane 删除认证相关 migration（users/identities/service_tokens/oauth_*/mcp_oauth_*）
-- [ ] 存量数据迁移脚本（id 兼容，无主键变更）
-- [ ] 取消 control_plane 对 `users`/`service_tokens` 的所有直读
+- [x] media_auth 接管 8 表（`media_auth` schema）
+- [x] 存量数据迁移脚本（默认 dry-run，`--apply` 执行；保留 id，无主键变更）
+- [x] control_plane 运行时认证链路可取消对 `service_tokens` 的直读
+- [x] control_plane 保留 `users` 业务只读投影，远程 session 验证时按原 id JIT upsert，以维持历史业务外键与展示关联
+- [ ] 在生产迁移窗口执行 dry-run、备份、apply、计数校验和灰度切换
+- [ ] 生产稳定后清理 control_plane 已失效的认证写路径；历史 migration 不删除，保证旧环境可重放
 
-## 4. P4 — 远期：JWT 非对称签名
+## 4. P4 — JWT 非对称签名与即时撤销
 
-- [ ] JWT HS256 → RS256/ES256：media_auth 私钥签，control_plane 公钥本地验（消除 `JWT_SECRET` 共享，ADR-0001 备选）
-- [ ] token 平滑迁移：双验期（新旧皆可验）→ 切签 → 撤旧
+- [x] media_auth 支持 RS256 私钥签名、JWKS 公钥发布和精确算法校验
+- [x] control_plane 支持 JWKS 缓存与 RS256 本地验签，并可配置 HS256 双验期
+- [x] control_plane 支持远程 session introspection；切换时可获得用户软删除/改密后的即时撤销语义
+- [ ] 生产执行双验期（新旧皆可验）→ 切签 → 撤旧，并完成密钥轮换演练
+- [ ] 评估 auth 事件消费者；在未实现前，不启用可能延迟撤销的边缘 session 缓存
 - [ ] 评估 VerifyToken 短 TTL 本地缓存（撤销失效及时性）
 
 ## 5. 风险与对策

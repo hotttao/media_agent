@@ -51,18 +51,22 @@ func VerifyToken(token string) (*auth.Session, error) {
 	return &sess, nil
 }
 
-// skipAllPaths 是无鉴权的公开端点（所有方法都跳过；spec §3.10 + 运维端点 + internal VerifyToken）。
+// skipAllPaths 是不经过用户 Session 鉴权的端点。
+// internal token 路由在 handler 中单独校验 X-Media-Auth-Internal-Token。
 var skipAllPaths = map[string]bool{
 	// spec §3.10 公开业务端点
-	"/api/auth/login":           true,
-	"/api/auth/register":        true,
-	"/api/auth/wecom/enabled":   true,
-	"/api/auth/wecom/authorize": true,
-	"/api/auth/wecom/callback":  true,
-	"/api/oauth/token":          true,
-	"/api/oauth/userinfo":       true,
-	// internal VerifyToken 不经 cookie/session（网络隔离/mTLS 由部署层负责）。
-	"/internal/token/verify": true,
+	"/api/auth/login":                 true,
+	"/api/auth/register":              true,
+	"/api/auth/.well-known/jwks.json": true,
+	"/api/auth/wecom/enabled":         true,
+	"/api/auth/wecom/authorize":       true,
+	"/api/auth/wecom/callback":        true,
+	"/api/oauth/token":                true,
+	"/api/oauth/userinfo":             true,
+	// internal token API 不经 cookie/session；每个 handler 校验内部凭证。
+	"/internal/token/verify":   true,
+	"/internal/token/platform": true,
+	"/internal/token/session":  true,
 	// internal teams 查询：供下游服务 fetchTeams 调用。
 	"/internal/teams:byUser": true,
 	// 运维端点（health/pprof/metrics/swagger/openapi/ping）不走 session 鉴权

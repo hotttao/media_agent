@@ -60,3 +60,13 @@ func _registerMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func __well_knownMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getjwksMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

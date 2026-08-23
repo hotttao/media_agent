@@ -52,7 +52,7 @@ auth 负责平台账号的本地密码 / LDAP 双路登录、会话（JWT cookie
 - User 状态为 `active/disabled/deleted`；disabled 可由管理员恢复，deleted 为终态。
 - disabled/deleted User 不能登录、续期 Cookie JWT、创建新 Service/Platform Token 或发起新的代表调用。
 - 软删除不级联删除历史 Session、Task、Workspace、Team 审计记录；跨服务保留稳定 user_id。
-- 删除事务递增 `auth_version` 并发布 `UserAccessRevoked`，供 Edge 立即拒绝尚未过期的旧 Cookie JWT。
+- 删除事务递增 `auth_version` 并发布 `UserAccessRevoked`。当前旧 control-plane 通过 media_auth Session introspection 即时检查该版本；Edge 事件消费者完成后才可改用带撤销缓存的纯本地验签。
 
 ## 数据模型
 
@@ -150,8 +150,9 @@ password_hash 非空            → 'password'
 ```
 issueSession(user): 仅 active User 可签 JWT + Set-Cookie（见 Login §6）
 verifySession(cookie):
-  - Edge 通过 JWKS 校验签名、issuer/audience/type/exp
-  - 检查 UserAccessRevoked 缓存中的 auth_version；旧版本立即拒绝
+  - media_auth middleware 校验签名、issuer/audience/type/exp，并读取 User status/auth_version
+  - 旧 control-plane 切换期调用内部 Session introspection，旧版本立即拒绝
+  - 纯 JWKS 本地验签只证明 token 完整性；在 UserAccessRevoked 消费者完成前不提供即时撤销
   - 续期必须回到 Auth 并重新检查 User status/auth_version
 ```
 
@@ -160,7 +161,7 @@ verifySession(cookie):
 1. 要求管理员身份，禁止删除最后一个有效平台管理员。
 2. 在 User 本地事务中将 status 置为 deleted、写 deleted_at/deleted_by、递增 auth_version，并写 Outbox。
 3. Token Worker 幂等撤销该用户全部 Service Token、Platform Token 和 MCP OAuth Credential。
-4. Edge 消费 `UserAccessRevoked`，按 user_id 记录最低 auth_version，立即拒绝旧 Cookie JWT。
+4. 当前旧 control-plane 通过 Session introspection 立即拒绝旧 Cookie JWT；未来 Edge 消费 `UserAccessRevoked` 后，才可按 user_id 维护最低 auth_version 缓存。
 5. 已开始请求允许自然结束；删除提交后禁止新请求和后台长期委托启动。
 
 ## 关联关系
