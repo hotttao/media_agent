@@ -10,20 +10,25 @@ import (
 	"github.com/spf13/cobra"
 
 	"media_agent/hertz_gen/media_agent_gateway/agent_task_service"
+	"media_agent/hertz_gen/media_agent_gateway/chat_service"
 	agenttaskpb "media_agent/hertz_gen/model/media_agent_gateway/agent_task"
+	chatpb "media_agent/hertz_gen/model/media_agent_gateway/chat"
 	"media_agent/hertz_infra/clienthertz"
 	config "media_agent/hertz_infra/config"
 	"media_agent/media_cli/cmd"
 	"media_agent/media_cli/cmd/cookie"
 )
 
-var agentTaskClient agent_task_service.Client
+var (
+	agentTaskClient agent_task_service.Client
+	chatClient      chat_service.Client
+)
 
 // MediaAgentGatewayCmd groups Agent Gateway command E2E entry points.
 var MediaAgentGatewayCmd = &cobra.Command{Use: "media_agent_gateway", Short: "调用 Media Agent Gateway API"}
 
 func init() {
-	MediaAgentGatewayCmd.AddCommand(agentTaskCmd())
+	MediaAgentGatewayCmd.AddCommand(agentTaskCmd(), chatCmd())
 	cmd.RegisterCmd(MediaAgentGatewayCmd)
 }
 
@@ -47,6 +52,17 @@ func Init(cfg *config.Config) {
 		log.Fatalf("media_agent_gateway: build shared client: %v", err)
 	}
 	store := cookie.New(cmd.CookiesDir)
+	chatClient, err = chat_service.NewChatServiceClient(host,
+		chat_service.WithHertzClient(shared),
+		chat_service.WithHertzClientMiddleware(store.Middleware(host)),
+	)
+	if err != nil {
+		log.Fatalf("media_agent_gateway: create chat client: %v", err)
+	}
+	shared, err = suite.NewClient()
+	if err != nil {
+		log.Fatalf("media_agent_gateway: build agent task client: %v", err)
+	}
 	agentTaskClient, err = agent_task_service.NewAgentTaskServiceClient(host,
 		agent_task_service.WithHertzClient(shared),
 		agent_task_service.WithHertzClientMiddleware(store.Middleware(host)),
@@ -54,6 +70,63 @@ func Init(cfg *config.Config) {
 	if err != nil {
 		log.Fatalf("media_agent_gateway: create agent task client: %v", err)
 	}
+}
+
+func chatCmd() *cobra.Command {
+	root := &cobra.Command{Use: "chat", Short: "Agent Session 与 Turn 命令"}
+	sessions := &cobra.Command{Use: "session", Short: "Session 命令"}
+	sessions.AddCommand(createSessionCmd(), listSessionsCmd())
+	turns := &cobra.Command{Use: "turn", Short: "Turn 命令"}
+	turns.AddCommand(runTurnCmd())
+	root.AddCommand(sessions, turns)
+	return root
+}
+
+func createSessionCmd() *cobra.Command {
+	var workspaceID, title string
+	command := &cobra.Command{Use: "create", RunE: func(command *cobra.Command, _ []string) error {
+		response, _, err := chatClient.CreateSession(context.Background(), &chatpb.CreateSessionRequest{WorkspaceId: workspaceID, Title: title})
+		if err != nil {
+			return fmt.Errorf("create chat session: %w", err)
+		}
+		return printJSON(command, response)
+	}}
+	command.Flags().StringVar(&workspaceID, "workspace-id", "", "Workspace ID")
+	command.Flags().StringVar(&title, "title", "", "Session 标题")
+	_ = command.MarkFlagRequired("workspace-id")
+	return command
+}
+
+func listSessionsCmd() *cobra.Command {
+	var workspaceID string
+	command := &cobra.Command{Use: "list", RunE: func(command *cobra.Command, _ []string) error {
+		response, _, err := chatClient.ListSessions(context.Background(), &chatpb.ListSessionsRequest{WorkspaceId: workspaceID})
+		if err != nil {
+			return fmt.Errorf("list chat sessions: %w", err)
+		}
+		return printJSON(command, response)
+	}}
+	command.Flags().StringVar(&workspaceID, "workspace-id", "", "Workspace ID")
+	_ = command.MarkFlagRequired("workspace-id")
+	return command
+}
+
+func runTurnCmd() *cobra.Command {
+	var sessionID, message, idempotencyKey string
+	command := &cobra.Command{Use: "run", RunE: func(command *cobra.Command, _ []string) error {
+		response, _, err := chatClient.RunTurn(context.Background(), &chatpb.RunTurnRequest{SessionId: sessionID, Message: message, IdempotencyKey: idempotencyKey})
+		if err != nil {
+			return fmt.Errorf("run chat turn: %w", err)
+		}
+		return printJSON(command, response)
+	}}
+	command.Flags().StringVar(&sessionID, "session-id", "", "Session ID")
+	command.Flags().StringVar(&message, "message", "", "用户消息")
+	command.Flags().StringVar(&idempotencyKey, "idempotency-key", "", "幂等键")
+	_ = command.MarkFlagRequired("session-id")
+	_ = command.MarkFlagRequired("message")
+	_ = command.MarkFlagRequired("idempotency-key")
+	return command
 }
 
 func printJSON(command *cobra.Command, value any) error {

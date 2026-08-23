@@ -98,9 +98,9 @@ func (w *RunTurn) Interrupt(ctx context.Context, sessionID, userID, authToken st
 	if session.Status != domain.StatusActive {
 		return nil, domain.ErrInactive
 	}
-	_, runtime, err := w.runtime(ctx, session, authToken)
-	if err != nil {
-		return nil, err
+	runtime, ok := w.runtimes.Get(session.AgentType)
+	if !ok {
+		return nil, fmt.Errorf("agent runtime %q is not registered", session.AgentType)
 	}
 	state, err := runtime.GetRuntimeSession(ctx, session.ID)
 	if err != nil {
@@ -193,7 +193,7 @@ func (w *RunTurn) runtime(ctx context.Context, session *domain.Session, authToke
 		return service.AgentContext{}, nil, err
 	}
 	if runtimeContext.AgentType != session.AgentType || runtimeContext.AgentID != session.AgentID || runtimeContext.ContextVersion != session.ContextVersion {
-		return service.AgentContext{}, nil, fmt.Errorf("Agent Session context version no longer matches its Registration")
+		return service.AgentContext{}, nil, domain.ErrContextChanged
 	}
 	runtime, ok := w.runtimes.Get(session.AgentType)
 	if !ok {

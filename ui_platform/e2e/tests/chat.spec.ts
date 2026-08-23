@@ -20,6 +20,7 @@ const session = {
   title: "Session 1",
   status: "active",
   chat_status: "human",
+  context_version: 1,
   created_at: 1,
   updated_at: 1,
 };
@@ -51,29 +52,27 @@ test.describe("workspace platform", () => {
     tag: "@C000009",
   }, async ({ page }) => {
     await mockWorkspace(page);
-    await page.route(
-      `**/api/chat/sessions/${session.id}/requests*`,
-      (route) =>
-        route.fulfill({
-          json: {
-            requests: [
-              {
-                request_id: "request-e2e",
-                session_id: session.id,
-                turn_id: "turn-e2e",
-                request_type: "permission",
-                payload: {
-                  question: "Allow the agent to run this command?",
-                  options: [{ option_id: "allow", label: "Allow once" }],
-                },
-                status: "pending",
-                response: null,
-                resolved_at: null,
-                created_at: "2026-08-22T00:00:00Z",
+    await page.route(`**/api/chat/sessions/${session.id}/requests*`, (route) =>
+      route.fulfill({
+        json: {
+          requests: [
+            {
+              request_id: "request-e2e",
+              session_id: session.id,
+              turn_id: "turn-e2e",
+              request_type: "permission",
+              payload: {
+                question: "Allow the agent to run this command?",
+                options: [{ option_id: "allow", label: "Allow once" }],
               },
-            ],
-          },
-        }),
+              status: "pending",
+              response: null,
+              resolved_at: null,
+              created_at: "2026-08-22T00:00:00Z",
+            },
+          ],
+        },
+      }),
     );
     await page.route(
       `**/api/chat/sessions/${session.id}/turns/turn-e2e/requests/request-e2e/resolve`,
@@ -98,9 +97,13 @@ test.describe("workspace platform", () => {
     );
     await page.goto(`/w/${workspace.id}`);
 
-    await expect(page.getByText("Allow the agent to run this command?")).toBeVisible();
+    await expect(
+      page.getByText("Allow the agent to run this command?"),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Allow once" }).click();
-    await expect(page.getByText("Allow the agent to run this command?")).toHaveCount(0);
+    await expect(
+      page.getByText("Allow the agent to run this command?"),
+    ).toHaveCount(0);
   });
 
   test("opens a workspace through the switcher and keeps it in the URL", {
@@ -145,13 +148,12 @@ test.describe("workspace platform", () => {
       expect(route.request().postDataJSON()).toEqual({
         name: "Updated workspace",
         agent_type: "codex",
-        api_key: "replacement-key",
+        api_key: "",
       });
       await route.fulfill({
         json: {
           ...workspace,
           name: "Updated workspace",
-          configuration_version: 2,
         },
       });
     });
@@ -160,12 +162,109 @@ test.describe("workspace platform", () => {
     await page.getByLabel("Switch workspace").click();
     await page.getByRole("button", { name: "Workspace settings" }).click();
     await page.getByLabel("Settings workspace name").fill("Updated workspace");
-    await page.getByLabel("Settings API key").fill("replacement-key");
     await page.getByRole("button", { name: "Save changes" }).click();
 
     await expect(page.getByLabel("Switch workspace")).toContainText(
       "Updated workspace",
     );
+  });
+
+  test("starts a compatible session after switching the workspace Agent", {
+    tag: "@C000010",
+  }, async ({ page }) => {
+    const availableSessions = [session];
+    const switchedSession = {
+      ...session,
+      id: "session-claude",
+      agent_id: "claude-code",
+      agent_type: "claude-code",
+      title: "Session 2",
+      context_version: 2,
+      created_at: 2,
+      updated_at: 2,
+    };
+    await mockWorkspace(page, availableSessions);
+    await page.route(`**/api/v1/workspaces/${workspace.id}`, async (route) => {
+      expect(route.request().postDataJSON()).toEqual({
+        name: workspace.name,
+        agent_type: "claude-code",
+        api_key: "claude-key",
+      });
+      await route.fulfill({
+        json: {
+          ...workspace,
+          agent_id: "claude-code",
+          agent_type: "claude-code",
+          configuration_version: 2,
+          updated_at: 2,
+        },
+      });
+    });
+    await page.route("**/api/chat/sessions", async (route) => {
+      expect(route.request().method()).toBe("POST");
+      expect(route.request().postDataJSON()).toEqual({
+        workspace_id: workspace.id,
+        title: "Session 2",
+      });
+      availableSessions.unshift(switchedSession);
+      await route.fulfill({ status: 201, json: switchedSession });
+    });
+    await page.goto(`/w/${workspace.id}`);
+
+    await page.getByLabel("Switch workspace").click();
+    await page.getByRole("button", { name: "Workspace settings" }).click();
+    await page.getByLabel("Agent").selectOption("claude-code");
+    await page.getByLabel("Settings API key").fill("claude-key");
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await expect(page).toHaveURL(/session=session-claude$/);
+    await expect(page.getByLabel("Message Claude Code")).toBeEnabled();
+    await page.getByRole("button", { name: /Session 1/ }).click();
+    await expect(
+      page.getByText("This session uses an older Agent configuration."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Start new session" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Send message")).toHaveCount(0);
+  });
+
+  test("keeps the old session readable when automatic session creation fails", {
+    tag: "@C000011",
+  }, async ({ page }) => {
+    await mockWorkspace(page);
+    await page.route(`**/api/v1/workspaces/${workspace.id}`, (route) =>
+      route.fulfill({
+        json: {
+          ...workspace,
+          api_key_configured: true,
+          configuration_version: 2,
+          updated_at: 2,
+        },
+      }),
+    );
+    await page.route("**/api/chat/sessions", (route) =>
+      route.fulfill({
+        status: 503,
+        json: { error: "Agent Runtime unavailable" },
+      }),
+    );
+    await page.goto(`/w/${workspace.id}`);
+
+    await page.getByLabel("Switch workspace").click();
+    await page.getByRole("button", { name: "Workspace settings" }).click();
+    await page.getByLabel("Settings API key").fill("replacement-key");
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await expect(
+      page.getByText(
+        "Agent configuration was saved, but a new session could not be started.",
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Start new session" }),
+    ).toBeVisible();
+    await expect(page.getByTestId("session-list")).toContainText("Session 1");
   });
 
   test("creates a workspace and navigates to its stable route", {

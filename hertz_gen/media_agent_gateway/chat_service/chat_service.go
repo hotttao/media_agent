@@ -26,6 +26,14 @@ type Client interface {
 	ListMessages(context context.Context, req *chat.ListMessagesRequest, reqOpt ...config.RequestOption) (resp *chat.ListMessagesResponse, rawResponse *protocol.Response, err error)
 
 	RunTurn(context context.Context, req *chat.RunTurnRequest, reqOpt ...config.RequestOption) (resp *chat.RunTurnResponse, rawResponse *protocol.Response, err error)
+
+	InterruptTurn(context context.Context, req *chat.InterruptTurnRequest, reqOpt ...config.RequestOption) (resp *chat.InterruptTurnResponse, rawResponse *protocol.Response, err error)
+
+	SubscribeEvents(context context.Context, req *chat.SubscribeEventsRequest, reqOpt ...config.RequestOption) (resp *chat.SubscribeEventsResponse, rawResponse *protocol.Response, err error)
+
+	ListAgentRequests(context context.Context, req *chat.ListAgentRequestsRequest, reqOpt ...config.RequestOption) (resp *chat.ListAgentRequestsResponse, rawResponse *protocol.Response, err error)
+
+	ResolveAgentRequest(context context.Context, req *chat.ResolveAgentRequestRequest, reqOpt ...config.RequestOption) (resp *chat.AgentRequestResponse, rawResponse *protocol.Response, err error)
 }
 
 type ChatServiceClient struct {
@@ -159,6 +167,108 @@ func (s *ChatServiceClient) RunTurn(context context.Context, req *chat.RunTurnRe
 	return resp, rawResponse, nil
 }
 
+func (s *ChatServiceClient) InterruptTurn(context context.Context, req *chat.InterruptTurnRequest, reqOpt ...config.RequestOption) (resp *chat.InterruptTurnResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.InterruptTurnResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"session_id": req.GetSessionId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/api/chat/sessions/:session_id/interrupt")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *ChatServiceClient) SubscribeEvents(context context.Context, req *chat.SubscribeEventsRequest, reqOpt ...config.RequestOption) (resp *chat.SubscribeEventsResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.SubscribeEventsResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{
+			"after_sequence": req.GetAfterSequence(),
+		}).
+		setPathParams(map[string]string{
+			"session_id": req.GetSessionId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/chat/sessions/:session_id/events")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *ChatServiceClient) ListAgentRequests(context context.Context, req *chat.ListAgentRequestsRequest, reqOpt ...config.RequestOption) (resp *chat.ListAgentRequestsResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.ListAgentRequestsResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{
+			"turn_id": req.GetTurnId(),
+		}).
+		setPathParams(map[string]string{
+			"session_id": req.GetSessionId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/chat/sessions/:session_id/requests")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *ChatServiceClient) ResolveAgentRequest(context context.Context, req *chat.ResolveAgentRequestRequest, reqOpt ...config.RequestOption) (resp *chat.AgentRequestResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.AgentRequestResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"session_id": req.GetSessionId(),
+			"turn_id":    req.GetTurnId(),
+			"request_id": req.GetRequestId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/api/chat/sessions/:session_id/turns/:turn_id/requests/:request_id/resolve")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
 var defaultClient, _ = NewChatServiceClient("")
 
 func ConfigDefaultClient(ops ...Option) (err error) {
@@ -184,4 +294,20 @@ func ListMessages(context context.Context, req *chat.ListMessagesRequest, reqOpt
 
 func RunTurn(context context.Context, req *chat.RunTurnRequest, reqOpt ...config.RequestOption) (resp *chat.RunTurnResponse, rawResponse *protocol.Response, err error) {
 	return defaultClient.RunTurn(context, req, reqOpt...)
+}
+
+func InterruptTurn(context context.Context, req *chat.InterruptTurnRequest, reqOpt ...config.RequestOption) (resp *chat.InterruptTurnResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.InterruptTurn(context, req, reqOpt...)
+}
+
+func SubscribeEvents(context context.Context, req *chat.SubscribeEventsRequest, reqOpt ...config.RequestOption) (resp *chat.SubscribeEventsResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.SubscribeEvents(context, req, reqOpt...)
+}
+
+func ListAgentRequests(context context.Context, req *chat.ListAgentRequestsRequest, reqOpt ...config.RequestOption) (resp *chat.ListAgentRequestsResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.ListAgentRequests(context, req, reqOpt...)
+}
+
+func ResolveAgentRequest(context context.Context, req *chat.ResolveAgentRequestRequest, reqOpt ...config.RequestOption) (resp *chat.AgentRequestResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.ResolveAgentRequest(context, req, reqOpt...)
 }

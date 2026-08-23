@@ -8,6 +8,7 @@ export interface ChatSession {
   title: string;
   agent_type: string;
   chat_status: "human" | "agent";
+  context_version: number;
 }
 
 export interface ChatMessage {

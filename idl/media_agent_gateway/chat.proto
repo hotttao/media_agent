@@ -88,6 +88,7 @@ message SessionResponse {
   string title = 7;
   string agent_type = 8;
   string chat_status = 9;
+  int64 context_version = 10;
 }
 
 message ListMessagesRequest {

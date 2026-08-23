@@ -141,7 +141,7 @@ func InterruptTurn(ctx context.Context, c *app.RequestContext) {
 }
 
 func toSessionResponse(value *domain.Session, chatStatus string) *chatpb.SessionResponse {
-	return &chatpb.SessionResponse{Id: value.ID, WorkspaceId: value.WorkspaceID, AgentId: value.AgentID, AgentType: value.AgentType, Title: value.Title, Status: value.Status, ChatStatus: chatStatus, CreatedAt: value.CreatedAt.UnixMilli(), UpdatedAt: value.UpdatedAt.UnixMilli()}
+	return &chatpb.SessionResponse{Id: value.ID, WorkspaceId: value.WorkspaceID, AgentId: value.AgentID, AgentType: value.AgentType, Title: value.Title, Status: value.Status, ChatStatus: chatStatus, ContextVersion: value.ContextVersion, CreatedAt: value.CreatedAt.UnixMilli(), UpdatedAt: value.UpdatedAt.UnixMilli()}
 }
 
 func writeError(c *app.RequestContext, err error) {
@@ -152,7 +152,7 @@ func writeError(c *app.RequestContext, err error) {
 	if errors.Is(err, domain.ErrForbidden) {
 		status = consts.StatusForbidden
 	}
-	if errors.Is(err, domain.ErrTurnInFlight) || errors.Is(err, domain.ErrAlreadyExists) {
+	if errors.Is(err, domain.ErrTurnInFlight) || errors.Is(err, domain.ErrAlreadyExists) || errors.Is(err, domain.ErrContextChanged) {
 		status = consts.StatusConflict
 	}
 	if errors.Is(err, domain.ErrInactive) {

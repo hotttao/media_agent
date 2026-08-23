@@ -42,6 +42,7 @@ Agent Session Domain 拥有用户、Workspace 与 Agent 的稳定会话注册关
 | 获取或创建默认会话 | 为已登录用户返回最近 Session；不存在时使用 Default Agent Context 创建 | `SessionService.GetOrCreateDefault` |
 | 授权 Agent 调用 | 校验用户是否拥有目标 Session，再允许命令或查询转发 | `SessionService.Authorize`（目标接口） |
 | 解析上下文 | 由 Session Token 返回固定身份上下文 | `ResolveSessionContext` |
+| 判断配置兼容性 | 向客户端公开 Session Context Version；与 Workspace 当前配置不一致时拒绝新 Turn | `SessionResponse.context_version`、`RunTurn` |
 
 Turn 提交、中断、Agent Request 响应和事件订阅是跨服务 Workflow，不是本 Domain 的状态变更能力。
 
@@ -52,6 +53,8 @@ Turn 提交、中断、Agent Request 响应和事件订阅是跨服务 Workflow�
 | Agent Session Registration | Session Token Hash、UI Metadata | 注册、版本更新与删除 | user_id、workspace_id、agent_id 创建后固定；明文 Token 不落库 |
 
 - `session_id` 同时作为 Agent Runtime Session 的外部关联 ID，但两侧禁止共享数据库表或建立跨服务外键。
+- `agent_id`、`agent_type` 与 `context_version` 在 Registration 创建后不可变；Workspace 配置升级不会迁移或覆盖既有 Registration。
+- 配置版本不兼容的 Session 仍可读取历史、订阅事件并中断已运行 Turn，但不得接受新 Turn；用户必须创建新 Session 使用当前配置。
 - Gateway Registration active 不代表 Agent 当前没有 running Turn；Chat Status 必须查询 Agent 或读取其投影事件。
 - 删除 Registration 必须通过启动/删除 Workflow 通知 Agent；仅删除 Gateway 行不能等价为终止 Runtime。
 
@@ -102,6 +105,13 @@ Turn 提交、中断、Agent Request 响应和事件订阅是跨服务 Workflow�
 2. 加载 Registration，检查 status、user_id 和 Workspace 访问范围。
 3. 生成只包含稳定 session/user/workspace/agent/context version 的内部命令；请求体同名字段不得覆盖。
 4. Agent 仍校验调用方 mTLS 服务身份和 Runtime Session 注册关系。
+
+### Configuration Compatibility
+
+1. `SessionResponse` 返回固定的 `context_version` 与 `agent_type`，客户端可与 Workspace 当前配置版本比较。
+2. 新 Turn 提交前，Gateway 从 Control 读取 Workspace 当前 Runtime Context；若 agent 或版本与 Registration 不一致，返回 HTTP 409 和稳定的 `ErrContextChanged` 领域错误，不得调用 Agent。
+3. 历史 Message/Event 查询按 Registration 固定的 Agent Type 路由，不依赖 Workspace 当前配置。
+4. Interrupt 不需要 Provider API Key，必须按 Registration 固定的 Agent Type 路由，使配置切换前已运行的 Turn 仍可停止。
 
 ### ResolveSessionContext
 

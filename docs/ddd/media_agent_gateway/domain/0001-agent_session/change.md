@@ -1,5 +1,11 @@
 # Agent Session 变更记录
 
+## 2026-08-23 · Workspace Agent 切换后的 Session 兼容性
+
+- Session Response 公开创建时固定的 Context Version，供客户端识别与 Workspace 当前配置是否兼容。
+- 配置不兼容的既有 Session 保留历史读取、事件订阅和运行中 Turn 中断能力，但新 Turn 返回明确冲突并要求创建新 Session。
+- Workspace Agent/API Key 变更不再让 UI 继续向旧 Registration 提交 Turn；UI 创建并选中当前版本的新 Session。
+
 ## 2026-08-22 · Agent Request 只读代理落地
 
 - Gateway 新增授权后的 Agent Request 查询与 resolve 路由，通过 Agent Runtime Session API 代理。

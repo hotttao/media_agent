@@ -7,11 +7,12 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("agent session not found")
-	ErrForbidden     = errors.New("agent session does not belong to user")
-	ErrTurnInFlight  = errors.New("a turn is already running")
-	ErrAlreadyExists = errors.New("turn idempotency key already exists")
-	ErrInactive      = errors.New("agent session registration is not active")
+	ErrNotFound       = errors.New("agent session not found")
+	ErrForbidden      = errors.New("agent session does not belong to user")
+	ErrTurnInFlight   = errors.New("a turn is already running")
+	ErrAlreadyExists  = errors.New("turn idempotency key already exists")
+	ErrInactive       = errors.New("agent session registration is not active")
+	ErrContextChanged = errors.New("agent session configuration changed; create a new session")
 )
 
 const (

@@ -152,6 +152,34 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/chat/sessions/{session_id}/requests:
+        get:
+            tags:
+                - ChatService
+            operationId: ChatService_ListAgentRequests
+            parameters:
+                - name: session_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: turn_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAgentRequestsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/chat/sessions/{session_id}/turns:
         post:
             tags:
@@ -182,6 +210,278 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/chat/sessions/{session_id}/turns/{turn_id}/requests/{request_id}/resolve:
+        post:
+            tags:
+                - ChatService
+            operationId: ChatService_ResolveAgentRequest
+            parameters:
+                - name: session_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: turn_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: request_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ResolveAgentRequestRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentRequestResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/agent-tasks:
+        get:
+            tags:
+                - AgentTaskService
+            operationId: AgentTaskService_ListTasks
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+                - name: status
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListTasksResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - AgentTaskService
+            operationId: AgentTaskService_CreateTask
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateTaskRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TaskResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/agent-tasks/{task_id}:
+        get:
+            tags:
+                - AgentTaskService
+            operationId: AgentTaskService_GetTask
+            parameters:
+                - name: task_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TaskResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/agent-tasks/{task_id}/cancel:
+        post:
+            tags:
+                - AgentTaskService
+            operationId: AgentTaskService_CancelTask
+            parameters:
+                - name: task_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CancelTaskRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TaskResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/batch-runs:
+        get:
+            tags:
+                - BatchRunService
+            operationId: BatchRunService_ListBatchRuns
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+                - name: status
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListBatchRunsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - BatchRunService
+            operationId: BatchRunService_CreateBatchRun
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateBatchRunRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BatchRunResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/batch-runs/{batch_run_id}:
+        get:
+            tags:
+                - BatchRunService
+            operationId: BatchRunService_GetBatchRun
+            parameters:
+                - name: batch_run_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BatchRunResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/batch-runs/{batch_run_id}/cancel:
+        post:
+            tags:
+                - BatchRunService
+            operationId: BatchRunService_CancelBatchRun
+            parameters:
+                - name: batch_run_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CancelBatchRunRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BatchRunResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/internal/teamwork-topology-events:
+        post:
+            tags:
+                - TeamworkRuntimeService
+            operationId: TeamworkRuntimeService_ApplyTopologyChanged
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApplyTopologyChangedRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplyTopologyChangedResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /health:
         get:
             tags:
@@ -202,12 +502,158 @@ paths:
                                 $ref: '#/components/schemas/Status'
 components:
     schemas:
+        AgentRequestResponse:
+            type: object
+            properties:
+                request_id:
+                    type: string
+                turn_id:
+                    type: string
+                request_type:
+                    type: string
+                payload_json:
+                    type: string
+                status:
+                    type: string
+                response_json:
+                    type: string
+                created_at:
+                    type: string
+                resolved_at:
+                    type: string
+        ApplyTopologyChangedRequest:
+            type: object
+            properties:
+                event_id:
+                    type: string
+                topology_id:
+                    type: string
+                topology_version:
+                    type: string
+                status:
+                    type: string
+                workspace_id:
+                    type: string
+        ApplyTopologyChangedResponse:
+            type: object
+            properties:
+                applied:
+                    type: boolean
+                cancelled_task_count:
+                    type: integer
+                    format: int32
+        BatchRunItemResponse:
+            type: object
+            properties:
+                item_key:
+                    type: string
+                session_id:
+                    type: string
+                agent_task_id:
+                    type: string
+                input_json:
+                    type: string
+                status:
+                    type: string
+                error_code:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        BatchRunResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                requested_by:
+                    type: string
+                idempotency_key:
+                    type: string
+                status:
+                    type: string
+                item_count:
+                    type: integer
+                    format: int32
+                next_cursor:
+                    type: integer
+                    format: int32
+                completed_count:
+                    type: integer
+                    format: int32
+                failed_count:
+                    type: integer
+                    format: int32
+                cancelled_count:
+                    type: integer
+                    format: int32
+                created_at:
+                    type: string
+                finished_at:
+                    type: string
+                updated_at:
+                    type: string
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BatchRunItemResponse'
+        CancelBatchRunRequest:
+            type: object
+            properties:
+                batch_run_id:
+                    type: string
+        CancelTaskRequest:
+            type: object
+            properties:
+                task_id:
+                    type: string
+        CreateBatchRunItem:
+            type: object
+            properties:
+                item_key:
+                    type: string
+                session_id:
+                    type: string
+                input_json:
+                    type: string
+        CreateBatchRunRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                idempotency_key:
+                    type: string
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CreateBatchRunItem'
         CreateSessionRequest:
             type: object
             properties:
                 workspace_id:
                     type: string
                 title:
+                    type: string
+        CreateTaskRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                session_id:
+                    type: string
+                source:
+                    type: string
+                source_resource_id:
+                    type: string
+                idempotency_key:
+                    type: string
+                input_json:
+                    type: string
+                topology_id:
+                    type: string
+                topology_version:
                     type: string
         GoogleProtobufAny:
             type: object
@@ -234,6 +680,20 @@ components:
                     type: string
                 status:
                     type: string
+        ListAgentRequestsResponse:
+            type: object
+            properties:
+                requests:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentRequestResponse'
+        ListBatchRunsResponse:
+            type: object
+            properties:
+                batch_runs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BatchRunResponse'
         ListMessagesResponse:
             type: object
             properties:
@@ -248,6 +708,13 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SessionResponse'
+        ListTasksResponse:
+            type: object
+            properties:
+                tasks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TaskResponse'
         MessageResponse:
             type: object
             properties:
@@ -262,6 +729,17 @@ components:
                 sequence:
                     type: string
                 created_at:
+                    type: string
+        ResolveAgentRequestRequest:
+            type: object
+            properties:
+                session_id:
+                    type: string
+                turn_id:
+                    type: string
+                request_id:
+                    type: string
+                response_json:
                     type: string
         RunTurnRequest:
             type: object
@@ -300,6 +778,8 @@ components:
                     type: string
                 chat_status:
                     type: string
+                context_version:
+                    type: string
         Status:
             type: object
             properties:
@@ -320,6 +800,53 @@ components:
             type: object
             properties: {}
             description: SubscribeEvents is transported as text/event-stream.
+        TaskResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                requested_by:
+                    type: string
+                session_id:
+                    type: string
+                source:
+                    type: string
+                source_resource_id:
+                    type: string
+                idempotency_key:
+                    type: string
+                input_json:
+                    type: string
+                status:
+                    type: string
+                attempt:
+                    type: integer
+                    format: int32
+                turn_id:
+                    type: string
+                result_ref_json:
+                    type: string
+                error_code:
+                    type: string
+                error_message:
+                    type: string
+                created_at:
+                    type: string
+                started_at:
+                    type: string
+                finished_at:
+                    type: string
+                updated_at:
+                    type: string
+                topology_id:
+                    type: string
+                topology_version:
+                    type: string
 tags:
+    - name: AgentTaskService
+    - name: BatchRunService
     - name: ChatService
     - name: HealthService
+    - name: TeamworkRuntimeService

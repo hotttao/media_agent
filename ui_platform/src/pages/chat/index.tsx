@@ -37,6 +37,7 @@ import {
   resolveAgentRequest,
   subscribeSessionEvents,
 } from "@/domains/chat/lib/chat-client";
+import { isSessionCompatible } from "@/domains/chat/lib/session-compatibility";
 import type {
   AgentRequest,
   ChatMessage,
@@ -123,7 +124,12 @@ function SessionsApp() {
             className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm ${sessionId === session.id ? "bg-blue-50 text-blue-800" : "hover:bg-slate-100"}`}
           >
             <MessageSquare size={14} />
-            <span className="truncate">{session.title || "New session"}</span>
+            <span className="min-w-0 flex-1 truncate">
+              {session.title || "New session"}
+            </span>
+            <span className="shrink-0 text-[10px] text-slate-400">
+              {agentTypeLabel(session.agent_type as Workspace["agent_type"])}
+            </span>
           </button>
         ))}
         {sessions.length === 0 && (
@@ -156,6 +162,9 @@ function ChatApp() {
     requests,
     resolveRequest,
   } = useRuntime();
+  const activeSession = sessions.find((session) => session.id === sessionId);
+  const compatible = isSessionCompatible(activeSession, workspace);
+  const activeAgentType = activeSession?.agent_type ?? workspace.agent_type;
   const [input, setInput] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -181,7 +190,8 @@ function ChatApp() {
           {sessions.length === 0 && <option value="">No session</option>}
           {sessions.map((session) => (
             <option key={session.id} value={session.id}>
-              {session.title || "New session"}
+              {session.title || "New session"} ·{" "}
+              {agentTypeLabel(session.agent_type as Workspace["agent_type"])}
             </option>
           ))}
         </select>
@@ -210,7 +220,7 @@ function ChatApp() {
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-500">
               {sessionId
-                ? `Chat with ${workspace.agent_type}.`
+                ? `Chat with ${agentTypeLabel(activeAgentType as Workspace["agent_type"])}.`
                 : "Create or select a session to begin."}
             </p>
           </div>
@@ -242,46 +252,61 @@ function ChatApp() {
             />
           </div>
         ))}
-      <form
-        onSubmit={submit}
-        className="flex items-end gap-2 rounded-2xl border bg-white p-2 shadow-lg shadow-slate-200/60"
-      >
-        <textarea
-          aria-label={`Message ${agentTypeLabel(workspace.agent_type)}`}
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-          placeholder={`Message ${agentTypeLabel(workspace.agent_type)}…`}
-          rows={1}
-          className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm outline-none"
-        />
-        {streaming ? (
-          <Button
-            type="button"
-            size="icon"
-            variant="destructive"
-            disabled={interrupting || !sessionId}
-            aria-label={interrupting ? "Stopping agent" : "Stop agent"}
-            onClick={() => void interrupt()}
-          >
-            <Square size={15} fill="currentColor" />
+      {!streaming && sessionId && !compatible ? (
+        <div
+          role="status"
+          className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 shadow-lg shadow-slate-200/40 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span>
+            This session uses an older Agent configuration. Its history remains
+            available, but new messages require a new session.
+          </span>
+          <Button type="button" onClick={() => void addSession()}>
+            Start new session
           </Button>
-        ) : (
-          <Button
-            type="submit"
-            size="icon"
-            disabled={!input.trim() || !sessionId}
-            aria-label="Send message"
-          >
-            <Send size={17} />
-          </Button>
-        )}
-      </form>
+        </div>
+      ) : (
+        <form
+          onSubmit={submit}
+          className="flex items-end gap-2 rounded-2xl border bg-white p-2 shadow-lg shadow-slate-200/60"
+        >
+          <textarea
+            aria-label={`Message ${agentTypeLabel(activeAgentType as Workspace["agent_type"])}`}
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder={`Message ${agentTypeLabel(activeAgentType as Workspace["agent_type"])}…`}
+            rows={1}
+            className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm outline-none"
+          />
+          {streaming ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="destructive"
+              disabled={interrupting || !sessionId}
+              aria-label={interrupting ? "Stopping agent" : "Stop agent"}
+              onClick={() => void interrupt()}
+            >
+              <Square size={15} fill="currentColor" />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              size="icon"
+              disabled={!input.trim() || !sessionId}
+              aria-label="Send message"
+            >
+              <Send size={17} />
+            </Button>
+          )}
+        </form>
+      )}
     </div>
   );
 }
@@ -508,6 +533,7 @@ export function ChatPage() {
   const itemTexts = useRef(new Map<string, string>());
   const eventCursors = useRef(new Map<string, number>());
   const workspace = workspaces.find((item) => item.id === workspaceId) ?? null;
+  const workspaceExists = workspaces.some((item) => item.id === workspaceId);
   useEffect(() => {
     listWorkspaces()
       .then(setWorkspaces)
@@ -527,7 +553,7 @@ export function ChatPage() {
       return;
     }
     if (!workspacesLoaded) return;
-    if (!workspaces.some((item) => item.id === workspaceId)) {
+    if (!workspaceExists) {
       navigate("/", { replace: true });
       return;
     }
@@ -572,7 +598,7 @@ export function ChatPage() {
       });
   }, [
     workspaceId,
-    workspaces,
+    workspaceExists,
     workspacesLoaded,
     navigate,
     requestedSessionId,
@@ -606,12 +632,22 @@ export function ChatPage() {
   );
   async function addSession() {
     if (!workspaceId) return;
-    const value = await createSession(
-      workspaceId,
-      `Session ${sessions.length + 1}`,
-    );
-    setSessions((current) => [value, ...current]);
-    await selectSession(value.id);
+    setError("");
+    try {
+      const value = await createSession(
+        workspaceId,
+        `Session ${sessions.length + 1}`,
+      );
+      setSessions((current) => [
+        value,
+        ...current.filter((session) => session.id !== value.id),
+      ]);
+      await selectSession(value.id);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Session creation failed",
+      );
+    }
   }
 
   const applyEvent = useCallback(
@@ -825,13 +861,51 @@ export function ChatPage() {
       );
     }
   }
-  function saved(value: Workspace) {
+  async function saved(value: Workspace) {
+    const previous = workspaces.find((item) => item.id === value.id);
     setWorkspaces((current) =>
       current.some((item) => item.id === value.id)
         ? current.map((item) => (item.id === value.id ? value : item))
         : [value, ...current],
     );
-    if (!workspaceId) navigate(`/w/${value.id}`);
+    if (!workspaceId) {
+      navigate(`/w/${value.id}`);
+      return;
+    }
+    if (
+      previous &&
+      previous.configuration_version !== value.configuration_version
+    ) {
+      setError("");
+      try {
+        const created = await createSession(
+          value.id,
+          `Session ${sessions.length + 1}`,
+        );
+        setSessions((current) => [
+          created,
+          ...current.filter((session) => session.id !== created.id),
+        ]);
+        await selectSession(created.id);
+      } catch {
+        try {
+          const current = await listSessions(value.id);
+          setSessions(current);
+          const compatibleSession = current.find((session) =>
+            isSessionCompatible(session, value),
+          );
+          if (compatibleSession) {
+            await selectSession(compatibleSession.id);
+            return;
+          }
+        } catch {
+          // The actionable error below covers both recovery failures.
+        }
+        setError(
+          "Agent configuration was saved, but a new session could not be started. Start a new session to continue.",
+        );
+      }
+    }
   }
   const runtime = workspace
     ? {
