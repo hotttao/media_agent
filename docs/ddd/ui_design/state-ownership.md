@@ -5,8 +5,8 @@
 | Workspace 名称、Agent 类型、是否配置 API Key | `media_control` | 服务端数据库 |
 | Workspace Runtime Directory 与 mount identity | Runtime Environment / Runtime Controller | 服务端基础设施；UI 不读取路径、不持久化副本 |
 | API Key 明文 | Workspace 设置表单到服务端的单向命令 | 不在浏览器持久化、不回显 |
-| Session、消息和 turn | `media_agent_gateway` | 服务端数据库/运行时 |
-| Session Chat Status | `media_agent_gateway` | 服务端数据库；UI 只读取 human/agent 投影判断后台 Turn 是否仍在运行 |
+| Agent Session Registration、固定 Agent/Context Version | `media_agent_gateway` | Gateway PostgreSQL；UI 只比较兼容性，不修改绑定 |
+| Runtime Session、Message、Turn、Universal Event、Chat Status | `media_agents` | Agent PostgreSQL；UI 经 Gateway 授权代理读取和提交命令 |
 | 当前 Workspace ID | Router | URL path `/w/:workspaceId`，服务端列表校验 |
 | 当前 Session ID | Workspace Page | URL query `?session=`，服务端列表校验 |
 | Layout、Slot 打开实例和活动实例 | Slot Provider | Workspace 级 localStorage Profile |

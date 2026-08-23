@@ -233,6 +233,91 @@ func TestMediaAgentGatewayClaudeCodeChatE2E(t *testing.T) {
 	}
 }
 
+func TestMediaAgentGatewayAgentConfigurationSwitchE2E(t *testing.T) {
+	authAddr := os.Getenv("MEDIA_AUTH_ADDR")
+	gatewayAddr := os.Getenv("MEDIA_AGENT_GATEWAY_ADDR")
+	controlAddr := os.Getenv("MEDIA_CONTROL_ADDR")
+	if authAddr == "" || gatewayAddr == "" || controlAddr == "" {
+		t.Skip("MEDIA_AUTH_ADDR, MEDIA_CONTROL_ADDR and MEDIA_AGENT_GATEWAY_ADDR are required")
+	}
+	client := registerGatewayUser(t, authAddr, "agentswitch")
+	status, body := doJSON(t, client, http.MethodPost, controlAddr+"/api/v1/workspaces", map[string]string{
+		"name": "Agent switch", "agent_type": "codex", "api_key": "codex-key",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create Workspace: status=%d body=%s", status, body)
+	}
+	var workspace struct {
+		ID                   string `json:"id"`
+		ConfigurationVersion int64  `json:"configuration_version"`
+	}
+	if err := json.Unmarshal(body, &workspace); err != nil {
+		t.Fatal(err)
+	}
+	status, body = doJSON(t, client, http.MethodPost, gatewayAddr+"/api/chat/sessions", map[string]string{
+		"workspace_id": workspace.ID, "title": "Codex session",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create old Session: status=%d body=%s", status, body)
+	}
+	var oldSession struct {
+		ID             string `json:"id"`
+		AgentType      string `json:"agent_type"`
+		ContextVersion int64  `json:"context_version"`
+	}
+	if err := json.Unmarshal(body, &oldSession); err != nil {
+		t.Fatal(err)
+	}
+	if oldSession.ContextVersion != workspace.ConfigurationVersion || oldSession.AgentType != "codex" {
+		t.Fatalf("old Session=%+v Workspace=%+v", oldSession, workspace)
+	}
+
+	status, body = doJSON(t, client, http.MethodPut, controlAddr+"/api/v1/workspaces/"+workspace.ID, map[string]string{
+		"name": "Agent switch", "agent_type": "claude-code", "api_key": "claude-key",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("switch Agent: status=%d body=%s", status, body)
+	}
+	var switched struct {
+		ConfigurationVersion int64 `json:"configuration_version"`
+	}
+	if err := json.Unmarshal(body, &switched); err != nil {
+		t.Fatal(err)
+	}
+	if switched.ConfigurationVersion <= oldSession.ContextVersion {
+		t.Fatalf("configuration version did not advance: old=%d new=%d", oldSession.ContextVersion, switched.ConfigurationVersion)
+	}
+
+	status, body = doJSON(t, client, http.MethodPost, gatewayAddr+"/api/chat/sessions/"+oldSession.ID+"/turns", map[string]string{
+		"message": "must not run", "idempotency_key": "stale-session",
+	})
+	if status != http.StatusConflict || !bytes.Contains(body, []byte("create a new session")) {
+		t.Fatalf("stale Session Turn: status=%d body=%s", status, body)
+	}
+	status, body = doJSON(t, client, http.MethodGet, gatewayAddr+"/api/chat/sessions/"+oldSession.ID+"/messages", nil)
+	if status != http.StatusOK {
+		t.Fatalf("old Session history: status=%d body=%s", status, body)
+	}
+
+	status, body = doJSON(t, client, http.MethodPost, gatewayAddr+"/api/chat/sessions", map[string]string{
+		"workspace_id": workspace.ID, "title": "Claude session",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create compatible Session: status=%d body=%s", status, body)
+	}
+	var newSession struct {
+		ID             string `json:"id"`
+		AgentType      string `json:"agent_type"`
+		ContextVersion int64  `json:"context_version"`
+	}
+	if err := json.Unmarshal(body, &newSession); err != nil {
+		t.Fatal(err)
+	}
+	if newSession.ID == oldSession.ID || newSession.AgentType != "claude-code" || newSession.ContextVersion != switched.ConfigurationVersion {
+		t.Fatalf("new Session=%+v switched Workspace=%+v", newSession, switched)
+	}
+}
+
 func TestMediaAgentGatewayInterruptTurnE2E(t *testing.T) {
 	authAddr := os.Getenv("MEDIA_AUTH_ADDR")
 	gatewayAddr := os.Getenv("MEDIA_AGENT_GATEWAY_ADDR")

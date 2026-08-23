@@ -48,13 +48,16 @@ func (r *workflowRepo) TransitionStatus(_ context.Context, id, from, to string, 
 	return nil
 }
 
-type workflowContexts struct{ value service.AgentContext }
+type workflowContexts struct {
+	value service.AgentContext
+	err   error
+}
 
 func (c workflowContexts) Default(context.Context, string) (service.AgentContext, error) {
 	return c.value, nil
 }
 func (c workflowContexts) Resolve(context.Context, string, string, string) (service.AgentContext, error) {
-	return c.value, nil
+	return c.value, c.err
 }
 
 type fakeRuntime struct {
@@ -175,6 +178,19 @@ func TestFailedRegistrationCannotSubmitTurn(t *testing.T) {
 	}
 }
 
+func TestStartRejectsChangedWorkspaceConfigurationWithoutCallingAgent(t *testing.T) {
+	flow, repo, runtime := newWorkflowFixture(domain.StatusActive)
+	flow.sessions = service.New(repo, workflowContexts{value: service.AgentContext{
+		WorkspaceID: "workspace", AgentID: "claude-code", AgentType: "claude-code", ContextVersion: 8,
+	}})
+	if _, err := flow.Start(context.Background(), "session", "user", "token", "key", "hello"); !errors.Is(err, domain.ErrContextChanged) {
+		t.Fatalf("error=%v", err)
+	}
+	if runtime.registerInput.SessionID != "" || runtime.submitInput.SessionID != "" {
+		t.Fatalf("stale Session reached Agent: register=%+v submit=%+v", runtime.registerInput, runtime.submitInput)
+	}
+}
+
 func TestInterruptUsesAgentActiveTurn(t *testing.T) {
 	flow, _, runtime := newWorkflowFixture(domain.StatusActive)
 	runtime.state.ActiveTurnID = "turn-active"
@@ -183,6 +199,22 @@ func TestInterruptUsesAgentActiveTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	if turn.TurnID != "turn-active" || runtime.interruptSession != "session" || runtime.interruptTurn != "turn-active" {
+		t.Fatalf("turn=%+v interrupt=%s/%s", turn, runtime.interruptSession, runtime.interruptTurn)
+	}
+}
+
+func TestInterruptRemainsAvailableAfterWorkspaceConfigurationChanges(t *testing.T) {
+	session := &domain.Session{ID: "session", UserID: "user", WorkspaceID: "workspace", AgentID: "codex", AgentType: "codex", ContextVersion: 7, Status: domain.StatusActive}
+	repo := &workflowRepo{session: session}
+	runtime := &fakeRuntime{state: client.RuntimeSession{SessionID: "session", ActiveTurnID: "turn-active"}}
+	contexts := workflowContexts{err: errors.New("current Workspace configuration is unavailable")}
+	flow := NewRunTurn(service.New(repo, contexts), client.Registry{"codex": runtime})
+
+	turn, err := flow.Interrupt(context.Background(), "session", "user", "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.TurnID != "turn-active" || runtime.interruptTurn != "turn-active" {
 		t.Fatalf("turn=%+v interrupt=%s/%s", turn, runtime.interruptSession, runtime.interruptTurn)
 	}
 }

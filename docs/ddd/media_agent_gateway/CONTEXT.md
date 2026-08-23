@@ -20,6 +20,10 @@ _禁用替代词_：Anonymous Session、Unowned Workspace、Temporary Chat
 每个 Agent Session 唯一且稳定的 opaque 凭证，仅供 Agent 调用 Platform MCP 或平台内业务 MCP。
 _禁用替代词_：Platform Token、Cookie、Access Token
 
+**Session Context Version（会话上下文版本）**:
+Agent Session Registration 创建时固定引用的运行配置版本；Workspace 后续切换 Agent 或更新凭证不会原地改变该版本，继续使用新配置必须创建新的 Agent Session。
+_禁用替代词_：Workspace Version、Current Agent Version、Mutable Session Config
+
 **Session Event Subscription（会话事件订阅）**:
 客户端从指定 Session Sequence 开始订阅一个 Agent Session；Gateway 先注册 Session Event Bus 接收者，再通过 Agent 查询接口回放已提交事件，并转换为 SSE。
 _禁用替代词_：Turn Stream、Runtime Connection、Web Session
