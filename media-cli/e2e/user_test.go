@@ -11,8 +11,12 @@
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +35,7 @@ func TestUserE2E(t *testing.T) {
 
 	regClient := httpClient(t)
 	regBody := fmt.Sprintf(`{"username":%q,"password":"e2eregpass123","display_name":"E2E Reg"}`, regUsername)
+	var registeredID string
 
 	t.Run("Register_success_autoLogin", func(t *testing.T) {
 		status, body := doJSON(t, regClient, "POST", addr+"/api/auth/register", json.RawMessage(regBody))
@@ -46,10 +51,34 @@ func TestUserE2E(t *testing.T) {
 		if resp.User.Username != regUsername || resp.User.Role != "user" {
 			t.Errorf("got user=%+v", resp.User)
 		}
+		registeredID = resp.User.ID
 		// cookie 应已下发（自动登录）-> /me 返回新用户。
 		status, body = doJSON(t, regClient, "GET", addr+"/api/auth/me", nil)
 		if status != 200 || !strings.Contains(string(body), regUsername) {
 			t.Errorf("me after register: status=%d body=%s", status, body)
+		}
+	})
+
+	t.Run("Internal_token_API_is_protected_and_resolves_session_and_platform_token", func(t *testing.T) {
+		internalToken := envOr("MEDIA_AUTH_INTERNAL_TOKEN", "dev-media-auth-internal-token")
+		status, _ := doInternalJSON(t, addr+"/internal/token/platform", `{"user_id":"`+registeredID+`"}`, "")
+		if status != 401 {
+			t.Fatalf("internal endpoint without credential: want 401, got %d", status)
+		}
+		status, body := doInternalJSON(t, addr+"/internal/token/platform", `{"user_id":"`+registeredID+`"}`, internalToken)
+		if status != 200 || !strings.Contains(string(body), "tos_") {
+			t.Fatalf("platform token: status=%d body=%s", status, body)
+		}
+		u, _ := url.Parse(addr)
+		var sessionToken string
+		for _, cookie := range regClient.Jar.Cookies(u) {
+			if cookie.Name == "token" {
+				sessionToken = cookie.Value
+			}
+		}
+		status, body = doInternalJSON(t, addr+"/internal/token/session", fmt.Sprintf(`{"token":%q}`, sessionToken), internalToken)
+		if status != 200 || !strings.Contains(string(body), `"active":true`) {
+			t.Fatalf("session introspection: status=%d body=%s", status, body)
 		}
 	})
 
@@ -206,4 +235,26 @@ func TestUserE2E(t *testing.T) {
 			}
 		}
 	})
+}
+
+func doInternalJSON(t *testing.T, endpoint, body, token string) (int, []byte) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("X-Media-Auth-Internal-Token", token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	value, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, value
 }

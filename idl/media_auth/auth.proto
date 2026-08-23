@@ -78,6 +78,10 @@ service AuthService {
     };
     option (api.put) = "/api/auth/me/default-prompt";
   }
+  rpc GetJwks(GetJwksRequest) returns(GetJwksResponse) {
+    option (google.api.http) = { get: "/api/auth/.well-known/jwks.json" };
+    option (api.get) = "/api/auth/.well-known/jwks.json";
+  }
 }
 
 // ───────────── 请求 / 响应消息 ─────────────
@@ -135,6 +139,16 @@ message SetDefaultPromptRequest {
 
 message SetDefaultPromptResponse {
   bool success = 1;
+}
+message GetJwksRequest {}
+message GetJwksResponse { repeated JsonWebKey keys = 1; }
+message JsonWebKey {
+  string kty = 1;
+  string use = 2;
+  string alg = 3;
+  string kid = 4;
+  string n = 5;
+  string e = 6;
 }
 
 // ───────────── 共享 DTO ─────────────

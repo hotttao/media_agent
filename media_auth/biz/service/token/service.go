@@ -78,3 +78,14 @@ func (s *Service) ValidateSession(ctx context.Context, sess domainauth.Session) 
 	u, err := s.userRepo.FindByID(ctx, sess.Sub)
 	return err == nil && u.IsActive() && u.AuthVersion == sess.AuthVersion
 }
+
+func (s *Service) GetPlatformToken(ctx context.Context, userID string) (string, error) {
+	if userID == "" {
+		return "", errors.New("user_id is required")
+	}
+	u, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil || !u.IsActive() {
+		return "", nil
+	}
+	return s.tokenRepo.EnsurePlatformToken(ctx, userID)
+}

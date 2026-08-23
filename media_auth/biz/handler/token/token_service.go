@@ -9,10 +9,13 @@ package token
 
 import (
 	"context"
+	"crypto/subtle"
+	"os"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	tokenpb "media_agent/hertz_gen/model/media_auth/token"
+	"media_agent/media_auth/biz/middleware"
 	tokenservice "media_agent/media_auth/biz/service/token"
 )
 
@@ -21,8 +24,11 @@ var TokenSvc *tokenservice.Service
 
 // VerifyToken POST /internal/token/verify —— 把明文 service token 解析为 Subject。
 //
-// 此端点在 session skip list（不经 cookie/session 鉴权）；网络隔离 / mTLS 由部署层负责。
+// 此端点在 session skip list（不经用户 cookie 鉴权）；由内部凭证和部署网络边界共同保护。
 func VerifyToken(ctx context.Context, c *app.RequestContext) {
+	if !authorizeInternal(c) {
+		return
+	}
 	var req tokenpb.VerifyTokenRequest
 	if err := c.BindAndValidate(&req); err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
@@ -41,4 +47,55 @@ func VerifyToken(ctx context.Context, c *app.RequestContext) {
 		Role:      res.Role,
 		TokenType: res.TokenType,
 	})
+}
+
+// GetPlatformToken .
+// @router /internal/token/platform [POST]
+func GetPlatformToken(ctx context.Context, c *app.RequestContext) {
+	if !authorizeInternal(c) {
+		return
+	}
+	var req tokenpb.GetPlatformTokenRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	value, err := TokenSvc.GetPlatformToken(ctx, req.GetUserId())
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	c.JSON(consts.StatusOK, &tokenpb.GetPlatformTokenResponse{Token: value})
+}
+
+func authorizeInternal(c *app.RequestContext) bool {
+	expected := os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN")
+	if expected == "" {
+		return true
+	}
+	actual := c.Request.Header.Peek("X-Media-Auth-Internal-Token")
+	if subtle.ConstantTimeCompare(actual, []byte(expected)) != 1 {
+		c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal token"})
+		return false
+	}
+	return true
+}
+
+// VerifySession .
+// @router /internal/token/session [POST]
+func VerifySession(ctx context.Context, c *app.RequestContext) {
+	if !authorizeInternal(c) {
+		return
+	}
+	var req tokenpb.VerifySessionRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	sess, err := middleware.VerifyToken(req.GetToken())
+	if err != nil || !TokenSvc.ValidateSession(ctx, *sess) {
+		c.JSON(consts.StatusOK, &tokenpb.VerifyTokenResponse{Active: false})
+		return
+	}
+	c.JSON(consts.StatusOK, &tokenpb.VerifyTokenResponse{Active: true, Sub: sess.Sub, Username: sess.Username, Name: sess.Name, Role: sess.Role, TokenType: "session"})
 }

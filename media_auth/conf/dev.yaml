@@ -124,6 +124,10 @@ consul_kv:
 
 auth:
   jwt_secret: ${JWT_SECRET:-dev-shared-secret}
+  jwt_private_key_file: ${JWT_PRIVATE_KEY_FILE:-}
+  jwt_public_key_file: ${JWT_PUBLIC_KEY_FILE:-}
+  jwt_key_id: ${JWT_KEY_ID:-media-auth-1}
+  accept_legacy_hs256: ${JWT_ACCEPT_LEGACY_HS256:-true}
   jwt_expires_in_seconds: 86400
   access_token_expires_in_seconds: 3600
   refresh_token_expires_in_days: 30

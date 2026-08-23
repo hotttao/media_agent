@@ -31,6 +31,10 @@ func Register(r *server.Hertz) {
 				_me.PUT("/default-prompt", append(_setdefaultpromptMw(), auth.SetDefaultPrompt)...)
 				_me.PUT("/password", append(_changepasswordMw(), auth.ChangePassword)...)
 			}
+			{
+				__well_known := _auth.Group("/.well-known", __well_knownMw()...)
+				__well_known.GET("/jwks.json", append(_getjwksMw(), auth.GetJwks)...)
+			}
 		}
 	}
 }

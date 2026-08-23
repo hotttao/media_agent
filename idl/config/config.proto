@@ -294,7 +294,7 @@ message ConsulKVConfig {
 // 业务配置：media_auth 认证（spec §7）
 // ============================================================================
 message AuthConfig {
-  // JWT 签名密钥（HS256），与 control_plane 共享；为空时启动报错。
+  // 迁移期 legacy HS256 验签密钥。配置 RSA 私钥后不再用于签发。
   string jwt_secret = 1;
   // session JWT 有效期（秒），默认 86400（24h）
   int32 jwt_expires_in_seconds = 2;
@@ -306,6 +306,12 @@ message AuthConfig {
   int32 auth_code_expires_in_minutes = 5;
   // OAuth client_secret（下游服务作为机密 client 时的 secret）
   string oauth_client_secret = 6;
+  // RS256 私钥/公钥 PEM 文件。private 配置后使用 RS256 签发；public 用于验签和 JWKS。
+  string jwt_private_key_file = 7;
+  string jwt_public_key_file = 8;
+  string jwt_key_id = 9;
+  // 双验期是否接受旧 HS256 token；完成切换后设 false。
+  bool accept_legacy_hs256 = 10;
 }
 
 message LdapConfig {

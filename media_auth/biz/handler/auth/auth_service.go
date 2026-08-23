@@ -18,10 +18,12 @@ import (
 	authpb "media_agent/hertz_gen/model/media_auth/auth"
 	"media_agent/media_auth/biz/middleware"
 	authservice "media_agent/media_auth/biz/service/auth"
+	"media_agent/media_auth/biz/shared/session"
 )
 
 // AuthSvc 是 auth 用例服务的全局实例，由 wire_gen.go InitDI() 注入。
 var AuthSvc *authservice.Service
+var JWKProvider *session.Signer
 
 // Login POST /api/auth/login —— 本地/LDAP 双路登录，下发 cookie。
 func Login(ctx context.Context, c *app.RequestContext) {
@@ -188,4 +190,21 @@ func Register(ctx context.Context, c *app.RequestContext) {
 	// 注册成功自动登录：下发 httpOnly cookie。
 	c.SetCookie("token", token, 24*3600, "/", "", protocol.CookieSameSiteLaxMode, false, true)
 	c.JSON(consts.StatusCreated, &authpb.RegisterResponse{User: toApiUserDTO(user)})
+}
+
+// GetJwks .
+// @router /api/auth/.well-known/jwks.json [GET]
+func GetJwks(ctx context.Context, c *app.RequestContext) {
+	var req authpb.GetJwksRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	resp := &authpb.GetJwksResponse{}
+	if JWKProvider != nil {
+		if key := JWKProvider.JWK(); key != nil {
+			resp.Keys = []*authpb.JsonWebKey{{Kty: key.Kty, Use: key.Use, Alg: key.Alg, Kid: key.Kid, N: key.N, E: key.E}}
+		}
+	}
+	c.JSON(consts.StatusOK, resp)
 }

@@ -130,6 +130,10 @@ consul_kv:
 
 auth:
   jwt_secret: ${JWT_SECRET:-dev-shared-secret} # 与 control_plane 共享（HS256）
+  jwt_private_key_file: ${JWT_PRIVATE_KEY_FILE:-}
+  jwt_public_key_file: ${JWT_PUBLIC_KEY_FILE:-}
+  jwt_key_id: ${JWT_KEY_ID:-media-auth-1}
+  accept_legacy_hs256: ${JWT_ACCEPT_LEGACY_HS256:-true}
   jwt_expires_in_seconds: 86400 # session 24h
   access_token_expires_in_seconds: 3600 # oauth access 1h
   refresh_token_expires_in_days: 30
