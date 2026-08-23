@@ -4,8 +4,11 @@
 
 | 测试类型 | 位置 | 驱动方式 | 覆盖 |
 |---------|------|---------|------|
-| 接口测试（需启动服务、打 HTTP） | `media-cli` | 裸 HTTP + cookie jar（被测服务由 docker-compose 起） | 各服务 HTTP 接口 |
+| Go HTTP E2E（需启动服务、打 HTTP） | `media-cli/e2e/` | `go test` + 裸 HTTP + 进程内 cookie jar（被测服务由 docker-compose 起） | 可重复执行的接口断言、异步收敛和错误分支 |
+| media-cli 命令 E2E | `media-cli/cmd/<service>/` | 连续执行 `media-cli <service> <command>`，使用落盘 Cookie 跨进程复用登录态 | CLI 命令树、参数映射、生成 client、中间件和真实用户操作链路 |
 | 接口无关测试（domain 逻辑/算法/迁移） | `<app>/e2e/` | go test + testcontainers | domain 业务逻辑、事务、纯算法 |
+
+Go HTTP E2E 与 media-cli 命令 E2E 是两道独立门禁，不能互相替代：`media-cli/e2e/` 中的测试通过，不代表对应 CLI 子命令存在或可用；CLI 命令执行成功，也不能替代 Go 测试对失败、幂等和并发分支的断言。
 
 ## 启动流程（4 步）
 
@@ -18,7 +21,11 @@ INFRA=local docker compose --profile infra -f docker-compose/docker-compose.yml 
 # 2. tearup 被测试服务
 INFRA=local docker compose -f media_auth/docker-compose.yml up -d media_auth
 
-# 3. 执行测试命令（media-cli 子命令，cookie 跨命令复用）
+# 3a. 执行 Go HTTP E2E
+MEDIA_AUTH_ADDR=http://localhost:8001 \
+  go -C media-cli test ./e2e -run TestAuthE2E -count=1 -v
+
+# 3b. 执行 media-cli 命令 E2E（cookie 跨进程复用）
 MEDIA_AUTH_ADDR=http://localhost:8001 \
   go -C media-cli run . media_auth auth login --username alice --password secret123
 MEDIA_AUTH_ADDR=http://localhost:8001 \
@@ -83,12 +90,14 @@ media_example/
   Dockerfile
   docker-compose.yml                # 同上
 media-cli/
-  e2e/                              # media-cli 的 HTTP e2e 测试（裸 HTTP，cookie 跨命令复用）
+  cmd/<service>/                    # media-cli 命令 E2E 入口（落盘 cookie 跨进程复用）
+  e2e/                              # Go HTTP E2E（裸 HTTP + 进程内 cookie jar）
 ```
 
 ## 关键约定
 
 - **`media-cli` 不用管服务启停**——那是 docker-compose 的事。media-cli 只发 HTTP 请求。
+- **两个 E2E 层级都要验收**——功能存在用户/管理 HTTP 入口时，既要运行 `media-cli/e2e` 的 Go HTTP E2E，也要实际执行对应 media-cli 命令链路；纯内部事件入口可以由面向用户的 CLI 流程间接覆盖，不要求暴露危险的内部命令。
 - **基础环境常驻**（除非确定不再测试才停），避免每次 e2e 重复 build/起。
 - **cookie 跨命令复用**：`media-cli media_auth auth login` 下发 cookie 落盘 `media-cli/.cookies/`，后续 `auth me`/`change-password` 自动带。
 - **日志映射 host**：`LOG_DIR=/media_logs/<app>` + volume 映射 `../media_logs/<app>/`，便于 `grep` debug。
