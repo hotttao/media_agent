@@ -27,6 +27,10 @@ export interface UserRecord {
   auth_source: string;
   created_at: string;
   last_login_at?: string;
+  status: "active" | "disabled" | "deleted";
+  auth_version: number;
+  deleted_at?: string;
+  deleted_by?: string;
 }
 
 export interface UsersPage {

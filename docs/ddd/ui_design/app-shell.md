@@ -1,6 +1,6 @@
 # App Shell
 
-Shell 由顶部 Menubar、中央 Canvas 和底部 Dock 构成。Menubar 负责品牌入口、当前 Workspace、Workspace 切换/创建入口和用户操作；Dock 负责 Layout 与 App Instance 导航。Workspace 切换器不是 App，也不占用 Slot。
+Shell 由顶部 Menubar、中央 Canvas 和底部 Dock 构成。Menubar 负责品牌入口、当前 Workspace、Workspace 切换/创建入口和用户操作；管理员的 User Management 入口也归 Menubar。Dock 负责 Layout 与 App Instance 导航。Workspace 切换器和平台级 User Management 都不是 Workspace App，不占用 Slot。
 
 Workspace 切换器使用 popover 展示 Workspace 搜索、选择与“新建 Workspace”入口。创建和更新使用 Dialog，不在 Canvas 中常驻表单。选择 Workspace 导航到 `/w/:workspaceId`；根路由展示 Workspace 选择空态。
 

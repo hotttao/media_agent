@@ -12,7 +12,7 @@ import (
 
 // CanLogin system 账号禁止登录（对齐 control-plane：role==='system' → 403）。
 func CanLogin(u domainauth.User) bool {
-	return u.Role != "system"
+	return u.Role != "system" && u.IsActive()
 }
 
 // CanChangePassword 仅本地密码账号（password_hash 非空）可改密（LDAP/企微派生账号不可）。

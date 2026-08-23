@@ -178,6 +178,8 @@ func (r *repo) GetUserByID(ctx context.Context, id string) (domainoauth.User, er
 		Username:    u.Username,
 		DisplayName: u.DisplayName,
 		Role:        u.Role,
+		Status:      u.Status,
+		AuthVersion: u.AuthVersion,
 	}
 	if u.Email != nil {
 		d.Email = *u.Email
@@ -195,6 +197,14 @@ func (r *repo) CleanupExpired(ctx context.Context) error {
 	_, err := q.OAuthRefreshToken.WithContext(ctx).
 		Where(q.OAuthRefreshToken.ExpiresAt.Lt(time.Now())).Delete()
 	return err
+}
+
+func (r *repo) RevokeUserCredentials(ctx context.Context, userID string) error {
+	db := dal.FromContext(ctx, r.db)
+	if err := db.Where("user_id = ?", userID).Delete(&model.OAuthAuthorizationCode{}).Error; err != nil {
+		return err
+	}
+	return db.Where("user_id = ?", userID).Delete(&model.OAuthRefreshToken{}).Error
 }
 
 // ── row → domain 转换 ────────────────────────────────────────────────

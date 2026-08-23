@@ -149,6 +149,11 @@ func sessionMiddleware(signer *session.Signer, tokenSvc *tokenservice.Service) a
 			abortUnauthorized(c, "invalid session")
 			return
 		}
+		if tokenSvc != nil && !tokenSvc.ValidateSession(ctx, sess) {
+			clearSessionCookie(c)
+			abortUnauthorized(c, "session revoked")
+			return
+		}
 
 		// 滑动续期：剩余 < 半周期则重签并回写 cookie。
 		if signer.ShouldRenew(sess) {

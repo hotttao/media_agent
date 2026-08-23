@@ -1,1 +1,47 @@
-{}
+{
+	"users": {
+		"title": "Administration",
+		"heading": "User management",
+		"description": "Create accounts and revoke access while preserving audit history.",
+		"loading": "Loading users…",
+		"never": "Never",
+		"actions": {
+			"back": "Back to workspaces",
+			"signOut": "Sign out",
+			"create": "Create user",
+			"cancel": "Cancel",
+			"confirmDelete": "Revoke access",
+			"deleteUser": "Delete {{name}}"
+		},
+		"search": {
+			"label": "Search users",
+			"placeholder": "Search username, name, or email…"
+		},
+		"fields": {
+			"user": "User",
+			"username": "Username",
+			"displayName": "Display name",
+			"email": "Email",
+			"password": "Password",
+			"role": "Role",
+			"source": "Auth source",
+			"status": "Status",
+			"lastLogin": "Last login",
+			"actions": "Actions"
+		},
+		"status": {
+			"active": "Active",
+			"disabled": "Disabled",
+			"deleted": "Deleted"
+		},
+		"create": { "title": "Create user" },
+		"delete": {
+			"title": "Revoke user access",
+			"message": "{{name}} will no longer be able to sign in or use existing credentials. Historical records are retained."
+		},
+		"errors": {
+			"load": "Could not load users",
+			"delete": "Could not revoke user access"
+		}
+	}
+}

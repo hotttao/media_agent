@@ -8,6 +8,7 @@ import {
   Settings,
   Sparkles,
   Square,
+  Users,
 } from "lucide-react";
 import {
   createContext,
@@ -19,6 +20,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { MessageBubble } from "@/domains/chat/components/message-bubble";
@@ -48,6 +50,7 @@ import { useAppHeaderSlot } from "@/foundation/components/app-window";
 import { SegmentedDock } from "@/foundation/components/segmented-dock";
 import { WorkspaceLayout } from "@/foundation/components/workspace-layout";
 import { api } from "@/foundation/lib/api-client";
+import { useAuth } from "@/foundation/providers/auth-provider";
 import { SlotProvider, useSlots } from "@/foundation/providers/slot-provider";
 import { createAppRegistry } from "@/foundation/slots/app-registry";
 import type { SlotConfig } from "@/foundation/slots/types";
@@ -67,7 +70,10 @@ interface WorkspaceRuntime {
   send(text: string): Promise<void>;
   interrupt(): Promise<void>;
   requests: AgentRequest[];
-  resolveRequest(request: AgentRequest, response: Record<string, unknown>): Promise<void>;
+  resolveRequest(
+    request: AgentRequest,
+    response: Record<string, unknown>,
+  ): Promise<void>;
   openSettings(): void;
 }
 
@@ -334,13 +340,16 @@ function Menubar({
   onSelect,
   onCreate,
   onEdit,
+  onManageUsers,
 }: {
   workspaces: Workspace[];
   workspace: Workspace | null;
   onSelect(id: string): void;
   onCreate(): void;
   onEdit(): void;
+  onManageUsers?: () => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const root = useRef<HTMLDivElement>(null);
@@ -395,6 +404,19 @@ function Menubar({
                 >
                   <Settings size={15} />
                   Workspace settings
+                </button>
+              )}
+              {onManageUsers && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onManageUsers();
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-slate-100"
+                >
+                  <Users size={15} />
+                  {t("users.heading")}
                 </button>
               )}
               <div className="my-1 border-t" />
@@ -462,6 +484,7 @@ function seedCompletedItems(
 }
 
 export function ChatPage() {
+  const { user } = useAuth();
   const params = useParams<{ workspaceId?: string }>();
   const workspaceId = params.workspaceId ?? "";
   const navigate = useNavigate();
@@ -609,7 +632,10 @@ export function ChatPage() {
           setMessages(history);
         });
       }
-      if (event.type === "agent.requested" || event.type === "agent.request.resolved") {
+      if (
+        event.type === "agent.requested" ||
+        event.type === "agent.request.resolved"
+      ) {
         void listAgentRequests(targetSession).then((values) => {
           if (targetSession === activeSessionId.current) setRequests(values);
         });
@@ -838,6 +864,9 @@ export function ChatPage() {
         onSelect={(id) => navigate(`/w/${id}`)}
         onCreate={() => setDialog("create")}
         onEdit={() => setDialog("edit")}
+        onManageUsers={
+          user?.role === "admin" ? () => navigate("/admin/users") : undefined
+        }
       />
       {workspace && runtime ? (
         <RuntimeContext.Provider value={runtime}>

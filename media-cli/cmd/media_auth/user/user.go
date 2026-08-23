@@ -13,7 +13,7 @@ import (
 
 var UserCmd = &cobra.Command{
 	Use:   "user",
-	Short: "media_auth UserService 接口 e2e（list/create/delete/change-password，需 admin）",
+	Short: "media_auth UserService 接口 e2e（list/create/soft-delete/change-password，需 admin）",
 }
 
 func init() {
@@ -81,12 +81,12 @@ func deleteCmd() *cobra.Command {
 	var id string
 	c := &cobra.Command{
 		Use:   "delete",
-		Short: "DELETE /api/users/:id - 删用户（admin，不能删自己）",
+		Short: "DELETE /api/users/:id - 软删除并撤销访问（admin，不能删自己）",
 		RunE: func(c *cobra.Command, args []string) error {
 			if _, _, err := Client().DeleteUser(context.Background(), &userpb.DeleteUserRequest{Id: id}); err != nil {
 				return fmt.Errorf("delete user: %w", err)
 			}
-			fmt.Println("✅ user deleted")
+			fmt.Println("✅ user access revoked (soft-deleted)")
 			return nil
 		},
 	}

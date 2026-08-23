@@ -86,6 +86,7 @@ func (r *fakeRepo) EnsurePlatformToken(_ context.Context, userID string) (string
 	r.platformByUser[userID] = pt
 	return pt, nil
 }
+func (r *fakeRepo) RevokeAllForUser(context.Context, string) error { return nil }
 
 // ── 用例 ──────────────────────────────────────────────────────────────
 

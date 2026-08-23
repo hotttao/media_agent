@@ -95,6 +95,7 @@ func (r *fakeRepo) DeleteToken(_ context.Context, userID, origin string) error {
 	delete(r.tokens, userID+":"+origin)
 	return nil
 }
+func (r *fakeRepo) DeleteTokensForUser(context.Context, string) error { return nil }
 
 // ── 用例 ──────────────────────────────────────────────────────────────
 

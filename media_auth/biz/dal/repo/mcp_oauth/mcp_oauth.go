@@ -166,6 +166,10 @@ func (r *repo) DeleteToken(ctx context.Context, userID, serverOrigin string) err
 	return err
 }
 
+func (r *repo) DeleteTokensForUser(ctx context.Context, userID string) error {
+	return dal.FromContext(ctx, r.db).Where("user_id = ?", userID).Delete(&model.McpOAuthToken{}).Error
+}
+
 // ── row → domain 转换 ────────────────────────────────────────────────
 
 func rowToClient(c *model.McpOAuthClient) domainmcp.McpClient {

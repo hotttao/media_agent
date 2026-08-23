@@ -12,8 +12,10 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestUserE2E 驱动 Register + 用户管理 HTTP 全流程。
@@ -21,11 +23,14 @@ func TestUserE2E(t *testing.T) {
 	addr := skipIfNoServer(t)
 	adminUser := envOr("MEDIA_AUTH_E2E_ADMIN_USER", "smoke")
 	adminPass := envOr("MEDIA_AUTH_E2E_ADMIN_PASS", "password123")
+	suffix := time.Now().UnixNano()
+	regUsername := fmt.Sprintf("e2e_reg_%d", suffix)
+	managedUsername := fmt.Sprintf("e2e_admin_%d", suffix)
 
 	// ── Register（自服务注册 + 自动登录） ──────────────────────────────
 
 	regClient := httpClient(t)
-	regBody := `{"username":"e2e_reguser","password":"e2eregpass123","display_name":"E2E Reg"}`
+	regBody := fmt.Sprintf(`{"username":%q,"password":"e2eregpass123","display_name":"E2E Reg"}`, regUsername)
 
 	t.Run("Register_success_autoLogin", func(t *testing.T) {
 		status, body := doJSON(t, regClient, "POST", addr+"/api/auth/register", json.RawMessage(regBody))
@@ -38,12 +43,12 @@ func TestUserE2E(t *testing.T) {
 		if err := json.Unmarshal(body, &resp); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
-		if resp.User.Username != "e2e_reguser" || resp.User.Role != "user" {
+		if resp.User.Username != regUsername || resp.User.Role != "user" {
 			t.Errorf("got user=%+v", resp.User)
 		}
 		// cookie 应已下发（自动登录）-> /me 返回新用户。
 		status, body = doJSON(t, regClient, "GET", addr+"/api/auth/me", nil)
-		if status != 200 || !strings.Contains(string(body), "e2e_reguser") {
+		if status != 200 || !strings.Contains(string(body), regUsername) {
 			t.Errorf("me after register: status=%d body=%s", status, body)
 		}
 	})
@@ -72,7 +77,7 @@ func TestUserE2E(t *testing.T) {
 
 	t.Run("CreateUser_admin", func(t *testing.T) {
 		status, body := doJSON(t, adminClient, "POST", addr+"/api/users",
-			json.RawMessage(`{"username":"e2e_adminuser","display_name":"E2E Admin","password":"e2eadmin1","role":"admin"}`))
+			json.RawMessage(fmt.Sprintf(`{"username":%q,"display_name":"E2E Admin","password":"e2eadmin1","role":"admin"}`, managedUsername)))
 		if status != 201 {
 			t.Fatalf("create user: status=%d body=%s", status, body)
 		}
@@ -91,18 +96,18 @@ func TestUserE2E(t *testing.T) {
 		if status != 200 {
 			t.Fatalf("list users: status=%d body=%s", status, body)
 		}
-		if !strings.Contains(string(body), "e2e_adminuser") {
-			t.Errorf("list users: missing e2e_adminuser, body=%s", body[:200])
+		if !strings.Contains(string(body), managedUsername) {
+			t.Errorf("list users: missing %s, body=%s", managedUsername, body[:200])
 		}
 	})
 
 	t.Run("ListUsers_search", func(t *testing.T) {
-		status, body := doJSON(t, adminClient, "GET", addr+"/api/users?q=e2e_adminuser&page=1&page_size=10", nil)
+		status, body := doJSON(t, adminClient, "GET", addr+"/api/users?q="+managedUsername+"&page=1&page_size=10", nil)
 		if status != 200 {
 			t.Fatalf("search: status=%d", status)
 		}
-		if !strings.Contains(string(body), "e2e_adminuser") {
-			t.Errorf("search: missing e2e_adminuser")
+		if !strings.Contains(string(body), managedUsername) {
+			t.Errorf("search: missing %s", managedUsername)
 		}
 	})
 
@@ -138,6 +143,38 @@ func TestUserE2E(t *testing.T) {
 		}
 	})
 
+	t.Run("SoftDelete_revokesExistingSession_andRetainsAuditRow", func(t *testing.T) {
+		status, body := doJSON(t, adminClient, "GET", addr+"/api/users?q="+regUsername+"&page=1&page_size=10", nil)
+		if status != 200 {
+			t.Fatalf("find registered user: status=%d body=%s", status, body)
+		}
+		var page struct {
+			Items []struct {
+				ID          string `json:"id"`
+				Status      string `json:"status"`
+				AuthVersion int64  `json:"auth_version"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(body, &page); err != nil || len(page.Items) != 1 {
+			t.Fatalf("find registered user: items=%+v err=%v", page.Items, err)
+		}
+		status, body = doJSON(t, adminClient, "DELETE", addr+"/api/users/"+page.Items[0].ID, nil)
+		if status != 200 {
+			t.Fatalf("soft delete: status=%d body=%s", status, body)
+		}
+		status, _ = doJSON(t, regClient, "GET", addr+"/api/auth/me", nil)
+		if status != 401 {
+			t.Fatalf("revoked session: want 401, got %d", status)
+		}
+		status, body = doJSON(t, adminClient, "GET", addr+"/api/users?q="+regUsername+"&page=1&page_size=10", nil)
+		if status != 200 {
+			t.Fatalf("list deleted user: status=%d body=%s", status, body)
+		}
+		if err := json.Unmarshal(body, &page); err != nil || len(page.Items) != 1 || page.Items[0].Status != "deleted" || page.Items[0].AuthVersion < 2 {
+			t.Fatalf("deleted audit row not retained: items=%+v err=%v", page.Items, err)
+		}
+	})
+
 	t.Run("DeleteSelf_400", func(t *testing.T) {
 		// admin 删自己 -> 400。
 		status, body := doJSON(t, adminClient, "GET", addr+"/api/auth/me", nil)
@@ -154,8 +191,8 @@ func TestUserE2E(t *testing.T) {
 	// ── 清理 ─────────────────────────────────────────────────────────
 
 	t.Cleanup(func() {
-		// 删注册的 e2e_reguser（admin 权限）。
-		status, body := doJSON(t, adminClient, "GET", addr+"/api/users?q=e2e_reguser&page=1&page_size=10", nil)
+		// 测试用户已软删除；保留终态行作为审计记录。
+		status, body := doJSON(t, adminClient, "GET", addr+"/api/users?q="+regUsername+"&page=1&page_size=10", nil)
 		if status == 200 {
 			var resp struct {
 				Items []struct {

@@ -8,6 +8,7 @@ package user
 import (
 	"context"
 	"errors"
+	"time"
 
 	domainauth "media_agent/media_auth/biz/domain/auth"
 	policyauth "media_agent/media_auth/biz/policy/auth"
@@ -16,12 +17,21 @@ import (
 
 // Service 是用户管理用例服务。
 type Service struct {
-	repo domainauth.UserRepo
+	repo    domainauth.UserRepo
+	deleter UserDeleter
+}
+
+type UserDeleter interface {
+	Delete(ctx context.Context, currentUserID, targetID string) error
 }
 
 // NewService 构造用户管理服务。
-func NewService(repo domainauth.UserRepo) *Service {
-	return &Service{repo: repo}
+func NewService(repo domainauth.UserRepo, deleters ...UserDeleter) *Service {
+	var deleter UserDeleter
+	if len(deleters) > 0 {
+		deleter = deleters[0]
+	}
+	return &Service{repo: repo, deleter: deleter}
 }
 
 // UserView 是 service 层返回的用户记录（与 DTO 对齐）。
@@ -34,6 +44,10 @@ type UserView struct {
 	AuthSource  string // password | ldap（admin 列表仅按 password_hash 推导，不解析 wecom）
 	CreatedAt   string // RFC3339
 	LastLoginAt string // RFC3339，空=从未登录
+	Status      string
+	AuthVersion int64
+	DeletedAt   string
+	DeletedBy   string
 }
 
 // 用例错误。
@@ -97,7 +111,10 @@ func (s *Service) DeleteUser(ctx context.Context, role, currentUserID, targetID 
 	if err := policyauth.CanDeleteUser(targetID, currentUserID); err != nil {
 		return err
 	}
-	return s.repo.DeleteUser(ctx, targetID)
+	if s.deleter == nil {
+		return errors.New("user soft-delete workflow is unavailable")
+	}
+	return s.deleter.Delete(ctx, currentUserID, targetID)
 }
 
 // ChangeUserPassword admin 改他人密码（admin only；仅本地密码账号）。
@@ -144,6 +161,15 @@ func toUserView(u domainauth.User) UserView {
 		Role:        u.Role,
 		AuthSource:  u.AuthSource(nil), // nil resolver -> password|ldap
 		CreatedAt:   u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		Status:      u.Status,
+		AuthVersion: u.AuthVersion,
+		DeletedBy:   u.DeletedBy,
+	}
+	if v.Status == "" {
+		v.Status = domainauth.UserStatusActive
+	}
+	if u.DeletedAt != nil {
+		v.DeletedAt = u.DeletedAt.Format(time.RFC3339)
 	}
 	if !u.LastLoginAt.IsZero() {
 		v.LastLoginAt = u.LastLoginAt.Format("2006-01-02T15:04:05Z07:00")

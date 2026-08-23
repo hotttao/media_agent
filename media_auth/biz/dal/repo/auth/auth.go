@@ -178,17 +178,34 @@ func (r *repo) ListUsers(ctx context.Context, q, sort, order string, page, pageS
 	return out, int(total), nil
 }
 
-// DeleteUser 按 id 删 user（FK CASCADE 清关联表）。0 行 -> ErrUserNotFound。
-func (r *repo) DeleteUser(ctx context.Context, id string) error {
-	q := r.q(ctx)
-	res, err := q.User.WithContext(ctx).Where(q.User.ID.Eq(id)).Delete()
-	if err != nil {
-		return err
+// SoftDeleteUser 只更新账号状态，保留身份、团队关系和历史引用。
+func (r *repo) SoftDeleteUser(ctx context.Context, id, deletedBy string) (domainauth.User, error) {
+	now := time.Now()
+	res := dal.FromContext(ctx, r.db).Model(&model.User{}).
+		Where("id = ? AND status = ?", id, domainauth.UserStatusActive).
+		Updates(map[string]any{
+			"status":       domainauth.UserStatusDeleted,
+			"auth_version": gorm.Expr("auth_version + 1"),
+			"deleted_at":   now,
+			"deleted_by":   deletedBy,
+		})
+	if res.Error != nil {
+		return domainauth.User{}, res.Error
 	}
 	if res.RowsAffected == 0 {
-		return domainauth.ErrUserNotFound
+		return domainauth.User{}, domainauth.ErrUserNotFound
 	}
-	return nil
+	return r.FindByID(ctx, id)
+}
+
+func (r *repo) CountActiveAdmins(ctx context.Context) (int, error) {
+	// 锁住所有 active admin 行，串行化并发删除，避免两个管理员同时看到 count=2 后都被删除。
+	var ids []string
+	err := dal.FromContext(ctx, r.db).Raw(
+		"SELECT id FROM media_auth.users WHERE role = ? AND status = ? FOR UPDATE",
+		"admin", domainauth.UserStatusActive,
+	).Scan(&ids).Error
+	return len(ids), err
 }
 
 // SetPassword 更新 password_hash（改密）。
@@ -259,6 +276,11 @@ func rowToDomain(u *model.User) domainauth.User {
 		AutoEvolution:   u.AutoEvolution,
 		CreatedAt:       u.CreatedAt,
 		PasswordHash:    ptrStr(u.PasswordHash),
+		Status:          u.Status,
+		AuthVersion:     u.AuthVersion,
+		DisabledAt:      u.DisabledAt,
+		DeletedAt:       u.DeletedAt,
+		DeletedBy:       ptrStr(u.DeletedBy),
 	}
 	if u.Email != nil {
 		d.Email = *u.Email

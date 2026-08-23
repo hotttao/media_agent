@@ -103,11 +103,12 @@ func (w *WecomLoginBind) handleLogin(ctx context.Context, userid string) (WecomC
 	}
 	// 签 session。
 	sess := domainauth.Session{
-		Sub:      user.ID,
-		Username: user.Username,
-		Name:     user.DisplayName,
-		Email:    user.Email,
-		Role:     user.Role,
+		Sub:         user.ID,
+		Username:    user.Username,
+		Name:        user.DisplayName,
+		Email:       user.Email,
+		Role:        user.Role,
+		AuthVersion: user.AuthVersion,
 	}
 	token, err := w.signer.Sign(sess)
 	if err != nil {

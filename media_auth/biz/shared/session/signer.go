@@ -20,11 +20,12 @@ import (
 
 // jwtClaims 是 JWT 的 claims（对齐 control-plane JwtPayload）。
 type jwtClaims struct {
-	Sub      string `json:"sub"`
-	Username string `json:"username"`
-	Name     string `json:"name"`
-	Email    string `json:"email,omitempty"`
-	Role     string `json:"role"`
+	Sub         string `json:"sub"`
+	Username    string `json:"username"`
+	Name        string `json:"name"`
+	Email       string `json:"email,omitempty"`
+	Role        string `json:"role"`
+	AuthVersion int64  `json:"auth_version"`
 	jwt.RegisteredClaims
 }
 
@@ -58,11 +59,12 @@ func (s *Signer) AccessTokenTTL() time.Duration { return s.accessTTL }
 func (s *Signer) Sign(sess auth.Session) (string, error) {
 	now := time.Now()
 	claims := jwtClaims{
-		Sub:      sess.Sub,
-		Username: sess.Username,
-		Name:     sess.Name,
-		Email:    sess.Email,
-		Role:     sess.Role,
+		Sub:         sess.Sub,
+		Username:    sess.Username,
+		Name:        sess.Name,
+		Email:       sess.Email,
+		Role:        sess.Role,
+		AuthVersion: sess.AuthVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.expiresIn)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -89,12 +91,13 @@ func (s *Signer) Verify(token string) (auth.Session, error) {
 		exp = claims.ExpiresAt.Time
 	}
 	return auth.Session{
-		Sub:      claims.Sub,
-		Username: claims.Username,
-		Name:     claims.Name,
-		Email:    claims.Email,
-		Role:     claims.Role,
-		Exp:      exp,
+		Sub:         claims.Sub,
+		Username:    claims.Username,
+		Name:        claims.Name,
+		Email:       claims.Email,
+		Role:        claims.Role,
+		AuthVersion: claims.AuthVersion,
+		Exp:         exp,
 	}, nil
 }
 
@@ -118,11 +121,12 @@ func (s *Signer) Renew(sess auth.Session) (string, error) {
 func (s *Signer) IssueAccessToken(sess auth.Session) (string, error) {
 	now := time.Now()
 	claims := jwtClaims{
-		Sub:      sess.Sub,
-		Username: sess.Username,
-		Name:     sess.Name,
-		Email:    sess.Email,
-		Role:     sess.Role,
+		Sub:         sess.Sub,
+		Username:    sess.Username,
+		Name:        sess.Name,
+		Email:       sess.Email,
+		Role:        sess.Role,
+		AuthVersion: sess.AuthVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTTL)),
 			IssuedAt:  jwt.NewNumericDate(now),
