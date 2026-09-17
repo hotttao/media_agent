@@ -14,6 +14,9 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     actionTimeout: 10_000,
+    ...(process.env.E2E_CHROMIUM_EXECUTABLE
+      ? { launchOptions: { executablePath: process.env.E2E_CHROMIUM_EXECUTABLE } }
+      : {}),
   },
 
   projects: [

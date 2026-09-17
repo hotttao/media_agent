@@ -12,6 +12,9 @@ E2E_USER_EMAIL=<email> E2E_USER_PASSWORD=<password> yarn test:e2e
 # Local development mode (requires media services with MW_DEV_USER_ID=dev-user)
 E2E_DEV_AUTH=true yarn test:e2e
 
+# If Playwright's bundled browser is unavailable, use an installed Chrome
+E2E_DEV_AUTH=true E2E_CHROMIUM_EXECUTABLE=/usr/bin/google-chrome yarn test:e2e
+
 # Run a specific test
 E2E_USER_EMAIL=<email> E2E_USER_PASSWORD=<password> yarn test:e2e --grep "roles"
 
