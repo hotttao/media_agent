@@ -1,0 +1,12 @@
+- id: media-agent-authenticated-api
+  upstream:
+    url: http://host.docker.internal:8002
+  match:
+    url: http://192.168.2.41:18080/api/<.*>
+    methods: [GET, POST, PUT, PATCH, DELETE]
+  authenticators:
+    - handler: cookie_session
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop

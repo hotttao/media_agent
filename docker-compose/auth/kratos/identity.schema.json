@@ -1,0 +1,36 @@
+{
+  "$id": "https://media-agent.local/schemas/identity.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Media Agent User",
+  "type": "object",
+  "properties": {
+    "traits": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "title": "Email",
+          "minLength": 3,
+          "ory.sh/kratos": {
+            "credentials": {"password": {"identifier": true}},
+            "verification": {"via": "email"},
+            "recovery": {"via": "email"}
+          }
+        },
+        "name": {
+          "type": "object",
+          "properties": {
+            "first": {"type": "string", "title": "First name"},
+            "last": {"type": "string", "title": "Last name"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": ["email"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["traits"],
+  "additionalProperties": false
+}

@@ -1,9 +1,181 @@
-# 认证与鉴权分组说明。
-#
-# Ory Kratos/Hydra/Keto/Oathkeeper 的权威部署位于独立的 ory-compose / auth
-# deployment；本文件作为 media_agent 的组合入口占位，避免把认证服务混入
-# 基础设施和可观测性 Compose。接入网关的路径统一维护在 traefik/dynamic.yml。
-#
-# 启动 Ory 前需显式进入权威目录执行其 compose 命令；本仓库不会隐式拉起认证服务。
+name: media-agent-auth
 
-services: {}
+# Current-repository-owned Ory stack. Nothing in this file depends on the
+# sibling ory-compose repository. Start it explicitly before the gateway.
+services:
+  auth-postgres:
+    image: m.daocloud.io/docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${ORY_POSTGRES_PASSWORD:-ory-local-postgres}
+      POSTGRES_DB: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - ory-postgres:/var/lib/postgresql/data
+      - ./auth/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks: [auth]
+    restart: unless-stopped
+
+  kratos-migrate:
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    command: migrate sql -e -y -c /etc/config/kratos/kratos.yml
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+    volumes:
+      - ./auth/kratos:/etc/config/kratos:ro
+    networks: [auth]
+    restart: "no"
+
+  kratos:
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    command: serve -c /etc/config/kratos/kratos.yml --dev
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./auth/kratos:/etc/config/kratos:ro
+    networks: [auth]
+    restart: unless-stopped
+
+  kratos-courier:
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    command: courier watch -c /etc/config/kratos/kratos.yml
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    volumes:
+      - ./auth/kratos:/etc/config/kratos:ro
+    networks: [auth]
+    restart: unless-stopped
+
+  kratos-seed:
+    image: ghcr.io/hotttao/ory-kratos:v26.2.0
+    entrypoint: ["/bin/sh"]
+    command: ["/etc/config/kratos/seed-identities.sh"]
+    depends_on:
+      kratos:
+        condition: service_started
+    environment:
+      KRATOS_ADMIN_URL: http://kratos:4434
+      DEV_USER_EMAIL: ${ORY_DEV_USER_EMAIL:-admin@media-agent.local}
+      DEV_USER_PASSWORD: ${ORY_DEV_USER_PASSWORD:-Media-agent-2026}
+    volumes:
+      - ./auth/kratos:/etc/config/kratos:ro
+    networks: [auth]
+    restart: "no"
+
+  hydra-migrate:
+    image: ghcr.io/hotttao/ory-hydra:v26.2.0
+    command: migrate sql -e --yes postgres://hydra:hydra-local@auth-postgres:5432/hydra?sslmode=disable
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+    networks: [auth]
+    restart: "no"
+
+  hydra:
+    image: ghcr.io/hotttao/ory-hydra:v26.2.0
+    command: serve all --dev
+    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
+    environment:
+      DSN: postgres://hydra:hydra-local@auth-postgres:5432/hydra?sslmode=disable
+      URLS_SELF_ISSUER: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/ory/hydra/
+      URLS_SELF_PUBLIC: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/ory/hydra/
+      URLS_LOGIN: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/login
+      URLS_CONSENT: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/consent
+      URLS_LOGOUT: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/logout
+      URLS_ERROR: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/error
+      URLS_POST_LOGOUT_REDIRECT: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/
+      URLS_IDENTITY_PROVIDER_PUBLICURL: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/
+      URLS_IDENTITY_PROVIDER_URL: http://kratos:4434/
+      SECRETS_SYSTEM: ${ORY_HYDRA_SYSTEM_SECRET:-local-hydra-system-secret-change-me-32}
+      SECRETS_COOKIE: ${ORY_HYDRA_COOKIE_SECRET:-local-hydra-cookie-secret-change-me-32}
+      OIDC_SUBJECT_IDENTIFIERS_SUPPORTED_TYPES: public,pairwise
+      OIDC_SUBJECT_IDENTIFIERS_PAIRWISE_SALT: ${ORY_HYDRA_PAIRWISE_SALT:-local-hydra-pairwise-salt-change-me}
+      STRATEGIES_ACCESS_TOKEN: jwt
+      LOG_LEVEL: ${ORY_LOG_LEVEL:-info}
+    networks: [auth]
+    restart: unless-stopped
+
+  keto-migrate:
+    image: ghcr.io/hotttao/ory-keto:v26.2.0
+    command: migrate up -y -c /etc/config/keto/keto.yml
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+    volumes:
+      - ./auth/keto:/etc/config/keto:ro
+    networks: [auth]
+    restart: "no"
+
+  keto:
+    image: ghcr.io/hotttao/ory-keto:v26.2.0
+    command: serve -c /etc/config/keto/keto.yml
+    depends_on:
+      keto-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./auth/keto:/etc/config/keto:ro
+    networks: [auth]
+    restart: unless-stopped
+
+  oathkeeper:
+    image: ghcr.io/hotttao/ory-oathkeeper:v26.2.0
+    command: serve -c /etc/oathkeeper/config.yaml
+    depends_on:
+      kratos:
+        condition: service_started
+    volumes:
+      - ./auth/oathkeeper:/etc/oathkeeper:ro
+    networks: [auth]
+    restart: unless-stopped
+
+  login-ui:
+    image: ghcr.io/korjavin/kratos-selfservice-ui-node-vendor:latest
+    depends_on: [kratos, hydra]
+    environment:
+      PORT: "3000"
+      SECURITY_MODE: ""
+      KRATOS_PUBLIC_URL: http://kratos:4433/
+      KRATOS_BROWSER_URL: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/
+      KRATOS_ADMIN_URL: http://kratos:4434/
+      HYDRA_ADMIN_URL: http://hydra:4445/
+      BASE_URL: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/
+      COOKIE_SECRET: ${ORY_UI_COOKIE_SECRET:-local-login-ui-cookie-secret-change-me}
+      CSRF_COOKIE_SECRET: ${ORY_UI_CSRF_SECRET:-local-login-ui-csrf-secret-change-me}
+      CSRF_COOKIE_NAME: ory_ui_csrf
+      DANGEROUSLY_DISABLE_SECURE_CSRF_COOKIES: "true"
+    networks: [auth]
+    restart: unless-stopped
+
+  consent:
+    image: ghcr.io/korjavin/ory-consent:latest
+    depends_on: [kratos, hydra]
+    environment:
+      PORT: "3001"
+      HYDRA_ADMIN_URL: http://hydra:4445
+      KRATOS_ADMIN_URL: http://kratos:4434
+    networks: [auth]
+    restart: unless-stopped
+
+  mailpit:
+    image: m.daocloud.io/docker.io/axllent/mailpit:v1.27.8
+    networks: [auth]
+    restart: unless-stopped
+
+networks:
+  auth:
+    name: media-auth
+
+volumes:
+  ory-postgres:
+    name: media-agent-ory-postgres

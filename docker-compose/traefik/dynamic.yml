@@ -1,5 +1,22 @@
 http:
   routers:
+    ory-hydra:
+      rule: "PathPrefix(`/ory/hydra`)"
+      priority: 130
+      middlewares: [strip-ory-hydra]
+      service: ory-hydra
+    ory-kratos:
+      rule: "PathPrefix(`/self-service`) || PathPrefix(`/sessions`) || PathPrefix(`/schemas`) || PathPrefix(`/health/ready`) || PathPrefix(`/health/alive`)"
+      priority: 125
+      service: ory-kratos
+    ory-consent:
+      rule: "PathPrefix(`/consent`)"
+      priority: 122
+      service: ory-consent
+    ory-login-ui:
+      rule: "Path(`/login`) || PathPrefix(`/login/`) || Path(`/registration`) || PathPrefix(`/registration/`) || Path(`/settings`) || PathPrefix(`/settings/`) || Path(`/recovery`) || PathPrefix(`/recovery/`) || Path(`/verification`) || PathPrefix(`/verification/`) || Path(`/logout`) || PathPrefix(`/logout/`) || Path(`/error`) || PathPrefix(`/error/`)"
+      priority: 120
+      service: ory-login-ui
     auth:
       rule: "PathPrefix(`/api/auth`)"
       priority: 100
@@ -9,11 +26,11 @@ http:
       priority: 100
       service: auth
     materials:
-      rule: "PathPrefix(`/api/materials`) || PathPrefix(`/api/products`) || PathPrefix(`/api/asset-kinds`) || PathPrefix(`/api/generated-assets`) || PathPrefix(`/api/virtual-ips`)"
+      rule: "PathPrefix(`/api/v1/materials`) || PathPrefix(`/api/v1/products`) || PathPrefix(`/api/v1/asset-kinds`) || PathPrefix(`/api/v1/generated-assets`) || PathPrefix(`/api/v1/virtual-ips`)"
       priority: 50
       service: materials
     workflow:
-      rule: "PathPrefix(`/api/workflows`) || PathPrefix(`/api/templates`) || PathPrefix(`/api/jobs`) || PathPrefix(`/api/step-runs`)"
+      rule: "PathPrefix(`/api/v1/workflows`) || PathPrefix(`/api/v1/templates`) || PathPrefix(`/api/v1/jobs`) || PathPrefix(`/api/v1/step-runs`)"
       priority: 50
       service: workflow
     frontend:
@@ -21,7 +38,29 @@ http:
       priority: 1
       service: frontend
 
+  middlewares:
+    strip-ory-hydra:
+      stripPrefix:
+        prefixes:
+          - /ory/hydra
+
   services:
+    ory-kratos:
+      loadBalancer:
+        servers:
+          - url: "http://kratos:4433"
+    ory-hydra:
+      loadBalancer:
+        servers:
+          - url: "http://hydra:4444"
+    ory-login-ui:
+      loadBalancer:
+        servers:
+          - url: "http://login-ui:3000"
+    ory-consent:
+      loadBalancer:
+        servers:
+          - url: "http://consent:3001"
     auth:
       loadBalancer:
         servers:

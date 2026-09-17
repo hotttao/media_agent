@@ -1,0 +1,87 @@
+version: v0.13.0
+
+dsn: postgres://kratos:kratos-local@auth-postgres:5432/kratos?sslmode=disable
+
+serve:
+  public:
+    host: 0.0.0.0
+    port: 4433
+    base_url: http://192.168.2.41:18080/
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://192.168.2.41:18080
+  admin:
+    host: 0.0.0.0
+    port: 4434
+    base_url: http://kratos:4434/
+
+selfservice:
+  default_browser_return_url: http://192.168.2.41:18080/
+  allowed_return_urls:
+    - http://192.168.2.41:18080/
+  methods:
+    password:
+      enabled: true
+    code:
+      enabled: true
+  flows:
+    error:
+      ui_url: http://192.168.2.41:18080/error
+    login:
+      ui_url: http://192.168.2.41:18080/login
+      lifespan: 10m
+    registration:
+      enabled: true
+      ui_url: http://192.168.2.41:18080/registration
+      lifespan: 10m
+      after:
+        password:
+          hooks:
+            - hook: session
+    logout:
+      after:
+        default_browser_return_url: http://192.168.2.41:18080/login
+    recovery:
+      enabled: true
+      ui_url: http://192.168.2.41:18080/recovery
+      use: code
+    settings:
+      ui_url: http://192.168.2.41:18080/settings
+      privileged_session_max_age: 15m
+    verification:
+      enabled: true
+      ui_url: http://192.168.2.41:18080/verification
+      use: code
+
+identity:
+  default_schema_id: default
+  schemas:
+    - id: default
+      url: file:///etc/config/kratos/identity.schema.json
+
+session:
+  lifespan: 24h
+
+secrets:
+  cookie:
+    - local-kratos-cookie-secret-change-me
+  cipher:
+    - 0123456789abcdef0123456789abcdef
+
+ciphers:
+  algorithm: xchacha20-poly1305
+
+hashers:
+  algorithm: bcrypt
+  bcrypt:
+    cost: 8
+
+courier:
+  smtp:
+    connection_uri: smtp://mailpit:1025/?disable_starttls=true
+
+log:
+  level: info
+  format: json
+  leak_sensitive_values: false

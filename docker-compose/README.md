@@ -5,7 +5,7 @@
 ## 分组
 
 - `docker-compose.yml`：基础设施，仅 PostgreSQL。
-- `docker-compose.auth.yml`：认证与鉴权服务的接入约定（Ory/业务认证独立部署）。
+- `docker-compose.auth.yml`：当前仓库维护的 Ory 认证鉴权栈（Kratos、Hydra、Keto、Oathkeeper、Login UI）。
 - `docker-compose.gateway.yml`：Traefik 统一入口，配置集中在 `traefik/`。
 - `docker-compose.observability.yml`：OTel、Jaeger、Prometheus、Loki、Grafana、Promtail、Consul；全部使用 `observability` profile。
 
@@ -14,6 +14,9 @@
 ```bash
 # 基础数据库
 docker compose -f docker-compose.yml up -d postgres
+
+# Ory 认证与鉴权（必须先于网关启动，以创建 media-auth 网络）
+docker compose -f docker-compose.auth.yml up -d
 
 # 统一网关
 docker compose -f docker-compose.gateway.yml up -d
@@ -24,7 +27,22 @@ docker compose -f docker-compose.yml -f docker-compose.observability.yml --profi
 
 网关地址：`http://192.168.2.41:18080/`。
 
-认证与鉴权：Ory Kratos/Hydra/Keto/Oathkeeper 的权威编排仍在
-`/home/tao/code/github/ory-compose` 或 auth deployment；这里保留分组边界和网关路由，
-不会在编码或测试时自动启动。当前业务服务的开发认证仍由 `media_auth` 提供，迁移到 Ory
-需要在联调前显式启动并配置客户端回调地址。
+认证与鉴权配置全部位于 `auth/`，不再依赖外部仓库。Kratos 浏览器流程与 Hydra
+Public API 经统一网关访问；Keto Write API、Kratos/Hydra Admin API 和 Oathkeeper
+Decision API 仅在 `media-auth` Docker 网络内开放。
+
+本地入口：
+
+- 登录：`http://192.168.2.41:18080/login`
+- 注册：`http://192.168.2.41:18080/registration`
+- Hydra OIDC discovery：`http://192.168.2.41:18080/ory/hydra/.well-known/openid-configuration`
+- Mailpit 仅在容器网络内运行，需要调试邮件时再显式增加受限端口映射。
+
+本地开发账号由幂等 seed job 创建，可通过环境变量覆盖：
+
+- 用户名：`admin@media-agent.local`
+- 密码：`Media-agent-2026`
+- 覆盖变量：`ORY_DEV_USER_EMAIL`、`ORY_DEV_USER_PASSWORD`
+
+当前业务 API 仍保留 `media_auth` 兼容路由。切换 Oathkeeper enforce 前，必须先完成
+业务主体适配和 Keto 投影；不能仅靠网关开关直接替换，以免现有会话全部失效。

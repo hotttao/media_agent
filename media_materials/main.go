@@ -121,6 +121,7 @@ func main() {
 		ServiceURL:        serviceURL,
 		OAuthClientID:     cfg.GetApp().GetName(),
 		OAuthClientSecret: cfg.GetAuth().GetOauthClientSecret(),
+		KratosPublicURL:   os.Getenv("ORY_KRATOS_PUBLIC_URL"),
 		DevUserID:         os.Getenv("MW_DEV_USER_ID"),
 		// skip 运维端点 + internal RPC（服务间调用不带 user session，靠网络隔离）
 		SkipPaths: map[string]bool{

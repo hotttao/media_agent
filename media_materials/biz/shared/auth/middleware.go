@@ -49,6 +49,7 @@ type Config struct {
 	ServiceURL        string // 本服务 base URL（OAuth callback redirect_uri）
 	OAuthClientID     string // 在 media_auth 注册的 OAuth client_id
 	OAuthClientSecret string // OAuth client_secret（机密 client 必填）
+	KratosPublicURL   string // Ory Kratos public URL；配置后浏览器会话优先使用 Kratos
 	// DevUserID enables a local-only authenticated session when explicitly set.
 	// It is intentionally empty by default and must never be configured in prod.
 	DevUserID    string
@@ -257,6 +258,15 @@ func (m *Middleware) Handler() app.HandlerFunc {
 		// 2. Cookie JWT → 本地验签
 		token := string(c.Cookie(m.cfg.CookieName))
 		if token == "" {
+			if user, err := m.verifyKratosSession(ctx, string(c.Request.Header.Peek("Cookie"))); err == nil && user != nil {
+				ctx = context.WithValue(ctx, callerKey{}, user)
+				teamIDs, _ := m.fetchTeams(ctx, user.Sub)
+				if teamIDs != nil {
+					ctx = context.WithValue(ctx, teamsKey{}, teamIDs)
+				}
+				c.Next(ctx)
+				return
+			}
 			c.JSON(consts.StatusUnauthorized, map[string]string{"error": "missing session"})
 			c.Abort()
 			return
@@ -276,6 +286,51 @@ func (m *Middleware) Handler() app.HandlerFunc {
 		}
 		c.Next(ctx)
 	}
+}
+
+// verifyKratosSession asks Kratos to validate the browser's httpOnly session
+// cookie. Identity traits remain profile data; authorization stays in Keto and
+// the owning business service.
+func (m *Middleware) verifyKratosSession(ctx context.Context, cookie string) (*User, error) {
+	if m.cfg.KratosPublicURL == "" || cookie == "" {
+		return nil, errors.New("kratos session unavailable")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(m.cfg.KratosPublicURL, "/")+"/sessions/whoami", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Cookie", cookie)
+	resp, err := m.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("verify kratos session: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("kratos whoami: status %d", resp.StatusCode)
+	}
+	var session struct {
+		Identity struct {
+			ID     string `json:"id"`
+			Traits struct {
+				Email string `json:"email"`
+				Name  struct {
+					First string `json:"first"`
+					Last  string `json:"last"`
+				} `json:"name"`
+			} `json:"traits"`
+		} `json:"identity"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&session); err != nil {
+		return nil, fmt.Errorf("decode kratos whoami: %w", err)
+	}
+	if session.Identity.ID == "" {
+		return nil, errors.New("kratos identity id is empty")
+	}
+	name := strings.TrimSpace(session.Identity.Traits.Name.First + " " + session.Identity.Traits.Name.Last)
+	if name == "" {
+		name = session.Identity.Traits.Email
+	}
+	return &User{Sub: session.Identity.ID, Username: session.Identity.Traits.Email, Name: name, Role: "user"}, nil
 }
 
 // prefetchTeams 异步预热 team 缓存（service token 路径用）。
@@ -409,6 +464,16 @@ func (m *Middleware) clearCookie(c *app.RequestContext) {
 
 // LoginHandler GET /api/auth/login → 302 → media_auth /api/oauth/authorize（带 PKCE）
 func (m *Middleware) LoginHandler(ctx context.Context, c *app.RequestContext) {
+	if m.cfg.KratosPublicURL != "" {
+		next := string(c.Query("next"))
+		if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
+			next = "/"
+		}
+		returnTo := strings.TrimRight(m.cfg.ServiceURL, "/") + next
+		loginURL := strings.TrimRight(m.cfg.KratosPublicURL, "/") + "/self-service/login/browser?return_to=" + url.QueryEscape(returnTo)
+		c.Redirect(consts.StatusFound, []byte(loginURL))
+		return
+	}
 	verifier := generateRandomString(32)
 	challenge := generateCodeChallenge(verifier)
 	state := generateRandomString(16)

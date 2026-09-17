@@ -1,0 +1,42 @@
+serve:
+  api:
+    host: 0.0.0.0
+    port: 4456
+  proxy:
+    host: 0.0.0.0
+    port: 4455
+
+access_rules:
+  matching_strategy: regexp
+  repositories:
+    - file:///etc/oathkeeper/rules.yaml
+
+authenticators:
+  cookie_session:
+    enabled: true
+    config:
+      check_session_url: http://kratos:4433/sessions/whoami
+      preserve_path: true
+      subject_from: identity.id
+      only:
+        - ory_kratos_session
+  noop:
+    enabled: true
+
+authorizers:
+  allow:
+    enabled: true
+
+mutators:
+  noop:
+    enabled: true
+
+errors:
+  fallback: [json]
+  handlers:
+    json:
+      enabled: true
+
+log:
+  level: info
+  format: json

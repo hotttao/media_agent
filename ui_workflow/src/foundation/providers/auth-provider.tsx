@@ -46,8 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await api.logout();
     setUser(null);
+    window.location.href = "/self-service/logout/browser";
   }, []);
 
   const refreshUser = useCallback(async () => {

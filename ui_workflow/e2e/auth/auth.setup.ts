@@ -17,15 +17,15 @@ setup("authenticate", async ({ page }) => {
     );
   }
 
-  await page.goto("/#/login");
+  await page.goto("/api/auth/login?next=/");
 
-  await page.locator('input[name="email"]').fill(email);
+  await page.locator('input[name="identifier"]').fill(email);
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
 
-  // Wait for redirect to dashboard after successful login
-  await page.waitForURL("**/#/dashboard");
-  await expect(page).toHaveURL(/\/#\/dashboard/);
+  // Kratos returns to the requested application path with its session cookie.
+  await page.waitForURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "Media Workflow" })).toBeVisible();
 
   // Save signed-in state
   await page.context().storageState({ path: "e2e/auth/storage-state.json" });

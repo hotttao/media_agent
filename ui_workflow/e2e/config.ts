@@ -45,8 +45,8 @@ function buildConfig(raw: Record<string, any>): E2eConfig {
   const auth = raw.auth ?? {};
   return {
     auth: {
-      email: auth.email ?? "admin@example.com",
-      password: auth.password ?? "admin",
+      email: process.env.E2E_USER_EMAIL ?? auth.email ?? "admin@example.com",
+      password: process.env.E2E_USER_PASSWORD ?? auth.password ?? "admin",
     },
   };
 }
