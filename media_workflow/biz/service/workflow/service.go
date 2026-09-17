@@ -38,6 +38,7 @@ type UpdateCommand struct {
 	Description   string
 	OutputStepKey string
 	Steps         []domain.Step
+	CallerID      string
 }
 
 // ValidateWorkflow 闸1：不写库，返回 ValidationResult。
@@ -142,6 +143,9 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Workfl
 	if err != nil {
 		return nil, err
 	}
+	if old.CreatedBy != cmd.CallerID {
+		return nil, errors.New("only owner can update workflow")
+	}
 	v.scope = old.Scope
 	res, err := v.validate(ctx)
 	if err != nil || !res.Valid {
@@ -167,7 +171,14 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Workfl
 	return s.repo.Get(ctx, result.ID)
 }
 
-func (s *Service) Archive(ctx context.Context, id string) (*domain.Workflow, error) {
+func (s *Service) Archive(ctx context.Context, id, callerID string) (*domain.Workflow, error) {
+	w, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if w.CreatedBy != callerID {
+		return nil, errors.New("only owner can archive workflow")
+	}
 	if err := s.repo.UpdateStatus(ctx, id, domain.StatusArchived); err != nil {
 		return nil, err
 	}
@@ -175,13 +186,16 @@ func (s *Service) Archive(ctx context.Context, id string) (*domain.Workflow, err
 }
 
 // Publish draft -> published（状态机守卫：仅 draft 可 publish；archived 不可 publish）。
-func (s *Service) Publish(ctx context.Context, id string) (*domain.Workflow, error) {
+func (s *Service) Publish(ctx context.Context, id, callerID string) (*domain.Workflow, error) {
 	w, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if w.Status != domain.StatusDraft {
 		return nil, fmt.Errorf("workflow %q status %s, expected draft", id, w.Status)
+	}
+	if w.CreatedBy != callerID {
+		return nil, errors.New("only owner can publish workflow")
 	}
 	if err := s.repo.UpdateStatus(ctx, id, domain.StatusPublished); err != nil {
 		return nil, err

@@ -89,6 +89,12 @@ export async function archiveWorkflow(id: string): Promise<Workflow> {
   });
 }
 
+export async function publishWorkflow(id: string): Promise<Workflow> {
+  return fromWire(await api.request<Workflow>(`/workflows/${encodeURIComponent(id)}/publish`, {
+    method: "POST",
+  }));
+}
+
 export async function grantWorkflow(id: string, teamId: string): Promise<Workflow> {
   return api.request<Workflow>(`/workflows/${encodeURIComponent(id)}/grants`, {
     method: "POST",

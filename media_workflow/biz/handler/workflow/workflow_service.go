@@ -45,6 +45,7 @@ func UpdateWorkflow(ctx context.Context, c *app.RequestContext) {
 	w, err := Svc.Update(ctx, wfsvc.UpdateCommand{
 		ID: req.GetId(), Name: req.GetName(), Description: req.GetDescription(),
 		OutputStepKey: req.GetOutputStepKey(), Steps: stepsFromPB(req.GetSteps()),
+		CallerID: auth.CallerID(ctx),
 	})
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
@@ -102,7 +103,7 @@ func ArchiveWorkflow(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	w, err := Svc.Archive(ctx, req.GetId())
+	w, err := Svc.Archive(ctx, req.GetId(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
@@ -306,7 +307,7 @@ func PublishWorkflow(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	w, err := Svc.Publish(ctx, req.GetId())
+	w, err := Svc.Publish(ctx, req.GetId(), auth.CallerID(ctx))
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
 		return

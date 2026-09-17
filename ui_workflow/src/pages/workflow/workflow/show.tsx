@@ -1,4 +1,4 @@
-import { useArchiveWorkflow } from "@/domains/workflows/hooks/use-workflow-mutations";
+import { useArchiveWorkflow, usePublishWorkflow } from "@/domains/workflows/hooks/use-workflow-mutations";
 import { useWorkflow } from "@/domains/workflows/hooks/use-workflow";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -14,6 +14,7 @@ export function WorkflowShow({
 }) {
   const { data: workflow, isLoading } = useWorkflow(id);
   const archiveWorkflow = useArchiveWorkflow();
+  const publishWorkflow = usePublishWorkflow();
 
   if (isLoading) {
     return (
@@ -32,9 +33,10 @@ export function WorkflowShow({
         <Button variant="ghost" size="sm" onClick={onBack}>
           Back
         </Button>
-        <Button size="sm" onClick={onEdit}>
-          Edit
-        </Button>
+        <div className="flex gap-2">
+          {workflow.status === "draft" && <Button size="sm" onClick={() => publishWorkflow.mutate(id)}>Publish</Button>}
+          <Button size="sm" variant="outline" onClick={onEdit}>Edit</Button>
+        </div>
       </div>
       <dl className="grid grid-cols-3 gap-2 text-sm">
         <dt className="text-muted-foreground">Name</dt>

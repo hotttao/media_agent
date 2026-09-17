@@ -4,6 +4,7 @@ import {
   createWorkflow,
   updateWorkflow,
   validateWorkflow,
+  publishWorkflow,
 } from "@/domains/workflows/lib/api";
 import type { WorkflowInput } from "@/domains/workflows/types";
 
@@ -12,6 +13,17 @@ export function useCreateWorkflow() {
   return useMutation({
     mutationFn: (input: WorkflowInput) => createWorkflow(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workflows"] }),
+  });
+}
+
+export function usePublishWorkflow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => publishWorkflow(id),
+    onSuccess: (workflow) => {
+      qc.invalidateQueries({ queryKey: ["workflows"] });
+      qc.invalidateQueries({ queryKey: ["workflow", workflow.id] });
+    },
   });
 }
 
