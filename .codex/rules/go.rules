@@ -1,4 +1,4 @@
-// 常用 Go 质量检查与构建命令。
+# 常用 Go 质量检查与构建命令。
 prefix_rule(
     pattern = ["go", "test"],
     decision = "allow",
@@ -47,7 +47,7 @@ prefix_rule(
     justification = "download declared Go dependencies"
 )
 
-// go run 允许执行项目内开发工具；不放行任意 shell/script 前缀。
+# go run 允许执行项目内开发工具；不放行任意 shell/script 前缀。
 prefix_rule(
     pattern = ["go", "run"],
     decision = "allow",

@@ -1,5 +1,5 @@
-// 本地开发常用的 Docker 查询和生命周期操作。
-// 删除容器/镜像/卷以及 system prune 不在放行范围内，仍需显式确认。
+# 本地开发常用的 Docker 查询和生命周期操作。
+# 删除容器/镜像/卷以及 system prune 不在放行范围内，仍需显式确认。
 prefix_rule(pattern = ["docker", "info"], decision = "allow", justification = "inspect Docker daemon")
 prefix_rule(pattern = ["docker", "version"], decision = "allow", justification = "inspect Docker versions")
 prefix_rule(pattern = ["docker", "ps"], decision = "allow", justification = "list running containers")
@@ -11,7 +11,7 @@ prefix_rule(pattern = ["docker", "exec"], decision = "allow", justification = "e
 prefix_rule(pattern = ["docker", "network", "ls"], decision = "allow", justification = "list Docker networks")
 prefix_rule(pattern = ["docker", "volume", "ls"], decision = "allow", justification = "list Docker volumes")
 
-// Compose 开发流程：查询、构建、启动、停止、重启和查看日志。
+# Compose 开发流程：查询、构建、启动、停止、重启和查看日志。
 prefix_rule(pattern = ["docker", "compose", "config"], decision = "allow", justification = "validate Compose configuration")
 prefix_rule(pattern = ["docker", "compose", "up"], decision = "allow", justification = "start development containers")
 prefix_rule(pattern = ["docker", "compose", "build"], decision = "allow", justification = "build development images")

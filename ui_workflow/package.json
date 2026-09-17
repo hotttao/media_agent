@@ -72,7 +72,7 @@
 	"scripts": {
 		"prepare": "husky",
 		"predev": "node scripts/check-node-version.mjs",
-		"dev": "vite",
+		"dev": "vite --host 0.0.0.0",
 		"prebuild": "node scripts/check-node-version.mjs",
 		"typecheck": "tsc -b",
 		"build": "yarn typecheck && yarn build:standalone && yarn build:plugin",

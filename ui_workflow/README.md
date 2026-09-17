@@ -29,7 +29,7 @@ Higher layers import lower layers only — enforced by `yarn dep-check` (depende
 
 ```bash
 yarn install
-yarn dev                 # Vite dev server (http://localhost:5173)
+yarn dev                 # Vite dev server (LAN accessible at http://<192.168.x.x>:5173)
 yarn build               # tsc --noEmit && vite build
 yarn lint                # biome lint .
 yarn lint:fix            # biome lint --write .

@@ -1,19 +1,19 @@
-// 放行 git，所有git子命令无需确认
+# 放行 git，所有git子命令无需确认
 prefix_rule(
     pattern = ["git"],
     decision = "allow",
     justification = "git source control commands"
 )
 
-// 放行 ps 进程查看
+# 放行 ps 进程查看
 prefix_rule(
     pattern = ["ps"],
     decision = "allow",
     justification = "list process"
 )
 
-// --------------------------
-// 高危命令保持prompt（弹出确认）
+# --------------------------
+# 高危命令保持prompt（弹出确认）
 prefix_rule(pattern = ["rm"], decision = "prompt")
 prefix_rule(pattern = ["sudo"], decision = "forbidden")
 prefix_rule(pattern = ["bash"], decision = "prompt")
