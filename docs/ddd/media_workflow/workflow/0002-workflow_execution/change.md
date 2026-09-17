@@ -27,3 +27,11 @@
 - 用户可以接受唯一 Candidate，或携带 feedback 请求重新生成；两种决定按 StepRun attempt 互斥且幂等。
 - 确认与重新生成均采用“本地决定 + Outbox 命令 + 下游结果 Inbox”三段式，不在本地事务内调用 Generation。
 - accept 只有在候选确认和 Generated Asset 登记完成后才推进后继；regenerate 创建新 attempt，旧候选与晚到事件只保留审计。
+- Step 可配置 `approval_policy=always` 让单 Candidate 也进入 needs_confirm；多 Candidate 不允许跳过审批。
+
+## 2026-09-17 · 改由 Conductor 持久编排
+
+- Workflow 发布时编译为 Conductor Definition；Job/StepRun 继续是业务事实源。
+- 一个业务 Step 编译为 `media_step_execution_v1` 子工作流，内部以 DO_WHILE 承载带反馈重新生成。
+- 多节点拓扑波次使用动态 fork + JOIN；后继从 StepRun 读取前驱唯一输出，不依赖 fork 输出结构。
+- 外部 Worker 不再直接领取 StepRun，而是经受控 Worker Gateway 执行 Capability Task。

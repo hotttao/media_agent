@@ -10,7 +10,7 @@
 
 ## 创建
 
-用户从 Menubar Workspace Switcher 或根路由空态打开创建 Dialog，提交成功后导航到 `/w/:workspaceId`，并加载它的默认 Slot Profile。提交失败时保留非秘密字段；API Key 是否保留在 Dialog 生命周期内由表单决定，但不得持久化。
+用户从 Menubar Workspace Switcher 或根路由空态打开创建 Dialog，提交成功后经 Navigation Port 导航到 `/o/:organizationId/t/:teamId/w/:workspaceId`，并加载它的默认 Slot Profile。提交失败时保留非秘密字段；API Key 是否保留在 Dialog 生命周期内由表单决定，但不得持久化。
 
 ## 更新
 

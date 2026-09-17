@@ -33,6 +33,12 @@
 - input slot 改为单一 `kind` 字段（asset_kind name），去掉 `resource_type` + `asset_kind` 两字段；media_type / resource_type / 落表均由 kind 推导。
 - output 改为 `output_asset_kind`（asset_kind name，resource_type=ASSET），取代 `output_resource_type`。修正 P0-4（产物 asset_kind 由 template 定义时设置）。
 - Template 新增 `platform` / `gen_way` / `gen_type` 生成路由字段，供 workflow_execution 分发下游生成器。
+
+## 2026-09-17：以版本化 Execution Capability 取代自由路由字符串
+
+- Template 新版本改为引用 `(capability_key, capability_version)`。
+- `platform` / `gen_way` / `gen_type` 只保留为旧数据迁移字段，新写路径不再使用。
+- Capability 的输入 schema、输出类别与 Conductor Task Definition 在发布时校验。
 - Render 返回 `OutputAssetKind` + `OutputMediaType`（从 asset_kind.media_type 推导），取代 `OutputType`。
 - 校验：input slot.kind 与 output_asset_kind 必须在 asset_kind 注册表已注册且未停用（调 `BatchGetAssetKind`）。
 

@@ -1,5 +1,7 @@
 # media_materials 实现规格
 
+> **历史基线。** 素材 CRUD 仍适用；与 Workflow bundle、Candidate/Generated Asset 执行集成及企业上下文有关的内容以 [企业素材与工作流平台 Spec](../enterprise-media-production.md) 为准。
+
 > 素材库 + 资源类别注册表。管理 material（curated 原料）/ generated_asset（workflow 产物）/ product / virtual_ip / asset_kind 注册表。
 >
 > media_workflow 不再调 materials 做"解析"——bundle 自包含，由 caller（编排层 / BFF）从本服务查数据组装。本服务只暴露 CRUD + List + `BatchGetAssetKind` + `UpsertGeneratedAsset`。

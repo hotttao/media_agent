@@ -32,7 +32,7 @@ Template / Workflow 均支持 `private | team | public`，与 grants 联动派�
 ### 模板
 
 **Template（提示词模板）**:
-调用一次 prompt / 生成动作的声明式定义。包含 inputs[]（输入资源槽位列表，每槽位引用一个 asset_kind）+ 单一 `output_asset_kind`（产出资源类别）+ prompt_body（用 slot 名作为占位符的字符串）+ `platform`/`gen_way`/`gen_type`（生成路由）；绑定 1 个 scope；含 visibility/grants/status（draft/published/archived）+ version。一次模板执行恒定产出**一个** generated_asset。归 `template` domain。
+调用一次 prompt / 生成动作的声明式定义。包含 inputs[]（输入资源槽位列表，每槽位引用一个 asset_kind）+ 单一 `output_asset_kind`（产出资源类别）+ prompt_body（用 slot 名作为占位符的字符串）+ 不可变 Execution Capability 引用；绑定 1 个 scope；含 visibility/grants/status（draft/published/archived）+ version。一次模板执行恒定产出**一个** generated_asset。归 `template` domain。
 _禁用替代词_：prompt（保留给模板里的"提示词字符串"）、prompt_template、recipe。
 
 **Template Slot（模板槽位）**:
@@ -41,6 +41,10 @@ _禁用替代词_：argument、parameter、variable。
 
 **Template Version（模板版本号）**:
 Template 的不可变快照，通过单调递增 version 区分，update 时新建 +1 的 version（保留旧可查询）。归 `template` domain。
+
+**Execution Capability（执行能力）**:
+可被生成 Worker 实现的、带版本的执行契约；声明输入 schema、唯一输出类别、Provider 路由和 Conductor Task Definition。Template 只引用已发布的 `(capability_key, capability_version)`，不直接绑定临时队列名或 Provider API。
+_禁用替代词_：Conductor Task、Worker、Template
 
 ### 工作流
 
@@ -63,8 +67,20 @@ Workflow 中一个节点，引用一个 Template；通过 StepBinding 声明 inp
 Step 输入到其来源的映射，`source ∈ {workflow_input, step_output, const}`；每条 `(to_input, source, ref?, value?)`。归 `workflow` domain。
 _禁用替代词_：edge、link、wire。
 
+**Step Approval Policy（步骤审批策略）**:
+Step 对生成 Candidate 的人工审批要求，取值 `when_multiple_candidates | always`。多个 Candidate 无论配置如何都必须审批；`always` 还要求单个 Candidate 进入审批。0 个 Candidate 直接失败，不进入审批。
+_禁用替代词_：Multi-output、Optional Review、Skip Multi-candidate Review
+
 **Output Step Key（输出步骤 key）**:
 Workflow 中产出最终结果的 Step 的 `step.key`；同时是 DAG 的唯一 sink；校验时强制 sink 唯一且与本值一致。归 `workflow` domain。
+
+**Workflow Compilation（工作流编译）**:
+把已发布 Workflow 的不可变版本转换为 Conductor Workflow Definition，并保存源版本、目标 name/version 与 definition_hash 的映射；编译结果是执行适配物，不是新的业务 Workflow。
+_禁用替代词_：Workflow Execution、DAG Save
+
+**Topological Wave（拓扑波次）**:
+由 Workflow DAG 按依赖关系计算的一组可并行 Step。编译器在相邻波次之间设置屏障；单 Step 波次编译为一个 Step 子工作流，多 Step 波次编译为动态并行分支后 JOIN。
+_禁用替代词_：Batch、Stage（除非专指展示层）
 
 ### 执行
 
@@ -81,8 +97,12 @@ Job 中某一个 Step 的执行实例，落地该 Step 的实际渲染入参、�
 _禁用替代词_：step execution、step instance。
 
 **Step Review Decision（步骤确认决定）**:
-Step Run 等待多候选确认时由用户提交的 `accept(candidate)` 或 `regenerate(feedback)` 决定；accept 固定唯一输出并推进 DAG，regenerate 保留旧候选并开始新 attempt。
+Step Run 按 Step Approval Policy 等待确认时由用户提交的 `accept(candidate)` 或 `regenerate(feedback)` 决定；accept 固定唯一输出并推进 DAG，regenerate 保留旧候选并开始新 attempt。
 _禁用替代词_：Retry、Multi-output Step、Candidate
+
+**Step Execution Fragment（步骤执行片段）**:
+Conductor 中承载一个业务 Step 的固定版本子工作流。它编排复用判定、执行能力调用、候选持久化、人工确认和最终单输出，不改变 Step 的领域边界。
+_禁用替代词_：Business Step、Template
 
 ### 校验
 

@@ -1,5 +1,7 @@
 # media_workflow 实现规格
 
+> **历史基线。** Template 路由、外部 Worker pull/bundle 和执行调度已由 [企业素材与工作流平台 Spec](../enterprise-media-production.md) 取代；现有 API/表结构盘点仍可用于迁移，不得据本文新增旧执行链路。
+
 > 模板执行引擎。存储 Template / Workflow / Job，接收自包含的 JobInput bundle，渲染 prompt，由外部 worker pull StepRun 执行。**不依赖 media_materials**——execution 只读 bundle + step 产出，零 materials 调用（仅 StepRun 产出时调一次 UpsertGeneratedAsset）。
 >
 > 领域规则见 `docs/ddd/media_workflow/domain/*` 与 `docs/ddd/media_workflow/workflow/*`；本文是落地规格（IDL + DB + 关键行为）。

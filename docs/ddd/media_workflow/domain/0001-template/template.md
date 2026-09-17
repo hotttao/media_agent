@@ -3,13 +3,14 @@ name: template
 description: Template（提示词模板）的存储、版本与渲染入口
 dependencies:
     - media_materials.asset_kind
+    - execution_capability
 related_workflow:
     - workflow_validation
     - workflow_execution
 ---
 
 ## 一句话职责
-Template 域负责存储「声明型」提示词模板：每个 Template 用 inputs[] 显式描述所需的输入资源槽位（每槽位引用一个 [asset_kind](../../../media_materials/domain/0005-asset_kind/asset_kind.md)），用单一 `output_asset_kind` 声明产出的资源类别，并把 prompt_body 作为可渲染正文；携带 `platform` / `gen_way` / `gen_type` 供下游生成器分发；维护 status/version 生命周期；提供渲染入口（resolve inputs → prompt + output）。
+Template 域负责存储「声明型」提示词模板：每个 Template 用 inputs[] 显式描述所需的输入资源槽位（每槽位引用一个 [asset_kind](../../../media_materials/domain/0005-asset_kind/asset_kind.md)），用单一 `output_asset_kind` 声明产出的资源类别，并把 prompt_body 作为可渲染正文；引用一个不可变 [Execution Capability](../0004-execution-capability/execution_capability.md) 版本作为执行契约；维护 status/version 生命周期；提供渲染入口（resolve inputs → prompt + output）。
 _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 域）、管理 asset 实体（归 `media_materials`）、校验 workflow 结构（归 [workflow_validation](../../workflow/0001-workflow_validation/workflow_validation.md)）。
 
 ## 边界
@@ -19,7 +20,7 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 - 维护 inputs[] 的 schema：每个元素一个 input slot，含 `name` + `kind`（引用 asset_kind name）+ `required`；name 在同一 Template 内唯一。
 - 维护单一 `output_asset_kind`：一次模板执行产出**一个** asset，其类别由此字段声明（引用 asset_kind name）；media_type 由 `asset_kind.media_type` 推导，不另存。
 - 维护 prompt_body：声明式正文，使用 `{{.name}}` 形式的占位符引用 inputs 的 name。
-- 维护 `platform` / `gen_way` / `gen_type`：生成路由字段，供 workflow_execution 分发到下游生成器。
+- 维护 `capability_key` / `capability_version`：引用已发布执行能力；`platform` / `gen_way` / `gen_type` 仅在旧数据迁移期保留只读映射。
 - 版本化：update 时 `version + 1`，旧版本只读保留可查。
 - 提供 `Render(slot_values []ResolvedSlot)` 接口，输入每个 input slot 的解析结果，产出渲染后的 prompt_body + output_asset_kind（及其 media_type）。
 - 校验 input slot.kind 与 output_asset_kind 在 asset_kind 注册表中已注册且未停用（调 `media_materials.BatchGetAssetKind`）。
@@ -34,7 +35,7 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 | 能力 | 说明 | 对外接口 |
 |:---|:---|:---|
 | CreateTemplate | 新建模板，初版 version=1, status=draft, visibility=private；创建者 = owner | `POST /api/v1/templates` |
-| UpdateTemplate | 修改 inputs/output_asset_kind/prompt_body/platform/gen_way/gen_type，自增 version；需 editor+ | `PUT /api/v1/templates/{id}` |
+| UpdateTemplate | 修改 inputs/output_asset_kind/prompt_body/capability，自增 version；需 editor+ | `PUT /api/v1/templates/{id}` |
 | GetTemplate | 取最新 version 的 Template；viewer+ | `GET /api/v1/templates/{id}` |
 | GetTemplateVersion | 取指定 (id, version) 快照；viewer+ | `GET /api/v1/templates/{id}/versions/{version}` |
 | ListTemplates | 按 scope/asset_kind/name/visibility 过滤分页；返回 viewer+ 的集合 | `GET /api/v1/templates?scope=&asset_kind=&name=&visibility=` |
@@ -58,9 +59,9 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 | description | text nullable | 模板说明 |
 | prompt_body | text not null | 渲染正文；占位符 `{{.name}}` 引用 inputs.name |
 | output_asset_kind | text not null | 产出资源类别；引用 `asset_kinds.name`，且 resource_type=ASSET；必填 |
-| platform | text not null | 生成平台；如 `gpt` / `jimeng`；下游生成器分发用 |
-| gen_way | text not null | 生成方式；如 `t2i` / `i2i` / `i2v` |
-| gen_type | text nullable | 生成类型；平台细分类型 |
+| capability_key | text not null | 引用已发布 Execution Capability |
+| capability_version | int not null | 不可变能力版本 |
+| platform / gen_way / gen_type | text nullable | 旧数据迁移字段；新写接口忽略，迁移完成后删除 |
 | status | text not null | 草稿/已发布/归档；draft / published / archived |
 | visibility | text not null | 可见性档位；private / team / public；默认 private |
 | version | int not null | 不可变版本号；默认 1；update 自增；同 (scope, name) 内单调递增 |
@@ -124,9 +125,8 @@ type Template struct {
     Description      string
     PromptBody       string
     OutputAssetKind  string  // 产出的 asset_kind name（resource_type=ASSET）
-    Platform         string  // 生成平台，如 gpt / jimeng
-    GenWay           string  // 生成方式，如 t2i / i2i / i2v
-    GenType          string  // 平台细分类型
+    CapabilityKey     string
+    CapabilityVersion int
     Status           TemplateStatus
     Visibility       ResourceVisibility
     Version          int
@@ -161,7 +161,7 @@ const (
 |:---|:---|
 | `CreateTemplate` | 无；创建者即 owner |
 | `GetTemplate` / `ListTemplates` / `GetTemplateVersion` | ≥ viewer（含 owner / editor / viewer / public） |
-| `UpdateTemplate`（修改 inputs/output_asset_kind/prompt_body/platform/gen_*） | ≥ editor |
+| `UpdateTemplate`（修改 inputs/output_asset_kind/prompt_body/capability） | ≥ editor |
 | `ArchiveTemplate` | ≥ editor |
 | `DeleteTemplate`（软删） | owner |
 | `GrantTemplate` / `RevokeTemplate`（写 grants 表） | owner |
@@ -179,7 +179,7 @@ const (
 3. `PromptBody` 内出现的所有 `{{.name}}` 必须能在 `Inputs` 的某个 slot 找到对应 name；多余的 `{{.name}}` → reject。
 4. 每个 input slot 的 `Kind` 必填，且必须指向 `asset_kinds` 注册表中已注册、status∈{SYSTEM, ENABLED} 的 kind（调 `media_materials.BatchGetAssetKind` 校验）。
 5. `OutputAssetKind` 必填，且所引 asset_kind 的 `resource_type=ASSET`（产物落 generated_assets 表）；其 `media_type` 即产出的媒体形态。
-6. `Platform` / `GenWay` 必填；`GenType` 可空。
+6. `(CapabilityKey, CapabilityVersion)` 必须指向 published Capability，且其 output_asset_kind 与 Template 一致；新模板禁止以 legacy route 字段分发。
 7. `Status` 流转：`draft ↔ published`（`PublishTemplate` / 回退）`-> archived`（`ArchiveTemplate`，终态不可逆）；不允许 archived 恢复到 draft 或 published。
 8. update 时不允许直接改 `Scope`；改 `Scope` 必须新建 Template（避免版本历史跨 scope）。
 9. Archive 边界：archive 一个被运行中 Job 引用的 template 不会中断 Job（Job 持 `template_version` 不可变快照）；但新 workflow 不再能引用 archived template（workflow_validation 闸2 拒绝 `TEMPLATE_ARCHIVED`）。对已活跃 binding 的 offline scan 见 [workflow_validation](../../workflow/0001-workflow_validation/workflow_validation.md) §2（本期未实现）。

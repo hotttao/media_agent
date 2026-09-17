@@ -23,8 +23,10 @@ Workflow 域负责存储「一组有序 Step 通过 StepBinding 串联而成的 
 - 维护 WorkflowInput[] 入口参数（`(name, type, required)`），`type ∈ {material, asset, product, virtual_ip}`——调用方在 SubmitJob 时传对应 id（material_id / generated_asset_id / product_id / virtual_ip_id）；具体 asset_kind 约束与解析选择由所绑定的 template slot 的 `kind` 承担。
 - 维护有序 Step 列表（用户提交顺序即 step_order），每个 Step 引用一个 Template。
 - 维护每个 Step 的 StepBinding 列表，`source ∈ {workflow_input, step_output, const}`。
+- 维护每个 Step 的 `approval_policy ∈ {when_multiple_candidates, always}`；多 Candidate 始终审批，always 还覆盖单 Candidate。
 - 维护 output_step_key，校验时强制它是 DAG 的唯一 sink。
 - 版本化：update 时 version + 1。
+- 发布时生成并保存 Workflow Compilation；只有 Conductor Definition 注册成功的版本可提交 Job。
 - 提供只读 `Validate` 接口，返回根节点、推得的边、错误原因；不写库。
 
 ### 不做什么
@@ -87,6 +89,19 @@ Workflow 域负责存储「一组有序 Step 通过 StepBinding 串联而成的 
 
 约束：UNIQUE `(scope, name, version)` WHERE `deleted_at IS NULL`；INDEX `(scope, status, updated_at)`；INDEX `(created_by)`。
 
+### Tables — `workflow_compilations`
+
+| 字段 | 含义 |
+|:---|:---|
+| workflow_id, workflow_version | 源业务 Workflow 版本；唯一 |
+| conductor_name, conductor_version | 不可变目标 Definition |
+| definition_hash | canonical JSON 的 SHA-256 |
+| status | pending/registering/registered/failed |
+| error_code, error_message | 最近不可恢复错误 |
+| created_at, registered_at | 审计时间 |
+
+只有 `status=registered` 的记录允许 SubmitJob。发布流程与冲突恢复见 [conductor_compilation](../../workflow/0003-conductor-compilation/conductor_compilation.md)。
+
 ### Tables — `workflow_grants`
 
 `(workflow_id, team_id) → permission`，对应 [Resource Grant](../../../resource_access/CONTEXT.md#resource-grant资源授权)。
@@ -128,6 +143,8 @@ Workflow 顶部声明的入口参数。每个 workflow_input 是一个**资源�
 | step_order | int not null | 渲染顺序；1..N |
 | template_id | bigint not null | 引用的 Template；必须存在于同 scope |
 | template_version | int not null | 引用的 Template 版本；不可变快照；语义同 `Job` 携带的 template_version |
+| approval_policy | text not null | when_multiple_candidates / always；默认 when_multiple_candidates |
+| reuse_policy | text not null | reuse_if_available / force_new；定义初始 attempt 行为，默认 reuse_if_available |
 
 约束：UNIQUE `(workflow_id, version, step_key)`；UNIQUE `(workflow_id, version, step_order)`；INDEX `(template_id, template_version)`。
 
@@ -218,14 +235,30 @@ type Step struct {
     Order           int
     TemplateID      int64
     TemplateVersion int
+    ApprovalPolicy  StepApprovalPolicy
+    ReusePolicy     StepReusePolicy
     Bindings        []StepBinding
 }
 
+type StepApprovalPolicy string
+const (
+    ApprovalWhenMultiple StepApprovalPolicy = "when_multiple_candidates"
+    ApprovalAlways       StepApprovalPolicy = "always"
+)
+
+type StepReusePolicy string
+const (
+    ReuseIfAvailable StepReusePolicy = "reuse_if_available"
+    ForceNew         StepReusePolicy = "force_new"
+)
+
 type WorkflowStatus string
 const (
-    WorkflowStatusDraft     WorkflowStatus = "draft"
-    WorkflowStatusPublished WorkflowStatus = "published"
-    WorkflowStatusArchived  WorkflowStatus = "archived"
+    WorkflowStatusDraft         WorkflowStatus = "draft"
+    WorkflowStatusPublishing    WorkflowStatus = "publishing"
+    WorkflowStatusPublished     WorkflowStatus = "published"
+    WorkflowStatusPublishFailed WorkflowStatus = "publish_failed"
+    WorkflowStatusArchived      WorkflowStatus = "archived"
 )
 ```
 
@@ -252,7 +285,8 @@ const (
 4. **Required 必填**：所有 `template.inputs[i].required=true` 在该 step 的 Bindings 里至少出现一条，且 `ConstValue` 非 nil（`source=const` 也算满足 required，等同于"调用方在 step 上常量化一个固定值"）。
 5. Template 引用：`Template` 必须存在同 scope，未被 archived，且 step 引用的 `TemplateVersion` 仍存在。
 6. **scope 匹配**：所有 binding 解析出的 material / asset / product / virtual_ip 必须与 workflow 同 scope——由 `workflow_validation` 跨 service 校验（material / asset 走 AssetReachability；product / virtual_ip 输入走各自的可达性规则）。
-7. `Status` 流转：`draft ↔ published`（`PublishWorkflow` / 回退）`-> archived`（`ArchiveWorkflow`，终态不可逆）；不允许 archived 恢复。
+7. `Status` 流转：`draft -> publishing -> published | publish_failed`，修改失败版本产生新版本再发布；`published -> archived` 为终态，已启动 Job 不受归档影响。
+8. `ApprovalPolicy` 只允许 `when_multiple_candidates | always`；它不能关闭多 Candidate 审批。`ReusePolicy` 只允许 `reuse_if_available | force_new`。
 
 ### Validate（不保存）
 

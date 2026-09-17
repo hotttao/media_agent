@@ -1,5 +1,7 @@
 # Media Workflow UI 组合发布架构
 
+> Organization/Team/Workspace Shell Context、Ory 登录和 Navigation Port 的目标契约以 [企业素材与工作流平台 Spec](../enterprise-media-production.md) 为准；本文继续定义双产物、前端分层和单插件双 panel 约束。
+
 ## 1. 产品与工程边界
 
 `ui_workflow` 是 `media_materials` 与 `media_workflow` 的唯一组合 UI 工程，包名 `@media/ui-workflow`。两个后端领域独立，前端共享发布版本、基础设施和跨域交互。
@@ -32,7 +34,7 @@ L3  src/pages/materials/     Materials panel 组合
 - 入口：`src/main.tsx`。
 - 自建 Query、Theme、Auth、Tooltip Provider。
 - 使用 Desktop/Dock/Slot/AppWindow shell 组合 Materials 与 Workflow app。
-- 使用 cookie session；未认证时跳转 `/api/v1/auth/login`。
+- 使用 Ory Kratos browser session；未认证时进入 Kratos login flow。
 - 产物目录：`dist/standalone/`。
 
 ### 3.2 Agent Platform plugin
@@ -42,7 +44,7 @@ L3  src/pages/materials/     Materials panel 组合
 - Plugin 是 manifest、bundle、版本、启停和回滚单元；Panel 只是插件贡献的 UI surface。不得为两个 panel 生成两份 bundle 或独立版本。
 - React、ReactDOM、jsx-runtime 复用 `window.tos` 宿主单例。
 - Query 与 i18n 由插件本地 Provider/实例提供；语言监听宿主 `lang.change`。
-- panel 通过 host-shim 使用 Header Slot、instance state 与当前主题。
+- panel 通过 host-shim 使用 Shell Context、Navigation Port、Header Slot、instance state 与当前主题。
 - 编译后的 Tailwind CSS 以内联字符串注入 bundle；使用稳定 style id 防重复。
 - `publicDir=false`，插件交付物只有 `dist/plugin/media-workflow.js`。
 
@@ -59,7 +61,7 @@ yarn build
 
 ## 5. 导航与状态
 
-- Standalone 的 Desktop shell 负责打开 Materials/Workflow app。
+- Standalone 的 Desktop shell 通过 Shell Context/Navigation Port 打开 Materials/Workflow app，并拥有 Organization/Team/Workspace Menubar。
 - Plugin 不嵌套第二套 Desktop，不修改 Agent Platform URL。
 - panel 内当前资源、list/show/create/edit、selected id 使用 host-shim 的 instance state，并按 panel 隔离命名空间：Materials 使用 `materials_` 前缀，Workflow 使用 `workflow_` 前缀。
 - 跨卸载需要保留的状态使用 persistent state；弹窗和短期表单状态使用临时 state。

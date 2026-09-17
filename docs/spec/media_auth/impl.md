@@ -1,5 +1,7 @@
 # media_auth 实现规格 (spec)
 
+> **历史基线。** 本地密码、Cookie JWT 与 media_auth 自持 Web Session 是迁移前实现；Ory、Organization/Team/Workspace 和授权投影的目标边界以 [企业素材与工作流平台 Spec](../enterprise-media-production.md) 为准。迁移期保留的 OAuth/Service Token 能力仍参照本文。
+
 > 本文是 media_auth 微服务的**自包含**实现规格：研发只看本文即可完成实现。
 > 依据 `harness/contributing`（idl / architecture / server / config）+ DDD 编写。
 > 详细领域语义见领域模型 [`docs/ddd/media_auth/`](../../ddd/media_auth/)（CONTEXT / 7 domain / 4 workflow）；架构决策见 [ADR-0001](../../ddd/adr/0001-media-auth-extraction-and-token-verification.md)、[ADR-0002](../../ddd/adr/0002-platform-token-plaintext-column.md)。

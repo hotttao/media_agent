@@ -11,13 +11,13 @@ related_workflow:
 
 ## 一句话职责
 
-Execution 把一个 Workflow 版本实例化为 Job 与 StepRun，并通过下游任务 ID 和集成事件推进 DAG。
+Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以业务数据库记录权威状态，并由 Conductor 持久编排技术任务。
 
 ## 边界
 
 ### 做什么
 - 保存 Job 输入快照、StepRun 状态和最终业务资源 ID。
-- 为可运行 Step 创建下游命令并记录下游任务 ID。
+- 通过 Outbox 启动对应 Conductor Workflow，以 `job_id` 作为 correlation/idempotency key。
 - 幂等应用完成/失败事件，记录候选确认决定，支持带反馈重新生成、失败重试和取消。
 
 ### 不做什么
@@ -42,7 +42,8 @@ Execution 把一个 Workflow 版本实例化为 Job 与 StepRun，并通过下�
 |:---|:---|:---|:---|
 | Job | StepRun、Step Review Decision | 单次执行状态推进 | 每个 StepRun 最终只有一个 output_resource_id；未确认多候选不能解锁后继；每个 review attempt 只能接受一个决定 |
 
-- 下游返回多个 Candidate 不改变 Workflow Step 的单输出定义。
+- 下游返回多个 Candidate 不改变 Workflow Step 的单输出定义，且必须进入 needs_confirm。
+- 单 Candidate 在 `approval_policy=always` 时进入 needs_confirm；否则自动确认并形成唯一输出。
 - `accept(candidate)` 与 `regenerate(feedback)` 是互斥的 Step Review Decision。
 - accept 只有在下游确认 Candidate 并完成业务资源登记后，才把 StepRun 置为 succeeded。
 - regenerate 保留旧候选审计，递增 StepRun attempt 后重新派发；它不是 failed 状态的 Retry。
@@ -51,7 +52,7 @@ Execution 把一个 Workflow 版本实例化为 Job 与 StepRun，并通过下�
 
 | 事件 | 产生条件 | 关键载荷 | 消费方 |
 |:---|:---|:---|:---|
-| StepReviewRequested | 用户决定被持久化 | job_id, step_run_id, attempt, decision | Workflow Dispatcher |
+| StepReviewRequested | 用户决定被持久化 | job_id, step_run_id, attempt, decision | Conductor Adapter |
 | StepRunSucceeded | 唯一 output_resource_id 已确定 | job_id, step_run_id, output_resource_id | DAG 推进器 |
 | StepRunRegenerationStarted | 下游接受重新生成并进入新 attempt | job_id, step_run_id, attempt | 查询投影、UI |
 
@@ -84,11 +85,13 @@ Execution 把一个 Workflow 版本实例化为 Job 与 StepRun，并通过下�
 | template_version | bigint | 使用的 Template 版本 |
 | status | text | blocked/pending/dispatching/running/needs_confirm/confirming/regenerating/succeeded/failed/cancelled/skipped |
 | resolved_inputs | jsonb | 解析后的资源 ID、Object Path 和常量 |
-| downstream_service | text nullable | 执行该步骤的服务身份 |
-| downstream_task_id | text nullable | 下游任务 ID，不建跨库外键 |
+| conductor_workflow_id | text nullable | Conductor execution ID；不作为业务幂等键 |
+| downstream_service | text nullable | 实现 Execution Capability 的服务身份 |
+| downstream_task_id | text nullable | Provider/生成任务 ID，不建跨库外键 |
 | output_resource_id | text nullable | 最终业务资源 ID |
 | failure_code | text nullable | 稳定失败码 |
 | attempt | integer | 当前调度次数 |
+| approval_policy | text | 从 Workflow Step 快照的审批策略 |
 | created_at | timestamptz | 创建时间 |
 | finished_at | timestamptz nullable | 终态时间 |
 
@@ -124,8 +127,10 @@ Job 和 StepRun 使用 ULID；下游幂等键由 `step_run_id + attempt` 派生�
 ### SubmitJob
 
 1. 校验 Workflow published、Workspace/Scope 一致且输入可达。
-2. 事务内保存 Job、全部 StepRun 和根步骤 Outbox 命令。
-3. Dispatcher 事务外调用目标服务创建任务，并回填 downstream_task_id。
+2. 事务内保存 Job、全部 StepRun 和 `StartConductorWorkflow` Outbox。
+3. Adapter 事务外按 Compilation mapping 启动 Conductor，以 `job_id` 为 correlationId；超时不确定时先按 correlationId 查询，不盲目重启。
+
+Conductor Worker 在返回 COMPLETED 前必须先以 `(step_run_id, attempt, operation)` 幂等提交业务数据库；若确认响应丢失导致重投，重复处理返回已提交结果。Job/StepRun 是 UI 与业务 API 的查询源，Conductor 状态仅用于运维诊断。
 
 ### ApplyStepResult
 

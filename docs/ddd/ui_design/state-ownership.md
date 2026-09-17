@@ -7,7 +7,8 @@
 | API Key 明文 | Workspace 设置表单到服务端的单向命令 | 不在浏览器持久化、不回显 |
 | Agent Session Registration、固定 Agent/Context Version | `media_agent_gateway` | Gateway PostgreSQL；UI 只比较兼容性，不修改绑定 |
 | Runtime Session、Message、Turn、Universal Event、Chat Status | `media_agents` | Agent PostgreSQL；UI 经 Gateway 授权代理读取和提交命令 |
-| 当前 Workspace ID | Router | URL path `/w/:workspaceId`，服务端列表校验 |
+| 当前 Organization/Team/Workspace ID | Shell Router | URL path `/o/:organizationId/t/:teamId/w/:workspaceId`，服务端层级和成员关系校验 |
+| Shell Context 与 Navigation Port | Host Adapter | 内存注入；不得复制为 App 全局 store |
 | 当前 Session ID | Workspace Page | URL query `?session=`，服务端列表校验 |
 | Layout、Slot 打开实例和活动实例 | Slot Provider | Workspace 级 localStorage Profile |
 | 移动端当前可见 App | Layout/Dock | 内存；从活动 Slot 推导 |
@@ -16,6 +17,8 @@
 | Turn interrupting 请求态 | Chat App | 内存；仅用于防止重复提交，不替代服务端 Turn/Chat Status |
 | Agent Request 请求、响应与状态 | `media_agents` | Agent PostgreSQL；Chat App 仅查询 pending 投影并提交 resolve |
 | 用户状态与认证版本 | `media_auth` | User Management 页面只读取投影并提交 create/soft-delete 命令，不缓存授权事实 |
+| Kratos 登录身份与 Web Session | Ory Kratos | UI 只消费 self-service flow/session，不复制凭证 |
+| 企业/部门功能授权 | `media_auth` 事实源、Ory Keto 判定投影 | UI 可缓存展示结果，不据此替代服务端授权 |
 
 localStorage key 必须带版本与 Workspace ID。Profile 包含 `layoutId`、`slots` 与预留的 `instances`；恢复数据必须迁移版本并校验已注册 App、允许的 Slot 和单实例约束，解析失败回退默认值。不得写入 API Key、消息正文或服务端授权事实。
 

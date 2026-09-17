@@ -45,3 +45,9 @@
 - 新增 Step Review Decision，明确 `accept(candidate)` 与 `regenerate(feedback)` 互斥。
 - 增加 confirming/regenerating 过渡态，使本地决定、下游 Generation 状态和最终资源登记可以通过 Outbox/Inbox 恢复。
 - 重新生成递增 attempt 并保留旧候选；与 failed 后的 Retry 保持不同语义。
+- 审批门槛由 Step `approval_policy` 决定：多 Candidate 始终审批；单 Candidate 仅在 `always` 时审批。
+## 2026-09-17：Conductor 承担技术编排
+
+- Job/StepRun 继续作为业务事实源，Conductor 只负责持久调度、等待和技术重试。
+- SubmitJob 通过 Outbox 以 job_id correlationId 启动编译后的 Definition。
+- Capability Worker 必须先幂等提交业务结果，再完成 Conductor Task。

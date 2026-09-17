@@ -45,3 +45,13 @@
 5. workflow 仅靠 scope / grants 控制访问；不在 workflow 层级引入"工作空间"概念。
 6. workflow_input `type ∈ {material, asset, product, virtual_ip}`；slot.kind 必填且 resource_type 与 type 自洽；step_binding source 不得为 product / virtual_ip。
 7. asset_kind 全局注册（无 scope）；slot.kind 引用 asset_kinds.name。
+## 2026-09-17：发布时编译为 Conductor Definition
+
+- 新增 `workflow_compilations`，记录源 Workflow version 到 Conductor name/version/hash 的不可变映射。
+- 发布改为 `draft -> publishing -> published | publish_failed`；只有 registered compilation 可以 SubmitJob。
+- P0 编译器使用拓扑波次，单节点发 SUB_WORKFLOW，多节点发动态并行子工作流和 JOIN。
+
+## 2026-09-17：节点可配置单候选审批
+
+- Step 新增 `approval_policy = when_multiple_candidates | always`。
+- 多 Candidate 始终需要用户审批；always 进一步要求单 Candidate 也审批，不提供跳过多候选审批的策略。

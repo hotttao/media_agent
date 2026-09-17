@@ -4,6 +4,8 @@
 |:---|:---|:---|
 | UI Platform | 承载 Shell、App 注册、Slot 布局和跨 App 基础能力的前端宿主 | 后端业务规则 |
 | Shell | 始终可用的顶层框架，负责 Workspace 切换、身份操作和响应式导航 | Session 或 Chat 业务内容 |
+| Shell Context | 宿主注入 App 的当前 Organization、Team、Workspace、Principal 与导航能力 | App 自有状态或资源 ACL |
+| Navigation Port | Shell Context 中以 route intent 表达跳转的宿主端口；独立版与插件版分别适配 | App 直接拼宿主 URL 或渲染全局导航 |
 | App | 可注册到 UI Platform 并由 Slot 承载的功能单元 | 独立部署的后端服务 |
 | App Definition | App 的稳定注册描述，包括 ID、标题、组件、单实例策略和可用性 | App 的运行时状态 |
 | App Instance | 某个 App 在 Slot 中的运行实例，由稳定 `instanceId` 标识 | 后端 Agent Session |

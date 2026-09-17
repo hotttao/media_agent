@@ -1,6 +1,6 @@
 # media_auth 认证鉴权上下文
 
-media 平台统一的认证 / 鉴权微服务，承担所有身份认证、会话、凭证签发与校验能力，对外以 Hertz + Protobuf IDL 暴露，自治数据库。
+media 平台的用户档案、企业、部门、成员关系与功能授权服务。目标架构中 Ory Kratos 持有登录身份和浏览器会话，Ory Oathkeeper 承担边缘认证并签发内部身份断言，Ory Keto 持有授权关系投影；media_auth 不再保存终端用户密码或自行签发 Web Session，但仍持有业务 User、Organization、Team、Membership、Entitlement 及其 Outbox。现有本地 Cookie JWT/OAuth 实现按迁移计划逐步退出，不作为新接口的目标边界。
 
 ## 业务术语词典
 
@@ -22,6 +22,10 @@ _禁用替代词_：login type、auth method（method 留给 OAuth grant_type）
 用户在第三方 provider（目前为企微）的身份记录 `(provider, external_id) → user_id`；一个用户对同一 provider 至多一条绑定。
 _禁用替代词_：binding、external account、link
 
+**Kratos Identity（登录身份）**:
+Ory Kratos 中用于登录、凭证恢复和会话管理的身份；media_auth 以不可变 `kratos_identity_id` 映射业务 User，不复制密码、恢复码或浏览器 Session。
+_禁用替代词_：User（User 是业务主体）、Profile
+
 **Provider（身份提供方）**:
 外部身份来源的标识字符串（如 `wecom`）；`identity` domain 按 provider 路由，新增 Google/GitHub 只需新增 provider 通道。
 _禁用替代词_：vendor、channel（channel 语义留给登录通道）
@@ -29,8 +33,16 @@ _禁用替代词_：vendor、channel（channel 语义留给登录通道）
 ### 会话与凭证
 
 **Web Session（Web 会话）**:
-用户登录后由 Cookie JWT 表达的浏览器会话；与 Agent Gateway 的 Agent Session 是不同概念。归 `auth` domain。
+用户登录后由 Ory Kratos 管理的浏览器会话；Oathkeeper 校验会话后向内部服务传递短时 Internal Identity JWT。与 Agent Gateway 的 Agent Session 是不同概念。
 _禁用替代词_：Agent Session、login state、JWT session（JWT 是载体不是会话本身）
+
+**Internal Identity JWT（内部身份 JWT）**:
+Oathkeeper 在边缘认证成功后为单次内部请求签发的短时身份断言，仅承载稳定主体和请求上下文；可变企业、部门及资源权限必须向 Keto 或资源所有服务检查，不把 JWT claim 当授权事实。
+_禁用替代词_：Web Session、Access Token、Permission Token
+
+**Authorization Projection（授权关系投影）**:
+由 Organization、Team、Membership、Entitlement 和资源 Grant 领域事件幂等投影到 Keto 的关系元组；业务数据库是事实源，Keto 是请求路径上的授权判定投影。
+_禁用替代词_：ACL Source of Truth、JWT Role
 
 **Service Token（服务令牌）**:
 B2B API 调用凭证，`tos_` 前缀 + 32 随机字节；DB 仅存 SHA-256 `token_hash`，明文仅创建时返回一次。归 `service_token` domain。
