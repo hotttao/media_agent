@@ -1,15 +1,15 @@
 ---
 name: team_invite_accept
-desc: 团队邀请的预览与接受——任意已登录 user 按 token 完成入团；接受操作对已入团者幂等
+desc: 部门邀请的预览与接受——企业成员按 token 加入部门；接受操作对已入团者幂等
 ---
 
 ## 一句话说明
-非 team 成员的已登录 user 持 `tinv_` token 调 `/api/invites/{token}` 预览、按 `/api/invites/{token}/accept` 入团；流程完全发生在 team domain 内部（不跨其它 domain），但因同时承担"邀请持有者"与"team 内 admin"两种身份且对外为两条独立 HTTP 路径，符合 workflow 跨域或跨身份编排的判定（即便此处未跨域），按 workflow 文档化便于 P2 反代对齐。
+Team 所属 Organization 的成员持 `tinv_` token 预览并接受部门邀请；Team Domain 处理 Invite/Membership，Organization Domain 证明接受者已属于同一企业，接受操作对已入团者幂等。
 
 ## 执行时间线（每个接口内嵌内部处理）
 
 ```text
-invitee               media_auth (team domain)                       users (auth domain)
+invitee               media_auth (team domain)              organization domain
    |                          |                                          |
    |-- GET /api/invites/{token} ----->|                                 |
    |   PreviewInvite                  |                                 |
@@ -31,6 +31,8 @@ invitee               media_auth (team domain)                       users (auth
    |   │    过期 → 410                                                  |
    |   ├─ team = getTeam(invite.team_id)                                 |
    |   │    无 → 404                                                    |
+   |   ├─ orgMember = getOrganizationMembership(team.organization_id, session.sub)
+   |   │    无 → 403（邀请不能把外部用户自动加入企业）                  |
    |   ├─ existing = getMembership(team.id, session.sub)                 |
    |   │    存在 → 返回 {team_id, already_member: true}  ← 幂等         |
    |   ├─ addTeamMember(team.id, session.sub, role='member')            |
@@ -41,7 +43,7 @@ invitee               media_auth (team domain)                       users (auth
 ```
 
 ## 关键流程参数传递
-- `token`：路径参数。`tinv_<base64url>` 格式；唯一识别一次邀请。**token 不带 user 绑定**——任何已登录 user 持 token 都能预览/接受；这是 control-plane 现行语义（链接即授权），media_auth 沿用。如需"只能特定 user 接受"，须在 invite 上加 `created_for` 字段，留待后续按需建模。
+- `token`：路径参数。`tinv_<base64url>` 格式；唯一识别一次邀请。Token 不绑定具体 user，但只允许 Team 所属 Organization 的现有成员接受，不能通过部门邀请自动取得企业成员资格。
 - `session.sub`：所有 handler 入口由 media_auth session middleware 注入；invitee 必须已登录（cookie/bearer 任一），否则 middleware 直接 401。
 - 入团 `role`：固定 `'member'`；不允许通过 invite 直升 admin。admin 任命由 `PATCH /api/teams/{id}/members/{userId}` 单独走。
 - 不下发新 cookie：用户已是 platform auth 用户，session 不变；入团后通过 `ListMyTeams` 自然可见该 team。
@@ -71,11 +73,11 @@ stateDiagram-v2
 
 ## 一致性边界
 
-Accept 在一个本地事务中重新读取并锁定 Invite、检查有效期与 Team 状态、插入 Team Membership。Preview 是非授权只读提示，不能替代 Accept 内的检查。通知或审计发布通过 Outbox，失败不回滚已建立的成员关系。
+Accept 先读取 Organization Membership，再在一个本地事务中重新读取并锁定 Invite、检查有效期与 Team 状态、插入 Team Membership。Organization Membership 与 Team Membership 是同服务不同聚合；接受事务提交前必须再次使用可识别版本确认企业成员仍有效。Preview 是非授权只读提示，不能替代 Accept 内的检查。通知或审计发布通过 Outbox，失败不回滚已建立的成员关系。
 
 ## 权限与失败
 
-- 当前模型是 capability link：持有 Invite Token 的任意已登录用户可以接受，Token 不代表创建者身份。
+- Invite Token 是部门加入凭证，不是企业加入凭证；非本企业成员即使持有 Token 也必须拒绝。
 - Cookie JWT 或用户 Service Token 决定接受者，body/path 不允许覆盖 user_id；角色固定为 member。
 - Invite 不存在、撤销、过期或 Team 已删除不可重试；并发接受由唯一约束收敛为同一 Membership。
 - Token 不得进入访问日志和 Trace；目标实现只保存高强度随机 Token 的 Hash，预览/接受时 Hash 查询。

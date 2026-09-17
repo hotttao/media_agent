@@ -5,7 +5,7 @@
 ## 业务术语词典
 
 **Workspace（工作空间）**:
-Generation Task、Transcription Task 和 Publish 的租户归属；对象路径必须位于对应 Workspace。
+Generation Task、Transcription Task 和 Publish 的业务资源隔离归属；对象路径必须位于对应 Workspace。
 _禁用替代词_：Scope、Worker Identity
 
 **Generation Task（生成任务）**:
@@ -23,6 +23,10 @@ _禁用替代词_：Generated Asset（Generated Asset 是 Materials 业务记录
 **Primary Candidate（主候选）**:
 单候选任务自动确定或多候选任务由用户确认的最终 Candidate。
 _禁用替代词_：Generated Asset、Default URL
+
+**Generation Review（生成结果确认）**:
+用户对多候选 Generation Task 作出的选择或重新生成决定；选择确定唯一 Primary Candidate，重新生成保留旧候选并开始新的 attempt。
+_禁用替代词_：Workflow Output、Retry、Candidate Status
 
 **Transcription Task（转写任务）**:
 把一个音频或视频对象转换为文本与时间片段的持久化任务。

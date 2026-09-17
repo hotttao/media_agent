@@ -92,7 +92,7 @@ Workspace Metadata 保存控制面通用的资源分类与发布记录，但不�
 ## 关联关系
 
 ### 依赖的 Domain
-- [workspace](../0001-workspace/workspace.md) - 提供租户边界与访问判断。
+- [workspace](../0001-workspace/workspace.md) - 提供业务资源隔离边界与访问判断。
 
 ### 被依赖的 Domain
 - 无。

@@ -11,3 +11,9 @@
 
 - Generation 从无状态 StepRun Worker 调整为持久化 Generation Task 聚合；media_workflow 只保存下游 task ID，并通过命令/事件协作。
 - 候选产物改存 Storage Object Path，不保存完整 URL。
+
+## 2026-09-17 · 多候选确认与反馈重新生成
+
+- 保持 Template/Step 单一最终输出不变量：一次 Generation Task 可以返回多张 Candidate，但必须确认唯一 Primary Candidate 后才形成 Step 输出。
+- 新增 Generation Review，区分 `accept(candidate)` 与 `regenerate(feedback)`。
+- 重新生成保留旧 Candidate、递增 attempt，并明确不等同于失败重试；同输入的主动重新生成不得复用上一 attempt。

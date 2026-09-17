@@ -1,12 +1,12 @@
 # 共享资源访问语言
 
-统一媒体资源在不同服务中的 Scope 分类和 ACL 语义。它是共享语言，不是独立服务；每个资源所属服务保存 Grant 并执行最终授权，`media_auth` 只提供 Team Membership 事实。
+统一媒体资源在不同服务中的 Scope 分类和 ACL 语义。它是共享语言，不是独立服务；每个资源所属服务保存 Grant 并执行最终授权，`media_auth` 提供企业内部门及 Team Membership 事实。
 
 ## 业务术语词典
 
 **Scope（业务范围）**:
 资源所属业务线的不可变分类，例如 `ai_clothing` 或 `ai_guoxue`；同一业务流程禁止跨 Scope 引用。
-_禁用替代词_：Workspace（Workspace 是租户边界）、Tenant、Business
+_禁用替代词_：Workspace（Workspace 是业务资源隔离边界）、Organization、Team、Business
 
 **Resource Visibility（资源可见性）**:
 资源的可见度档位：`private | team | public`；public 只放开读取，不绕过 Workspace 和 Scope 约束。

@@ -11,3 +11,9 @@
 
 - 执行循环改为 River 按 Generation Task ID 唤醒；不再由 media_gen 领取 media_workflow StepRun。
 - Task 状态和 attempt 归 media_gen，Provider/Storage 调用在数据库事务外执行。
+
+## 2026-09-17 · 多候选与重新生成 attempt
+
+- Worker 一次 Provider 调用可以保存多条 Candidate；单候选直接 succeeded，多候选进入 needs_confirm。
+- 用户 regenerate 由 Generation 聚合记录反馈并创建新 attempt，再由同一执行循环处理。
+- 主动重新生成与基础设施失败恢复分离：新 attempt 不复用上一 attempt 的候选，未知 Provider 结果仍先查询而不盲目重发。

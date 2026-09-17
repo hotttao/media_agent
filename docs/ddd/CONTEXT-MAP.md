@@ -2,8 +2,8 @@
 
 ## 限界上下文
 
-- [认证上下文](media_auth/CONTEXT.md) — 用户身份、Web 会话、服务凭证、团队与 OAuth 凭据
-- [控制上下文](media_control/CONTEXT.md) — Workspace、运行环境、Agent 配置、定时计划与 Teamwork 拓扑
+- [认证上下文](media_auth/CONTEXT.md) — 用户身份、企业、部门、成员关系、服务凭证与 OAuth 凭据
+- [控制上下文](media_control/CONTEXT.md) — 部门所属 Workspace、运行环境、Agent 配置、定时计划与 Teamwork 拓扑
 - [Agent 网关上下文](media_agent_gateway/CONTEXT.md) — Agent Session 注册、访问控制、执行任务接入、SSE 协议适配与 Platform MCP
 - [Agent 执行上下文](media_agents/CONTEXT.md) — Runtime Session、Turn 队列、模型/工具执行、交互记录与可恢复事件
 - [Plugin 上下文](media_plugin/CONTEXT.md) — 受控 MCP 目录、Workspace 启用关系与外部 OAuth MCP 连接
@@ -18,7 +18,9 @@ Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存
 
 ## 上下文关系
 
-- `media_auth` 向 Edge 和内部服务提供身份验证、团队访问检查及受限凭据获取。
+- `media_auth` 是 Organization、Team 及成员关系的权威来源；Organization 表达企业及其可用功能上限，Team 表达企业内部门。
+- `media_control` 为 Team 创建和管理 Workspace；每个 Workspace 只属于一个 Team，并由该 Team 的 Organization 确定企业归属。
+- `media_auth` 向 Edge 和内部服务提供身份验证、企业/部门访问检查及受限凭据获取。
 - 资源服务使用共享访问语言实现本地 ACL；共享词典不拥有资源或授权数据。
 - `media_control` 是 Workspace 与 Agent 配置的权威来源；`media_agent_gateway` 消费其运行上下文，但不修改控制配置。
 - `media_agent_gateway` 创建 Agent Session Registration 并向 `media_agents` 注册同 ID 的 Runtime Session；两侧只共享稳定 ID，不共享数据库表。
@@ -31,7 +33,8 @@ Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存
 
 ## 全局不变量
 
-- Workspace 是平台租户边界；Workspace 内业务资源必须持有 `workspace_id`。
+- Organization 是企业客户与功能授权边界；Team 是 Organization 内的部门，不能脱离 Organization 存在。
+- Workspace 是业务资源与运行数据的隔离边界；每个 Workspace 只属于一个 Team，Workspace 内业务资源必须持有 `workspace_id`。
 - 每项业务事实只有一个权威写入上下文；跨上下文只引用 ID，不共享表或建立跨库外键。
 - 直接调用服务身份与被代表用户身份是两个独立维度。
 - 资源所属上下文执行最终资源授权。

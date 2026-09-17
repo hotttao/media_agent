@@ -38,3 +38,10 @@
 
 - 外部 Worker Pull 改为下游任务命令 + 完成事件；StepRun 只保存下游 service/task ID。
 - Job/StepRun 增加 Workspace 边界，删除跨服务数据库外键。
+
+## 2026-09-17 · 单输出下的多候选人工确认
+
+- StepRun 继续只有一个 `output_resource_id`；下游多张图片建模为 Candidate，不扩展为多输出 Step。
+- 新增 Step Review Decision，明确 `accept(candidate)` 与 `regenerate(feedback)` 互斥。
+- 增加 confirming/regenerating 过渡态，使本地决定、下游 Generation 状态和最终资源登记可以通过 Outbox/Inbox 恢复。
+- 重新生成递增 attempt 并保留旧候选；与 failed 后的 Retry 保持不同语义。

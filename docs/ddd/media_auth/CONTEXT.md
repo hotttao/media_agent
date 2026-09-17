@@ -126,15 +126,39 @@ _禁用替代词_：share、ACL。
 `owner` 含全部操作（编辑、归档、删除、改 visibility / grant、提交执行）；`editor` 含编辑、提交执行、改 visibility / grant 之外的子集操作；`viewer` 仅读 + 提交执行；`public` 仅读。
 _禁用替代词_：role、claim。
 
-### 团队
+### 企业与部门
+
+**Organization（企业）**:
+平台上的企业客户主体，拥有企业信息、成员和可使用功能的授权上限；一个 Organization 包含多个 Team。
+_禁用替代词_：Workspace、Team、Company Account、Tenant
+
+**Organization Membership（企业成员关系）**:
+User 加入 Organization 的关系及企业级角色；企业管理员只能在 Organization 已获授权的功能范围内管理部门。
+_禁用替代词_：Team Membership、Resource Grant、Workspace Membership
+
+**Organization Member Role（企业成员角色）**:
+Organization 内的角色档位 `admin | member`；admin 管理企业资料、部门和部门功能范围，member 只能使用被所属部门授予的功能。
+_禁用替代词_：Team Member Role、Resource Permission、Platform Role
+
+**Organization Entitlement（企业功能授权）**:
+平台授予 Organization 的可用功能集合，是其所有 Team 可获功能的上限。
+_禁用替代词_：Resource Grant、Team Role、Feature Flag
 
 **Team（团队）**:
-一组 user 的命名集合，可被资源服务的 Resource Grant 引用；team 不是多租户隔离边界，也不是 billing 单位。归 `team` domain。
-_禁用替代词_：group、org、tenant。
+Organization 内的部门，一条 Team 必须且只能属于一个 Organization；Team 可创建多个 Workspace，也可被资源服务的 Resource Grant 引用。归 `team` domain。
+_禁用替代词_：Organization、Workspace、Group、Tenant。
 
 **Team Membership（团队成员关系）**:
-`(team_id, user_id) → role` 的多对多关系记录；role 决定该 user 在该 team 内的管理能力。
+`(team_id, user_id) → role` 的多对多关系记录；成员必须同时属于 Team 的 Organization，role 决定该 user 在部门内的管理能力。
 _禁用替代词_：membership row、team user。
+
+**Team Entitlement Mode（部门功能授权模式）**:
+Team 使用 Organization 全部功能或受限功能子集的方式：默认 `inherit`，有效功能等于 Organization Entitlement；`restricted` 时有效功能等于企业授权与部门显式授权的交集。
+_禁用替代词_：Resource Visibility、Team Role、Workspace Permission
+
+**Team Status（部门状态）**:
+Team 的生命周期 `active -> decommissioning -> decommissioned`；停用中禁止创建 Workspace 和扩大授权，decommissioned 为保留历史引用的不可恢复终态。
+_禁用替代词_：Workspace Status、Organization Status、Deleted Team
 
 **Team Member Role（团队成员角色）**:
 team 内的角色档位 `admin | member`：admin 可改 team / 增删成员 / 创建与撤销邀请；member 仅可查看与主动退团。归 `team` domain。

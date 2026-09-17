@@ -5,8 +5,8 @@
 ## 业务术语词典
 
 **Workspace（工作空间）**:
-用户开展 Agent 工作的租户边界，持有 owner、状态和控制配置；业务资源通过 `workspace_id` 归属其中。
-_禁用替代词_：Tenant、Project、Environment
+企业部门开展 Agent 工作的业务资源与运行数据隔离边界；每个 Workspace 只属于一个 Team，一个 Team 可创建多个 Workspace，业务资源通过 `workspace_id` 归属其中。
+_禁用替代词_：Organization、Team、Project、Environment、Worker Space
 
 **Runtime Environment（运行环境）**:
 可承载 Agent Runtime 的执行环境定义，包含连接、容量和可用状态。

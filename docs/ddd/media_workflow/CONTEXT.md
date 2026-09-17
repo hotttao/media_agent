@@ -4,10 +4,10 @@
 
 ## 业务术语词典
 
-### 租户边界
+### Workspace 隔离边界
 
 **Workspace（工作空间）**:
-Template、Workflow 和 Execution 的租户归属；同一 Execution 的输入与产物必须属于同一 Workspace。
+Template、Workflow 和 Execution 的业务资源隔离归属；同一 Execution 的输入与产物必须属于同一 Workspace。
 _禁用替代词_：Scope（Scope 是业务线分类，不是租户）
 
 ### 范围
@@ -77,8 +77,12 @@ Execution 的持久化状态，状态机 `pending → running → (succeeded | f
 _禁用替代词_：task（task 留给未来通用调度）、record。
 
 **Step Run（步骤运行）**:
-Job 中某一个 Step 的执行实例，落地该 Step 的实际渲染入参、渲染输出、状态、失败原因。归 `execution` domain。
+Job 中某一个 Step 的执行实例，落地该 Step 的实际渲染入参、唯一最终输出、状态与失败原因；下游可以返回多个 Candidate，但确认前不构成多个 Step 输出。归 `execution` domain。
 _禁用替代词_：step execution、step instance。
+
+**Step Review Decision（步骤确认决定）**:
+Step Run 等待多候选确认时由用户提交的 `accept(candidate)` 或 `regenerate(feedback)` 决定；accept 固定唯一输出并推进 DAG，regenerate 保留旧候选并开始新 attempt。
+_禁用替代词_：Retry、Multi-output Step、Candidate
 
 ### 校验
 

@@ -44,7 +44,7 @@ sequenceDiagram
 命令只提交期望状态，不等待基础设施完成。Worker 只处理当前 version；旧版本消息直接结束。Runtime Controller 必须先确保 Workspace Runtime Directory，再启动 Agent；容器内固定挂载点为 `/workspace`，具体宿主路径属于部署适配器。Agent 启动时校验目录中的 mount identity 与配置 `workspace_id` 相同，冲突时拒绝启动，禁止误用其他 Workspace 文件。AFS Controller 是第三方依赖，保持原使用方式，不修改其代码和内部生命周期语义。
 
 ## 关键参数
-`workspace_id` 固定租户边界，也是 Workspace Runtime Directory 的唯一归属键；`version` 同时作为乐观锁和幂等版本。
+`workspace_id` 固定业务资源与运行数据隔离边界，也是 Workspace Runtime Directory 的唯一归属键；`version` 同时作为乐观锁和幂等版本。
 
 ## 状态与不变量
 Workspace 的 `desired_state` 由 Workspace 聚合决定，`observed_state` 是协调结果。二者短暂不一致是正常状态。每个 Workspace 只有一个 Workspace Runtime Directory；不同 Workspace 不共享目录。普通 stop/restart 不删除目录；rebuild 只重建容器和可再生运行文件，是否清理用户文件必须是显式独立命令。删除遵守回收期，晚到的旧 version 结果不得覆盖新期望。

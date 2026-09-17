@@ -20,3 +20,10 @@
 # 2026-08-06
 
 - Workflow 执行改为 Outbox 下发幂等任务命令并消费结果事件，不再暴露 Claim/Complete/Fail Worker Pull 协议。
+
+## 2026-09-17 · 多候选确认与重新生成
+
+- 多候选完成事件不再直接推进 DAG，而是让 StepRun 进入 needs_confirm。
+- 用户可以接受唯一 Candidate，或携带 feedback 请求重新生成；两种决定按 StepRun attempt 互斥且幂等。
+- 确认与重新生成均采用“本地决定 + Outbox 命令 + 下游结果 Inbox”三段式，不在本地事务内调用 Generation。
+- accept 只有在候选确认和 Generated Asset 登记完成后才推进后继；regenerate 创建新 attempt，旧候选与晚到事件只保留审计。

@@ -4,10 +4,10 @@ media 平台统一的社交数据抓取编排与查询微服务：以 Go/hertz �
 
 ## 业务术语词典
 
-### 租户边界
+### Workspace 隔离边界
 
 **Workspace（工作空间）**:
-Crawl Job 与 Crawl Result 的租户归属；原始平台数据只有经 Workspace Result 映射后才能由业务接口访问。
+Crawl Job 与 Crawl Result 的业务资源隔离归属；原始平台数据只有经 Workspace Result 映射后才能由业务接口访问。
 _禁用替代词_：Platform、Scope
 
 ### 抓取编排
