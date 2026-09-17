@@ -10,7 +10,10 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
+	"encoding/json"
 	"errors"
+	"os"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol"
@@ -20,6 +23,33 @@ import (
 	authservice "media_agent/media_auth/biz/service/auth"
 	"media_agent/media_auth/biz/shared/session"
 )
+
+// ResolveKratosIdentity is an internal identity bridge used after Kratos has
+// validated a browser session. It never accepts a caller-supplied business ID.
+func ResolveKratosIdentity(ctx context.Context, c *app.RequestContext) {
+	expected := os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN")
+	if expected != "" && subtle.ConstantTimeCompare(c.Request.Header.Peek("X-Media-Auth-Internal-Token"), []byte(expected)) != 1 {
+		c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal token"})
+		return
+	}
+	var req struct {
+		IdentityID string `json:"identity_id"`
+		Email      string `json:"email"`
+		Name       string `json:"name"`
+	}
+	if err := json.Unmarshal(c.Request.Body(), &req); err != nil {
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	u, err := AuthSvc.ResolveKratosIdentity(ctx, req.IdentityID, req.Email, req.Name)
+	if err != nil {
+		writeAuthError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, map[string]string{
+		"id": u.ID, "sub": u.ID, "username": u.Username, "name": req.Name, "role": u.Role,
+	})
+}
 
 // AuthSvc 是 auth 用例服务的全局实例，由 wire_gen.go InitDI() 注入。
 var AuthSvc *authservice.Service

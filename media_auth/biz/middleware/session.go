@@ -10,13 +10,18 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 
+	"media_agent/hertz_infra/authn/internaljwt"
 	"media_agent/media_auth/biz/domain/auth"
 	tokenservice "media_agent/media_auth/biz/service/token"
 	"media_agent/media_auth/biz/shared/session"
@@ -31,6 +36,10 @@ var globalSigner *session.Signer
 
 // globalTokenSvc 供 Bearer service token 验证。由 SessionWithToken 在装配时设置。
 var globalTokenSvc *tokenservice.Service
+
+type kratosIdentityRepo interface {
+	ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string) (auth.User, error)
+}
 
 // SessionFromContext 从 ctx 取 Session（middleware 注入）；无返回 nil。
 func SessionFromContext(ctx context.Context) *auth.Session {
@@ -68,7 +77,8 @@ var skipAllPaths = map[string]bool{
 	"/internal/token/platform": true,
 	"/internal/token/session":  true,
 	// internal teams 查询：供下游服务 fetchTeams 调用。
-	"/internal/teams:byUser": true,
+	"/internal/teams:byUser":              true,
+	"/internal/identities/kratos:resolve": true,
 	// 运维端点（health/pprof/metrics/swagger/openapi/ping）不走 session 鉴权
 	"/health":       true,
 	"/ping":         true,
@@ -97,6 +107,75 @@ func SessionWithToken(signer *session.Signer, tokenSvc *tokenservice.Service) ap
 	globalSigner = signer
 	globalTokenSvc = tokenSvc
 	return sessionMiddleware(signer, tokenSvc)
+}
+
+// SessionWithInternalJWT accepts Oathkeeper assertions at the external API
+// boundary and resolves their Kratos subject to a stable business User.
+func SessionWithInternalJWT(signer *session.Signer, tokenSvc *tokenservice.Service, repo kratosIdentityRepo, verifier *internaljwt.Verifier, kratosURL string) app.HandlerFunc {
+	globalSigner = signer
+	globalTokenSvc = tokenSvc
+	base := sessionMiddleware(signer, tokenSvc)
+	return func(ctx context.Context, c *app.RequestContext) {
+		authHeader := string(c.Request.Header.Peek("Authorization"))
+		if verifier == nil || !strings.HasPrefix(authHeader, "Bearer ") {
+			base(ctx, c)
+			return
+		}
+		claims, err := verifier.Verify(ctx, strings.TrimPrefix(authHeader, "Bearer "))
+		if err != nil {
+			base(ctx, c) // opaque service-token fallback
+			return
+		}
+		identityID, email, name, err := fetchKratosIdentity(ctx, kratosURL, string(c.Request.Header.Peek("Cookie")))
+		if err != nil || identityID != claims.Subject {
+			abortUnauthorized(c, "invalid internal identity")
+			return
+		}
+		u, err := repo.ResolveKratosIdentity(ctx, identityID, email, name)
+		if err != nil || !u.IsActive() {
+			abortUnauthorized(c, "inactive business user")
+			return
+		}
+		sess := &auth.Session{Sub: u.ID, Username: u.Username, Name: u.DisplayName, Email: u.Email, Role: u.Role, AuthVersion: u.AuthVersion}
+		ctx = context.WithValue(ctx, sessionCtxKey{}, sess)
+		c.Next(ctx)
+	}
+}
+
+func fetchKratosIdentity(ctx context.Context, baseURL, cookie string) (identityID, email, name string, err error) {
+	if baseURL == "" || cookie == "" {
+		return "", "", "", errors.New("Kratos session unavailable")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/sessions/whoami", nil)
+	if err != nil {
+		return "", "", "", err
+	}
+	req.Header.Set("Cookie", cookie)
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	if err != nil {
+		return "", "", "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", "", "", fmt.Errorf("Kratos whoami status %d", resp.StatusCode)
+	}
+	var body struct {
+		Identity struct {
+			ID     string `json:"id"`
+			Traits struct {
+				Email string                       `json:"email"`
+				Name  struct{ First, Last string } `json:"name"`
+			} `json:"traits"`
+		} `json:"identity"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", "", "", err
+	}
+	name = strings.TrimSpace(body.Identity.Traits.Name.First + " " + body.Identity.Traits.Name.Last)
+	if name == "" {
+		name = body.Identity.Traits.Email
+	}
+	return body.Identity.ID, body.Identity.Traits.Email, name, nil
 }
 
 func sessionMiddleware(signer *session.Signer, tokenSvc *tokenservice.Service) app.HandlerFunc {

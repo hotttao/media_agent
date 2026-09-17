@@ -6,12 +6,15 @@ import "time"
 // Team 是 media_auth.teams 表的 GORM row model。
 // id 由应用层 generateId() 产生(短随机串)；created_by 为创建者(首任 admin)。
 type Team struct {
-	ID          string    `gorm:"column:id;primaryKey"`
-	Name        string    `gorm:"column:name"`
-	Description *string   `gorm:"column:description"`
-	CreatedBy   string    `gorm:"column:created_by"`
-	CreatedAt   time.Time `gorm:"column:created_at"`
-	UpdatedAt   time.Time `gorm:"column:updated_at"`
+	ID              string    `gorm:"column:id;primaryKey"`
+	OrganizationID  string    `gorm:"column:organization_id"`
+	Name            string    `gorm:"column:name"`
+	Description     *string   `gorm:"column:description"`
+	EntitlementMode string    `gorm:"column:entitlement_mode"`
+	Status          string    `gorm:"column:status"`
+	CreatedBy       string    `gorm:"column:created_by"`
+	CreatedAt       time.Time `gorm:"column:created_at"`
+	UpdatedAt       time.Time `gorm:"column:updated_at"`
 }
 
 // TableName 固定表名（与 migration 一致，含 media_auth schema 前缀）。

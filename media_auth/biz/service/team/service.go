@@ -13,14 +13,22 @@ import (
 	"errors"
 	"time"
 
+	domainorganization "media_agent/media_auth/biz/domain/organization"
 	domainteam "media_agent/media_auth/biz/domain/team"
 	policyteam "media_agent/media_auth/biz/policy/team"
 )
 
 // Service 是 team 用例服务。
 type Service struct {
-	repo domainteam.TeamRepo
-	tx   TxRunner
+	repo          domainteam.TeamRepo
+	tx            TxRunner
+	organizations OrganizationAccess
+}
+
+// OrganizationAccess 是 Team 用例依赖的企业事实源。Team 不复制企业成员关系。
+type OrganizationAccess interface {
+	Get(context.Context, string) (domainorganization.Organization, error)
+	GetMembership(context.Context, string, string) (domainorganization.Membership, error)
 }
 
 // TxRunner 是事务抽象（dal.NewTxRunner 实现）。team service 仅 CreateTeam 用。
@@ -29,23 +37,32 @@ type TxRunner interface {
 }
 
 // NewService 构造 team 用例服务。tx 可为 nil（仅 CreateTeam 不可用，其余用例不依赖事务）。
-func NewService(repo domainteam.TeamRepo, tx TxRunner) *Service {
-	return &Service{repo: repo, tx: tx}
+func NewService(repo domainteam.TeamRepo, tx TxRunner, organizations ...OrganizationAccess) *Service {
+	s := &Service{repo: repo, tx: tx}
+	if len(organizations) > 0 {
+		s.organizations = organizations[0]
+	}
+	return s
 }
 
 // 用例错误（handler 据此映射 HTTP 状态）。
 var (
-	ErrInvalidName      = errors.New("team name must not be empty")
-	ErrInvalidRole      = errors.New("invalid role: must be admin or member")
-	ErrUserNotFound     = errors.New("user not found")
-	ErrTeamNotFound     = domainteam.ErrTeamNotFound
-	ErrInviteNotFound   = domainteam.ErrInviteNotFound
-	ErrNotMember        = domainteam.ErrNotMember
-	ErrForbidden        = errors.New("admin only")
-	ErrInviteExpired    = errors.New("invite expired")
-	ErrCannotDemoteLast = policyteam.ErrCannotDemoteLastAdmin
-	ErrCannotRemoveLast = policyteam.ErrCannotRemoveLastAdmin
-	ErrCreateTeamNoTx   = errors.New("create team requires a transaction runner")
+	ErrInvalidName          = errors.New("team name must not be empty")
+	ErrInvalidRole          = errors.New("invalid role: must be admin or member")
+	ErrUserNotFound         = errors.New("user not found")
+	ErrTeamNotFound         = domainteam.ErrTeamNotFound
+	ErrInviteNotFound       = domainteam.ErrInviteNotFound
+	ErrNotMember            = domainteam.ErrNotMember
+	ErrForbidden            = errors.New("admin only")
+	ErrInviteExpired        = errors.New("invite expired")
+	ErrCannotDemoteLast     = policyteam.ErrCannotDemoteLastAdmin
+	ErrCannotRemoveLast     = policyteam.ErrCannotRemoveLastAdmin
+	ErrCreateTeamNoTx       = errors.New("create team requires a transaction runner")
+	ErrOrganizationRequired = errors.New("organization_id is required")
+	ErrOrganizationInactive = errors.New("organization is not active")
+	ErrOrganizationAdmin    = errors.New("organization admin only")
+	ErrOrganizationMember   = errors.New("user must belong to the organization")
+	ErrOrganizationNotFound = domainorganization.ErrNotFound
 )
 
 // ListMyTeams 查当前 user 所属全部 team（含 my_role + member_count）。
@@ -63,15 +80,32 @@ func (s *Service) ListMyTeams(ctx context.Context, userID string) ([]TeamView, e
 
 // CreateTeam 建团，创建者自动成为首任 admin（事务内插 team + admin 成员）。
 func (s *Service) CreateTeam(ctx context.Context, userID string, cmd CreateTeamCommand) (TeamView, error) {
+	if cmd.OrganizationID == "" {
+		return TeamView{}, ErrOrganizationRequired
+	}
 	if cmd.Name == "" {
 		return TeamView{}, ErrInvalidName
 	}
 	if s.tx == nil {
 		return TeamView{}, ErrCreateTeamNoTx
 	}
+	if s.organizations == nil {
+		return TeamView{}, ErrOrganizationRequired
+	}
+	organization, err := s.organizations.Get(ctx, cmd.OrganizationID)
+	if err != nil {
+		return TeamView{}, err
+	}
+	if organization.Status != "active" {
+		return TeamView{}, ErrOrganizationInactive
+	}
+	membership, err := s.organizations.GetMembership(ctx, cmd.OrganizationID, userID)
+	if err != nil || membership.Role != "admin" {
+		return TeamView{}, ErrOrganizationAdmin
+	}
 	var team domainteam.Team
-	err := s.tx.RunInTx(ctx, func(txCtx context.Context) error {
-		t, err := s.repo.InsertTeam(txCtx, userID, cmd.Name, cmd.Description)
+	err = s.tx.RunInTx(ctx, func(txCtx context.Context) error {
+		t, err := s.repo.InsertTeam(txCtx, cmd.OrganizationID, userID, cmd.Name, cmd.Description)
 		if err != nil {
 			return err
 		}
@@ -157,6 +191,15 @@ func (s *Service) AddMember(ctx context.Context, userID, teamID string, cmd AddM
 	}
 	if !exists {
 		return domainteam.MemberWithUser{}, ErrUserNotFound
+	}
+	if s.organizations != nil {
+		team, err := s.repo.GetTeam(ctx, teamID)
+		if err != nil {
+			return domainteam.MemberWithUser{}, err
+		}
+		if _, err := s.organizations.GetMembership(ctx, team.OrganizationID, cmd.UserID); err != nil {
+			return domainteam.MemberWithUser{}, ErrOrganizationMember
+		}
 	}
 	if err := s.repo.AddMember(ctx, teamID, cmd.UserID, role); err != nil {
 		return domainteam.MemberWithUser{}, err
@@ -331,6 +374,11 @@ func (s *Service) AcceptInvite(ctx context.Context, userID, token string) (Accep
 	team, err := s.repo.GetTeam(ctx, inv.TeamID)
 	if err != nil {
 		return AcceptResult{}, err
+	}
+	if s.organizations != nil {
+		if _, err := s.organizations.GetMembership(ctx, team.OrganizationID, userID); err != nil {
+			return AcceptResult{}, ErrOrganizationMember
+		}
 	}
 	// 已是成员 → 幂等返回。
 	if _, err := s.repo.GetMembership(ctx, team.ID, userID); err == nil {

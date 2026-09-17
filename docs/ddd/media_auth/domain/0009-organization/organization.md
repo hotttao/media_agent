@@ -28,10 +28,10 @@ Organization 负责企业客户主体、企业成员关系和企业可使用功�
 
 | 能力 | 说明 | 对外接口/函数 |
 |:---|:---|:---|
-| 管理企业 | 创建、查询、更新和停用企业 | 待 IDL 定义 |
-| 管理企业成员 | 加入、移除和调整企业级角色 | 待 IDL 定义 |
-| 管理企业功能 | 设置企业可使用功能的授权上限 | 待 IDL 定义 |
-| 查询企业访问事实 | 批量返回成员角色和功能授权 | 待 IDL 定义 |
+| 管理企业 | 创建、查询、更新和停用企业 | `OrganizationService` `/api/organizations*` |
+| 管理企业成员 | 加入、移除和调整企业级角色 | `OrganizationService` `/api/organizations/{id}/members*` |
+| 管理企业功能 | 设置企业可使用功能的授权上限 | `OrganizationService` `/api/organizations/{id}/entitlements` |
+| 查询企业访问事实 | 批量返回成员角色和功能授权 | internal authorization facts API（待落地） |
 
 ## 聚合与不变量
 
@@ -42,6 +42,8 @@ Organization 负责企业客户主体、企业成员关系和企业可使用功�
 - Organization Member Role 首期为 `admin | member`。
 - admin 可以管理企业资料、部门和部门功能，但只能授予 Organization Entitlement 已包含的功能。
 - 停用 Organization 后不得创建新 Team、Workspace 或发起新的业务执行；历史事实保留。
+- Organization 创建只允许平台管理员；创建事务同时把指定首任管理员加入 Organization，禁止产生无管理员企业。
+- 删除最后一名 active Organization admin、把其降级或移出企业必须返回冲突。
 
 ## 领域事件
 

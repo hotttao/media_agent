@@ -28,8 +28,17 @@ authorizers:
     enabled: true
 
 mutators:
-  noop:
+  id_token:
     enabled: true
+    config:
+      issuer_url: http://oathkeeper:4456/
+      jwks_url: file:///etc/oathkeeper/id_token.jwks.json
+      ttl: 5m
+      claims: |
+        {
+          "aud": ["internal-api"],
+          "principal_type": "user"
+        }
 
 errors:
   fallback: [json]

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"media_agent/hertz_infra/authn/internaljwt"
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_workflow/biz/dal"
@@ -134,21 +135,25 @@ func main() {
 		serviceURL = "http://" + wfAddr
 	}
 	authCfg := &auth.Config{
-		JWTSecret:         cfg.GetAuth().GetJwtSecret(),
-		CookieName:        "mw_token",
-		JWTExpiresSec:     int(cfg.GetAuth().GetJwtExpiresInSeconds()),
-		MediaAuthURL:      mediaAuthURL,
-		ServiceURL:        strings.TrimRight(serviceURL, "/"),
-		OAuthClientID:     cfg.GetApp().GetName(),
-		OAuthClientSecret: cfg.GetAuth().GetOauthClientSecret(),
-		KratosPublicURL:   os.Getenv("ORY_KRATOS_PUBLIC_URL"),
-		DevUserID:         os.Getenv("MW_DEV_USER_ID"),
+		JWTSecret:              cfg.GetAuth().GetJwtSecret(),
+		CookieName:             "mw_token",
+		JWTExpiresSec:          int(cfg.GetAuth().GetJwtExpiresInSeconds()),
+		MediaAuthURL:           mediaAuthURL,
+		ServiceURL:             strings.TrimRight(serviceURL, "/"),
+		OAuthClientID:          cfg.GetApp().GetName(),
+		OAuthClientSecret:      cfg.GetAuth().GetOauthClientSecret(),
+		KratosPublicURL:        os.Getenv("ORY_KRATOS_PUBLIC_URL"),
+		MediaAuthInternalToken: os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN"),
+		DevUserID:              os.Getenv("MW_DEV_USER_ID"),
 		// skip 运维端点 + internal RPC（服务间调用不带 user session，靠网络隔离）
 		SkipPaths: map[string]bool{
 			"/health": true, "/metrics": true, "/ping": true, "/openapi.yaml": true,
 			"/api/auth/login": true, "/api/auth/callback": true, "/api/auth/logout": true,
 		},
 		SkipPrefixes: []string{"/swagger/", "/debug/pprof/", "/api/internal/"},
+	}
+	if jwksURL := os.Getenv("INTERNAL_JWKS_URL"); jwksURL != "" {
+		authCfg.InternalJWTVerifier = internaljwt.NewVerifier(jwksURL, os.Getenv("INTERNAL_JWT_ISSUER"), "internal-api", nil)
 	}
 	authMw := auth.New(authCfg)
 

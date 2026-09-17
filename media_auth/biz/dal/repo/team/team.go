@@ -38,13 +38,16 @@ func (r *repo) q(ctx context.Context) *query.Query {
 }
 
 // InsertTeam 仅插 team 行。description 空串 → NULL。
-func (r *repo) InsertTeam(ctx context.Context, createdBy, name, description string) (domainteam.Team, error) {
+func (r *repo) InsertTeam(ctx context.Context, organizationID, createdBy, name, description string) (domainteam.Team, error) {
 	q := r.q(ctx)
 	row := model.Team{
-		ID:          ids.New(),
-		Name:        name,
-		Description: strPtr(description),
-		CreatedBy:   createdBy,
+		ID:              ids.New(),
+		OrganizationID:  organizationID,
+		Name:            name,
+		Description:     strPtr(description),
+		EntitlementMode: "inherit",
+		Status:          "active",
+		CreatedBy:       createdBy,
 	}
 	if err := q.Team.WithContext(ctx).Create(&row); err != nil {
 		return domainteam.Team{}, err
@@ -348,11 +351,14 @@ func (r *repo) DeleteInvite(ctx context.Context, token string) error {
 
 func rowToTeam(t *model.Team) domainteam.Team {
 	d := domainteam.Team{
-		ID:        t.ID,
-		Name:      t.Name,
-		CreatedBy: t.CreatedBy,
-		CreatedAt: t.CreatedAt,
-		UpdatedAt: t.UpdatedAt,
+		ID:              t.ID,
+		OrganizationID:  t.OrganizationID,
+		Name:            t.Name,
+		EntitlementMode: t.EntitlementMode,
+		Status:          t.Status,
+		CreatedBy:       t.CreatedBy,
+		CreatedAt:       t.CreatedAt,
+		UpdatedAt:       t.UpdatedAt,
 	}
 	if t.Description != nil {
 		d.Description = *t.Description

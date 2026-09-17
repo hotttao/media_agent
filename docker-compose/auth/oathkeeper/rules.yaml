@@ -9,4 +9,4 @@
   authorizer:
     handler: allow
   mutators:
-    - handler: noop
+    - handler: id_token

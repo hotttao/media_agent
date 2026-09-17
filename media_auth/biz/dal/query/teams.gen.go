@@ -29,8 +29,11 @@ func newTeam(db *gorm.DB, opts ...gen.DOOption) team {
 	tableName := _team.teamDo.TableName()
 	_team.ALL = field.NewAsterisk(tableName)
 	_team.ID = field.NewString(tableName, "id")
+	_team.OrganizationID = field.NewString(tableName, "organization_id")
 	_team.Name = field.NewString(tableName, "name")
 	_team.Description = field.NewString(tableName, "description")
+	_team.EntitlementMode = field.NewString(tableName, "entitlement_mode")
+	_team.Status = field.NewString(tableName, "status")
 	_team.CreatedBy = field.NewString(tableName, "created_by")
 	_team.CreatedAt = field.NewTime(tableName, "created_at")
 	_team.UpdatedAt = field.NewTime(tableName, "updated_at")
@@ -43,13 +46,16 @@ func newTeam(db *gorm.DB, opts ...gen.DOOption) team {
 type team struct {
 	teamDo teamDo
 
-	ALL         field.Asterisk
-	ID          field.String
-	Name        field.String
-	Description field.String
-	CreatedBy   field.String
-	CreatedAt   field.Time
-	UpdatedAt   field.Time
+	ALL             field.Asterisk
+	ID              field.String
+	OrganizationID  field.String
+	Name            field.String
+	Description     field.String
+	EntitlementMode field.String
+	Status          field.String
+	CreatedBy       field.String
+	CreatedAt       field.Time
+	UpdatedAt       field.Time
 
 	fieldMap map[string]field.Expr
 }
@@ -67,8 +73,11 @@ func (t team) As(alias string) *team {
 func (t *team) updateTableName(table string) *team {
 	t.ALL = field.NewAsterisk(table)
 	t.ID = field.NewString(table, "id")
+	t.OrganizationID = field.NewString(table, "organization_id")
 	t.Name = field.NewString(table, "name")
 	t.Description = field.NewString(table, "description")
+	t.EntitlementMode = field.NewString(table, "entitlement_mode")
+	t.Status = field.NewString(table, "status")
 	t.CreatedBy = field.NewString(table, "created_by")
 	t.CreatedAt = field.NewTime(table, "created_at")
 	t.UpdatedAt = field.NewTime(table, "updated_at")
@@ -96,10 +105,13 @@ func (t *team) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (t *team) fillFieldMap() {
-	t.fieldMap = make(map[string]field.Expr, 6)
+	t.fieldMap = make(map[string]field.Expr, 9)
 	t.fieldMap["id"] = t.ID
+	t.fieldMap["organization_id"] = t.OrganizationID
 	t.fieldMap["name"] = t.Name
 	t.fieldMap["description"] = t.Description
+	t.fieldMap["entitlement_mode"] = t.EntitlementMode
+	t.fieldMap["status"] = t.Status
 	t.fieldMap["created_by"] = t.CreatedBy
 	t.fieldMap["created_at"] = t.CreatedAt
 	t.fieldMap["updated_at"] = t.UpdatedAt

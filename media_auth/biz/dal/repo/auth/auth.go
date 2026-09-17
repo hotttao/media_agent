@@ -20,7 +20,7 @@ import (
 )
 
 // NewRepo 构造 auth 仓储。db 为 dal 层 *gorm.DB（非事务时用，事务时由 ctx 覆盖）。
-func NewRepo(db *gorm.DB) domainauth.UserRepo {
+func NewRepo(db *gorm.DB) domainauth.Repository {
 	return &repo{db: db}
 }
 
@@ -55,6 +55,79 @@ func (r *repo) FindByID(ctx context.Context, id string) (domainauth.User, error)
 		return domainauth.User{}, err
 	}
 	return rowToDomain(u), nil
+}
+
+// ResolveKratosIdentity maps the external Kratos identity to one stable
+// business user. Existing local users are linked by normalized email on first
+// login so enabling Kratos does not fork resource ownership.
+func (r *repo) ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string) (domainauth.User, error) {
+	var resolved domainauth.User
+	err := dal.FromContext(ctx, r.db).Transaction(func(tx *gorm.DB) error {
+		var row model.User
+		err := tx.Where("kratos_identity_id = ?", identityID).First(&row).Error
+		if err == nil {
+			updates := map[string]any{"last_login_at": time.Now()}
+			if email != "" {
+				updates["email"] = email
+			}
+			if displayName != "" {
+				updates["display_name"] = displayName
+			}
+			if err := tx.Model(&model.User{}).Where("id = ?", row.ID).Updates(updates).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("id = ?", row.ID).First(&row).Error; err != nil {
+				return err
+			}
+			resolved = rowToDomain(&row)
+			return nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		if email != "" {
+			err = tx.Where("lower(email) = lower(?) OR lower(username) = lower(?)", email, email).First(&row).Error
+			if err == nil {
+				if row.KratosIdentityID != nil && *row.KratosIdentityID != identityID {
+					return errors.New("email is already linked to another Kratos identity")
+				}
+				updates := map[string]any{"kratos_identity_id": identityID, "last_login_at": time.Now()}
+				if displayName != "" {
+					updates["display_name"] = displayName
+				}
+				if err := tx.Model(&model.User{}).Where("id = ?", row.ID).Updates(updates).Error; err != nil {
+					return err
+				}
+				row.KratosIdentityID = &identityID
+				resolved = rowToDomain(&row)
+				return nil
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		}
+
+		username := email
+		if username == "" {
+			username = "kratos:" + identityID
+		}
+		if displayName == "" {
+			displayName = username
+		}
+		now := time.Now()
+		row = model.User{
+			ID: ids.New(), KratosIdentityID: &identityID, Username: username,
+			DisplayName: displayName, Email: strPtr(email), Role: "user",
+			Status: domainauth.UserStatusActive, AuthVersion: 1, LastLoginAt: &now,
+		}
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		resolved = rowToDomain(&row)
+		return nil
+	})
+	return resolved, err
 }
 
 // Upsert 创建或更新用户（LDAP 登录命中时自动建号；已存在更新 display_name/email/last_login_at）。
@@ -268,19 +341,20 @@ func (r *repo) UpdateLastLogin(ctx context.Context, id string) error {
 // rowToDomain 把 GORM row model 转为 domain User（不泄漏 row model）。
 func rowToDomain(u *model.User) domainauth.User {
 	d := domainauth.User{
-		ID:              u.ID,
-		Username:        u.Username,
-		DisplayName:     u.DisplayName,
-		Role:            u.Role,
-		DefaultPromptID: ptrStr(u.DefaultPromptID),
-		AutoEvolution:   u.AutoEvolution,
-		CreatedAt:       u.CreatedAt,
-		PasswordHash:    ptrStr(u.PasswordHash),
-		Status:          u.Status,
-		AuthVersion:     u.AuthVersion,
-		DisabledAt:      u.DisabledAt,
-		DeletedAt:       u.DeletedAt,
-		DeletedBy:       ptrStr(u.DeletedBy),
+		ID:               u.ID,
+		KratosIdentityID: ptrStr(u.KratosIdentityID),
+		Username:         u.Username,
+		DisplayName:      u.DisplayName,
+		Role:             u.Role,
+		DefaultPromptID:  ptrStr(u.DefaultPromptID),
+		AutoEvolution:    u.AutoEvolution,
+		CreatedAt:        u.CreatedAt,
+		PasswordHash:     ptrStr(u.PasswordHash),
+		Status:           u.Status,
+		AuthVersion:      u.AuthVersion,
+		DisabledAt:       u.DisabledAt,
+		DeletedAt:        u.DeletedAt,
+		DeletedBy:        ptrStr(u.DeletedBy),
 	}
 	if u.Email != nil {
 		d.Email = *u.Email

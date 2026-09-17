@@ -9,8 +9,9 @@ import (
 
 // CreateTeamCommand 是 CreateTeam 用例入参。Description 空串=不设。
 type CreateTeamCommand struct {
-	Name        string
-	Description string
+	OrganizationID string
+	Name           string
+	Description    string
 }
 
 // UpdateTeamCommand 是 UpdateTeam 用例入参（tri-state：nil 指针 = 不改）。

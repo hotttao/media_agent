@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	domainorganization "media_agent/media_auth/biz/domain/organization"
 	domainteam "media_agent/media_auth/biz/domain/team"
 )
 
@@ -41,15 +42,28 @@ func newFakeRepo(existingUsers ...string) *fakeRepo {
 	return r
 }
 
-func (r *fakeRepo) InsertTeam(_ context.Context, createdBy, name, description string) (domainteam.Team, error) {
+func (r *fakeRepo) InsertTeam(_ context.Context, organizationID, createdBy, name, description string) (domainteam.Team, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.nextID++
 	id := "t" + itoa(r.nextID)
-	t := domainteam.Team{ID: id, Name: name, Description: description, CreatedBy: createdBy, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	t := domainteam.Team{ID: id, OrganizationID: organizationID, Name: name, Description: description, EntitlementMode: "inherit", Status: "active", CreatedBy: createdBy, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	r.teams[id] = t
 	r.members[id] = map[string]domainteam.Membership{}
 	return t, nil
+}
+
+type allowOrg struct{}
+
+func (allowOrg) Get(context.Context, string) (domainorganization.Organization, error) {
+	return domainorganization.Organization{ID: "org1", Status: "active"}, nil
+}
+func (allowOrg) GetMembership(_ context.Context, organizationID, userID string) (domainorganization.Membership, error) {
+	return domainorganization.Membership{OrganizationID: organizationID, UserID: userID, Role: "admin"}, nil
+}
+
+func newTestService(repo *fakeRepo, tx TxRunner) *Service {
+	return NewService(repo, tx, allowOrg{})
 }
 
 func (r *fakeRepo) GetTeam(_ context.Context, id string) (domainteam.Team, error) {
@@ -251,9 +265,9 @@ func itoa(n int) string {
 
 func TestCreateTeam(t *testing.T) {
 	repo := newFakeRepo("u1")
-	svc := NewService(repo, fakeTx{})
+	svc := newTestService(repo, fakeTx{})
 
-	view, err := svc.CreateTeam(context.Background(), "u1", CreateTeamCommand{Name: "Team A", Description: "desc"})
+	view, err := svc.CreateTeam(context.Background(), "u1", CreateTeamCommand{OrganizationID: "org1", Name: "Team A", Description: "desc"})
 	if err != nil {
 		t.Fatalf("CreateTeam: %v", err)
 	}
@@ -268,16 +282,16 @@ func TestCreateTeam(t *testing.T) {
 }
 
 func TestCreateTeam_EmptyName(t *testing.T) {
-	svc := NewService(newFakeRepo("u1"), fakeTx{})
-	_, err := svc.CreateTeam(context.Background(), "u1", CreateTeamCommand{Name: ""})
+	svc := newTestService(newFakeRepo("u1"), fakeTx{})
+	_, err := svc.CreateTeam(context.Background(), "u1", CreateTeamCommand{OrganizationID: "org1", Name: ""})
 	if !errors.Is(err, ErrInvalidName) {
 		t.Errorf("want ErrInvalidName, got %v", err)
 	}
 }
 
 func TestCreateTeam_NoTxRunner(t *testing.T) {
-	svc := NewService(newFakeRepo("u1"), nil)
-	_, err := svc.CreateTeam(context.Background(), "u1", CreateTeamCommand{Name: "x"})
+	svc := newTestService(newFakeRepo("u1"), nil)
+	_, err := svc.CreateTeam(context.Background(), "u1", CreateTeamCommand{OrganizationID: "org1", Name: "x"})
 	if !errors.Is(err, ErrCreateTeamNoTx) {
 		t.Errorf("want ErrCreateTeamNoTx, got %v", err)
 	}
@@ -286,7 +300,7 @@ func TestCreateTeam_NoTxRunner(t *testing.T) {
 // seedTeamWithAdmin 建 team + 1 admin（创建者），返回 team id。
 func seedTeamWithAdmin(t *testing.T, svc *Service, repo *fakeRepo, creator string) string {
 	t.Helper()
-	view, err := svc.CreateTeam(context.Background(), creator, CreateTeamCommand{Name: "T"})
+	view, err := svc.CreateTeam(context.Background(), creator, CreateTeamCommand{OrganizationID: "org1", Name: "T"})
 	if err != nil {
 		t.Fatalf("seed CreateTeam: %v", err)
 	}
@@ -295,7 +309,7 @@ func seedTeamWithAdmin(t *testing.T, svc *Service, repo *fakeRepo, creator strin
 
 func TestUpdateMemberRole_LastAdminProtection(t *testing.T) {
 	repo := newFakeRepo("u1", "u2")
-	svc := NewService(repo, fakeTx{})
+	svc := newTestService(repo, fakeTx{})
 	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
 	// 加 u2 为 member。
 	if _, err := svc.AddMember(context.Background(), "u1", teamID, AddMemberCommand{UserID: "u2"}); err != nil {
@@ -319,7 +333,7 @@ func TestUpdateMemberRole_LastAdminProtection(t *testing.T) {
 
 func TestRemoveMember_SelfAndLastAdmin(t *testing.T) {
 	repo := newFakeRepo("u1", "u2")
-	svc := NewService(repo, fakeTx{})
+	svc := newTestService(repo, fakeTx{})
 	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
 
 	// u2 加入。
@@ -339,7 +353,7 @@ func TestRemoveMember_SelfAndLastAdmin(t *testing.T) {
 
 func TestRemoveMember_AdminCanRemoveOthers(t *testing.T) {
 	repo := newFakeRepo("u1", "u2")
-	svc := NewService(repo, fakeTx{})
+	svc := newTestService(repo, fakeTx{})
 	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
 	svc.AddMember(context.Background(), "u1", teamID, AddMemberCommand{UserID: "u2"})
 
@@ -357,7 +371,7 @@ func TestRemoveMember_AdminCanRemoveOthers(t *testing.T) {
 
 func TestAcceptInvite_Idempotent(t *testing.T) {
 	repo := newFakeRepo("u1", "u2")
-	svc := NewService(repo, fakeTx{})
+	svc := newTestService(repo, fakeTx{})
 	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
 
 	// u1 创建邀请。
@@ -380,7 +394,7 @@ func TestAcceptInvite_Idempotent(t *testing.T) {
 
 func TestAcceptInvite_Expired(t *testing.T) {
 	repo := newFakeRepo("u1", "u2")
-	svc := NewService(repo, fakeTx{})
+	svc := newTestService(repo, fakeTx{})
 	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
 	// 手动塞过期邀请。
 	past := time.Now().Add(-time.Hour)
@@ -394,7 +408,7 @@ func TestAcceptInvite_Expired(t *testing.T) {
 
 func TestAddMember_UserNotFound(t *testing.T) {
 	repo := newFakeRepo("u1") // u2 不存在
-	svc := NewService(repo, fakeTx{})
+	svc := newTestService(repo, fakeTx{})
 	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
 
 	_, err := svc.AddMember(context.Background(), "u1", teamID, AddMemberCommand{UserID: "u2"})
@@ -405,7 +419,7 @@ func TestAddMember_UserNotFound(t *testing.T) {
 
 func TestAddMember_InvalidRole(t *testing.T) {
 	repo := newFakeRepo("u1", "u2")
-	svc := NewService(repo, fakeTx{})
+	svc := newTestService(repo, fakeTx{})
 	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
 	role := "owner"
 	_, err := svc.AddMember(context.Background(), "u1", teamID, AddMemberCommand{UserID: "u2", Role: &role})
@@ -416,7 +430,7 @@ func TestAddMember_InvalidRole(t *testing.T) {
 
 func TestGetTeam_NonMemberNotFound(t *testing.T) {
 	repo := newFakeRepo("u1", "u2")
-	svc := NewService(repo, fakeTx{})
+	svc := newTestService(repo, fakeTx{})
 	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
 
 	// u2 非成员 → 404（不暴露存在性）。
@@ -428,7 +442,7 @@ func TestGetTeam_NonMemberNotFound(t *testing.T) {
 
 func TestListMyTeams(t *testing.T) {
 	repo := newFakeRepo("u1")
-	svc := NewService(repo, fakeTx{})
+	svc := newTestService(repo, fakeTx{})
 	seedTeamWithAdmin(t, svc, repo, "u1")
 	seedTeamWithAdmin(t, svc, repo, "u1")
 

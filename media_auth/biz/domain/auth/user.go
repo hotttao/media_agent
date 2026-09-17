@@ -10,21 +10,22 @@ import (
 //
 // PasswordHash 为空表示该账号无本地密码（LDAP/企微派生），不可改密。
 type User struct {
-	ID              string
-	Username        string
-	DisplayName     string
-	Email           string
-	PasswordHash    string // 空 = LDAP/企微派生账号
-	Role            string // user | admin | system
-	DefaultPromptID string
-	AutoEvolution   bool
-	CreatedAt       time.Time
-	LastLoginAt     time.Time // 零值 = 从未登录
-	Status          string
-	AuthVersion     int64
-	DisabledAt      *time.Time
-	DeletedAt       *time.Time
-	DeletedBy       string
+	ID               string
+	KratosIdentityID string
+	Username         string
+	DisplayName      string
+	Email            string
+	PasswordHash     string // 空 = LDAP/企微派生账号
+	Role             string // user | admin | system
+	DefaultPromptID  string
+	AutoEvolution    bool
+	CreatedAt        time.Time
+	LastLoginAt      time.Time // 零值 = 从未登录
+	Status           string
+	AuthVersion      int64
+	DisabledAt       *time.Time
+	DeletedAt        *time.Time
+	DeletedBy        string
 }
 
 const (
@@ -104,6 +105,13 @@ type UserRepo interface {
 	SetAutoEvolution(ctx context.Context, id string, autoEvolution bool) error
 	// UpdateLastLogin 更新 last_login_at = now（本地登录成功后）。
 	UpdateLastLogin(ctx context.Context, id string) error
+}
+
+// Repository extends the legacy account contract with the Kratos identity
+// bridge used only at the authentication boundary.
+type Repository interface {
+	UserRepo
+	ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string) (User, error)
 }
 
 // AccessRevocationEvent 是软删除事务写出的访问撤销事件。

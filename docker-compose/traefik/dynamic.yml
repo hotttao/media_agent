@@ -18,20 +18,32 @@ http:
       priority: 120
       service: ory-login-ui
     auth:
-      rule: "PathPrefix(`/api/auth`)"
+      rule: "Path(`/api/auth/login`) || Path(`/api/auth/logout`)"
       priority: 100
       service: workflow
+    authenticated-user:
+      rule: "Path(`/api/auth/me`)"
+      priority: 110
+      middlewares: [oathkeeper-forward-auth]
+      service: workflow
+    oathkeeper-jwks:
+      rule: "Path(`/.well-known/jwks.json`)"
+      priority: 140
+      service: oathkeeper-api
     oauth:
-      rule: "PathPrefix(`/api/oauth`) || PathPrefix(`/api/users`) || PathPrefix(`/api/teams`)"
+      rule: "PathPrefix(`/api/oauth`) || PathPrefix(`/api/users`) || PathPrefix(`/api/teams`) || PathPrefix(`/api/organizations`)"
       priority: 100
+      middlewares: [oathkeeper-forward-auth]
       service: auth
     materials:
       rule: "PathPrefix(`/api/v1/materials`) || PathPrefix(`/api/v1/products`) || PathPrefix(`/api/v1/asset-kinds`) || PathPrefix(`/api/v1/generated-assets`) || PathPrefix(`/api/v1/virtual-ips`)"
       priority: 50
+      middlewares: [oathkeeper-forward-auth]
       service: materials
     workflow:
       rule: "PathPrefix(`/api/v1/workflows`) || PathPrefix(`/api/v1/templates`) || PathPrefix(`/api/v1/jobs`) || PathPrefix(`/api/v1/step-runs`)"
       priority: 50
+      middlewares: [oathkeeper-forward-auth]
       service: workflow
     frontend:
       rule: "PathPrefix(`/`)"
@@ -39,6 +51,11 @@ http:
       service: frontend
 
   middlewares:
+    oathkeeper-forward-auth:
+      forwardAuth:
+        address: "http://oathkeeper:4456/decisions"
+        trustForwardHeader: false
+        authResponseHeaders: [Authorization]
     strip-ory-hydra:
       stripPrefix:
         prefixes:
@@ -61,6 +78,10 @@ http:
       loadBalancer:
         servers:
           - url: "http://consent:3001"
+    oathkeeper-api:
+      loadBalancer:
+        servers:
+          - url: "http://oathkeeper:4456"
     auth:
       loadBalancer:
         servers:

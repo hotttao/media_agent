@@ -11,6 +11,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"media_agent/hertz_infra/serverhertz/swaggerui"
 	handler "media_agent/media_auth/biz/handler"
+	authhandler "media_agent/media_auth/biz/handler/auth"
 	teaminternalhandler "media_agent/media_auth/biz/handler/team_internal"
 )
 
@@ -44,5 +45,6 @@ func customizedRegister(r *server.Hertz) {
 
 	// internal teams 查询：供下游服务 fetchTeams 调用（不挂网关，session skip list 内）。
 	r.POST("/internal/teams:byUser", teaminternalhandler.ListUserTeams)
+	r.POST("/internal/identities/kratos:resolve", authhandler.ResolveKratosIdentity)
 	// your code ...
 }

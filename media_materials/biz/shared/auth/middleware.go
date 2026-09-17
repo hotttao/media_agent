@@ -30,6 +30,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/golang-jwt/jwt/v5"
+	"media_agent/hertz_infra/authn/internaljwt"
 )
 
 // User 是注入 ctx 的鉴权主体（与 media_auth auth.Session 对齐）。
@@ -42,14 +43,16 @@ type User struct {
 
 // Config auth 中间件配置。
 type Config struct {
-	JWTSecret         string // materials/workflow 共享的 JWT secret（与 media_auth 不同）
-	CookieName        string // cookie 名（默认 "mw_token"）
-	JWTExpiresSec     int    // session JWT 有效期（默认 7 天）
-	MediaAuthURL      string // media_auth base URL（OAuth + service token 验证）
-	ServiceURL        string // 本服务 base URL（OAuth callback redirect_uri）
-	OAuthClientID     string // 在 media_auth 注册的 OAuth client_id
-	OAuthClientSecret string // OAuth client_secret（机密 client 必填）
-	KratosPublicURL   string // Ory Kratos public URL；配置后浏览器会话优先使用 Kratos
+	JWTSecret              string // materials/workflow 共享的 JWT secret（与 media_auth 不同）
+	CookieName             string // cookie 名（默认 "mw_token"）
+	JWTExpiresSec          int    // session JWT 有效期（默认 7 天）
+	MediaAuthURL           string // media_auth base URL（OAuth + service token 验证）
+	ServiceURL             string // 本服务 base URL（OAuth callback redirect_uri）
+	OAuthClientID          string // 在 media_auth 注册的 OAuth client_id
+	OAuthClientSecret      string // OAuth client_secret（机密 client 必填）
+	KratosPublicURL        string // Ory Kratos public URL；配置后浏览器会话优先使用 Kratos
+	MediaAuthInternalToken string // internal identity/team lookup credential
+	InternalJWTVerifier    *internaljwt.Verifier
 	// DevUserID enables a local-only authenticated session when explicitly set.
 	// It is intentionally empty by default and must never be configured in prod.
 	DevUserID    string
@@ -242,6 +245,23 @@ func (m *Middleware) Handler() app.HandlerFunc {
 		authHeader := string(c.Request.Header.Peek("Authorization"))
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			bearer := strings.TrimPrefix(authHeader, "Bearer ")
+			if m.cfg.InternalJWTVerifier != nil {
+				if claims, verifyErr := m.cfg.InternalJWTVerifier.Verify(ctx, bearer); verifyErr == nil {
+					user, resolveErr := m.verifyKratosSessionForIdentity(ctx, string(c.Request.Header.Peek("Cookie")), claims.Subject)
+					if resolveErr != nil {
+						c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal identity"})
+						c.Abort()
+						return
+					}
+					ctx = context.WithValue(ctx, callerKey{}, user)
+					teamIDs, _ := m.fetchTeams(ctx, user.Sub)
+					if teamIDs != nil {
+						ctx = context.WithValue(ctx, teamsKey{}, teamIDs)
+					}
+					c.Next(ctx)
+					return
+				}
+			}
 			user, err := m.verifyServiceToken(ctx, bearer)
 			if err != nil || user == nil {
 				c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid service token"})
@@ -292,6 +312,10 @@ func (m *Middleware) Handler() app.HandlerFunc {
 // cookie. Identity traits remain profile data; authorization stays in Keto and
 // the owning business service.
 func (m *Middleware) verifyKratosSession(ctx context.Context, cookie string) (*User, error) {
+	return m.verifyKratosSessionForIdentity(ctx, cookie, "")
+}
+
+func (m *Middleware) verifyKratosSessionForIdentity(ctx context.Context, cookie, expectedIdentityID string) (*User, error) {
 	if m.cfg.KratosPublicURL == "" || cookie == "" {
 		return nil, errors.New("kratos session unavailable")
 	}
@@ -326,11 +350,45 @@ func (m *Middleware) verifyKratosSession(ctx context.Context, cookie string) (*U
 	if session.Identity.ID == "" {
 		return nil, errors.New("kratos identity id is empty")
 	}
+	if expectedIdentityID != "" && session.Identity.ID != expectedIdentityID {
+		return nil, errors.New("internal JWT subject does not match Kratos session")
+	}
 	name := strings.TrimSpace(session.Identity.Traits.Name.First + " " + session.Identity.Traits.Name.Last)
 	if name == "" {
 		name = session.Identity.Traits.Email
 	}
-	return &User{Sub: session.Identity.ID, Username: session.Identity.Traits.Email, Name: name, Role: "user"}, nil
+	return m.resolveKratosIdentity(ctx, session.Identity.ID, session.Identity.Traits.Email, name)
+}
+
+func (m *Middleware) resolveKratosIdentity(ctx context.Context, identityID, email, name string) (*User, error) {
+	body, err := json.Marshal(map[string]string{"identity_id": identityID, "email": email, "name": name})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(m.cfg.MediaAuthURL, "/")+"/internal/identities/kratos:resolve", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if m.cfg.MediaAuthInternalToken != "" {
+		req.Header.Set("X-Media-Auth-Internal-Token", m.cfg.MediaAuthInternalToken)
+	}
+	resp, err := m.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("resolve Kratos identity: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("resolve Kratos identity: status %d", resp.StatusCode)
+	}
+	var user User
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return nil, fmt.Errorf("decode resolved identity: %w", err)
+	}
+	if user.Sub == "" {
+		return nil, errors.New("resolved business user id is empty")
+	}
+	return &user, nil
 }
 
 // prefetchTeams 异步预热 team 缓存（service token 路径用）。
@@ -363,6 +421,9 @@ func (m *Middleware) fetchTeams(ctx context.Context, userID string) ([]string, e
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if m.cfg.MediaAuthInternalToken != "" {
+		req.Header.Set("X-Media-Auth-Internal-Token", m.cfg.MediaAuthInternalToken)
+	}
 	resp, err := m.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch teams: %w", err)

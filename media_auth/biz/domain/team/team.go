@@ -21,12 +21,15 @@ const (
 
 // Team 是团队实体（对应 media_auth.teams 表的领域形态，非 GORM row）。
 type Team struct {
-	ID          string
-	Name        string
-	Description string // 空串 = NULL
-	CreatedBy   string // 创建者 user id（首任 admin）
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID              string
+	OrganizationID  string
+	Name            string
+	Description     string // 空串 = NULL
+	EntitlementMode string
+	Status          string
+	CreatedBy       string // 创建者 user id（首任 admin）
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 // Membership 是 (team_id, user_id) → role 的成员关系值对象。
@@ -77,7 +80,7 @@ type TeamPatch struct {
 type TeamRepo interface {
 	// InsertTeam 仅插 team 行（不含成员）。返回落库后的 Team（含 id）。
 	// 建 team + 首任 admin 的原子性由 service 在 TxRunner 内调 InsertTeam + AddMember 保证。
-	InsertTeam(ctx context.Context, createdBy, name, description string) (Team, error)
+	InsertTeam(ctx context.Context, organizationID, createdBy, name, description string) (Team, error)
 	// GetTeam 按 id 查 team。不存在返回 ErrTeamNotFound。
 	GetTeam(ctx context.Context, id string) (Team, error)
 	// UpdateTeam 局部更新 name/description（nil 跳过）。0 行返回 ErrTeamNotFound。

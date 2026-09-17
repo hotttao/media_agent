@@ -27,7 +27,7 @@ func newTeamRepo(t *testing.T) domainteam.TeamRepo {
 
 func TestTeamRepo_CreateTeam_InsertsCreatorAsAdmin(t *testing.T) {
 	repo := newTeamRepo(t)
-	team, err := repo.InsertTeam(context.Background(), "u1", "Team A", "desc")
+	team, err := repo.InsertTeam(context.Background(), "org_legacy", "u1", "Team A", "desc")
 	if err != nil {
 		t.Fatalf("InsertTeam: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestTeamRepo_CreateTeam_InsertsCreatorAsAdmin(t *testing.T) {
 
 func TestTeamRepo_AddMember_Idempotent(t *testing.T) {
 	repo := newTeamRepo(t)
-	team, _ := repo.InsertTeam(context.Background(), "u1", "T", "")
+	team, _ := repo.InsertTeam(context.Background(), "org_legacy", "u1", "T", "")
 	repo.AddMember(context.Background(), team.ID, "u1", domainteam.RoleAdmin)
 
 	if err := repo.AddMember(context.Background(), team.ID, "u1", domainteam.RoleAdmin); err != nil {
@@ -62,7 +62,7 @@ func TestTeamRepo_AddMember_Idempotent(t *testing.T) {
 
 func TestTeamRepo_GetMembership_NotMember(t *testing.T) {
 	repo := newTeamRepo(t)
-	team, _ := repo.InsertTeam(context.Background(), "u1", "T", "")
+	team, _ := repo.InsertTeam(context.Background(), "org_legacy", "u1", "T", "")
 	repo.AddMember(context.Background(), team.ID, "u1", domainteam.RoleAdmin)
 
 	_, err := repo.GetMembership(context.Background(), team.ID, "u2")
@@ -73,7 +73,7 @@ func TestTeamRepo_GetMembership_NotMember(t *testing.T) {
 
 func TestTeamRepo_UpdateTeam_PatchDescription(t *testing.T) {
 	repo := newTeamRepo(t)
-	team, _ := repo.InsertTeam(context.Background(), "u1", "T", "")
+	team, _ := repo.InsertTeam(context.Background(), "org_legacy", "u1", "T", "")
 	desc := "new desc"
 	updated, err := repo.UpdateTeam(context.Background(), team.ID, domainteam.TeamPatch{Description: &desc})
 	if err != nil || updated.Description != "new desc" {
@@ -88,7 +88,7 @@ func TestTeamRepo_UpdateTeam_PatchDescription(t *testing.T) {
 
 func TestTeamRepo_DeleteTeam_Cascades(t *testing.T) {
 	repo := newTeamRepo(t)
-	team, _ := repo.InsertTeam(context.Background(), "u1", "T", "")
+	team, _ := repo.InsertTeam(context.Background(), "org_legacy", "u1", "T", "")
 	repo.AddMember(context.Background(), team.ID, "u1", domainteam.RoleAdmin)
 	repo.CreateInvite(context.Background(), team.ID, "u1", nil)
 
@@ -110,7 +110,7 @@ func TestTeamRepo_DeleteTeam_Cascades(t *testing.T) {
 
 func TestTeamRepo_Invites_ExpiryAndRevoke(t *testing.T) {
 	repo := newTeamRepo(t)
-	team, _ := repo.InsertTeam(context.Background(), "u1", "T", "")
+	team, _ := repo.InsertTeam(context.Background(), "org_legacy", "u1", "T", "")
 	repo.AddMember(context.Background(), team.ID, "u1", domainteam.RoleAdmin)
 
 	future := time.Now().Add(7 * 24 * time.Hour)
@@ -141,7 +141,7 @@ func TestTeamRepo_Invites_ExpiryAndRevoke(t *testing.T) {
 
 func TestTeamRepo_ListMembers_JoinUser(t *testing.T) {
 	repo := newTeamRepo(t)
-	team, _ := repo.InsertTeam(context.Background(), "u1", "T", "")
+	team, _ := repo.InsertTeam(context.Background(), "org_legacy", "u1", "T", "")
 	repo.AddMember(context.Background(), team.ID, "u1", domainteam.RoleAdmin)
 	repo.AddMember(context.Background(), team.ID, "u2", domainteam.RoleMember)
 

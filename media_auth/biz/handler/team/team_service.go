@@ -64,8 +64,9 @@ func CreateTeam(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	view, err := TeamSvc.CreateTeam(ctx, userID, teamservice.CreateTeamCommand{
-		Name:        req.GetName(),
-		Description: req.GetDescription(),
+		OrganizationID: req.GetOrganizationId(),
+		Name:           req.GetName(),
+		Description:    req.GetDescription(),
 	})
 	if err != nil {
 		writeTeamError(c, err)
@@ -344,14 +345,17 @@ func AcceptInvite(ctx context.Context, c *app.RequestContext) {
 // TeamView 内嵌 domain Team，字段经提升访问，handler 无需 import domain。
 func toApiTeam(v teamservice.TeamView) *teampb.ApiTeam {
 	return &teampb.ApiTeam{
-		Id:          v.ID,
-		Name:        v.Name,
-		Description: strPtrIfNonEmpty(v.Description),
-		CreatedBy:   v.CreatedBy,
-		CreatedAt:   v.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   v.UpdatedAt.Format(time.RFC3339),
-		MyRole:      string(v.MyRole),
-		MemberCount: int32(v.MemberCount),
+		Id:              v.ID,
+		Name:            v.Name,
+		Description:     strPtrIfNonEmpty(v.Description),
+		CreatedBy:       v.CreatedBy,
+		CreatedAt:       v.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:       v.UpdatedAt.Format(time.RFC3339),
+		MyRole:          string(v.MyRole),
+		MemberCount:     int32(v.MemberCount),
+		OrganizationId:  v.OrganizationID,
+		EntitlementMode: v.EntitlementMode,
+		Status:          v.Status,
 	}
 }
 
@@ -395,13 +399,18 @@ func writeTeamError(c *app.RequestContext, err error) {
 	switch {
 	case errors.Is(err, teamservice.ErrInvalidName),
 		errors.Is(err, teamservice.ErrInvalidRole),
-		errors.Is(err, teamservice.ErrUserNotFound):
+		errors.Is(err, teamservice.ErrUserNotFound),
+		errors.Is(err, teamservice.ErrOrganizationRequired),
+		errors.Is(err, teamservice.ErrOrganizationInactive),
+		errors.Is(err, teamservice.ErrOrganizationMember):
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
-	case errors.Is(err, teamservice.ErrForbidden):
+	case errors.Is(err, teamservice.ErrForbidden),
+		errors.Is(err, teamservice.ErrOrganizationAdmin):
 		c.JSON(consts.StatusForbidden, map[string]string{"error": err.Error()})
 	case errors.Is(err, teamservice.ErrTeamNotFound),
 		errors.Is(err, teamservice.ErrNotMember),
-		errors.Is(err, teamservice.ErrInviteNotFound):
+		errors.Is(err, teamservice.ErrInviteNotFound),
+		errors.Is(err, teamservice.ErrOrganizationNotFound):
 		c.JSON(consts.StatusNotFound, map[string]string{"error": "not found"})
 	case errors.Is(err, teamservice.ErrCannotDemoteLast),
 		errors.Is(err, teamservice.ErrCannotRemoveLast):

@@ -730,6 +730,269 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/organizations:
+        get:
+            tags:
+                - OrganizationService
+            operationId: OrganizationService_ListOrganizations
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrganizationsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - OrganizationService
+            operationId: OrganizationService_CreateOrganization
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateOrganizationRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiOrganization'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/organizations/{id}:
+        get:
+            tags:
+                - OrganizationService
+            operationId: OrganizationService_GetOrganization
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiOrganization'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        patch:
+            tags:
+                - OrganizationService
+            operationId: OrganizationService_UpdateOrganization
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateOrganizationRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiOrganization'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/organizations/{id}/entitlements:
+        get:
+            tags:
+                - OrganizationService
+            operationId: OrganizationService_GetEntitlements
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EntitlementsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - OrganizationService
+            operationId: OrganizationService_SetEntitlements
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetEntitlementsRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EntitlementsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/organizations/{id}/members:
+        get:
+            tags:
+                - OrganizationService
+            operationId: OrganizationService_ListMembers
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMembersResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - OrganizationService
+            operationId: OrganizationService_AddMember
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AddMemberRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiOrganizationMember'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/organizations/{id}/members/{user_id}:
+        delete:
+            tags:
+                - OrganizationService
+            operationId: OrganizationService_RemoveMember
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: user_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MutationResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        patch:
+            tags:
+                - OrganizationService
+            operationId: OrganizationService_UpdateMember
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: user_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateMemberRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApiOrganizationMember'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/service-tokens:
         get:
             tags:
@@ -1274,6 +1537,34 @@ components:
                     type: string
                 updated_at:
                     type: string
+        ApiOrganization:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                status:
+                    type: string
+                version:
+                    type: string
+                my_role:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        ApiOrganizationMember:
+            type: object
+            properties:
+                user_id:
+                    type: string
+                user_name:
+                    type: string
+                role:
+                    type: string
+                joined_at:
+                    type: string
         ApiTeam:
             type: object
             properties:
@@ -1294,6 +1585,12 @@ components:
                 member_count:
                     type: integer
                     format: int32
+                organization_id:
+                    type: string
+                entitlement_mode:
+                    type: string
+                status:
+                    type: string
         ApiTeamInvite:
             type: object
             properties:
@@ -1440,6 +1737,11 @@ components:
                 expires_in_days:
                     type: integer
                     format: int32
+        CreateOrganizationRequest:
+            type: object
+            properties:
+                name:
+                    type: string
         CreateServiceTokenRequest:
             type: object
             properties:
@@ -1463,6 +1765,8 @@ components:
                 name:
                     type: string
                 description:
+                    type: string
+                organization_id:
                     type: string
         CreateUserRequest:
             type: object
@@ -1509,6 +1813,13 @@ components:
                     type: boolean
                 server_origin:
                     type: string
+        EntitlementsResponse:
+            type: object
+            properties:
+                feature_keys:
+                    type: array
+                    items:
+                        type: string
         ExchangeTokenResponse:
             type: object
             properties:
@@ -1627,6 +1938,13 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ApiTeam'
+        ListOrganizationsResponse:
+            type: object
+            properties:
+                organizations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ApiOrganization'
         ListServiceTokensResponse:
             type: object
             properties:
@@ -1663,6 +1981,11 @@ components:
                 user:
                     $ref: '#/components/schemas/ApiUser'
         LogoutResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+        MutationResponse:
             type: object
             properties:
                 success:
@@ -1741,6 +2064,15 @@ components:
             properties:
                 success:
                     type: boolean
+        SetEntitlementsRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                feature_keys:
+                    type: array
+                    items:
+                        type: string
         StartAuthorizationResponse:
             type: object
             properties:
@@ -1778,6 +2110,15 @@ components:
             properties:
                 success:
                     type: boolean
+        UpdateMemberRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                user_id:
+                    type: string
+                role:
+                    type: string
         UpdateMemberRoleRequest:
             type: object
             properties:
@@ -1792,6 +2133,15 @@ components:
             properties:
                 success:
                     type: boolean
+        UpdateOrganizationRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                status:
+                    type: string
         UpdateTeamRequest:
             type: object
             properties:
@@ -1857,6 +2207,7 @@ tags:
 
          /token 接受 application/x-www-form-urlencoded 和 application/json 两种 Content-Type,
          proto 字段一律声明,handler 层按 Content-Type 分支。
+    - name: OrganizationService
     - name: ServiceTokenService
       description: |-
         ServiceTokenService —— B2B API token 管理(tos_xxx 形式)。

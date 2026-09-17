@@ -29,6 +29,7 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 	tableName := _user.userDo.TableName()
 	_user.ALL = field.NewAsterisk(tableName)
 	_user.ID = field.NewString(tableName, "id")
+	_user.KratosIdentityID = field.NewString(tableName, "kratos_identity_id")
 	_user.Username = field.NewString(tableName, "username")
 	_user.DisplayName = field.NewString(tableName, "display_name")
 	_user.Email = field.NewString(tableName, "email")
@@ -38,6 +39,11 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 	_user.AutoEvolution = field.NewBool(tableName, "auto_evolution")
 	_user.CreatedAt = field.NewTime(tableName, "created_at")
 	_user.LastLoginAt = field.NewTime(tableName, "last_login_at")
+	_user.Status = field.NewString(tableName, "status")
+	_user.AuthVersion = field.NewInt64(tableName, "auth_version")
+	_user.DisabledAt = field.NewTime(tableName, "disabled_at")
+	_user.DeletedAt = field.NewTime(tableName, "deleted_at")
+	_user.DeletedBy = field.NewString(tableName, "deleted_by")
 
 	_user.fillFieldMap()
 
@@ -47,17 +53,23 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 type user struct {
 	userDo userDo
 
-	ALL             field.Asterisk
-	ID              field.String
-	Username        field.String
-	DisplayName     field.String
-	Email           field.String
-	PasswordHash    field.String
-	Role            field.String
-	DefaultPromptID field.String
-	AutoEvolution   field.Bool
-	CreatedAt       field.Time
-	LastLoginAt     field.Time
+	ALL              field.Asterisk
+	ID               field.String
+	KratosIdentityID field.String
+	Username         field.String
+	DisplayName      field.String
+	Email            field.String
+	PasswordHash     field.String
+	Role             field.String
+	DefaultPromptID  field.String
+	AutoEvolution    field.Bool
+	CreatedAt        field.Time
+	LastLoginAt      field.Time
+	Status           field.String
+	AuthVersion      field.Int64
+	DisabledAt       field.Time
+	DeletedAt        field.Time
+	DeletedBy        field.String
 
 	fieldMap map[string]field.Expr
 }
@@ -75,6 +87,7 @@ func (u user) As(alias string) *user {
 func (u *user) updateTableName(table string) *user {
 	u.ALL = field.NewAsterisk(table)
 	u.ID = field.NewString(table, "id")
+	u.KratosIdentityID = field.NewString(table, "kratos_identity_id")
 	u.Username = field.NewString(table, "username")
 	u.DisplayName = field.NewString(table, "display_name")
 	u.Email = field.NewString(table, "email")
@@ -84,6 +97,11 @@ func (u *user) updateTableName(table string) *user {
 	u.AutoEvolution = field.NewBool(table, "auto_evolution")
 	u.CreatedAt = field.NewTime(table, "created_at")
 	u.LastLoginAt = field.NewTime(table, "last_login_at")
+	u.Status = field.NewString(table, "status")
+	u.AuthVersion = field.NewInt64(table, "auth_version")
+	u.DisabledAt = field.NewTime(table, "disabled_at")
+	u.DeletedAt = field.NewTime(table, "deleted_at")
+	u.DeletedBy = field.NewString(table, "deleted_by")
 
 	u.fillFieldMap()
 
@@ -108,8 +126,9 @@ func (u *user) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (u *user) fillFieldMap() {
-	u.fieldMap = make(map[string]field.Expr, 10)
+	u.fieldMap = make(map[string]field.Expr, 16)
 	u.fieldMap["id"] = u.ID
+	u.fieldMap["kratos_identity_id"] = u.KratosIdentityID
 	u.fieldMap["username"] = u.Username
 	u.fieldMap["display_name"] = u.DisplayName
 	u.fieldMap["email"] = u.Email
@@ -119,6 +138,11 @@ func (u *user) fillFieldMap() {
 	u.fieldMap["auto_evolution"] = u.AutoEvolution
 	u.fieldMap["created_at"] = u.CreatedAt
 	u.fieldMap["last_login_at"] = u.LastLoginAt
+	u.fieldMap["status"] = u.Status
+	u.fieldMap["auth_version"] = u.AuthVersion
+	u.fieldMap["disabled_at"] = u.DisabledAt
+	u.fieldMap["deleted_at"] = u.DeletedAt
+	u.fieldMap["deleted_by"] = u.DeletedBy
 }
 
 func (u user) clone(db *gorm.DB) user {

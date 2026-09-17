@@ -20,9 +20,10 @@ import (
 
 // Service 是 auth 用例服务。
 type Service struct {
-	repo   domainauth.UserRepo
-	signer domainauth.SessionSigner
-	ldap   LdapAuthenticator
+	repo               domainauth.UserRepo
+	kratosIdentityRepo KratosIdentityRepo
+	signer             domainauth.SessionSigner
+	ldap               LdapAuthenticator
 	// authSourceResolver 推导无密码账号的 wecom/ldap 来源（identity domain 实现）。
 	// 当前 nil（identity 未实现），wecom 分支回退 ldap。
 	resolver domainauth.AuthSourceResolver
@@ -37,9 +38,16 @@ type LdapAuthenticator interface {
 	Authenticate(ctx context.Context, username, password string) (*ldapclient.LdapUser, error)
 }
 
+// KratosIdentityRepo is kept separate from the legacy UserRepo contract so
+// other use cases and test doubles do not need an identity-provider concern.
+type KratosIdentityRepo interface {
+	ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string) (domainauth.User, error)
+}
+
 // NewService 构造 auth 用例服务。ldap 可为 nil（禁用 LDAP）。
 func NewService(repo domainauth.UserRepo, signer domainauth.SessionSigner, ldap LdapAuthenticator) *Service {
-	return &Service{repo: repo, signer: signer, ldap: ldap}
+	identityRepo, _ := repo.(KratosIdentityRepo)
+	return &Service{repo: repo, kratosIdentityRepo: identityRepo, signer: signer, ldap: ldap}
 }
 
 // SetAuthSourceResolver 注入 identity 提供的 auth_source 解析器（identity domain 完成后调用）。
@@ -209,6 +217,25 @@ func (s *Service) GetMe(ctx context.Context, sess domainauth.Session) (ApiUser, 
 	u, err := s.repo.FindByID(ctx, sess.Sub)
 	if err != nil {
 		return ApiUser{}, err
+	}
+	return toApiUser(u, s.resolver), nil
+}
+
+// ResolveKratosIdentity converts Kratos identity/profile data into the stable
+// media_auth User used by ownership, memberships and authorization tuples.
+func (s *Service) ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string) (ApiUser, error) {
+	if identityID == "" {
+		return ApiUser{}, ErrInvalidCredentials
+	}
+	if s.kratosIdentityRepo == nil {
+		return ApiUser{}, errors.New("Kratos identity repository is unavailable")
+	}
+	u, err := s.kratosIdentityRepo.ResolveKratosIdentity(ctx, identityID, email, displayName)
+	if err != nil {
+		return ApiUser{}, err
+	}
+	if !policyauth.CanLogin(u) {
+		return ApiUser{}, ErrAccountDisabled
 	}
 	return toApiUser(u, s.resolver), nil
 }

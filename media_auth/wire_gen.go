@@ -8,17 +8,20 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"gorm.io/gorm"
 
 	configpb "media_agent/hertz_gen/config"
+	"media_agent/hertz_infra/authn/internaljwt"
 	"media_agent/media_auth/biz/dal"
 	dalauth "media_agent/media_auth/biz/dal/repo/auth"
 	dalidentity "media_agent/media_auth/biz/dal/repo/identity"
 	dalmcpoauth "media_agent/media_auth/biz/dal/repo/mcp_oauth"
 	daloauth "media_agent/media_auth/biz/dal/repo/oauth"
+	dalorganization "media_agent/media_auth/biz/dal/repo/organization"
 	dalservicetoken "media_agent/media_auth/biz/dal/repo/service_token"
 	dalteam "media_agent/media_auth/biz/dal/repo/team"
 	domainwecom "media_agent/media_auth/biz/domain/wecom"
@@ -27,6 +30,7 @@ import (
 	mcpoauthhandler "media_agent/media_auth/biz/handler/mcp_oauth"
 	oauthhandler "media_agent/media_auth/biz/handler/oauth"
 	oauthclienthandler "media_agent/media_auth/biz/handler/oauth_client"
+	organizationhandler "media_agent/media_auth/biz/handler/organization"
 	servicetokenhandler "media_agent/media_auth/biz/handler/service_token"
 	teamhandler "media_agent/media_auth/biz/handler/team"
 	teaminternalhandler "media_agent/media_auth/biz/handler/team_internal"
@@ -38,6 +42,7 @@ import (
 	identityservice "media_agent/media_auth/biz/service/identity"
 	mcpoauthservice "media_agent/media_auth/biz/service/mcp_oauth"
 	oauthservice "media_agent/media_auth/biz/service/oauth"
+	organizationservice "media_agent/media_auth/biz/service/organization"
 	servicetokenservice "media_agent/media_auth/biz/service/service_token"
 	teamservice "media_agent/media_auth/biz/service/team"
 	tokenservice "media_agent/media_auth/biz/service/token"
@@ -102,9 +107,12 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	servicetokenhandler.ServiceTokenSvc = stSvc
 	authSvc.SetPlatformTokenEnsurer(stSvc)
 
-	// team domain：repo + service（持 TxRunner）+ handler 回填。
+	organizationRepo := dalorganization.NewRepo(db)
+	organizationhandler.Svc = organizationservice.NewService(organizationRepo)
+
+	// team domain：企业事实由 organization repo 提供，不复制成员关系。
 	teamRepo := dalteam.NewRepo(db)
-	teamSvc := teamservice.NewService(teamRepo, txRunner)
+	teamSvc := teamservice.NewService(teamRepo, txRunner, organizationRepo)
 	teamhandler.TeamSvc = teamSvc
 	teaminternalhandler.TeamSvc = teamSvc // internal /internal/teams:byUser 复用 team service
 
@@ -114,6 +122,10 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 
 	// 重新装配 session middleware（支持 cookie JWT + Bearer service token）。
 	SessionMiddleware = middleware.SessionWithToken(signer, tokenSvc)
+	if jwksURL := os.Getenv("INTERNAL_JWKS_URL"); jwksURL != "" {
+		verifier := internaljwt.NewVerifier(jwksURL, os.Getenv("INTERNAL_JWT_ISSUER"), "internal-api", nil)
+		SessionMiddleware = middleware.SessionWithInternalJWT(signer, tokenSvc, userRepo, verifier, os.Getenv("ORY_KRATOS_PUBLIC_URL"))
+	}
 
 	// oauth domain：repo + service（持 signer + introspect client + TTL）+ handler 回填。
 	oauthRepo := daloauth.NewRepo(db)

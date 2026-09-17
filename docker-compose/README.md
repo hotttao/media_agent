@@ -44,5 +44,18 @@ Decision API 仅在 `media-auth` Docker 网络内开放。
 - 密码：`Media-agent-2026`
 - 覆盖变量：`ORY_DEV_USER_EMAIL`、`ORY_DEV_USER_PASSWORD`
 
-当前业务 API 仍保留 `media_auth` 兼容路由。切换 Oathkeeper enforce 前，必须先完成
-业务主体适配和 Keto 投影；不能仅靠网关开关直接替换，以免现有会话全部失效。
+Traefik 对 `/api/auth/me`、`/api/v1/*`、`/api/users`、`/api/teams` 和
+`/api/organizations` 使用 Oathkeeper ForwardAuth。Oathkeeper 校验 Kratos Session 后
+签发 5 分钟 RS256 Internal JWT；业务服务从 `/.well-known/jwks.json` 获取公钥并验证
+issuer/audience，再把 Kratos Identity 映射为 `media_auth.users.id`。本地启动业务服务需设置：
+
+```bash
+ORY_KRATOS_PUBLIC_URL=http://192.168.2.41:18080
+INTERNAL_JWKS_URL=http://192.168.2.41:18080/.well-known/jwks.json
+INTERNAL_JWT_ISSUER=http://oathkeeper:4456/
+MEDIA_AUTH_INTERNAL_TOKEN=dev-media-auth-internal-token
+```
+
+`auth/oathkeeper/id_token.jwks.json` 只用于本地开发，包含私钥；生产部署必须改用
+Secret/Vault 挂载并轮换，业务容器只能访问 Oathkeeper 发布的公钥。Keto 投影和按 route
+权限 enforce 仍未完成，当前 Oathkeeper 只执行认证，不替代业务授权检查。

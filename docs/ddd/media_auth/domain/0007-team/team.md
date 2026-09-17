@@ -33,7 +33,7 @@ Team Domain 维护 Organization 内部门、部门成员关系、部门有效功
 
 | 能力 | 说明 | 对外接口/函数 |
 |:---|:---|:---|
-| 创建 Team | 企业管理员在指定 Organization 内创建部门 | 待 IDL 调整 |
+| 创建 Team | 企业管理员在指定 Organization 内创建部门 | `CreateTeam` `POST /api/teams`（请求必须含 `organization_id`） |
 | 列出我所在的 team | 按当前 user 查所有 membership，含 my_role / member_count | `ListMyTeams` `GET /api/teams` |
 | 查看 team 详情 | Team 成员或 Organization admin 可读 | `GetTeam` `GET /api/teams/{id}` |
 | 修改 team | Organization admin 或 Team admin 修改 name/description | `UpdateTeam` `PATCH /api/teams/{id}` |

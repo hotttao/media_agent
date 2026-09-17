@@ -69,7 +69,7 @@ service TeamService {
 
 message ListMyTeamsRequest  {}
 message ListMyTeamsResponse { repeated ApiTeam teams = 1; }
-message CreateTeamRequest  { string name = 1; optional string description = 2; }
+message CreateTeamRequest  { string name = 1; optional string description = 2; string organization_id = 3; }
 message GetTeamRequest     { string id = 1 [(api.path) = "id"]; }
 message UpdateTeamRequest  { string id = 1 [(api.path) = "id"]; optional string name = 2; optional string description = 3; }
 message DeleteTeamRequest  { string id = 1 [(api.path) = "id"]; }
@@ -99,6 +99,9 @@ message ApiTeam {
   string updated_at = 6;
   string my_role = 7;       // admin | member
   int32 member_count = 8;
+  string organization_id = 9;
+  string entitlement_mode = 10; // inherit | restricted
+  string status = 11;           // active | decommissioning | decommissioned
 }
 message ApiTeamMember {
   string user_id = 1;
