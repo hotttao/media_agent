@@ -21,7 +21,7 @@ import "./index.css";
 configureApi({
   onUnauthorized: () => {
     if (window.location.pathname !== "/login") {
-      window.location.href = `/api/v1/auth/login?next=${encodeURIComponent(window.location.pathname)}`;
+      window.location.href = `/api/auth/login?next=${encodeURIComponent(window.location.pathname)}`;
     }
   },
 });

@@ -10,6 +10,13 @@ export interface CurrentUser {
   logout: () => Promise<void>;
 }
 
+export interface ShellContext {
+  organization: { id: string; name: string };
+  team: { id: string; name: string };
+  workspace: { id: string; name: string };
+  capabilities: string[];
+}
+
 /**
  * Unified host-surface for app components. Apps depend only on this interface;
  * standalone and plugin provide different implementations (see ./standalone
@@ -29,4 +36,6 @@ export interface HostShim {
     defaultFn: () => T,
   ) => [T, (next: T | ((prev: T) => T)) => void];
   useCurrentUser: () => CurrentUser;
+  /** Current company/department/workspace scope supplied by the host shell. */
+  useShellContext: () => ShellContext;
 }

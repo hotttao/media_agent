@@ -6,6 +6,14 @@ import {
   useInstanceState,
 } from "@/foundation/stores/instance-state-store";
 import type { HostShim } from "./types";
+import type { ShellContext } from "./types";
+
+const standaloneContext: ShellContext = {
+  organization: { id: "local-org", name: "Local Organization" },
+  team: { id: "default-team", name: "Default Team" },
+  workspace: { id: "standalone", name: "Standalone Workspace" },
+  capabilities: ["materials.read", "materials.write", "workflow.read", "workflow.write"],
+};
 
 /**
  * Standalone implementation: uses the local AppWindow's header slot, the
@@ -18,4 +26,5 @@ export const standaloneShim: HostShim = {
   useInstancePersistentState,
   useInstanceState,
   useCurrentUser: useAuth,
+  useShellContext: () => standaloneContext,
 };

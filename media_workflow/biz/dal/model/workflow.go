@@ -31,6 +31,8 @@ type WorkflowStep struct {
 	StepOrder       int       `gorm:"column:step_order;not null"`
 	TemplateID      string    `gorm:"column:template_id;not null"`
 	TemplateVersion int       `gorm:"column:template_version;not null"`
+	ApprovalPolicy  string    `gorm:"column:approval_policy;not null;default:when_multiple_candidates"`
+	ReusePolicy     string    `gorm:"column:reuse_policy;not null;default:reuse_if_available"`
 	CreatedAt       time.Time `gorm:"column:created_at;not null"`
 }
 

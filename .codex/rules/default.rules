@@ -19,13 +19,6 @@ prefix_rule(
     justification = "list process"
 )
 
-// 放行 go：go test / go build / go run
-prefix_rule(
-    pattern = ["go"],
-    decision = "allow",
-    justification = "golang toolchain"
-)
-
 // --------------------------
 // 高危命令保持prompt（弹出确认）
 prefix_rule(pattern = ["rm"], decision = "prompt")

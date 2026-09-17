@@ -7,7 +7,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Trash2 } from "lucide-react";
 
 export function MaterialsList({ onSelect }: { onSelect: (id: string) => void }) {
-  const { data, isLoading } = useMaterialsList();
+  const { data, isLoading, isError, error } = useMaterialsList();
   const deleteMaterial = useDeleteMaterial();
 
   if (isLoading) {
@@ -16,6 +16,12 @@ export function MaterialsList({ onSelect }: { onSelect: (id: string) => void }) 
         <Spinner className="h-5 w-5" />
       </div>
     );
+  }
+
+  if (isError) {
+    return <div className="flex flex-1 items-center justify-center p-4 text-sm text-destructive">
+      Unable to load materials: {error instanceof Error ? error.message : "request failed"}
+    </div>;
   }
 
   const items = data?.items ?? [];

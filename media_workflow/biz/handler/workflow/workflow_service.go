@@ -196,7 +196,14 @@ func stepsFromPB(in []*pb.WorkflowStep) []domain.Step {
 	out := make([]domain.Step, 0, len(in))
 	for _, s := range in {
 		st := domain.Step{Key: s.GetKey(), Name: s.GetName(), Order: int(s.GetStepOrder()),
-			TemplateID: s.GetTemplateId(), TemplateVersion: int(s.GetTemplateVersion())}
+			TemplateID: s.GetTemplateId(), TemplateVersion: int(s.GetTemplateVersion()),
+			ApprovalPolicy: domain.ApprovalPolicy(s.GetApprovalPolicy()), ReusePolicy: domain.ReusePolicy(s.GetReusePolicy())}
+		if st.ApprovalPolicy == "" {
+			st.ApprovalPolicy = domain.ApprovalWhenMultipleCandidates
+		}
+		if st.ReusePolicy == "" {
+			st.ReusePolicy = domain.ReuseIfAvailable
+		}
 		// map 不保证顺序，按 key 排序保证 display_order 稳定
 		keys := make([]string, 0, len(s.GetInputBindings()))
 		for k := range s.GetInputBindings() {
@@ -227,7 +234,8 @@ func stepsToPB(in []domain.Step) []*pb.WorkflowStep {
 		out[i] = &pb.WorkflowStep{
 			Key: s.Key, Name: s.Name, StepOrder: int32(s.Order),
 			TemplateId: s.TemplateID, TemplateVersion: int32(s.TemplateVersion),
-			InputBindings: bindings,
+			InputBindings:  bindings,
+			ApprovalPolicy: string(s.ApprovalPolicy), ReusePolicy: string(s.ReusePolicy),
 		}
 	}
 	return out

@@ -37,7 +37,8 @@ func (r *JobRepo) Save(ctx context.Context, j *domain.Job, stepRuns []*domain.St
 		srRow := &model.StepRun{
 			ID: sr.ID, JobID: j.ID, StepKey: sr.StepKey, StepOrder: sr.StepOrder,
 			TemplateID: sr.TemplateID, TemplateVersion: sr.TemplateVersion,
-			Status: string(sr.Status), ResolvedInputs: datatypes.JSON("{}"),
+			ApprovalPolicy: string(sr.ApprovalPolicy),
+			Status:         string(sr.Status), ResolvedInputs: datatypes.JSON("{}"),
 			Candidates: datatypes.JSON("[]"),
 			Platform:   sr.Platform, GenWay: sr.GenWay, GenType: sr.GenType,
 			AssetKind: sr.AssetKind, NeedsConfirm: sr.NeedsConfirm, CandidateCount: sr.CandidateCount,
@@ -292,6 +293,7 @@ func stepRunToDomain(row *model.StepRun) *domain.StepRun {
 		// 反范式
 		Platform: row.Platform, GenWay: row.GenWay, GenType: row.GenType,
 		AssetKind: row.AssetKind, NeedsConfirm: row.NeedsConfirm, CandidateCount: row.CandidateCount,
+		ApprovalPolicy: domain.ApprovalPolicy(row.ApprovalPolicy),
 	}
 	_ = json.Unmarshal(row.ResolvedInputs, &sr.ResolvedInputs)
 	_ = json.Unmarshal(row.Candidates, &sr.Candidates)

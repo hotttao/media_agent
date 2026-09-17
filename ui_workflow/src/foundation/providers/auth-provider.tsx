@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback((next?: string) => {
     const q = next ? `?next=${encodeURIComponent(next)}` : "";
-    window.location.href = `/api/v1/auth/login${q}`;
+    window.location.href = `/api/auth/login${q}`;
   }, []);
 
   const logout = useCallback(async () => {

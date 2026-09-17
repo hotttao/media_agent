@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 
 export function WorkflowList({ onSelect }: { onSelect: (id: string) => void }) {
-  const { data, isLoading } = useWorkflowsList();
+  const { data, isLoading, isError, error } = useWorkflowsList();
   const archiveWorkflow = useArchiveWorkflow();
 
   if (isLoading) {
@@ -14,6 +14,12 @@ export function WorkflowList({ onSelect }: { onSelect: (id: string) => void }) {
         <Spinner className="h-5 w-5" />
       </div>
     );
+  }
+
+  if (isError) {
+    return <div className="flex flex-1 items-center justify-center p-4 text-sm text-destructive">
+      Unable to load workflows: {error instanceof Error ? error.message : "request failed"}
+    </div>;
   }
 
   const items = data?.items ?? [];

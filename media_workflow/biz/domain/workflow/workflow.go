@@ -25,6 +25,20 @@ const (
 	PermissionEditor Permission = "editor"
 )
 
+type ApprovalPolicy string
+
+const (
+	ApprovalWhenMultipleCandidates ApprovalPolicy = "when_multiple_candidates"
+	ApprovalAlways                 ApprovalPolicy = "always"
+)
+
+type ReusePolicy string
+
+const (
+	ReuseIfAvailable ReusePolicy = "reuse_if_available"
+	ForceNew         ReusePolicy = "force_new"
+)
+
 // BindingSource step 输入来源。
 type BindingSource string
 
@@ -50,6 +64,8 @@ type Step struct {
 	Order           int
 	TemplateID      string
 	TemplateVersion int
+	ApprovalPolicy  ApprovalPolicy
+	ReusePolicy     ReusePolicy
 	Bindings        []Binding
 }
 

@@ -70,11 +70,30 @@ class ApiClient {
   // ── Auth (shared by materials/workflow auth middleware) ──────────────
 
   async getMe(): Promise<User> {
-    return this.request<User>("/auth/me");
+    return this.requestAuth<User>("/me");
   }
 
   async logout(): Promise<void> {
-    await this.request<LogoutResponse>("/auth/logout", { method: "POST" });
+    await this.requestAuth<LogoutResponse>("/logout", { method: "POST" });
+  }
+
+  /** Auth endpoints are mounted at /api/auth, outside the versioned resource API. */
+  private async requestAuth<T>(path: string, options?: RequestInit): Promise<T> {
+    const response = await fetch(`/api/auth${path}`, {
+      ...options,
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      credentials: "include",
+    });
+    if (response.status === 401) {
+      onUnauthorized();
+      throw new ApiClientError("Unauthorized", 401, {});
+    }
+    if (!response.ok) {
+      const body: Record<string, unknown> = await response.json().catch(() => ({ error: "Request failed" }));
+      throw new ApiClientError((typeof body.error === "string" && body.error) || `Request failed: ${response.status}`, response.status, body);
+    }
+    if (response.status === 204 || response.headers.get("Content-Length") === "0") return undefined as T;
+    return response.json();
   }
 }
 

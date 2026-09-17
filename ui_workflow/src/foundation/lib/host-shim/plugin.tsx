@@ -2,7 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/foundation/lib/api-client";
 import { getTos } from "@/foundation/lib/plugin-host";
 import type { User } from "@/foundation/types/auth";
-import type { HostShim } from "./types";
+import type { HostShim, ShellContext } from "./types";
+
+const pluginFallbackContext: ShellContext = {
+  organization: { id: "host-org", name: "Organization" },
+  team: { id: "host-team", name: "Team" },
+  workspace: { id: "host-workspace", name: "Workspace" },
+  capabilities: ["materials.read", "workflow.read"],
+};
 
 /**
  * Plugin implementation: forwards nap-specific hooks to window.tos
@@ -22,7 +29,7 @@ function useCurrentUser() {
     user: data ?? null,
     isLoading,
     login: () => {
-      window.location.href = "/api/v1/auth/login";
+      window.location.href = "/api/auth/login";
     },
     logout: async () => {
       await api.logout();
@@ -43,4 +50,5 @@ export const pluginShim: HostShim = {
   useInstanceState: (instanceId, key, defaultFn) =>
     getTos().workspace.useInstanceState(instanceId, key, defaultFn),
   useCurrentUser,
+  useShellContext: () => pluginFallbackContext,
 };

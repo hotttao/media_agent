@@ -597,8 +597,8 @@ func TestAdvanceDAG_MultiLevelCascade(t *testing.T) {
 	}
 }
 
-// Complete 非 confirm 分支：selected_index 应落 primary candidate 的下标
-func TestComplete_NoConfirm_PersistsSelectedIndex(t *testing.T) {
+// Complete 多候选分支：必须先等待用户，再把选中的 candidate 落库。
+func TestComplete_MultipleCandidatesRequiresApproval(t *testing.T) {
 	svc, jobRepo, srRepo := newTestService(false)
 	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", Scope: "ai_clothing", WorkflowID: "wf1", Status: domain.JobRunning, SubmittedBy: "u1", Input: domain.JobInput{Materials: []domain.MaterialData{{Name: "scene", URL: "https://x.png"}}}}
 	_ = makeClaimedStepRun(srRepo, false)
@@ -613,11 +613,21 @@ func TestComplete_NoConfirm_PersistsSelectedIndex(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	updated, _ := srRepo.Get(context.Background(), "sr1")
+	if updated.Status != domain.SRNeedConfirm {
+		t.Errorf("status = %s, want need_confirm", updated.Status)
+	}
+	if updated.SelectedIndex != nil {
+		t.Errorf("selected_index = %v, want nil before approval", updated.SelectedIndex)
+	}
+	if _, err := svc.Confirm(context.Background(), "sr1", 1); err != nil {
+		t.Fatalf("confirm candidate: %v", err)
+	}
+	updated, _ = srRepo.Get(context.Background(), "sr1")
 	if updated.Status != domain.SRSucceeded {
-		t.Errorf("status = %s, want succeeded", updated.Status)
+		t.Errorf("status after confirm = %s, want succeeded", updated.Status)
 	}
 	if updated.SelectedIndex == nil || *updated.SelectedIndex != 1 {
-		t.Errorf("selected_index = %v, want 1 (primary candidate)", updated.SelectedIndex)
+		t.Errorf("selected_index = %v, want 1 after approval", updated.SelectedIndex)
 	}
 }
 

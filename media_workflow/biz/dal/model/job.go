@@ -33,6 +33,7 @@ type StepRun struct {
 	StepOrder       int            `gorm:"column:step_order;not null"`
 	TemplateID      string         `gorm:"column:template_id;not null"`
 	TemplateVersion int            `gorm:"column:template_version;not null"`
+	ApprovalPolicy  string         `gorm:"column:approval_policy;not null;default:when_multiple_candidates"`
 	Status          string         `gorm:"column:status;not null;default:blocked"`
 	RetryCount      int            `gorm:"column:retry_count;not null;default:0"`
 	ResolvedInputs  datatypes.JSON `gorm:"column:resolved_inputs;type:jsonb;not null;default:{}"`

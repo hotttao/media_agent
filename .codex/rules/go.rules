@@ -1,0 +1,55 @@
+// 常用 Go 质量检查与构建命令。
+prefix_rule(
+    pattern = ["go", "test"],
+    decision = "allow",
+    justification = "run Go unit and integration tests"
+)
+
+prefix_rule(
+    pattern = ["go", "build"],
+    decision = "allow",
+    justification = "build Go services"
+)
+
+prefix_rule(
+    pattern = ["go", "vet"],
+    decision = "allow",
+    justification = "run Go static analysis"
+)
+
+prefix_rule(
+    pattern = ["go", "fmt"],
+    decision = "allow",
+    justification = "format Go packages"
+)
+
+prefix_rule(
+    pattern = ["gofmt"],
+    decision = "allow",
+    justification = "format Go source files"
+)
+
+prefix_rule(
+    pattern = ["go", "list"],
+    decision = "allow",
+    justification = "inspect Go packages and modules"
+)
+
+prefix_rule(
+    pattern = ["go", "mod", "tidy"],
+    decision = "allow",
+    justification = "synchronize Go module dependencies"
+)
+
+prefix_rule(
+    pattern = ["go", "mod", "download"],
+    decision = "allow",
+    justification = "download declared Go dependencies"
+)
+
+// go run 允许执行项目内开发工具；不放行任意 shell/script 前缀。
+prefix_rule(
+    pattern = ["go", "run"],
+    decision = "allow",
+    justification = "run repository Go development tools"
+)

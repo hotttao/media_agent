@@ -29,6 +29,27 @@ const (
 	SRSkipped     StepRunStatus = "skipped"
 )
 
+// ApprovalPolicy controls whether a completed generation must wait for a
+// user's candidate decision. Multiple candidates always require approval;
+// Always additionally requires approval for a single candidate.
+type ApprovalPolicy string
+
+const (
+	ApprovalWhenMultipleCandidates ApprovalPolicy = "when_multiple_candidates"
+	ApprovalAlways                 ApprovalPolicy = "always"
+)
+
+func (p ApprovalPolicy) Valid() bool {
+	return p == ApprovalWhenMultipleCandidates || p == ApprovalAlways
+}
+
+func NeedsApproval(policy ApprovalPolicy, candidateCount int) bool {
+	if candidateCount <= 0 {
+		return false
+	}
+	return candidateCount > 1 || policy == ApprovalAlways
+}
+
 // JobInput bundle（自包含，存 jobs.input jsonb）。
 type JobInput struct {
 	Product   *ProductData   `json:"product,omitempty"`
@@ -48,11 +69,11 @@ type AssetData struct {
 	Content string `json:"content"`
 }
 type ProductData struct {
-	ID              string `json:"id"`
-	Name            string `json:"name"`
-	TargetAudience  string `json:"target_audience"`
-	ProductDetails  string `json:"product_details"`
-	DisplayActions  string `json:"display_actions"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	TargetAudience string `json:"target_audience"`
+	ProductDetails string `json:"product_details"`
+	DisplayActions string `json:"display_actions"`
 }
 type VirtualIpData struct {
 	ID           string `json:"id"`
@@ -99,6 +120,7 @@ type StepRun struct {
 	StepOrder       int
 	TemplateID      string
 	TemplateVersion int
+	ApprovalPolicy  ApprovalPolicy
 	Status          StepRunStatus
 	RetryCount      int
 	ResolvedInputs  map[string]any

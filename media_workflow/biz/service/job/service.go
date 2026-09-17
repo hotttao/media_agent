@@ -92,7 +92,8 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 			ID: "sr_" + uuid.NewString(), JobID: jobID,
 			StepKey: step.Key, StepOrder: step.Order,
 			TemplateID: step.TemplateID, TemplateVersion: step.TemplateVersion,
-			Status: status, ResolvedInputs: map[string]any{}, Candidates: []domain.Candidate{},
+			ApprovalPolicy: approvalPolicyFromWorkflow(step.ApprovalPolicy),
+			Status:         status, ResolvedInputs: map[string]any{}, Candidates: []domain.Candidate{},
 			Platform: tpl.Platform, GenWay: tpl.GenWay, GenType: tpl.GenType,
 			AssetKind: tpl.OutputAssetKind, NeedsConfirm: tpl.NeedsConfirm, CandidateCount: tpl.CandidateCount,
 		}
@@ -341,7 +342,8 @@ func (s *Service) Complete(ctx context.Context, stepRunID string, candidates []d
 		return nil, errors.New("no candidates provided")
 	}
 	_ = s.stepRunRepo.UpdateCandidates(ctx, stepRunID, candidates)
-	if sr.NeedsConfirm {
+	needsApproval := domain.NeedsApproval(sr.ApprovalPolicy, len(candidates))
+	if sr.NeedsConfirm || needsApproval {
 		// → NEED_CONFIRM
 		_ = s.stepRunRepo.UpdateStatus(ctx, stepRunID, domain.SRNeedConfirm, nil)
 		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobNeedConfirm, "")
@@ -361,6 +363,13 @@ func (s *Service) Complete(ctx context.Context, stepRunID string, candidates []d
 		}
 	}
 	return s.stepRunRepo.Get(ctx, stepRunID)
+}
+
+func approvalPolicyFromWorkflow(policy wfdomain.ApprovalPolicy) domain.ApprovalPolicy {
+	if policy == wfdomain.ApprovalAlways {
+		return domain.ApprovalAlways
+	}
+	return domain.ApprovalWhenMultipleCandidates
 }
 
 // —— ConfirmStepRun ——

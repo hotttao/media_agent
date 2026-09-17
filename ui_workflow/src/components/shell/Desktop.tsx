@@ -11,6 +11,7 @@ import { useStandaloneApps } from "@/components/shell/useStandaloneApps";
 import { Spinner } from "@/components/ui/spinner";
 import { STANDALONE_WORKSPACE_ID } from "@/foundation/lib/constants";
 import { SlotProvider } from "@/foundation/providers/slot-provider";
+import { hostShim } from "@/foundation/lib/host-shim";
 import {
   useWorkspaceProfileLoaded,
   useWorkspaceProfileStore,
@@ -18,6 +19,7 @@ import {
 import { useEffect } from "react";
 
 export function Desktop() {
+  const shell = hostShim.useShellContext();
   const apps = useStandaloneApps();
   const ensureLoaded = useWorkspaceProfileStore((s) => s.ensureLoaded);
   const loaded = useWorkspaceProfileLoaded(STANDALONE_WORKSPACE_ID);
@@ -43,7 +45,12 @@ export function Desktop() {
     >
       <div className="flex h-screen flex-col bg-background text-foreground">
         <header className="border-b border-foreground/[0.06] px-4 py-2 text-sm font-medium">
-          media_workflow
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-semibold">Media Workflow</span>
+            <span className="text-xs text-muted-foreground">
+              {shell.organization.name} / {shell.team.name} / {shell.workspace.name}
+            </span>
+          </div>
         </header>
         <div className="min-h-0 flex-1">
           <OneColumnLayout />

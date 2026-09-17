@@ -16,6 +16,8 @@ export interface WorkflowStep {
   template_id: string;
   template_version?: number;
   bindings: StepBinding[];
+  approval_policy?: "when_multiple_candidates" | "always";
+  reuse_policy?: "reuse_if_available" | "force_new";
 }
 
 export interface WorkflowInput {

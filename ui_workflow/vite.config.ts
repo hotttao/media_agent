@@ -97,7 +97,7 @@ const standaloneConfig: UserConfig = {
         target: "http://localhost:8002",
         changeOrigin: true,
       },
-      "/api/v1/auth": { target: "http://localhost:8002", changeOrigin: true },
+      "/api/auth": { target: "http://localhost:8002", changeOrigin: true },
     },
   },
 };
