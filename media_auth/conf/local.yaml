@@ -1,10 +1,10 @@
 # local.yaml — 本地测试配置
 #
 # 语义：env=local = 「本机 + docker-compose 全栈」启动。
-# 预期配套组件已起：PostgreSQL、Consul agent、OTel collector、Prometheus。
+# 预期配套组件已起：PostgreSQL；可观测组件仅在显式联调时启动。
 # YAML 是 source of truth，本地 .env 只放 APP_ENV 与少量覆盖变量。
 #
-# 与 dev.yaml 的差别：local 全启用（开发与 e2e 都方便），dev 只开可观测 + 真实基础设施。
+# 与 dev.yaml 的差别：local 连接本机基础设施；可观测默认关闭。
 #
 # 字段约定（harness/contributing/config.md）：
 #   - snake_case
@@ -54,15 +54,15 @@ consul_discovery:
   scheme: http
   refresh_interval_seconds: 5
 
-# ---- 可观测（全开） ----
+# ---- 可观测（默认关闭） ----
 otel:
-  enabled: true
+  enabled: ${OTEL_ENABLED:-false}
   export_endpoint: ${OTEL_EXPORT_ENDPOINT:-localhost:4317}
   insecure: true
   sample_ratio: 1.0
 
 prometheus:
-  enabled: true
+  enabled: ${PROMETHEUS_ENABLED:-false}
   address: ${PROMETHEUS_ADDR:-:9092}
   path: /metrics
 

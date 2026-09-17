@@ -1,132 +1,9 @@
-# docker-compose.yml — 可观测性后端栈（Trace + Metrics + Log + 可视化）
+# 基础设施（默认只包含业务数据库，不启动认证、网关或可观测性服务）。
 #
-# 拓扑（对齐 docs/spec/opentelemetry.md + docs/plan/observability.md）：
-#   OTel Trace  ─OTLP gRPC─→ otel-collector ─→ jaeger
-#   Metrics     ← prometheus scrape host:9091/metrics (monitor-prometheus pull)
-#   Zap 日志    ─promtail─→ loki
-#   统一可视化：grafana（Prometheus + Loki + Jaeger 三数据源）
-#
-# 数据目录：每个 infra 服务一个目录，统一在 /data/<service>/（基础服务的数据和日志各落自己目录）。
-# app 日志：../media_logs/<app>/（host 侧），promtail 挂载只读采集。
-#
-# 配置文件：每个服务一个子目录（otel-collector/ jaeger/ prometheus/ loki/ grafana/ promtail/），
-# 各自存放该服务的配置，根目录只保留 docker-compose.yml 与 prepare.sh。
-#
-# 启动前先执行 ./prepare.sh 创建 /data/<service> 目录并设置权限。
-# 用法：
-#   cd docker-compose && ./prepare.sh && docker compose up -d
-#   # 验证栈：docker compose ps
+# 编码/单元测试：不需要启动 Compose。
+# 本地联调：docker compose -f docker-compose.yml up -d postgres
 
 services:
-  # 1. OTel Collector — 收敛 trace，转发 jaeger（metrics 走 app 直暴 /metrics，不经 collector）
-  otel-collector:
-    profiles: [infra]
-    image: otel/opentelemetry-collector-contrib:0.103.0
-    command: ["--config=/etc/otelcol/config.yaml"]
-    volumes:
-      - ./otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
-    ports:
-      - "4317:4317"   # OTLP gRPC（app 推 trace）
-      - "4318:4318"   # OTLP HTTP
-      - "8888:8888"   # collector 自身 metrics
-    depends_on:
-      - jaeger
-    restart: unless-stopped
-
-  # 2. Jaeger — 链路存储 + UI（接收 collector OTLP 推送）
-  #    无配置文件，行为由环境变量控制（见 jaeger/README.md）。
-  jaeger:
-    profiles: [infra]
-    image: jaegertracing/all-in-one:1.60
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
-      - SPAN_STORAGE_TYPE=badger
-      - BADGER_EPHEMERAL=false
-      - BADGER_DIRECTORY_VALUE=/badger/data
-      - BADGER_DIRECTORY_KEY=/badger/key
-    volumes:
-      - ${DATA_ROOT:-/data}/jaeger/badger:/badger
-    ports:
-      - "16686:16686" # Jaeger UI
-      - "4317"        # OTLP 接收（容器内，collector 经 docker 网络访问）
-    restart: unless-stopped
-
-  # 3. Prometheus — 拉取 app :9091/metrics + collector :8888
-  prometheus:
-    profiles: [infra]
-    image: prom/prometheus:v2.54.1
-    volumes:
-      - ./prometheus/config.yml:/etc/prometheus/prometheus.yml:ro
-      - ${DATA_ROOT:-/data}/prometheus:/prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=7d"
-    ports:
-      - "9090:9090"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-
-  # 4. Loki — 日志存储（接收 promtail 推送）
-  loki:
-    profiles: [infra]
-    image: grafana/loki:3.1.2
-    volumes:
-      - ./loki/config.yaml:/etc/loki/local-config.yaml:ro
-      - ${DATA_ROOT:-/data}/loki:/loki
-    command: -config.file=/etc/loki/local-config.yaml
-    ports:
-      - "3100:3100"
-    restart: unless-stopped
-
-  # 5. Grafana — 统一可视化（预置 Prometheus / Loki / Jaeger 数据源）
-  grafana:
-    profiles: [infra]
-    image: grafana/grafana:11.2.2
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ${DATA_ROOT:-/data}/grafana:/var/lib/grafana
-    ports:
-      - "3000:3000"
-    depends_on:
-      - prometheus
-      - loki
-      - jaeger
-    restart: unless-stopped
-
-  # 6. Promtail — 采集 ../media_logs/*/*.log 推送 Loki（Loki 官方 agent）
-  promtail:
-    profiles: [infra]
-    image: grafana/promtail:3.1.2
-    volumes:
-      - ./promtail/config.yaml:/etc/promtail/config.yaml:ro
-      - ../media_logs:/logs:ro
-    command: -config.file=/etc/promtail/config.yaml
-    depends_on:
-      - loki
-    restart: unless-stopped
-
-  # 7. Consul — 服务注册 / 发现 + KV 配置中心（local e2e 用）
-  #    media_example server 启动时把自身注册到此处；media-cli / 其他服务经它发现下游；
-  #    限流 / 熔断规则的运行期热更新也经此 KV 推送（consul_kv.enabled=true 时）。
-  #    dev 环境关闭 consul 注册（conf/dev.yaml），此服务可不启。
-  consul:
-    profiles: [infra]
-    image: hashicorp/consul:1.18
-    command: agent -dev -client=0.0.0.0
-    ports:
-      - "8500:8500"     # HTTP API + UI（注册 / 发现 / KV）
-      - "8600:8600/udp" # DNS
-    restart: unless-stopped
-
-  # 8. PostgreSQL — 数据库（media_auth + media_example 共用，各自独立 database）
-  #    默认库名 / 用户 / 密码 = media_auth；media_example 的 database 由其 migrate_on_start 创建。
-  #    端口 5432：若 host 已占可改端口映射。
   postgres:
     image: postgres:16-alpine
     environment:
@@ -143,31 +20,8 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    networks: [media-net]
 
-  # 9. Traefik - 入口网关（SSL 终止 / 路由 / 服务发现）
-  #    Docker label 驱动：各 media_ 服务在自己的 docker-compose.yml 里声明 Traefik label。
-  #    本服务只跑 Traefik 本体 + Docker provider，不手写路由配置（gateway.md §2.1）。
-  #    端口 80 = 业务入口；8080 = dashboard（dev only，prod 关 --api.insecure）。
-  traefik:
-    image: rancher/mirrored-library-traefik:3.7.4
-    command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=media-net"
-      - "--entrypoints.web.address=:80"
-      - "--api.dashboard=true"
-      - "--api.insecure=true"
-    ports:
-      - "80:80"
-      - "8080:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - media-net
-    restart: unless-stopped
-
-# media-net：所有 media_ 服务 + Traefik 共享的 Docker 网络。
-# 各服务在自己的 docker-compose.yml 里以 external: true 引用此网络。
 networks:
   media-net:
     name: media-net

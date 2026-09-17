@@ -51,15 +51,15 @@ consul_discovery:
   scheme: http
   refresh_interval_seconds: 5
 
-# ---- 可观测（dev 保留） ----
+# ---- 可观测（默认关闭；联调时显式 OTEL_ENABLED/PROMETHEUS_ENABLED=true） ----
 otel:
-  enabled: true
+  enabled: ${OTEL_ENABLED:-false}
   export_endpoint: ${OTEL_EXPORT_ENDPOINT:-otel-collector:4317}
   insecure: true
   sample_ratio: 1.0
 
 prometheus:
-  enabled: true
+  enabled: ${PROMETHEUS_ENABLED:-false}
   address: ${PROMETHEUS_ADDR:-:9092}
   path: /metrics
 

@@ -1,0 +1,17 @@
+# 统一业务网关（显式启动）。
+# 配置集中在 traefik/；Compose 不使用业务容器 labels。
+# 默认监听 192.168.2.41:18080（8080 已被 Conductor 占用）。
+
+services:
+  media_gateway:
+    image: traefik:v3.1
+    container_name: media-agent-gateway
+    command: --configFile=/etc/traefik/traefik.yml
+    ports:
+      - "192.168.2.41:18080:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    restart: unless-stopped

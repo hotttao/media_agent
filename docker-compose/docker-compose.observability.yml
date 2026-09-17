@@ -1,0 +1,92 @@
+# 可观测性（显式启用：--profile observability）。
+# 默认不启动，编码和测试不依赖此文件。
+
+services:
+  otel-collector:
+    profiles: [observability]
+    image: otel/opentelemetry-collector-contrib:0.103.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8888:8888"
+    depends_on: [jaeger]
+    restart: unless-stopped
+
+  jaeger:
+    profiles: [observability]
+    image: jaegertracing/all-in-one:1.60
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: badger
+      BADGER_EPHEMERAL: "false"
+      BADGER_DIRECTORY_VALUE: /badger/data
+      BADGER_DIRECTORY_KEY: /badger/key
+    volumes:
+      - ${DATA_ROOT:-/data}/jaeger/badger:/badger
+    ports:
+      - "16686:16686"
+      - "4317"
+    restart: unless-stopped
+
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./prometheus/config.yml:/etc/prometheus/prometheus.yml:ro
+      - ${DATA_ROOT:-/data}/prometheus:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+    ports:
+      - "9090:9090"
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    restart: unless-stopped
+
+  loki:
+    profiles: [observability]
+    image: grafana/loki:3.1.2
+    volumes:
+      - ./loki/config.yaml:/etc/loki/local-config.yaml:ro
+      - ${DATA_ROOT:-/data}/loki:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:11.2.2
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${DATA_ROOT:-/data}/grafana:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on: [prometheus, loki, jaeger]
+    restart: unless-stopped
+
+  promtail:
+    profiles: [observability]
+    image: grafana/promtail:3.1.2
+    volumes:
+      - ./promtail/config.yaml:/etc/promtail/config.yaml:ro
+      - ../media_logs:/logs:ro
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on: [loki]
+    restart: unless-stopped
+
+  consul:
+    profiles: [observability]
+    image: hashicorp/consul:1.18
+    command: agent -dev -client=0.0.0.0
+    ports:
+      - "8500:8500"
+      - "8600:8600/udp"
+    restart: unless-stopped

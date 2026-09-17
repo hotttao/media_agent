@@ -1,0 +1,9 @@
+# 认证与鉴权分组说明。
+#
+# Ory Kratos/Hydra/Keto/Oathkeeper 的权威部署位于独立的 ory-compose / auth
+# deployment；本文件作为 media_agent 的组合入口占位，避免把认证服务混入
+# 基础设施和可观测性 Compose。接入网关的路径统一维护在 traefik/dynamic.yml。
+#
+# 启动 Ory 前需显式进入权威目录执行其 compose 命令；本仓库不会隐式拉起认证服务。
+
+services: {}

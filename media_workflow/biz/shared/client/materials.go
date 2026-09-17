@@ -8,6 +8,10 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+
 	"media_agent/media_workflow/biz/shared"
 )
 
@@ -16,6 +20,17 @@ import (
 type MaterialsClient struct {
 	baseURL string
 	http    *http.Client
+}
+
+var materialsTracer = otel.Tracer("media-workflow/media-materials-client")
+
+// startDownstreamRequest creates a child span and injects W3C trace context so
+// the downstream service can join the same trace. With OTel disabled this is a
+// no-op tracer, while the propagation contract remains safe and deterministic.
+func startDownstreamRequest(ctx context.Context, req *http.Request, operation string) (context.Context, trace.Span) {
+	ctx, span := materialsTracer.Start(ctx, operation)
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+	return ctx, span
 }
 
 func NewMaterialsClient(baseURL string) *MaterialsClient {
@@ -55,6 +70,9 @@ func (c *MaterialsClient) BatchGet(ctx context.Context, names []string) (map[str
 		return nil, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	ctx, span := startDownstreamRequest(ctx, req, "media_materials.BatchGetAssetKind")
+	defer span.End()
+	req = req.WithContext(ctx)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("call materials BatchGetAssetKind: %w", err)
@@ -104,6 +122,9 @@ func (c *MaterialsClient) UpsertGeneratedAsset(ctx context.Context, req *UpsertG
 		return "", err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	ctx, span := startDownstreamRequest(ctx, httpReq, "media_materials.UpsertGeneratedAsset")
+	defer span.End()
+	httpReq = httpReq.WithContext(ctx)
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
 		return "", fmt.Errorf("call materials UpsertGeneratedAsset: %w", err)

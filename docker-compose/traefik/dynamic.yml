@@ -1,0 +1,40 @@
+http:
+  routers:
+    auth:
+      rule: "PathPrefix(`/api/auth`)"
+      priority: 100
+      service: workflow
+    oauth:
+      rule: "PathPrefix(`/api/oauth`) || PathPrefix(`/api/users`) || PathPrefix(`/api/teams`)"
+      priority: 100
+      service: auth
+    materials:
+      rule: "PathPrefix(`/api/materials`) || PathPrefix(`/api/products`) || PathPrefix(`/api/asset-kinds`) || PathPrefix(`/api/generated-assets`) || PathPrefix(`/api/virtual-ips`)"
+      priority: 50
+      service: materials
+    workflow:
+      rule: "PathPrefix(`/api/workflows`) || PathPrefix(`/api/templates`) || PathPrefix(`/api/jobs`) || PathPrefix(`/api/step-runs`)"
+      priority: 50
+      service: workflow
+    frontend:
+      rule: "PathPrefix(`/`)"
+      priority: 1
+      service: frontend
+
+  services:
+    auth:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8001"
+    materials:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8003"
+    workflow:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8002"
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:5173"

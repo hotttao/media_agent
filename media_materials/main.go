@@ -110,6 +110,9 @@ func main() {
 		addr = "127.0.0.1" + addr
 	}
 	serviceURL := "http://" + addr
+	if publicURL := os.Getenv("MW_PUBLIC_URL"); publicURL != "" {
+		serviceURL = strings.TrimRight(publicURL, "/")
+	}
 	authCfg := &auth.Config{
 		JWTSecret:         cfg.GetAuth().GetJwtSecret(),
 		CookieName:        "mw_token",

@@ -13,6 +13,7 @@ const analyze = process.env.ANALYZE === "true";
 //    are bundled (v7 vs host v6 not shareable; query/i18n use plugin-local
 //    Provider per §4.3 方案 C).
 const target = process.env.VITE_TARGET ?? "standalone";
+const gatewayTarget = process.env.VITE_GATEWAY_URL ?? "http://192.168.2.41:18080";
 
 const plugins = [
   react(),
@@ -64,40 +65,40 @@ const standaloneConfig: UserConfig = {
     proxy: {
       // media_materials (8003): materials resources CRUD
       "/api/v1/materials": {
-        target: "http://localhost:8003",
+        target: gatewayTarget,
         changeOrigin: true,
       },
       "/api/v1/products": {
-        target: "http://localhost:8003",
+        target: gatewayTarget,
         changeOrigin: true,
       },
       "/api/v1/virtual-ips": {
-        target: "http://localhost:8003",
+        target: gatewayTarget,
         changeOrigin: true,
       },
       "/api/v1/asset-kinds": {
-        target: "http://localhost:8003",
+        target: gatewayTarget,
         changeOrigin: true,
       },
       "/api/v1/generated-assets": {
-        target: "http://localhost:8003",
+        target: gatewayTarget,
         changeOrigin: true,
       },
       // media_workflow (8002): workflow/template/job + auth (OAuth via media_auth 8001)
       "/api/v1/workflows": {
-        target: "http://localhost:8002",
+        target: gatewayTarget,
         changeOrigin: true,
       },
       "/api/v1/templates": {
-        target: "http://localhost:8002",
+        target: gatewayTarget,
         changeOrigin: true,
       },
-      "/api/v1/jobs": { target: "http://localhost:8002", changeOrigin: true },
+      "/api/v1/jobs": { target: gatewayTarget, changeOrigin: true },
       "/api/v1/step-runs": {
-        target: "http://localhost:8002",
+        target: gatewayTarget,
         changeOrigin: true,
       },
-      "/api/auth": { target: "http://localhost:8002", changeOrigin: true },
+      "/api/auth": { target: gatewayTarget, changeOrigin: true },
     },
   },
 };

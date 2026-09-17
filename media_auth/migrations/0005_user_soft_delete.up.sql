@@ -7,8 +7,19 @@ ALTER TABLE media_auth.users
     ADD COLUMN IF NOT EXISTS deleted_at timestamptz,
     ADD COLUMN IF NOT EXISTS deleted_by text;
 
-ALTER TABLE media_auth.users
-    ADD CONSTRAINT users_status_check CHECK (status IN ('active', 'disabled', 'deleted'));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'users_status_check'
+          AND conrelid = 'media_auth.users'::regclass
+    ) THEN
+        ALTER TABLE media_auth.users
+            ADD CONSTRAINT users_status_check CHECK (status IN ('active', 'disabled', 'deleted'));
+    END IF;
+END
+$$;
 
 CREATE INDEX IF NOT EXISTS users_active_admin_idx
     ON media_auth.users (role, status) WHERE role = 'admin' AND status = 'active';

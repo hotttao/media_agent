@@ -129,12 +129,16 @@ func main() {
 	if strings.HasPrefix(wfAddr, ":") {
 		wfAddr = "127.0.0.1" + wfAddr
 	}
+	serviceURL := os.Getenv("MW_PUBLIC_URL")
+	if serviceURL == "" {
+		serviceURL = "http://" + wfAddr
+	}
 	authCfg := &auth.Config{
 		JWTSecret:         cfg.GetAuth().GetJwtSecret(),
 		CookieName:        "mw_token",
 		JWTExpiresSec:     int(cfg.GetAuth().GetJwtExpiresInSeconds()),
 		MediaAuthURL:      mediaAuthURL,
-		ServiceURL:        "http://" + wfAddr,
+		ServiceURL:        strings.TrimRight(serviceURL, "/"),
 		OAuthClientID:     cfg.GetApp().GetName(),
 		OAuthClientSecret: cfg.GetAuth().GetOauthClientSecret(),
 		DevUserID:         os.Getenv("MW_DEV_USER_ID"),
