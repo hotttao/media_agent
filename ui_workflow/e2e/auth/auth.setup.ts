@@ -2,6 +2,13 @@ import { expect, test as setup } from "@playwright/test";
 import { config } from "../config";
 
 setup("authenticate", async ({ page }) => {
+  if (process.env.E2E_DEV_AUTH === "true") {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Media Workflow" })).toBeVisible();
+    await page.context().storageState({ path: "e2e/auth/storage-state.json" });
+    return;
+  }
+
   const { email, password } = config.auth;
 
   if (!email || !password) {

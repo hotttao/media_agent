@@ -55,7 +55,7 @@ function fromWire(workflow: Workflow): Workflow {
 
 export async function listWorkflows(params: WorkflowListParams = {}): Promise<WorkflowsPage> {
   const page = await api.request<WorkflowsPage>(`/workflows${buildQuery(params)}`);
-  return { ...page, items: page.items.map(fromWire) };
+  return { ...page, items: (page.items ?? []).map(fromWire) };
 }
 
 export async function getWorkflow(id: string): Promise<Workflow> {

@@ -49,8 +49,11 @@ type Config struct {
 	ServiceURL        string // 本服务 base URL（OAuth callback redirect_uri）
 	OAuthClientID     string // 在 media_auth 注册的 OAuth client_id
 	OAuthClientSecret string // OAuth client_secret（机密 client 必填）
-	SkipPaths         map[string]bool
-	SkipPrefixes      []string
+	// DevUserID enables a local-only authenticated session when explicitly set.
+	// It is intentionally empty by default and must never be configured in prod.
+	DevUserID    string
+	SkipPaths    map[string]bool
+	SkipPrefixes []string
 }
 
 type callerKey struct{}
@@ -218,6 +221,11 @@ func New(cfg *Config) *Middleware {
 func (m *Middleware) Handler() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		path := string(c.Request.Path())
+		if m.cfg.DevUserID != "" && path != "/api/auth/login" && path != "/api/auth/callback" && path != "/api/auth/logout" {
+			ctx = context.WithValue(ctx, callerKey{}, &User{Sub: m.cfg.DevUserID, Username: m.cfg.DevUserID, Name: "Local Developer", Role: "admin"})
+			c.Next(ctx)
+			return
+		}
 		if m.cfg.SkipPaths[path] {
 			c.Next(ctx)
 			return

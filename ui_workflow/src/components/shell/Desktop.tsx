@@ -11,6 +11,7 @@ import { useStandaloneApps } from "@/components/shell/useStandaloneApps";
 import { Spinner } from "@/components/ui/spinner";
 import { STANDALONE_WORKSPACE_ID } from "@/foundation/lib/constants";
 import { SlotProvider } from "@/foundation/providers/slot-provider";
+import { useRequiredSlotContext } from "@/foundation/providers/slot-provider";
 import { hostShim } from "@/foundation/lib/host-shim";
 import {
   useWorkspaceProfileLoaded,
@@ -44,18 +45,36 @@ export function Desktop() {
       fallbackSlotId="slot-a"
     >
       <div className="flex h-screen flex-col bg-background text-foreground">
-        <header className="border-b border-foreground/[0.06] px-4 py-2 text-sm font-medium">
-          <div className="flex items-center justify-between gap-4">
-            <span className="font-semibold">Media Workflow</span>
-            <span className="text-xs text-muted-foreground">
-              {shell.organization.name} / {shell.team.name} / {shell.workspace.name}
-            </span>
-          </div>
-        </header>
+        <ShellHeader shell={shell} />
         <div className="min-h-0 flex-1">
           <OneColumnLayout />
         </div>
       </div>
     </SlotProvider>
+  );
+}
+
+function ShellHeader({ shell }: { shell: ReturnType<typeof hostShim.useShellContext> }) {
+  const slots = useRequiredSlotContext();
+  const active = slots.getState("slot-a").active?.appId;
+  const openApp = (appId: string) => {
+    const target = slots.ensureInstance(appId);
+    slots.activate(target.slotId, target.instanceId);
+  };
+  return (
+    <header className="border-b border-foreground/[0.06] px-4 py-2 text-sm font-medium">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <h1 className="font-semibold">Media Workflow</h1>
+          <nav aria-label="Applications" className="flex items-center gap-1">
+            <button type="button" className={active === "materials" ? "rounded bg-foreground/10 px-2 py-1" : "rounded px-2 py-1 text-muted-foreground hover:bg-foreground/10"} onClick={() => openApp("materials")}>Materials</button>
+            <button type="button" className={active === "workflow" ? "rounded bg-foreground/10 px-2 py-1" : "rounded px-2 py-1 text-muted-foreground hover:bg-foreground/10"} onClick={() => openApp("workflow")}>Workflow</button>
+          </nav>
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {shell.organization.name} / {shell.team.name} / {shell.workspace.name}
+        </span>
+      </div>
+    </header>
   );
 }

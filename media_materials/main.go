@@ -118,9 +118,11 @@ func main() {
 		ServiceURL:        serviceURL,
 		OAuthClientID:     cfg.GetApp().GetName(),
 		OAuthClientSecret: cfg.GetAuth().GetOauthClientSecret(),
+		DevUserID:         os.Getenv("MW_DEV_USER_ID"),
 		// skip 运维端点 + internal RPC（服务间调用不带 user session，靠网络隔离）
 		SkipPaths: map[string]bool{
 			"/health": true, "/metrics": true, "/ping": true, "/openapi.yaml": true,
+			"/api/auth/login": true, "/api/auth/callback": true, "/api/auth/logout": true,
 		},
 		SkipPrefixes: []string{"/swagger/", "/debug/pprof/", "/api/internal/"},
 	}

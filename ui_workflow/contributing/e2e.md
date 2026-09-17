@@ -9,6 +9,9 @@ yarn dev
 # Run all E2E tests
 E2E_USER_EMAIL=<email> E2E_USER_PASSWORD=<password> yarn test:e2e
 
+# Local development mode (requires media services with MW_DEV_USER_ID=dev-user)
+E2E_DEV_AUTH=true yarn test:e2e
+
 # Run a specific test
 E2E_USER_EMAIL=<email> E2E_USER_PASSWORD=<password> yarn test:e2e --grep "roles"
 
