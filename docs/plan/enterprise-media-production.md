@@ -15,7 +15,7 @@
 
 ### 部署与 media_auth
 
-当前进度（2026-09-17）：仓库内 Compose 已具备 Kratos/Oathkeeper/Keto、文件化 Traefik 路由、Oathkeeper RS256 Internal JWT 和业务服务验签；`users.kratos_identity_id`、Organization/Membership/Entitlement、Team Entitlement/状态及授权 Outbox migration 已落地。Organization API 已完成；Team 已固化企业归属，创建要求 active Organization 的企业管理员，添加成员和接受邀请要求目标用户先属于企业。Team Entitlement API/Outbox、Workspace 归属、Keto Projection Worker 与灰度 enforce 尚未完成，所以下列整项暂不提前勾选。
+当前进度（2026-09-17）：仓库内 Compose 已具备 Kratos/Oathkeeper/Keto、文件化 Traefik 路由、Oathkeeper RS256 Internal JWT 和业务服务验签；`users.kratos_identity_id`、Organization/Membership/Entitlement、Team Entitlement/状态及授权 Outbox migration 已落地。Organization API 已完成；Team 已固化企业归属，创建要求 active Organization 的企业管理员，添加成员和接受邀请要求目标用户先属于企业。Organization Outbox→Keto 投影已具备顺序领取、lease、退避与 checkpoint，并通过真实 Keto 联调；Team Entitlement API/Outbox 与投影、Workspace 归属、全量重建和灰度 enforce 尚未完成，所以下列整项暂不提前勾选。
 
 - [ ] 在 compose/部署仓库加入 Kratos、Oathkeeper、Keto 的数据库、migration、健康检查和仅内部开放的 admin endpoint。
 - [ ] 定义 Kratos identity schema、browser login/recovery flow 和 Oathkeeper access rules/JWT mutator。

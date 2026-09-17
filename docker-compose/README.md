@@ -54,6 +54,8 @@ ORY_KRATOS_PUBLIC_URL=http://192.168.2.41:18080
 INTERNAL_JWKS_URL=http://192.168.2.41:18080/.well-known/jwks.json
 INTERNAL_JWT_ISSUER=http://oathkeeper:4456/
 MEDIA_AUTH_INTERNAL_TOKEN=dev-media-auth-internal-token
+KETO_READ_URL=http://keto:4466
+KETO_WRITE_URL=http://keto:4467
 ```
 
 `auth/oathkeeper/id_token.jwks.json` 只用于本地开发，包含私钥；生产部署必须改用

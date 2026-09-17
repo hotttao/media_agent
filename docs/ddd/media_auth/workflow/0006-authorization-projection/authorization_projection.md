@@ -40,6 +40,13 @@ domains: [organization, team]
 - 非法 tuple 或连续失败进入告警，但不删除 Outbox。修复 mapper 后从 checkpoint 重放。
 - 全量重建从 Organization/Team/Resource 快照生成同一套目标 tuple；构建到新 namespace/version，校验 shadow check 后切换，避免清空在线授权面。
 
+## 当前实现状态（2026-09-17）
+
+- Organization 投影已落地：Worker 按聚合最小 sequence 领取事件，使用 30 秒 claim lease、指数退避和 `authorization_projection_checkpoints`；checkpoint 与 `delivered_at` 在同一事务提交。
+- 每次事件从 media_auth 读取 Organization 当前快照并与 Keto 现有 tuple 做差量同步；重复投递不会产生重复关系。
+- `workflow.*` 与 `materials.*` entitlement 分别投影为 `workflow_entitled`、`materials_entitled` 对 Organization `members/admins` subject set 的关系；disabled Organization 的全部 tuple 会被撤销。
+- Team、Workspace、资源 Grant 投影以及全量重建命令仍待实现；在这些投影和 shadow comparison 完成前不得开启 Keto enforce。
+
 ## 可观测与验收
 
 - 指标至少包括 pending 数、最老 pending age、成功/失败计数、每聚合最后 checkpoint 和 Keto check shadow mismatch。

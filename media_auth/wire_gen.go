@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"media_agent/hertz_infra/authn/internaljwt"
 	"media_agent/media_auth/biz/dal"
 	dalauth "media_agent/media_auth/biz/dal/repo/auth"
+	dalauthorizationprojection "media_agent/media_auth/biz/dal/repo/authorizationprojection"
 	dalidentity "media_agent/media_auth/biz/dal/repo/identity"
 	dalmcpoauth "media_agent/media_auth/biz/dal/repo/mcp_oauth"
 	daloauth "media_agent/media_auth/biz/dal/repo/oauth"
@@ -49,6 +51,7 @@ import (
 	userservice "media_agent/media_auth/biz/service/user"
 	wecomservice "media_agent/media_auth/biz/service/wecom"
 	"media_agent/media_auth/biz/shared/client/introspect"
+	ketoclient "media_agent/media_auth/biz/shared/client/keto"
 	ldapclient "media_agent/media_auth/biz/shared/client/ldap"
 	mcpclient "media_agent/media_auth/biz/shared/client/mcp"
 	wecomclient "media_agent/media_auth/biz/shared/client/wecom"
@@ -109,6 +112,12 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 
 	organizationRepo := dalorganization.NewRepo(db)
 	organizationhandler.Svc = organizationservice.NewService(organizationRepo)
+	if readURL, writeURL := os.Getenv("KETO_READ_URL"), os.Getenv("KETO_WRITE_URL"); readURL != "" && writeURL != "" {
+		projectionRepo := dalauthorizationprojection.New(db)
+		ketoClient := ketoclient.New(readURL, writeURL, &http.Client{Timeout: 5 * time.Second})
+		projection := workflow.NewAuthorizationProjection(projectionRepo, projectionRepo, dalauthorizationprojection.NewKetoStore(ketoClient))
+		go projection.Run(context.Background())
+	}
 
 	// team domain：企业事实由 organization repo 提供，不复制成员关系。
 	teamRepo := dalteam.NewRepo(db)
