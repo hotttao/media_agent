@@ -38,3 +38,20 @@
 2. agent_gateway 是无状态的，可以滚动升级，可以做到无感。
 
 所以业务内部逻辑，应该尽可能的放在 agent_way 处理，agent 本身应该足够简单。
+
+### agent pod 的创建
+
+在现有的逻辑下 workspace 与 agent pod 是一一对应关系。但是当前系统还缺少 agent pod 的创建逻辑。
+
+在 agent_platform 的设计里，是在 control 控制面内，使用 k8s 的客户端直接创建  Statefulset 来管理 agent pod。
+1. 一个 workspace 对应一个 Statefulset。一个 Statefulset 可以包含多个 agent pod
+2. 因为是 Statefulset，每一个pod都有专属的域名，session 在创建的时候固定关联到某一个具体的 agent pod 以实现对 workflow 下的负载均衡
+
+整个实现设计我觉得是没问题的。问题在于直接使用 k8s 的client 来创建和管理 agent pod 我觉得比较重，也不容易跟平台解耦。
+
+我的想法是这样:
+1. 在 k8s 上通过自定义控制器的方式来管理 agent pod 的生命周期
+2. 如果是其他环境，比如本地的 docker 环境，可以自己开发一个类似的服务来创建和管理 agent 容器
+3. agent_gateway 首先需要定义 agent 负载的接口，包括 agent 的创建、删除、健康状态探测等等。
+4. 对于 k8s 环境，声明和使用自定义的 crd，通过自定义控制器来管理 agent pod
+5. 对于 其他环境，使用对应服务的客户端，调用服务接口来管理 agent 容器等
