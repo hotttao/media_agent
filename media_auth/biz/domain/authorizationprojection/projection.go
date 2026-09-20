@@ -24,6 +24,15 @@ type OrganizationSnapshot struct {
 
 type OrganizationMember struct{ UserID, Role string }
 
+type TeamSnapshot struct {
+	ID, OrganizationID, Status, EntitlementMode string
+	Members                                     []TeamMember
+	OrganizationEntitlements                    []string
+	TeamEntitlements                            []string
+}
+
+type TeamMember struct{ UserID, Role string }
+
 type Tuple struct {
 	Namespace, Object, Relation string
 	SubjectID                   string
@@ -40,6 +49,7 @@ type Outbox interface {
 
 type SnapshotSource interface {
 	Organization(context.Context, string) (OrganizationSnapshot, error)
+	Team(context.Context, string) (TeamSnapshot, error)
 }
 
 type TupleStore interface {

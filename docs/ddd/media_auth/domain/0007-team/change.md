@@ -1,5 +1,11 @@
 # team domain 变更记录
 
+## 2026-09-20：固化部门功能授权接口与投影事务
+
+- 新增部门功能查询与原子设置接口，响应区分显式配置和实时有效功能。
+- 只有 Organization admin 可以修改部门功能，restricted 集合不得超过企业授权上限。
+- Team 授权相关写入以 `authorization_version` 排序，并与 Outbox 在同一事务提交；Keto 从当前快照幂等投影。
+
 ## 2026-09-17：Team 明确为企业内部门
 
 - Team 从无企业归属的用户分组调整为 Organization 内的部门，新增不可变 `organization_id`。

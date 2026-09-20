@@ -27,6 +27,10 @@ type Client interface {
 
 	DeleteTeam(context context.Context, req *team.DeleteTeamRequest, reqOpt ...config.RequestOption) (resp *team.DeleteTeamResponse, rawResponse *protocol.Response, err error)
 
+	GetEntitlements(context context.Context, req *team.GetTeamEntitlementsRequest, reqOpt ...config.RequestOption) (resp *team.TeamEntitlementsResponse, rawResponse *protocol.Response, err error)
+
+	SetEntitlements(context context.Context, req *team.SetTeamEntitlementsRequest, reqOpt ...config.RequestOption) (resp *team.TeamEntitlementsResponse, rawResponse *protocol.Response, err error)
+
 	ListMembers(context context.Context, req *team.ListMembersRequest, reqOpt ...config.RequestOption) (resp *team.ListMembersResponse, rawResponse *protocol.Response, err error)
 
 	AddMember(context context.Context, req *team.AddMemberRequest, reqOpt ...config.RequestOption) (resp *team.ApiTeamMember, rawResponse *protocol.Response, err error)
@@ -168,6 +172,54 @@ func (s *TeamServiceClient) DeleteTeam(context context.Context, req *team.Delete
 		setRequestOption(reqOpt...).
 		setResult(httpResp).
 		execute("DELETE", "/api/teams/:id")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *TeamServiceClient) GetEntitlements(context context.Context, req *team.GetTeamEntitlementsRequest, reqOpt ...config.RequestOption) (resp *team.TeamEntitlementsResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &team.TeamEntitlementsResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"id": req.GetId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/teams/:id/entitlements")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *TeamServiceClient) SetEntitlements(context context.Context, req *team.SetTeamEntitlementsRequest, reqOpt ...config.RequestOption) (resp *team.TeamEntitlementsResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &team.TeamEntitlementsResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"id": req.GetId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("PUT", "/api/teams/:id/entitlements")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -421,6 +473,14 @@ func UpdateTeam(context context.Context, req *team.UpdateTeamRequest, reqOpt ...
 
 func DeleteTeam(context context.Context, req *team.DeleteTeamRequest, reqOpt ...config.RequestOption) (resp *team.DeleteTeamResponse, rawResponse *protocol.Response, err error) {
 	return defaultClient.DeleteTeam(context, req, reqOpt...)
+}
+
+func GetEntitlements(context context.Context, req *team.GetTeamEntitlementsRequest, reqOpt ...config.RequestOption) (resp *team.TeamEntitlementsResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.GetEntitlements(context, req, reqOpt...)
+}
+
+func SetEntitlements(context context.Context, req *team.SetTeamEntitlementsRequest, reqOpt ...config.RequestOption) (resp *team.TeamEntitlementsResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.SetEntitlements(context, req, reqOpt...)
 }
 
 func ListMembers(context context.Context, req *team.ListMembersRequest, reqOpt ...config.RequestOption) (resp *team.ListMembersResponse, rawResponse *protocol.Response, err error) {

@@ -21,15 +21,16 @@ const (
 
 // Team 是团队实体（对应 media_auth.teams 表的领域形态，非 GORM row）。
 type Team struct {
-	ID              string
-	OrganizationID  string
-	Name            string
-	Description     string // 空串 = NULL
-	EntitlementMode string
-	Status          string
-	CreatedBy       string // 创建者 user id（首任 admin）
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                   string
+	OrganizationID       string
+	Name                 string
+	Description          string // 空串 = NULL
+	EntitlementMode      string
+	Status               string
+	AuthorizationVersion int64
+	CreatedBy            string // 创建者 user id（首任 admin）
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // Membership 是 (team_id, user_id) → role 的成员关系值对象。
@@ -87,6 +88,8 @@ type TeamRepo interface {
 	UpdateTeam(ctx context.Context, id string, patch TeamPatch) (Team, error)
 	// DeleteTeam 删 team（级联清 team_members + team_invites）。0 行返回 ErrTeamNotFound。
 	DeleteTeam(ctx context.Context, id string) error
+	GetEntitlements(ctx context.Context, id string) ([]string, error)
+	SetEntitlements(ctx context.Context, id, grantedBy, mode string, keys []string) ([]string, error)
 	// ListTeamsForUser 查 user 所属全部 team，含 my_role + member_count。
 	ListTeamsForUser(ctx context.Context, userID string) ([]TeamSummary, error)
 

@@ -44,19 +44,30 @@ func (w *AuthorizationProjection) ProcessPending(ctx context.Context) error {
 }
 
 func (w *AuthorizationProjection) project(ctx context.Context, event domain.Event) error {
-	if event.AggregateType != "organization" {
+	switch event.AggregateType {
+	case "organization":
+		snapshot, err := w.snapshots.Organization(ctx, event.AggregateID)
+		if err != nil {
+			return err
+		}
+		current, err := w.tuples.List(ctx, "Organization", snapshot.ID)
+		if err != nil {
+			return err
+		}
+		return reconcile(ctx, w.tuples, current, organizationTuples(snapshot))
+	case "team":
+		snapshot, err := w.snapshots.Team(ctx, event.AggregateID)
+		if err != nil {
+			return err
+		}
+		current, err := w.tuples.List(ctx, "Team", snapshot.ID)
+		if err != nil {
+			return err
+		}
+		return reconcile(ctx, w.tuples, current, teamTuples(snapshot))
+	default:
 		return fmt.Errorf("unsupported aggregate type %q", event.AggregateType)
 	}
-	snapshot, err := w.snapshots.Organization(ctx, event.AggregateID)
-	if err != nil {
-		return err
-	}
-	current, err := w.tuples.List(ctx, "Organization", snapshot.ID)
-	if err != nil {
-		return err
-	}
-	desired := organizationTuples(snapshot)
-	return reconcile(ctx, w.tuples, current, desired)
 }
 
 func (w *AuthorizationProjection) Run(ctx context.Context) {
@@ -98,6 +109,51 @@ func organizationTuples(snapshot domain.OrganizationSnapshot) []domain.Tuple {
 	for relation := range features {
 		for _, subjectRelation := range []string{"members", "admins"} {
 			out = append(out, domain.Tuple{Namespace: "Organization", Object: snapshot.ID, Relation: relation, SubjectSet: &domain.SubjectSet{Namespace: "Organization", Object: snapshot.ID, Relation: subjectRelation}})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return tupleKey(out[i]) < tupleKey(out[j]) })
+	return out
+}
+
+func teamTuples(snapshot domain.TeamSnapshot) []domain.Tuple {
+	if snapshot.Status != "active" {
+		return nil
+	}
+	out := []domain.Tuple{{Namespace: "Team", Object: snapshot.ID, Relation: "organization", SubjectID: snapshot.OrganizationID}}
+	for _, member := range snapshot.Members {
+		relation := "members"
+		if member.Role == "admin" {
+			relation = "admins"
+		}
+		out = append(out, domain.Tuple{Namespace: "Team", Object: snapshot.ID, Relation: relation, SubjectID: member.UserID})
+	}
+	effective := snapshot.OrganizationEntitlements
+	if snapshot.EntitlementMode == "restricted" {
+		allowed := make(map[string]struct{}, len(snapshot.TeamEntitlements))
+		for _, key := range snapshot.TeamEntitlements {
+			allowed[key] = struct{}{}
+		}
+		effective = nil
+		for _, key := range snapshot.OrganizationEntitlements {
+			if _, ok := allowed[key]; ok {
+				effective = append(effective, key)
+			}
+		}
+	}
+	features := map[string]bool{}
+	for _, key := range effective {
+		switch {
+		case key == "materials" || strings.HasPrefix(key, "materials."):
+			features["materials_users"] = true
+		case key == "workflow" || strings.HasPrefix(key, "workflow."):
+			features["workflow_users"] = true
+		case key == "workspace" || strings.HasPrefix(key, "workspace."):
+			features["workspace_creators"] = true
+		}
+	}
+	for relation := range features {
+		for _, subjectRelation := range []string{"members", "admins"} {
+			out = append(out, domain.Tuple{Namespace: "Team", Object: snapshot.ID, Relation: relation, SubjectSet: &domain.SubjectSet{Namespace: "Team", Object: snapshot.ID, Relation: subjectRelation}})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return tupleKey(out[i]) < tupleKey(out[j]) })

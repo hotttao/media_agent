@@ -20,6 +20,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // envOr returns os.Getenv(key) or fallback.
@@ -97,8 +98,9 @@ func login(t *testing.T, c *http.Client, addr, user, pass string) string {
 	return resp.User.ID
 }
 
-// TestTeamE2E 驱动 team HTTP 流程：login → create → list → get → create-invite →
-// accept-invite（同 user 幂等 already_member=true）→ members → delete。
+// TestTeamE2E 驱动 organization/team HTTP 流程：login → create organization →
+// configure organization entitlements → create team → configure team entitlements →
+// list/get → create-invite → accept-invite（同 user 幂等 already_member=true）→ members → delete。
 func TestTeamE2E(t *testing.T) {
 	addr := skipIfNoServer(t)
 	user := envOr("MEDIA_AUTH_E2E_USER", "smoke")
@@ -108,8 +110,32 @@ func TestTeamE2E(t *testing.T) {
 	uid := login(t, c, addr, user, pass)
 	t.Logf("logged in as %s (id=%s)", user, uid)
 
+	// A team always belongs to an organization. Creating a fresh organization
+	// keeps the authorization boundary explicit and makes this test repeatable.
+	status, body := doJSON(t, c, "POST", addr+"/api/organizations", map[string]string{
+		"name": "E2E Organization " + time.Now().Format("20060102-150405.000000000"),
+	})
+	if status != 201 {
+		t.Fatalf("create organization: status=%d body=%s", status, body)
+	}
+	var organization struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &organization); err != nil || organization.ID == "" {
+		t.Fatalf("create organization unmarshal: err=%v body=%s", err, body)
+	}
+
+	status, body = doJSON(t, c, "PUT", addr+"/api/organizations/"+organization.ID+"/entitlements", map[string]any{
+		"feature_keys": []string{"materials.read", "workflow.run"},
+	})
+	if status != 200 {
+		t.Fatalf("set organization entitlements: status=%d body=%s", status, body)
+	}
+
 	// create team
-	status, body := doJSON(t, c, "POST", addr+"/api/teams", map[string]string{"name": "E2E Team", "description": "via media-cli e2e"})
+	status, body = doJSON(t, c, "POST", addr+"/api/teams", map[string]string{
+		"name": "E2E Team", "description": "via media-cli e2e", "organization_id": organization.ID,
+	})
 	if status != 201 {
 		t.Fatalf("create team: status=%d body=%s", status, body)
 	}
@@ -123,6 +149,21 @@ func TestTeamE2E(t *testing.T) {
 		t.Fatal("create team: empty id")
 	}
 	t.Logf("created team id=%s", team.ID)
+
+	// Teams inherit their organization's effective feature set by default.
+	status, body = doJSON(t, c, "GET", addr+"/api/teams/"+team.ID+"/entitlements", nil)
+	if status != 200 || !strings.Contains(string(body), `"entitlement_mode":"inherit"`) || !strings.Contains(string(body), `"materials.read"`) {
+		t.Fatalf("get inherited team entitlements: status=%d body=%s", status, body)
+	}
+
+	// Organization admins may restrict a team to a subset of the company's features.
+	status, body = doJSON(t, c, "PUT", addr+"/api/teams/"+team.ID+"/entitlements", map[string]any{
+		"entitlement_mode": "restricted",
+		"feature_keys":     []string{"workflow.run"},
+	})
+	if status != 200 || !strings.Contains(string(body), `"entitlement_mode":"restricted"`) || strings.Contains(string(body), `"materials.read"`) {
+		t.Fatalf("set restricted team entitlements: status=%d body=%s", status, body)
+	}
 
 	// list my teams → 应含刚建的
 	status, body = doJSON(t, c, "GET", addr+"/api/teams", nil)
@@ -171,9 +212,9 @@ func TestTeamE2E(t *testing.T) {
 	}
 
 	// delete team
-	status, _ = doJSON(t, c, "DELETE", addr+"/api/teams/"+team.ID, nil)
+	status, body = doJSON(t, c, "DELETE", addr+"/api/teams/"+team.ID, nil)
 	if status != 200 {
-		t.Fatalf("delete team: status=%d", status)
+		t.Fatalf("delete team: status=%d body=%s", status, body)
 	}
 	t.Logf("deleted team %s", team.ID)
 }

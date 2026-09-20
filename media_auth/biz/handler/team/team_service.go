@@ -399,6 +399,8 @@ func writeTeamError(c *app.RequestContext, err error) {
 	switch {
 	case errors.Is(err, teamservice.ErrInvalidName),
 		errors.Is(err, teamservice.ErrInvalidRole),
+		errors.Is(err, teamservice.ErrInvalidEntitlementMode),
+		errors.Is(err, teamservice.ErrEntitlementExceedsOrganization),
 		errors.Is(err, teamservice.ErrUserNotFound),
 		errors.Is(err, teamservice.ErrOrganizationRequired),
 		errors.Is(err, teamservice.ErrOrganizationInactive),
@@ -419,5 +421,55 @@ func writeTeamError(c *app.RequestContext, err error) {
 		c.JSON(consts.StatusGone, map[string]string{"error": err.Error()})
 	default:
 		c.JSON(consts.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+}
+
+// GetEntitlements .
+// @router /api/teams/:id/entitlements [GET]
+func GetEntitlements(ctx context.Context, c *app.RequestContext) {
+	userID, ok := requireSession(ctx, c)
+	if !ok {
+		return
+	}
+	var req teampb.GetTeamEntitlementsRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	view, err := TeamSvc.GetEntitlements(ctx, userID, req.GetId())
+	if err != nil {
+		writeTeamError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, toEntitlementsResponse(view))
+}
+
+// SetEntitlements .
+// @router /api/teams/:id/entitlements [PUT]
+func SetEntitlements(ctx context.Context, c *app.RequestContext) {
+	userID, ok := requireSession(ctx, c)
+	if !ok {
+		return
+	}
+	var req teampb.SetTeamEntitlementsRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	view, err := TeamSvc.SetEntitlements(ctx, userID, req.GetId(), teamservice.SetEntitlementsCommand{
+		Mode: req.GetEntitlementMode(), FeatureKeys: req.GetFeatureKeys(),
+	})
+	if err != nil {
+		writeTeamError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, toEntitlementsResponse(view))
+}
+
+func toEntitlementsResponse(view teamservice.EntitlementsView) *teampb.TeamEntitlementsResponse {
+	return &teampb.TeamEntitlementsResponse{
+		EntitlementMode:       view.Mode,
+		ConfiguredFeatureKeys: view.ConfiguredFeatureKeys,
+		EffectiveFeatureKeys:  view.EffectiveFeatureKeys,
 	}
 }

@@ -11,6 +11,7 @@ package team
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	domainorganization "media_agent/media_auth/biz/domain/organization"
@@ -29,6 +30,7 @@ type Service struct {
 type OrganizationAccess interface {
 	Get(context.Context, string) (domainorganization.Organization, error)
 	GetMembership(context.Context, string, string) (domainorganization.Membership, error)
+	GetEntitlements(context.Context, string) ([]string, error)
 }
 
 // TxRunner 是事务抽象（dal.NewTxRunner 实现）。team service 仅 CreateTeam 用。
@@ -47,22 +49,24 @@ func NewService(repo domainteam.TeamRepo, tx TxRunner, organizations ...Organiza
 
 // 用例错误（handler 据此映射 HTTP 状态）。
 var (
-	ErrInvalidName          = errors.New("team name must not be empty")
-	ErrInvalidRole          = errors.New("invalid role: must be admin or member")
-	ErrUserNotFound         = errors.New("user not found")
-	ErrTeamNotFound         = domainteam.ErrTeamNotFound
-	ErrInviteNotFound       = domainteam.ErrInviteNotFound
-	ErrNotMember            = domainteam.ErrNotMember
-	ErrForbidden            = errors.New("admin only")
-	ErrInviteExpired        = errors.New("invite expired")
-	ErrCannotDemoteLast     = policyteam.ErrCannotDemoteLastAdmin
-	ErrCannotRemoveLast     = policyteam.ErrCannotRemoveLastAdmin
-	ErrCreateTeamNoTx       = errors.New("create team requires a transaction runner")
-	ErrOrganizationRequired = errors.New("organization_id is required")
-	ErrOrganizationInactive = errors.New("organization is not active")
-	ErrOrganizationAdmin    = errors.New("organization admin only")
-	ErrOrganizationMember   = errors.New("user must belong to the organization")
-	ErrOrganizationNotFound = domainorganization.ErrNotFound
+	ErrInvalidName                    = errors.New("team name must not be empty")
+	ErrInvalidRole                    = errors.New("invalid role: must be admin or member")
+	ErrUserNotFound                   = errors.New("user not found")
+	ErrTeamNotFound                   = domainteam.ErrTeamNotFound
+	ErrInviteNotFound                 = domainteam.ErrInviteNotFound
+	ErrNotMember                      = domainteam.ErrNotMember
+	ErrForbidden                      = errors.New("admin only")
+	ErrInviteExpired                  = errors.New("invite expired")
+	ErrCannotDemoteLast               = policyteam.ErrCannotDemoteLastAdmin
+	ErrCannotRemoveLast               = policyteam.ErrCannotRemoveLastAdmin
+	ErrCreateTeamNoTx                 = errors.New("create team requires a transaction runner")
+	ErrOrganizationRequired           = errors.New("organization_id is required")
+	ErrOrganizationInactive           = errors.New("organization is not active")
+	ErrOrganizationAdmin              = errors.New("organization admin only")
+	ErrOrganizationMember             = errors.New("user must belong to the organization")
+	ErrOrganizationNotFound           = domainorganization.ErrNotFound
+	ErrInvalidEntitlementMode         = errors.New("entitlement_mode must be inherit or restricted")
+	ErrEntitlementExceedsOrganization = errors.New("team entitlement exceeds organization entitlement")
 )
 
 // ListMyTeams 查当前 user 所属全部 team（含 my_role + member_count）。
@@ -123,13 +127,19 @@ func (s *Service) CreateTeam(ctx context.Context, userID string, cmd CreateTeamC
 
 // GetTeam 查 team 详情（仅成员可读；非成员 → 404 不暴露存在性）。
 func (s *Service) GetTeam(ctx context.Context, userID, teamID string) (TeamView, error) {
-	membership, err := s.assertMember(ctx, teamID, userID)
-	if err != nil {
-		return TeamView{}, err
-	}
 	team, err := s.repo.GetTeam(ctx, teamID)
 	if err != nil {
 		return TeamView{}, err
+	}
+	membership, err := s.repo.GetMembership(ctx, teamID, userID)
+	if err != nil {
+		if !errors.Is(err, domainteam.ErrNotMember) {
+			return TeamView{}, err
+		}
+		organizationMembership, orgErr := s.organizations.GetMembership(ctx, team.OrganizationID, userID)
+		if orgErr != nil || organizationMembership.Role != "admin" {
+			return TeamView{}, ErrTeamNotFound
+		}
 	}
 	count, err := s.memberCount(ctx, teamID)
 	if err != nil {
@@ -138,9 +148,58 @@ func (s *Service) GetTeam(ctx context.Context, userID, teamID string) (TeamView,
 	return TeamView{Team: team, MyRole: membership.Role, MemberCount: count}, nil
 }
 
+func (s *Service) GetEntitlements(ctx context.Context, userID, teamID string) (EntitlementsView, error) {
+	team, err := s.repo.GetTeam(ctx, teamID)
+	if err != nil {
+		return EntitlementsView{}, err
+	}
+	if _, err := s.repo.GetMembership(ctx, teamID, userID); err != nil {
+		membership, orgErr := s.organizations.GetMembership(ctx, team.OrganizationID, userID)
+		if orgErr != nil || membership.Role != "admin" {
+			return EntitlementsView{}, ErrTeamNotFound
+		}
+	}
+	configured, err := s.repo.GetEntitlements(ctx, teamID)
+	if err != nil {
+		return EntitlementsView{}, err
+	}
+	organizationKeys, err := s.organizations.GetEntitlements(ctx, team.OrganizationID)
+	if err != nil {
+		return EntitlementsView{}, err
+	}
+	return entitlementView(team.EntitlementMode, configured, organizationKeys), nil
+}
+
+func (s *Service) SetEntitlements(ctx context.Context, userID, teamID string, cmd SetEntitlementsCommand) (EntitlementsView, error) {
+	if cmd.Mode != "inherit" && cmd.Mode != "restricted" {
+		return EntitlementsView{}, ErrInvalidEntitlementMode
+	}
+	team, err := s.repo.GetTeam(ctx, teamID)
+	if err != nil {
+		return EntitlementsView{}, err
+	}
+	membership, err := s.organizations.GetMembership(ctx, team.OrganizationID, userID)
+	if err != nil || membership.Role != "admin" {
+		return EntitlementsView{}, ErrOrganizationAdmin
+	}
+	organizationKeys, err := s.organizations.GetEntitlements(ctx, team.OrganizationID)
+	if err != nil {
+		return EntitlementsView{}, err
+	}
+	requested := uniqueSorted(cmd.FeatureKeys)
+	if cmd.Mode == "restricted" && !isSubset(requested, organizationKeys) {
+		return EntitlementsView{}, ErrEntitlementExceedsOrganization
+	}
+	configured, err := s.repo.SetEntitlements(ctx, teamID, userID, cmd.Mode, requested)
+	if err != nil {
+		return EntitlementsView{}, err
+	}
+	return entitlementView(cmd.Mode, configured, organizationKeys), nil
+}
+
 // UpdateTeam 改 team name/description（admin only）。
 func (s *Service) UpdateTeam(ctx context.Context, userID, teamID string, cmd UpdateTeamCommand) (TeamView, error) {
-	if err := s.assertAdmin(ctx, teamID, userID); err != nil {
+	if err := s.assertTeamOrOrganizationAdmin(ctx, teamID, userID); err != nil {
 		return TeamView{}, err
 	}
 	team, err := s.repo.UpdateTeam(ctx, teamID, domainteam.TeamPatch{
@@ -159,7 +218,7 @@ func (s *Service) UpdateTeam(ctx context.Context, userID, teamID string, cmd Upd
 
 // DeleteTeam 删 team（admin only；级联清成员与邀请）。
 func (s *Service) DeleteTeam(ctx context.Context, userID, teamID string) error {
-	if err := s.assertAdmin(ctx, teamID, userID); err != nil {
+	if err := s.assertOrganizationAdmin(ctx, teamID, userID); err != nil {
 		return err
 	}
 	return s.repo.DeleteTeam(ctx, teamID)
@@ -168,14 +227,19 @@ func (s *Service) DeleteTeam(ctx context.Context, userID, teamID string) error {
 // ListMembers 列 team 成员（仅成员可读）。
 func (s *Service) ListMembers(ctx context.Context, userID, teamID string) ([]domainteam.MemberWithUser, error) {
 	if _, err := s.assertMember(ctx, teamID, userID); err != nil {
-		return nil, err
+		if !errors.Is(err, domainteam.ErrNotMember) {
+			return nil, err
+		}
+		if err := s.assertOrganizationAdmin(ctx, teamID, userID); err != nil {
+			return nil, ErrTeamNotFound
+		}
 	}
 	return s.repo.ListMembers(ctx, teamID)
 }
 
 // AddMember 加成员（admin only；目标 user 必须存在；幂等）。
 func (s *Service) AddMember(ctx context.Context, userID, teamID string, cmd AddMemberCommand) (domainteam.MemberWithUser, error) {
-	if err := s.assertAdmin(ctx, teamID, userID); err != nil {
+	if err := s.assertTeamOrOrganizationAdmin(ctx, teamID, userID); err != nil {
 		return domainteam.MemberWithUser{}, err
 	}
 	role := domainteam.RoleMember
@@ -220,7 +284,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, userID, teamID, targetUs
 	if !policyteam.IsValidRole(newRole) {
 		return ErrInvalidRole
 	}
-	if err := s.assertAdmin(ctx, teamID, userID); err != nil {
+	if err := s.assertTeamOrOrganizationAdmin(ctx, teamID, userID); err != nil {
 		return err
 	}
 	target, err := s.repo.GetMembership(ctx, teamID, targetUserID)
@@ -241,7 +305,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, userID, teamID, targetUs
 func (s *Service) RemoveMember(ctx context.Context, userID, teamID, targetUserID string) error {
 	isSelf := targetUserID == userID
 	if !isSelf {
-		if err := s.assertAdmin(ctx, teamID, userID); err != nil {
+		if err := s.assertTeamOrOrganizationAdmin(ctx, teamID, userID); err != nil {
 			return err
 		}
 	} else {
@@ -415,6 +479,30 @@ func (s *Service) assertAdmin(ctx context.Context, teamID, userID string) error 
 	return nil
 }
 
+func (s *Service) assertTeamOrOrganizationAdmin(ctx context.Context, teamID, userID string) error {
+	if err := s.assertAdmin(ctx, teamID, userID); err == nil {
+		return nil
+	} else if !errors.Is(err, domainteam.ErrNotMember) && !errors.Is(err, ErrForbidden) {
+		return err
+	}
+	return s.assertOrganizationAdmin(ctx, teamID, userID)
+}
+
+func (s *Service) assertOrganizationAdmin(ctx context.Context, teamID, userID string) error {
+	team, err := s.repo.GetTeam(ctx, teamID)
+	if err != nil {
+		return err
+	}
+	membership, err := s.organizations.GetMembership(ctx, team.OrganizationID, userID)
+	if err != nil {
+		return ErrNotMember
+	}
+	if membership.Role != "admin" {
+		return ErrOrganizationAdmin
+	}
+	return nil
+}
+
 // memberCount 取 team 成员数（GetTeam/CreateTeam 响应填充用）。
 func (s *Service) memberCount(ctx context.Context, teamID string) (int, error) {
 	members, err := s.repo.ListMembers(ctx, teamID)
@@ -422,4 +510,56 @@ func (s *Service) memberCount(ctx context.Context, teamID string) (int, error) {
 		return 0, err
 	}
 	return len(members), nil
+}
+
+func entitlementView(mode string, configured, organizationKeys []string) EntitlementsView {
+	configured = uniqueSorted(configured)
+	organizationKeys = uniqueSorted(organizationKeys)
+	effective := organizationKeys
+	if mode == "restricted" {
+		effective = intersection(organizationKeys, configured)
+	}
+	return EntitlementsView{Mode: mode, ConfiguredFeatureKeys: configured, EffectiveFeatureKeys: effective}
+}
+
+func uniqueSorted(values []string) []string {
+	set := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value != "" {
+			set[value] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(set))
+	for value := range set {
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func isSubset(values, allowed []string) bool {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, value := range allowed {
+		allowedSet[value] = struct{}{}
+	}
+	for _, value := range values {
+		if _, ok := allowedSet[value]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func intersection(left, right []string) []string {
+	rightSet := make(map[string]struct{}, len(right))
+	for _, value := range right {
+		rightSet[value] = struct{}{}
+	}
+	out := make([]string, 0)
+	for _, value := range left {
+		if _, ok := rightSet[value]; ok {
+			out = append(out, value)
+		}
+	}
+	return out
 }

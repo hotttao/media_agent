@@ -1178,6 +1178,59 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/teams/{id}/entitlements:
+        get:
+            tags:
+                - TeamService
+            operationId: TeamService_GetEntitlements
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TeamEntitlementsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - TeamService
+            operationId: TeamService_SetEntitlements
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetTeamEntitlementsRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TeamEntitlementsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/teams/{id}/invites:
         get:
             tags:
@@ -2073,6 +2126,17 @@ components:
                     type: array
                     items:
                         type: string
+        SetTeamEntitlementsRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                entitlement_mode:
+                    type: string
+                feature_keys:
+                    type: array
+                    items:
+                        type: string
         StartAuthorizationResponse:
             type: object
             properties:
@@ -2097,6 +2161,19 @@ components:
                         $ref: '#/components/schemas/GoogleProtobufAny'
                     description: A list of messages that carry the error details.  There is a common set of message types for APIs to use.
             description: 'The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors).'
+        TeamEntitlementsResponse:
+            type: object
+            properties:
+                entitlement_mode:
+                    type: string
+                configured_feature_keys:
+                    type: array
+                    items:
+                        type: string
+                effective_feature_keys:
+                    type: array
+                    items:
+                        type: string
         UpdateMeRequest:
             type: object
             properties:

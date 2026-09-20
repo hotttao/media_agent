@@ -115,3 +115,13 @@ func _updatememberroleMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _getentitlementsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _setentitlementsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

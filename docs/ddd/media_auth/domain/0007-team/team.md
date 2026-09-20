@@ -49,9 +49,8 @@ Team Domain 维护 Organization 内部门、部门成员关系、部门有效功
 | 接受邀请 | 同一 Organization 的成员按 token 入团；已是成员则幂等返回 | `AcceptInvite` `POST /api/invites/{token}/accept` |
 | 内部：取成员关系 | 供 auth / 其他 domain 校验当前 user 对 team 的角色 | `getMembership(teamID, userID)` |
 | 内部：取邀请 | 按 token 查邀请；供 preview / accept 共享 | `getInviteByToken(token)` |
-| 设置部门功能模式 | 在 inherit/restricted 之间切换 | 待 IDL 定义 |
-| 设置部门功能 | 企业管理员维护 restricted 模式的功能子集 | 待 IDL 定义 |
-| 查询有效功能 | 返回 Organization Entitlement 与部门配置的交集 | 待 IDL 定义 |
+| 查询部门功能 | 返回授权模式、显式配置和实时有效功能 | `GetEntitlements` `GET /api/teams/{id}/entitlements` |
+| 设置部门功能 | 企业管理员原子设置 inherit/restricted 模式及 restricted 功能子集 | `SetEntitlements` `PUT /api/teams/{id}/entitlements` |
 
 ## 数据模型
 
@@ -193,6 +192,9 @@ listTeamsForUser(userID) → TeamSummary[]
 2. `entitlement_mode=restricted` 时，有效功能为 `Organization Entitlement ∩ Team Entitlement`。
 3. 只有 Organization admin 可以切换模式或修改 Team Entitlement；Team admin 不能扩大部门功能。
 4. 企业撤销功能后，即使 `team_entitlements` 仍有旧记录，该功能也不再有效。
+5. 查询接口返回 `entitlement_mode`、`configured_feature_keys` 和 `effective_feature_keys`；普通 Team 成员及 Organization admin 可读。
+6. 设置接口由 Organization admin 调用。`restricted` 的显式集合必须是当前 Organization Entitlement 的子集；`inherit` 时清空显式集合，避免无效配置被误认为生效。
+7. 设置模式与显式集合、递增 `authorization_version`、写入授权 Outbox 必须在同一数据库事务提交。
 
 ## 关联关系
 

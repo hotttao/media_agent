@@ -28,6 +28,14 @@ service TeamService {
     option (google.api.http) = { delete: "/api/teams/{id}" };
     option (api.delete) = "/api/teams/:id";
   }
+  rpc GetEntitlements(GetTeamEntitlementsRequest) returns(TeamEntitlementsResponse) {
+    option (google.api.http) = { get: "/api/teams/{id}/entitlements" };
+    option (api.get) = "/api/teams/:id/entitlements";
+  }
+  rpc SetEntitlements(SetTeamEntitlementsRequest) returns(TeamEntitlementsResponse) {
+    option (google.api.http) = { put: "/api/teams/{id}/entitlements" body: "*" };
+    option (api.put) = "/api/teams/:id/entitlements";
+  }
   rpc ListMembers(ListMembersRequest) returns(ListMembersResponse) {
     option (google.api.http) = { get: "/api/teams/{id}/members" };
     option (api.get) = "/api/teams/:id/members";
@@ -74,6 +82,17 @@ message GetTeamRequest     { string id = 1 [(api.path) = "id"]; }
 message UpdateTeamRequest  { string id = 1 [(api.path) = "id"]; optional string name = 2; optional string description = 3; }
 message DeleteTeamRequest  { string id = 1 [(api.path) = "id"]; }
 message DeleteTeamResponse { bool success = 1; }
+message GetTeamEntitlementsRequest { string id = 1 [(api.path) = "id"]; }
+message SetTeamEntitlementsRequest {
+  string id = 1 [(api.path) = "id"];
+  string entitlement_mode = 2;
+  repeated string feature_keys = 3;
+}
+message TeamEntitlementsResponse {
+  string entitlement_mode = 1;
+  repeated string configured_feature_keys = 2;
+  repeated string effective_feature_keys = 3;
+}
 message ListMembersRequest { string id = 1 [(api.path) = "id"]; }
 message ListMembersResponse{ repeated ApiTeamMember members = 1; }
 message AddMemberRequest   { string id = 1 [(api.path) = "id"]; string user_id = 2; optional string role = 3; } // 默认 member

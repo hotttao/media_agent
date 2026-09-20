@@ -94,3 +94,38 @@ func (r *Repository) Organization(ctx context.Context, id string) (domain.Organi
 	}
 	return snapshot, nil
 }
+
+func (r *Repository) Team(ctx context.Context, id string) (domain.TeamSnapshot, error) {
+	var row struct{ ID, OrganizationID, Status, EntitlementMode string }
+	err := r.conn(ctx).Table("media_auth.teams").
+		Select("id,organization_id,status,entitlement_mode").Where("id = ?", id).Take(&row).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return domain.TeamSnapshot{ID: id, Status: "decommissioned"}, nil
+		}
+		return domain.TeamSnapshot{}, err
+	}
+	snapshot := domain.TeamSnapshot{ID: row.ID, OrganizationID: row.OrganizationID, Status: row.Status, EntitlementMode: row.EntitlementMode}
+	if err := r.conn(ctx).Table("media_auth.team_members tm").
+		Select("tm.user_id,tm.role").
+		Joins("JOIN media_auth.organization_members om ON om.organization_id = ? AND om.user_id = tm.user_id", row.OrganizationID).
+		Where("tm.team_id = ?", id).Order("tm.user_id").Scan(&snapshot.Members).Error; err != nil {
+		return domain.TeamSnapshot{}, err
+	}
+	if err := r.conn(ctx).Table("media_auth.organization_entitlements").Where("organization_id = ?", row.OrganizationID).
+		Order("feature_key").Pluck("feature_key", &snapshot.OrganizationEntitlements).Error; err != nil {
+		return domain.TeamSnapshot{}, err
+	}
+	if err := r.conn(ctx).Table("media_auth.team_entitlements").Where("team_id = ?", id).
+		Order("feature_key").Pluck("feature_key", &snapshot.TeamEntitlements).Error; err != nil {
+		return domain.TeamSnapshot{}, err
+	}
+	var organizationStatus string
+	if err := r.conn(ctx).Table("media_auth.organizations").Where("id = ?", row.OrganizationID).Pluck("status", &organizationStatus).Error; err != nil {
+		return domain.TeamSnapshot{}, err
+	}
+	if organizationStatus != "active" {
+		snapshot.Status = "decommissioned"
+	}
+	return snapshot, nil
+}

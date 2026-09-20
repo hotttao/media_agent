@@ -58,6 +58,12 @@ Organization（公司）
 
 授权变更在事实源事务内写 Outbox，再幂等投影到 Keto。管理写入和撤权敏感操作应回查事实源；普通请求可使用 Keto，必须监控投影延迟。
 
+Team 功能接口固定为：
+
+- `GET /api/teams/{id}/entitlements`：Team 成员或 Organization admin 可读，返回 `entitlement_mode`、`configured_feature_keys`、`effective_feature_keys`。
+- `PUT /api/teams/{id}/entitlements`：仅 Organization admin 可写，请求同时携带 `entitlement_mode` 与 `feature_keys`；restricted 集合必须是 Organization Entitlement 子集，inherit 模式清空显式集合。
+- Team 创建、成员和角色变化、状态变化、功能变化均递增 `authorization_version`，并与 Outbox 原子提交。Organization Entitlement 变化还要触发其所有 Team 重新投影。
+
 ## 4. Workflow 的业务定义
 
 ### 4.1 Execution Capability

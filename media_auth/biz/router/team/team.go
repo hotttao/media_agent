@@ -36,6 +36,8 @@ func Register(r *server.Hertz) {
 			_teams.PATCH("/:id", append(_updateteamMw(), team.UpdateTeam)...)
 			{
 				_id := _teams.Group("/:id", _idMw()...)
+				_id.GET("/entitlements", append(_getentitlementsMw(), team.GetEntitlements)...)
+				_id.PUT("/entitlements", append(_setentitlementsMw(), team.SetEntitlements)...)
 				_id.GET("/invites", append(_listinvitesMw(), team.ListInvites)...)
 				_id.POST("/invites", append(_createinviteMw(), team.CreateInvite)...)
 				_id.GET("/members", append(_listmembersMw(), team.ListMembers)...)

@@ -40,12 +40,21 @@ domains: [organization, team]
 - 非法 tuple 或连续失败进入告警，但不删除 Outbox。修复 mapper 后从 checkpoint 重放。
 - 全量重建从 Organization/Team/Resource 快照生成同一套目标 tuple；构建到新 namespace/version，校验 shadow check 后切换，避免清空在线授权面。
 
-## 当前实现状态（2026-09-17）
+## Team 投影
+
+Team 聚合的任何授权相关变更（创建、成员增删/角色变更、状态或功能授权变化）必须在同一事务内递增 `authorization_version` 并写入 `authorization_outbox`。Worker 每次消费事件时读取 Team 当前快照，而不是依赖事件 payload 拼接增量状态：
+
+1. active Team 写入所属 Organization、成员和管理员关系；非 active Team 的全部有效授权 tuple 被撤销。
+2. `inherit` 模式的有效功能取 Organization Entitlement；`restricted` 模式取 Organization Entitlement 与 Team Entitlement 的交集。
+3. `materials.*`、`workflow.*` 分别映射为 Team 的 `materials_users`、`workflow_users`，subject set 指向 Team 的 `members/admins`。
+4. Organization Entitlement 变化时，除更新 Organization tuple 外，还必须为该 Organization 下的 Team 创建投影事件，保证继承与交集结果及时收缩。
+
+## 当前实现状态（2026-09-20）
 
 - Organization 投影已落地：Worker 按聚合最小 sequence 领取事件，使用 30 秒 claim lease、指数退避和 `authorization_projection_checkpoints`；checkpoint 与 `delivered_at` 在同一事务提交。
 - 每次事件从 media_auth 读取 Organization 当前快照并与 Keto 现有 tuple 做差量同步；重复投递不会产生重复关系。
 - `workflow.*` 与 `materials.*` entitlement 分别投影为 `workflow_entitled`、`materials_entitled` 对 Organization `members/admins` subject set 的关系；disabled Organization 的全部 tuple 会被撤销。
-- Team、Workspace、资源 Grant 投影以及全量重建命令仍待实现；在这些投影和 shadow comparison 完成前不得开启 Keto enforce。
+- Team 投影覆盖归属、成员、管理员和有效功能；Workspace、资源 Grant 投影以及全量重建命令仍待实现。在这些投影和 shadow comparison 完成前不得开启 Keto enforce。
 
 ## 可观测与验收
 

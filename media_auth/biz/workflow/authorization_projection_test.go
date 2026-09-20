@@ -27,10 +27,16 @@ func (f *projectionOutboxFake) MarkFailed(_ context.Context, _ domain.Event, _ s
 	return nil
 }
 
-type projectionSnapshotFake struct{ snapshot domain.OrganizationSnapshot }
+type projectionSnapshotFake struct {
+	snapshot     domain.OrganizationSnapshot
+	teamSnapshot domain.TeamSnapshot
+}
 
 func (f projectionSnapshotFake) Organization(context.Context, string) (domain.OrganizationSnapshot, error) {
 	return f.snapshot, nil
+}
+func (f projectionSnapshotFake) Team(context.Context, string) (domain.TeamSnapshot, error) {
+	return f.teamSnapshot, nil
 }
 
 type tupleStoreFake struct {
@@ -63,7 +69,7 @@ func TestAuthorizationProjectionReconcilesOrganizationSnapshot(t *testing.T) {
 	store := &tupleStoreFake{tuples: map[string]domain.Tuple{
 		"Organization:o1#members@removed": {Namespace: "Organization", Object: "o1", Relation: "members", SubjectID: "removed"},
 	}}
-	worker := NewAuthorizationProjection(outbox, projectionSnapshotFake{domain.OrganizationSnapshot{
+	worker := NewAuthorizationProjection(outbox, projectionSnapshotFake{snapshot: domain.OrganizationSnapshot{
 		ID: "o1", Status: "active",
 		Members:      []domain.OrganizationMember{{UserID: "admin", Role: "admin"}, {UserID: "member", Role: "member"}},
 		Entitlements: []string{"workflow.run"},
@@ -87,7 +93,7 @@ func TestAuthorizationProjectionReconcilesOrganizationSnapshot(t *testing.T) {
 
 func TestAuthorizationProjectionRetriesKetoFailure(t *testing.T) {
 	outbox := &projectionOutboxFake{events: []domain.Event{{ID: "e1", AggregateType: "organization", AggregateID: "o1", Attempts: 2}}}
-	worker := NewAuthorizationProjection(outbox, projectionSnapshotFake{domain.OrganizationSnapshot{ID: "o1", Status: "active"}}, &tupleStoreFake{fail: true})
+	worker := NewAuthorizationProjection(outbox, projectionSnapshotFake{snapshot: domain.OrganizationSnapshot{ID: "o1", Status: "active"}}, &tupleStoreFake{fail: true})
 	before := time.Now()
 	if err := worker.ProcessPending(context.Background()); err != nil {
 		t.Fatal(err)
@@ -104,5 +110,32 @@ func TestDisabledOrganizationRemovesAllTuples(t *testing.T) {
 	}
 	if len(store.tuples) != 0 {
 		t.Fatalf("tuples=%v", store.tuples)
+	}
+}
+
+func TestAuthorizationProjectionReconcilesRestrictedTeamSnapshot(t *testing.T) {
+	event := domain.Event{ID: "e-team", AggregateType: "team", AggregateID: "t1", Sequence: 4}
+	outbox := &projectionOutboxFake{events: []domain.Event{event}}
+	store := &tupleStoreFake{tuples: map[string]domain.Tuple{}}
+	worker := NewAuthorizationProjection(outbox, projectionSnapshotFake{teamSnapshot: domain.TeamSnapshot{
+		ID: "t1", OrganizationID: "o1", Status: "active", EntitlementMode: "restricted",
+		Members:                  []domain.TeamMember{{UserID: "admin", Role: "admin"}, {UserID: "member", Role: "member"}},
+		OrganizationEntitlements: []string{"materials.read", "workflow.run"},
+		TeamEntitlements:         []string{"workflow.run", "outside.invalid"},
+	}}, store)
+	if err := worker.ProcessPending(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !outbox.delivered || outbox.failed {
+		t.Fatalf("delivered=%v failed=%v", outbox.delivered, outbox.failed)
+	}
+	if _, ok := store.tuples["Team:t1#organization@o1"]; !ok {
+		t.Fatal("missing organization tuple")
+	}
+	if _, ok := store.tuples["Team:t1#workflow_users@Team:t1#members"]; !ok {
+		t.Fatal("missing workflow entitlement")
+	}
+	if _, ok := store.tuples["Team:t1#materials_users@Team:t1#members"]; ok {
+		t.Fatal("restricted team must not inherit unconfigured materials entitlement")
 	}
 }

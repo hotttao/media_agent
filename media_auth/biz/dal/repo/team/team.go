@@ -9,8 +9,11 @@ package team
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"sort"
 	"time"
 
 	"gorm.io/gorm"
@@ -37,19 +40,28 @@ func (r *repo) q(ctx context.Context) *query.Query {
 	return query.Use(dal.FromContext(ctx, r.db))
 }
 
+func (r *repo) conn(ctx context.Context) *gorm.DB {
+	return dal.FromContext(ctx, r.db).WithContext(ctx)
+}
+
 // InsertTeam 仅插 team 行。description 空串 → NULL。
 func (r *repo) InsertTeam(ctx context.Context, organizationID, createdBy, name, description string) (domainteam.Team, error) {
-	q := r.q(ctx)
 	row := model.Team{
-		ID:              ids.New(),
-		OrganizationID:  organizationID,
-		Name:            name,
-		Description:     strPtr(description),
-		EntitlementMode: "inherit",
-		Status:          "active",
-		CreatedBy:       createdBy,
+		ID:                   ids.New(),
+		OrganizationID:       organizationID,
+		Name:                 name,
+		Description:          strPtr(description),
+		EntitlementMode:      "inherit",
+		Status:               "active",
+		AuthorizationVersion: 1,
+		CreatedBy:            createdBy,
 	}
-	if err := q.Team.WithContext(ctx).Create(&row); err != nil {
+	if err := r.conn(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		return enqueueTeam(tx, row.ID, "TeamCreated", map[string]any{"team_id": row.ID}, false)
+	}); err != nil {
 		return domainteam.Team{}, err
 	}
 	return rowToTeam(&row), nil
@@ -102,15 +114,56 @@ func (r *repo) UpdateTeam(ctx context.Context, id string, patch domainteam.TeamP
 
 // DeleteTeam 删 team（级联清 team_members + team_invites）。0 行返回 ErrTeamNotFound。
 func (r *repo) DeleteTeam(ctx context.Context, id string) error {
-	q := r.q(ctx)
-	res, err := q.Team.WithContext(ctx).Where(q.Team.ID.Eq(id)).Delete()
+	return r.conn(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := enqueueTeam(tx, id, "TeamDeleted", map[string]any{"team_id": id}, true); err != nil {
+			return err
+		}
+		res := tx.Delete(&model.Team{}, "id = ?", id)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return domainteam.ErrTeamNotFound
+		}
+		return nil
+	})
+}
+
+func (r *repo) GetEntitlements(ctx context.Context, id string) ([]string, error) {
+	var keys []string
+	err := r.conn(ctx).Model(&model.TeamEntitlement{}).
+		Where("team_id = ?", id).Order("feature_key").Pluck("feature_key", &keys).Error
+	return keys, err
+}
+
+func (r *repo) SetEntitlements(ctx context.Context, id, grantedBy, mode string, keys []string) ([]string, error) {
+	keys = uniqueStrings(keys)
+	if mode == "inherit" {
+		keys = nil
+	}
+	err := r.conn(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&model.Team{}).Where("id = ?", id).Update("entitlement_mode", mode)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return domainteam.ErrTeamNotFound
+		}
+		if err := tx.Where("team_id = ?", id).Delete(&model.TeamEntitlement{}).Error; err != nil {
+			return err
+		}
+		for _, key := range keys {
+			row := model.TeamEntitlement{TeamID: id, FeatureKey: key, GrantedBy: grantedBy}
+			if err := tx.Omit("granted_at").Create(&row).Error; err != nil {
+				return err
+			}
+		}
+		return enqueueTeam(tx, id, "TeamEntitlementsChanged", map[string]any{"team_id": id, "entitlement_mode": mode, "feature_keys": keys}, true)
+	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if res.RowsAffected == 0 {
-		return domainteam.ErrTeamNotFound
-	}
-	return nil
+	return keys, nil
 }
 
 // ListTeamsForUser 查 user 所属全部 team，含 my_role + member_count。
@@ -215,44 +268,42 @@ func (r *repo) CountAdmins(ctx context.Context, teamID string) (int, error) {
 // AddMember 加入成员（ON CONFLICT DO NOTHING 幂等）。
 // Omit JoinedAt 让 DB DEFAULT now() 生效（避免 GORM 写入零值时间）。
 func (r *repo) AddMember(ctx context.Context, teamID, userID string, role domainteam.Role) error {
-	q := r.q(ctx)
-	row := model.TeamMember{
-		TeamID: teamID,
-		UserID: userID,
-		Role:   string(role),
-	}
-	return q.TeamMember.WithContext(ctx).
-		Omit(q.TeamMember.JoinedAt).
-		Clauses(clause.OnConflict{DoNothing: true}).Create(&row)
+	return r.conn(ctx).Transaction(func(tx *gorm.DB) error {
+		row := model.TeamMember{TeamID: teamID, UserID: userID, Role: string(role)}
+		res := tx.Omit("joined_at").Clauses(clause.OnConflict{DoNothing: true}).Create(&row)
+		if res.Error != nil || res.RowsAffected == 0 {
+			return res.Error
+		}
+		return enqueueTeam(tx, teamID, "TeamMembershipChanged", map[string]any{"team_id": teamID, "user_id": userID, "role": role}, true)
+	})
 }
 
 // UpdateMemberRole 改成员 role。0 行返回 ErrMemberNotFound。
 func (r *repo) UpdateMemberRole(ctx context.Context, teamID, userID string, role domainteam.Role) error {
-	q := r.q(ctx)
-	res, err := q.TeamMember.WithContext(ctx).
-		Where(q.TeamMember.TeamID.Eq(teamID), q.TeamMember.UserID.Eq(userID)).
-		UpdateColumn(q.TeamMember.Role, string(role))
-	if err != nil {
-		return err
-	}
-	if res.RowsAffected == 0 {
-		return domainteam.ErrMemberNotFound
-	}
-	return nil
+	return r.conn(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&model.TeamMember{}).Where("team_id = ? AND user_id = ?", teamID, userID).Update("role", string(role))
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return domainteam.ErrMemberNotFound
+		}
+		return enqueueTeam(tx, teamID, "TeamMembershipChanged", map[string]any{"team_id": teamID, "user_id": userID, "role": role}, true)
+	})
 }
 
 // RemoveMember 移除成员。0 行返回 ErrMemberNotFound。
 func (r *repo) RemoveMember(ctx context.Context, teamID, userID string) error {
-	q := r.q(ctx)
-	res, err := q.TeamMember.WithContext(ctx).
-		Where(q.TeamMember.TeamID.Eq(teamID), q.TeamMember.UserID.Eq(userID)).Delete()
-	if err != nil {
-		return err
-	}
-	if res.RowsAffected == 0 {
-		return domainteam.ErrMemberNotFound
-	}
-	return nil
+	return r.conn(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Delete(&model.TeamMember{}, "team_id = ? AND user_id = ?", teamID, userID)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return domainteam.ErrMemberNotFound
+		}
+		return enqueueTeam(tx, teamID, "TeamMembershipChanged", map[string]any{"team_id": teamID, "user_id": userID, "removed": true}, true)
+	})
 }
 
 // UserExists 判定 user 是否存在。
@@ -351,14 +402,15 @@ func (r *repo) DeleteInvite(ctx context.Context, token string) error {
 
 func rowToTeam(t *model.Team) domainteam.Team {
 	d := domainteam.Team{
-		ID:              t.ID,
-		OrganizationID:  t.OrganizationID,
-		Name:            t.Name,
-		EntitlementMode: t.EntitlementMode,
-		Status:          t.Status,
-		CreatedBy:       t.CreatedBy,
-		CreatedAt:       t.CreatedAt,
-		UpdatedAt:       t.UpdatedAt,
+		ID:                   t.ID,
+		OrganizationID:       t.OrganizationID,
+		Name:                 t.Name,
+		EntitlementMode:      t.EntitlementMode,
+		Status:               t.Status,
+		AuthorizationVersion: t.AuthorizationVersion,
+		CreatedBy:            t.CreatedBy,
+		CreatedAt:            t.CreatedAt,
+		UpdatedAt:            t.UpdatedAt,
 	}
 	if t.Description != nil {
 		d.Description = *t.Description
@@ -409,4 +461,41 @@ func newInviteToken() (string, error) {
 		return "", err
 	}
 	return "tinv_" + base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func uniqueStrings(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, value := range in {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func enqueueTeam(tx *gorm.DB, teamID, eventType string, payload any, bump bool) error {
+	var version int64
+	if bump {
+		row := tx.Raw("UPDATE media_auth.teams SET authorization_version = authorization_version + 1, updated_at = now() WHERE id = ? RETURNING authorization_version", teamID).Row()
+		if err := row.Scan(&version); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domainteam.ErrTeamNotFound
+			}
+			return err
+		}
+	} else if err := tx.Model(&model.Team{}).Select("authorization_version").Where("id = ?", teamID).Scan(&version).Error; err != nil {
+		return err
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	return tx.Exec("INSERT INTO media_auth.authorization_outbox (id,aggregate_type,aggregate_id,event_type,payload,sequence) VALUES (?,?,?,?,?::jsonb,?)", ids.New(), "team", teamID, eventType, string(body), version).Error
 }

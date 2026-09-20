@@ -218,7 +218,29 @@ func enqueue(tx *gorm.DB, aggregateID string, sequence int64, eventType string, 
 	if err != nil {
 		return err
 	}
-	return tx.Exec("INSERT INTO media_auth.authorization_outbox (id,aggregate_type,aggregate_id,event_type,payload,sequence) VALUES (?,?,?,?,?::jsonb,?)", ids.New(), "organization", aggregateID, eventType, string(b), sequence).Error
+	if err := tx.Exec("INSERT INTO media_auth.authorization_outbox (id,aggregate_type,aggregate_id,event_type,payload,sequence) VALUES (?,?,?,?,?::jsonb,?)", ids.New(), "organization", aggregateID, eventType, string(b), sequence).Error; err != nil {
+		return err
+	}
+	rows, err := tx.Raw("UPDATE media_auth.teams SET authorization_version = authorization_version + 1, updated_at = now() WHERE organization_id = ? RETURNING id, authorization_version", aggregateID).Rows()
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var teamID string
+		var teamVersion int64
+		if err := rows.Scan(&teamID, &teamVersion); err != nil {
+			return err
+		}
+		teamPayload, err := json.Marshal(map[string]any{"team_id": teamID, "organization_id": aggregateID})
+		if err != nil {
+			return err
+		}
+		if err := tx.Exec("INSERT INTO media_auth.authorization_outbox (id,aggregate_type,aggregate_id,event_type,payload,sequence) VALUES (?,?,?,?,?::jsonb,?)", ids.New(), "team", teamID, "TeamOrganizationAuthorizationChanged", string(teamPayload), teamVersion).Error; err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 func toDomain(r model.Organization) domain.Organization {
 	return domain.Organization{ID: r.ID, Name: r.Name, Status: r.Status, Version: r.Version, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}

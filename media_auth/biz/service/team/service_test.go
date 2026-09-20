@@ -21,20 +21,22 @@ import (
 
 // fakeRepo 实现 domainteam.TeamRepo（内存版）。
 type fakeRepo struct {
-	mu      sync.Mutex
-	teams   map[string]domainteam.Team
-	members map[string]map[string]domainteam.Membership // teamID → userID → membership
-	invites map[string]domainteam.Invite                // token → invite
-	users   map[string]bool                             // 存在的 user id
-	nextID  int
+	mu           sync.Mutex
+	teams        map[string]domainteam.Team
+	members      map[string]map[string]domainteam.Membership // teamID → userID → membership
+	invites      map[string]domainteam.Invite                // token → invite
+	users        map[string]bool                             // 存在的 user id
+	entitlements map[string][]string
+	nextID       int
 }
 
 func newFakeRepo(existingUsers ...string) *fakeRepo {
 	r := &fakeRepo{
-		teams:   map[string]domainteam.Team{},
-		members: map[string]map[string]domainteam.Membership{},
-		invites: map[string]domainteam.Invite{},
-		users:   map[string]bool{},
+		teams:        map[string]domainteam.Team{},
+		members:      map[string]map[string]domainteam.Membership{},
+		invites:      map[string]domainteam.Invite{},
+		users:        map[string]bool{},
+		entitlements: map[string][]string{},
 	}
 	for _, u := range existingUsers {
 		r.users[u] = true
@@ -59,6 +61,25 @@ func (allowOrg) Get(context.Context, string) (domainorganization.Organization, e
 	return domainorganization.Organization{ID: "org1", Status: "active"}, nil
 }
 func (allowOrg) GetMembership(_ context.Context, organizationID, userID string) (domainorganization.Membership, error) {
+	role := "member"
+	if userID == "u1" {
+		role = "admin"
+	}
+	return domainorganization.Membership{OrganizationID: organizationID, UserID: userID, Role: role}, nil
+}
+func (allowOrg) GetEntitlements(context.Context, string) ([]string, error) {
+	return []string{"materials.read", "workflow.run"}, nil
+}
+
+type denyOrg struct{ allowOrg }
+
+func (denyOrg) GetMembership(context.Context, string, string) (domainorganization.Membership, error) {
+	return domainorganization.Membership{}, domainorganization.ErrNotMember
+}
+
+type allAdminOrg struct{ allowOrg }
+
+func (allAdminOrg) GetMembership(_ context.Context, organizationID, userID string) (domainorganization.Membership, error) {
 	return domainorganization.Membership{OrganizationID: organizationID, UserID: userID, Role: "admin"}, nil
 }
 
@@ -103,6 +124,28 @@ func (r *fakeRepo) DeleteTeam(_ context.Context, id string) error {
 	delete(r.teams, id)
 	delete(r.members, id)
 	return nil
+}
+
+func (r *fakeRepo) GetEntitlements(_ context.Context, id string) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.entitlements[id]...), nil
+}
+
+func (r *fakeRepo) SetEntitlements(_ context.Context, id, _ string, mode string, keys []string) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.teams[id]
+	if !ok {
+		return nil, domainteam.ErrTeamNotFound
+	}
+	t.EntitlementMode = mode
+	r.teams[id] = t
+	if mode == "inherit" {
+		keys = nil
+	}
+	r.entitlements[id] = append([]string(nil), keys...)
+	return append([]string(nil), keys...), nil
 }
 
 func (r *fakeRepo) ListTeamsForUser(_ context.Context, userID string) ([]domainteam.TeamSummary, error) {
@@ -359,8 +402,8 @@ func TestRemoveMember_AdminCanRemoveOthers(t *testing.T) {
 
 	// 非 admin 移除他人 → 403。
 	err := svc.RemoveMember(context.Background(), "u2", teamID, "u1")
-	if !errors.Is(err, ErrForbidden) {
-		t.Errorf("non-admin remove others: want ErrForbidden, got %v", err)
+	if !errors.Is(err, ErrOrganizationAdmin) {
+		t.Errorf("non-admin remove others: want ErrOrganizationAdmin, got %v", err)
 	}
 
 	// admin 移除他人 → 允许。
@@ -428,15 +471,25 @@ func TestAddMember_InvalidRole(t *testing.T) {
 	}
 }
 
-func TestGetTeam_NonMemberNotFound(t *testing.T) {
+func TestGetTeam_OrganizationAdminCanRead(t *testing.T) {
 	repo := newFakeRepo("u1", "u2")
-	svc := newTestService(repo, fakeTx{})
-	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
+	seedSvc := newTestService(repo, fakeTx{})
+	teamID := seedTeamWithAdmin(t, seedSvc, repo, "u1")
+	svc := NewService(repo, fakeTx{}, allAdminOrg{})
 
-	// u2 非成员 → 404（不暴露存在性）。
+	if _, err := svc.GetTeam(context.Background(), "u2", teamID); err != nil {
+		t.Fatalf("organization admin should read team: %v", err)
+	}
+}
+
+func TestGetTeam_NonOrganizationMemberNotFound(t *testing.T) {
+	repo := newFakeRepo("u1", "u2")
+	seedSvc := newTestService(repo, fakeTx{})
+	teamID := seedTeamWithAdmin(t, seedSvc, repo, "u1")
+	svc := NewService(repo, fakeTx{}, denyOrg{})
 	_, err := svc.GetTeam(context.Background(), "u2", teamID)
-	if !errors.Is(err, ErrNotMember) {
-		t.Errorf("non-member get: want ErrNotMember, got %v", err)
+	if !errors.Is(err, ErrTeamNotFound) {
+		t.Errorf("non-member get: want ErrTeamNotFound, got %v", err)
 	}
 }
 
@@ -457,5 +510,44 @@ func TestListMyTeams(t *testing.T) {
 		if tm.MyRole != domainteam.RoleAdmin || tm.MemberCount != 1 {
 			t.Errorf("unexpected team summary: %+v", tm)
 		}
+	}
+}
+
+func TestSetEntitlementsRestrictedUsesOrganizationUpperBound(t *testing.T) {
+	repo := newFakeRepo("u1")
+	svc := newTestService(repo, fakeTx{})
+	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
+
+	view, err := svc.SetEntitlements(context.Background(), "u1", teamID, SetEntitlementsCommand{
+		Mode: "restricted", FeatureKeys: []string{"workflow.run"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.EffectiveFeatureKeys) != 1 || view.EffectiveFeatureKeys[0] != "workflow.run" {
+		t.Fatalf("view=%+v", view)
+	}
+	_, err = svc.SetEntitlements(context.Background(), "u1", teamID, SetEntitlementsCommand{
+		Mode: "restricted", FeatureKeys: []string{"admin.superpower"},
+	})
+	if !errors.Is(err, ErrEntitlementExceedsOrganization) {
+		t.Fatalf("want ErrEntitlementExceedsOrganization, got %v", err)
+	}
+}
+
+func TestSetEntitlementsInheritClearsConfiguredKeys(t *testing.T) {
+	repo := newFakeRepo("u1")
+	svc := newTestService(repo, fakeTx{})
+	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
+	repo.entitlements[teamID] = []string{"workflow.run"}
+
+	view, err := svc.SetEntitlements(context.Background(), "u1", teamID, SetEntitlementsCommand{
+		Mode: "inherit", FeatureKeys: []string{"workflow.run"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.ConfiguredFeatureKeys) != 0 || len(view.EffectiveFeatureKeys) != 2 {
+		t.Fatalf("view=%+v", view)
 	}
 }

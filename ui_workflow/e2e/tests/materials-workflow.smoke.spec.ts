@@ -9,7 +9,10 @@ test.describe("Materials and Workflow shell", () => {
     await expect(page.getByRole("navigation", { name: "Applications" })).toContainText("Materials");
     await expect(page.getByRole("navigation", { name: "Applications" })).toContainText("Workflow");
     await expect(page.getByText("Local Organization / Default Team / Standalone Workspace")).toBeVisible();
-    await expect(page.getByText("No materials yet.")).toBeVisible();
+    await expect(
+      page.getByText("No materials yet.").or(page.getByRole("columnheader", { name: "Name" })),
+    ).toBeVisible();
+    await expect(page.getByText(/Unable to load materials:/)).toHaveCount(0);
   });
 
   test("switches from Materials to Workflow and loads the workflow resource tabs", {

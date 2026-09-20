@@ -20,6 +20,17 @@ type UpdateTeamCommand struct {
 	Description *string // &""=清空；&"x"=设置；nil=不改
 }
 
+type SetEntitlementsCommand struct {
+	Mode        string
+	FeatureKeys []string
+}
+
+type EntitlementsView struct {
+	Mode                  string
+	ConfiguredFeatureKeys []string
+	EffectiveFeatureKeys  []string
+}
+
 // AddMemberCommand 是 AddMember 用例入参。Role nil=默认 member。
 type AddMemberCommand struct {
 	UserID string

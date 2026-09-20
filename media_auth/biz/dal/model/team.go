@@ -6,16 +6,27 @@ import "time"
 // Team 是 media_auth.teams 表的 GORM row model。
 // id 由应用层 generateId() 产生(短随机串)；created_by 为创建者(首任 admin)。
 type Team struct {
-	ID              string    `gorm:"column:id;primaryKey"`
-	OrganizationID  string    `gorm:"column:organization_id"`
-	Name            string    `gorm:"column:name"`
-	Description     *string   `gorm:"column:description"`
-	EntitlementMode string    `gorm:"column:entitlement_mode"`
-	Status          string    `gorm:"column:status"`
-	CreatedBy       string    `gorm:"column:created_by"`
-	CreatedAt       time.Time `gorm:"column:created_at"`
-	UpdatedAt       time.Time `gorm:"column:updated_at"`
+	ID                   string    `gorm:"column:id;primaryKey"`
+	OrganizationID       string    `gorm:"column:organization_id"`
+	Name                 string    `gorm:"column:name"`
+	Description          *string   `gorm:"column:description"`
+	EntitlementMode      string    `gorm:"column:entitlement_mode"`
+	Status               string    `gorm:"column:status"`
+	AuthorizationVersion int64     `gorm:"column:authorization_version;default:1"`
+	CreatedBy            string    `gorm:"column:created_by"`
+	CreatedAt            time.Time `gorm:"column:created_at"`
+	UpdatedAt            time.Time `gorm:"column:updated_at"`
 }
+
+// TeamEntitlement 是部门在 restricted 模式下显式获授的功能。
+type TeamEntitlement struct {
+	TeamID     string    `gorm:"column:team_id;primaryKey"`
+	FeatureKey string    `gorm:"column:feature_key;primaryKey"`
+	GrantedBy  string    `gorm:"column:granted_by"`
+	GrantedAt  time.Time `gorm:"column:granted_at"`
+}
+
+func (TeamEntitlement) TableName() string { return "media_auth.team_entitlements" }
 
 // TableName 固定表名（与 migration 一致，含 media_auth schema 前缀）。
 func (Team) TableName() string { return "media_auth.teams" }

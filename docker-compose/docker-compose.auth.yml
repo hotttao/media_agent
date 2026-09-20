@@ -145,10 +145,12 @@ services:
     environment:
       PORT: "3000"
       SECURITY_MODE: ""
-      KRATOS_PUBLIC_URL: http://kratos:4433/
+      # The UI app appends /self-service/... itself; a trailing slash produces
+      # //self-service and Kratos redirects before cookies are forwarded.
+      KRATOS_PUBLIC_URL: http://kratos:4433
       KRATOS_BROWSER_URL: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/
-      KRATOS_ADMIN_URL: http://kratos:4434/
-      HYDRA_ADMIN_URL: http://hydra:4445/
+      KRATOS_ADMIN_URL: http://kratos:4434
+      HYDRA_ADMIN_URL: http://hydra:4445
       BASE_URL: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/
       COOKIE_SECRET: ${ORY_UI_COOKIE_SECRET:-local-login-ui-cookie-secret-change-me}
       CSRF_COOKIE_SECRET: ${ORY_UI_CSRF_SECRET:-local-login-ui-csrf-secret-change-me}
