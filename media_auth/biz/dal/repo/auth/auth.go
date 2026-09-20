@@ -60,13 +60,16 @@ func (r *repo) FindByID(ctx context.Context, id string) (domainauth.User, error)
 // ResolveKratosIdentity maps the external Kratos identity to one stable
 // business user. Existing local users are linked by normalized email on first
 // login so enabling Kratos does not fork resource ownership.
-func (r *repo) ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string) (domainauth.User, error) {
+func (r *repo) ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string, platformAdmin bool) (domainauth.User, error) {
 	var resolved domainauth.User
 	err := dal.FromContext(ctx, r.db).Transaction(func(tx *gorm.DB) error {
 		var row model.User
 		err := tx.Where("kratos_identity_id = ?", identityID).First(&row).Error
 		if err == nil {
 			updates := map[string]any{"last_login_at": time.Now()}
+			if platformAdmin {
+				updates["role"] = "admin"
+			}
 			if email != "" {
 				updates["email"] = email
 			}
@@ -93,6 +96,9 @@ func (r *repo) ResolveKratosIdentity(ctx context.Context, identityID, email, dis
 					return errors.New("email is already linked to another Kratos identity")
 				}
 				updates := map[string]any{"kratos_identity_id": identityID, "last_login_at": time.Now()}
+				if platformAdmin {
+					updates["role"] = "admin"
+				}
 				if displayName != "" {
 					updates["display_name"] = displayName
 				}
@@ -116,9 +122,13 @@ func (r *repo) ResolveKratosIdentity(ctx context.Context, identityID, email, dis
 			displayName = username
 		}
 		now := time.Now()
+		role := "user"
+		if platformAdmin {
+			role = "admin"
+		}
 		row = model.User{
 			ID: ids.New(), KratosIdentityID: &identityID, Username: username,
-			DisplayName: displayName, Email: strPtr(email), Role: "user",
+			DisplayName: displayName, Email: strPtr(email), Role: role,
 			Status: domainauth.UserStatusActive, AuthVersion: 1, LastLoginAt: &now,
 		}
 		if err := tx.Create(&row).Error; err != nil {
@@ -255,13 +265,35 @@ func (r *repo) ListUsers(ctx context.Context, q, sort, order string, page, pageS
 func (r *repo) SoftDeleteUser(ctx context.Context, id, deletedBy string) (domainauth.User, error) {
 	now := time.Now()
 	res := dal.FromContext(ctx, r.db).Model(&model.User{}).
-		Where("id = ? AND status = ?", id, domainauth.UserStatusActive).
+		Where("id = ? AND status IN ?", id, []string{domainauth.UserStatusActive, domainauth.UserStatusDisabled}).
 		Updates(map[string]any{
 			"status":       domainauth.UserStatusDeleted,
 			"auth_version": gorm.Expr("auth_version + 1"),
 			"deleted_at":   now,
 			"deleted_by":   deletedBy,
 		})
+	if res.Error != nil {
+		return domainauth.User{}, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domainauth.User{}, domainauth.ErrUserNotFound
+	}
+	return r.FindByID(ctx, id)
+}
+
+func (r *repo) UpdateStatus(ctx context.Context, id, fromStatus, toStatus string) (domainauth.User, error) {
+	updates := map[string]any{
+		"status":       toStatus,
+		"auth_version": gorm.Expr("auth_version + 1"),
+	}
+	if toStatus == domainauth.UserStatusDisabled {
+		updates["disabled_at"] = time.Now()
+	} else {
+		updates["disabled_at"] = nil
+	}
+	res := dal.FromContext(ctx, r.db).Model(&model.User{}).
+		Where("id = ? AND status = ?", id, fromStatus).
+		Updates(updates)
 	if res.Error != nil {
 		return domainauth.User{}, res.Error
 	}

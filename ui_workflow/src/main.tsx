@@ -12,6 +12,7 @@ import App from "./App";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { configureApi } from "@/foundation/lib/api-client";
+import { browserFlowURL } from "@/foundation/lib/ory-browser";
 import "@/foundation/lib/i18n"; // side-effect: initialize i18next singleton
 import { AuthProvider } from "@/foundation/providers/auth-provider";
 import { QueryProvider } from "@/foundation/providers/query-provider";
@@ -21,7 +22,9 @@ import "./index.css";
 configureApi({
   onUnauthorized: () => {
     if (window.location.pathname !== "/login") {
-      window.location.href = `/api/auth/login?next=${encodeURIComponent(window.location.pathname)}`;
+      window.location.assign(
+        browserFlowURL("login", window.location.pathname + window.location.search),
+      );
     }
   },
 });

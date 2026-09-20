@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -52,6 +53,7 @@ import (
 	wecomservice "media_agent/media_auth/biz/service/wecom"
 	"media_agent/media_auth/biz/shared/client/introspect"
 	ketoclient "media_agent/media_auth/biz/shared/client/keto"
+	kratosclient "media_agent/media_auth/biz/shared/client/kratos"
 	ldapclient "media_agent/media_auth/biz/shared/client/ldap"
 	mcpclient "media_agent/media_auth/biz/shared/client/mcp"
 	wecomclient "media_agent/media_auth/biz/shared/client/wecom"
@@ -112,9 +114,10 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 
 	organizationRepo := dalorganization.NewRepo(db)
 	organizationhandler.Svc = organizationservice.NewService(organizationRepo)
+	var ketoClient *ketoclient.Client
 	if readURL, writeURL := os.Getenv("KETO_READ_URL"), os.Getenv("KETO_WRITE_URL"); readURL != "" && writeURL != "" {
 		projectionRepo := dalauthorizationprojection.New(db)
-		ketoClient := ketoclient.New(readURL, writeURL, &http.Client{Timeout: 5 * time.Second})
+		ketoClient = ketoclient.New(readURL, writeURL, &http.Client{Timeout: 5 * time.Second})
 		projection := workflow.NewAuthorizationProjection(projectionRepo, projectionRepo, dalauthorizationprojection.NewKetoStore(ketoClient))
 		go projection.Run(context.Background())
 	}
@@ -124,6 +127,8 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	teamSvc := teamservice.NewService(teamRepo, txRunner, organizationRepo)
 	teamhandler.TeamSvc = teamSvc
 	teaminternalhandler.TeamSvc = teamSvc // internal /internal/teams:byUser 复用 team service
+	teaminternalhandler.KetoClient = ketoClient
+	teaminternalhandler.KetoEnforce = strings.EqualFold(os.Getenv("KETO_ENFORCE"), "true")
 
 	// internal token service：复用 service_token TokenRepo + auth UserRepo（不新建 domain）。
 	tokenSvc := tokenservice.NewService(stRepo, userRepo)
@@ -133,7 +138,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	SessionMiddleware = middleware.SessionWithToken(signer, tokenSvc)
 	if jwksURL := os.Getenv("INTERNAL_JWKS_URL"); jwksURL != "" {
 		verifier := internaljwt.NewVerifier(jwksURL, os.Getenv("INTERNAL_JWT_ISSUER"), "internal-api", nil)
-		SessionMiddleware = middleware.SessionWithInternalJWT(signer, tokenSvc, userRepo, verifier, os.Getenv("ORY_KRATOS_PUBLIC_URL"))
+		SessionMiddleware = middleware.SessionWithInternalJWT(signer, tokenSvc, userRepo, verifier, os.Getenv("ORY_KRATOS_PUBLIC_URL"), os.Getenv("ORY_KRATOS_ADMIN_URL"))
 	}
 
 	// oauth domain：repo + service（持 signer + introspect client + TTL）+ handler 回填。
@@ -172,6 +177,9 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 
 	// 用户软删除：提交 User + Outbox，worker 最终一致撤销各认证域凭据。
 	userDeleteFlow := workflow.NewUserSoftDelete(userRepo, accessOutbox, stRepo, oauthRepo, mcpRepo, txRunner)
+	if kratosAdminURL := os.Getenv("ORY_KRATOS_ADMIN_URL"); kratosAdminURL != "" {
+		userDeleteFlow.SetIdentitySessionRevoker(kratosclient.New(kratosAdminURL, nil))
+	}
 	userSvc := userservice.NewService(userRepo, userDeleteFlow)
 	userhandler.UserSvc = userSvc
 	go userDeleteFlow.Run(context.Background())

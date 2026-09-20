@@ -63,6 +63,8 @@ Team 功能接口固定为：
 - `GET /api/teams/{id}/entitlements`：Team 成员或 Organization admin 可读，返回 `entitlement_mode`、`configured_feature_keys`、`effective_feature_keys`。
 - `PUT /api/teams/{id}/entitlements`：仅 Organization admin 可写，请求同时携带 `entitlement_mode` 与 `feature_keys`；restricted 集合必须是 Organization Entitlement 子集，inherit 模式清空显式集合。
 - Team 创建、成员和角色变化、状态变化、功能变化均递增 `authorization_version`，并与 Outbox 原子提交。Organization Entitlement 变化还要触发其所有 Team 重新投影。
+- `POST /internal/team-authorization/check`：内部固定权限判定，只接受 `view | manage | create_workspace | use_materials | use_workflow`；同时返回事实源/Keto shadow 结果，enforce 时二者必须同时允许。
+- Workspace 创建必须携带 `organization_id`、`team_id`；持久化不可变归属与 `created_by`。列表、详情、更新及内部 access check 均从事实归属反查 Team 权限。
 
 ## 4. Workflow 的业务定义
 

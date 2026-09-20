@@ -13,7 +13,7 @@
  * 401 redirect into an injectable handler, base path /api/v1).
  */
 import { API_BASE } from "@/foundation/lib/constants";
-import type { LogoutResponse, User } from "@/foundation/types/auth";
+import type { User } from "@/foundation/types/auth";
 
 export class ApiClientError extends Error {
   readonly status: number;
@@ -71,10 +71,6 @@ class ApiClient {
 
   async getMe(): Promise<User> {
     return this.requestAuth<User>("/me");
-  }
-
-  async logout(): Promise<void> {
-    await this.requestAuth<LogoutResponse>("/logout", { method: "POST" });
   }
 
   /** Auth endpoints are mounted at /api/auth, outside the versioned resource API. */

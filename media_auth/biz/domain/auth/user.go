@@ -111,7 +111,8 @@ type UserRepo interface {
 // bridge used only at the authentication boundary.
 type Repository interface {
 	UserRepo
-	ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string) (User, error)
+	ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string, platformAdmin bool) (User, error)
+	UpdateStatus(ctx context.Context, id, fromStatus, toStatus string) (User, error)
 }
 
 // AccessRevocationEvent 是软删除事务写出的访问撤销事件。
@@ -132,8 +133,12 @@ type AccessRevocationOutbox interface {
 
 // domain 错误。repo 实现用 errors.Is 透传，service/handler 据此映射 HTTP 状态。
 var (
-	ErrUserNotFound  = errSentinel("user not found")
-	ErrUsernameTaken = errSentinel("username already taken")
+	ErrUserNotFound       = errSentinel("user not found")
+	ErrUsernameTaken      = errSentinel("username already taken")
+	ErrLastActiveAdmin    = errSentinel("cannot disable or delete the last active admin")
+	ErrCannotDisableSelf  = errSentinel("cannot disable yourself")
+	ErrInvalidUserStatus  = errSentinel("status must be active or disabled")
+	ErrTerminalUserStatus = errSentinel("deleted user status cannot be changed")
 )
 
 // errSentinel 是简单的哨兵错误类型，支持 errors.Is 比较。

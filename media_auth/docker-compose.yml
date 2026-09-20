@@ -12,9 +12,20 @@ services:
       CONSUL_ENABLED: 'false'
       MEDIA_AUTH_DB_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_auth?sslmode=disable
       MEDIA_AUTH_INTERNAL_TOKEN: ${MEDIA_AUTH_INTERNAL_TOKEN:-dev-media-auth-internal-token}
+      KETO_READ_URL: http://keto:4466
+      KETO_WRITE_URL: http://keto:4467
+      ORY_KRATOS_ADMIN_URL: http://kratos:4434
       LOG_DIR: /media_logs/media-auth
     volumes:
     - ../media_logs/media-auth:/media_logs/media-auth
     extra_hosts:
     - host.docker.internal:host-gateway
+    networks:
+    - default
+    - auth
     restart: unless-stopped
+
+networks:
+  auth:
+    external: true
+    name: media-auth

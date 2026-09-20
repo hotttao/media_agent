@@ -17,15 +17,11 @@ http:
       rule: "Path(`/login`) || PathPrefix(`/login/`) || Path(`/registration`) || PathPrefix(`/registration/`) || Path(`/settings`) || PathPrefix(`/settings/`) || Path(`/recovery`) || PathPrefix(`/recovery/`) || Path(`/verification`) || PathPrefix(`/verification/`) || Path(`/logout`) || PathPrefix(`/logout/`) || Path(`/error`) || PathPrefix(`/error/`)"
       priority: 120
       service: ory-login-ui
-    auth:
-      rule: "Path(`/api/auth/login`) || Path(`/api/auth/logout`)"
-      priority: 100
-      service: workflow
     authenticated-user:
       rule: "Path(`/api/auth/me`)"
       priority: 110
       middlewares: [oathkeeper-forward-auth]
-      service: workflow
+      service: auth
     oathkeeper-jwks:
       rule: "Path(`/.well-known/jwks.json`)"
       priority: 140
@@ -45,6 +41,11 @@ http:
       priority: 50
       middlewares: [oathkeeper-forward-auth]
       service: workflow
+    control:
+      rule: "PathPrefix(`/api/v1/workspaces`)"
+      priority: 60
+      middlewares: [oathkeeper-forward-auth]
+      service: control
     frontend:
       rule: "PathPrefix(`/`)"
       priority: 1
@@ -94,6 +95,10 @@ http:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:8002"
+    control:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8007"
     frontend:
       loadBalancer:
         servers:

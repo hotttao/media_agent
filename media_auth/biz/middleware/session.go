@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -38,7 +39,7 @@ var globalSigner *session.Signer
 var globalTokenSvc *tokenservice.Service
 
 type kratosIdentityRepo interface {
-	ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string) (auth.User, error)
+	ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string, platformAdmin bool) (auth.User, error)
 }
 
 // SessionFromContext 从 ctx 取 Session（middleware 注入）；无返回 nil。
@@ -78,6 +79,7 @@ var skipAllPaths = map[string]bool{
 	"/internal/token/session":  true,
 	// internal teams 查询：供下游服务 fetchTeams 调用。
 	"/internal/teams:byUser":              true,
+	"/internal/team-authorization/check":  true,
 	"/internal/identities/kratos:resolve": true,
 	// 运维端点（health/pprof/metrics/swagger/openapi/ping）不走 session 鉴权
 	"/health":       true,
@@ -111,7 +113,7 @@ func SessionWithToken(signer *session.Signer, tokenSvc *tokenservice.Service) ap
 
 // SessionWithInternalJWT accepts Oathkeeper assertions at the external API
 // boundary and resolves their Kratos subject to a stable business User.
-func SessionWithInternalJWT(signer *session.Signer, tokenSvc *tokenservice.Service, repo kratosIdentityRepo, verifier *internaljwt.Verifier, kratosURL string) app.HandlerFunc {
+func SessionWithInternalJWT(signer *session.Signer, tokenSvc *tokenservice.Service, repo kratosIdentityRepo, verifier *internaljwt.Verifier, kratosURL, kratosAdminURL string) app.HandlerFunc {
 	globalSigner = signer
 	globalTokenSvc = tokenSvc
 	base := sessionMiddleware(signer, tokenSvc)
@@ -131,7 +133,12 @@ func SessionWithInternalJWT(signer *session.Signer, tokenSvc *tokenservice.Servi
 			abortUnauthorized(c, "invalid internal identity")
 			return
 		}
-		u, err := repo.ResolveKratosIdentity(ctx, identityID, email, name)
+		platformAdmin, err := fetchKratosPlatformAdmin(ctx, kratosAdminURL, identityID)
+		if err != nil {
+			abortUnauthorized(c, "identity metadata unavailable")
+			return
+		}
+		u, err := repo.ResolveKratosIdentity(ctx, identityID, email, name, platformAdmin)
 		if err != nil || !u.IsActive() {
 			abortUnauthorized(c, "inactive business user")
 			return
@@ -176,6 +183,36 @@ func fetchKratosIdentity(ctx context.Context, baseURL, cookie string) (identityI
 		name = body.Identity.Traits.Email
 	}
 	return body.Identity.ID, body.Identity.Traits.Email, name, nil
+}
+
+// fetchKratosPlatformAdmin reads server-owned metadata from the Admin API only
+// after the Oathkeeper subject and browser session identity have matched.
+func fetchKratosPlatformAdmin(ctx context.Context, adminURL, identityID string) (bool, error) {
+	if adminURL == "" || identityID == "" {
+		return false, errors.New("Kratos admin identity endpoint unavailable")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		strings.TrimRight(adminURL, "/")+"/admin/identities/"+url.PathEscape(identityID), nil)
+	if err != nil {
+		return false, err
+	}
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("Kratos admin identity status %d", resp.StatusCode)
+	}
+	var body struct {
+		MetadataAdmin struct {
+			Role string `json:"role"`
+		} `json:"metadata_admin"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return false, err
+	}
+	return body.MetadataAdmin.Role == "platform_admin", nil
 }
 
 func sessionMiddleware(signer *session.Signer, tokenSvc *tokenservice.Service) app.HandlerFunc {

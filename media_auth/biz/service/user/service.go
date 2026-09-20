@@ -17,12 +17,17 @@ import (
 
 // Service 是用户管理用例服务。
 type Service struct {
-	repo    domainauth.UserRepo
-	deleter UserDeleter
+	repo          domainauth.UserRepo
+	deleter       UserDeleter
+	statusUpdater UserStatusUpdater
 }
 
 type UserDeleter interface {
 	Delete(ctx context.Context, currentUserID, targetID string) error
+}
+
+type UserStatusUpdater interface {
+	UpdateStatus(ctx context.Context, currentUserID, targetID, status string) error
 }
 
 // NewService 构造用户管理服务。
@@ -31,7 +36,11 @@ func NewService(repo domainauth.UserRepo, deleters ...UserDeleter) *Service {
 	if len(deleters) > 0 {
 		deleter = deleters[0]
 	}
-	return &Service{repo: repo, deleter: deleter}
+	var statusUpdater UserStatusUpdater
+	if value, ok := deleter.(UserStatusUpdater); ok {
+		statusUpdater = value
+	}
+	return &Service{repo: repo, deleter: deleter, statusUpdater: statusUpdater}
 }
 
 // UserView 是 service 层返回的用户记录（与 DTO 对齐）。
@@ -52,9 +61,13 @@ type UserView struct {
 
 // 用例错误。
 var (
-	ErrForbidden     = errors.New("admin only")
-	ErrUserNotFound  = domainauth.ErrUserNotFound
-	ErrUsernameTaken = domainauth.ErrUsernameTaken
+	ErrForbidden          = errors.New("admin only")
+	ErrUserNotFound       = domainauth.ErrUserNotFound
+	ErrUsernameTaken      = domainauth.ErrUsernameTaken
+	ErrLastActiveAdmin    = domainauth.ErrLastActiveAdmin
+	ErrCannotDisableSelf  = domainauth.ErrCannotDisableSelf
+	ErrInvalidUserStatus  = domainauth.ErrInvalidUserStatus
+	ErrTerminalUserStatus = domainauth.ErrTerminalUserStatus
 )
 
 // ListUsers 分页+搜索用户（admin only）。返回 (views, total)。
@@ -115,6 +128,16 @@ func (s *Service) DeleteUser(ctx context.Context, role, currentUserID, targetID 
 		return errors.New("user soft-delete workflow is unavailable")
 	}
 	return s.deleter.Delete(ctx, currentUserID, targetID)
+}
+
+func (s *Service) UpdateUserStatus(ctx context.Context, role, currentUserID, targetID, status string) error {
+	if role != "admin" {
+		return ErrForbidden
+	}
+	if s.statusUpdater == nil {
+		return errors.New("user status workflow is unavailable")
+	}
+	return s.statusUpdater.UpdateStatus(ctx, currentUserID, targetID, status)
 }
 
 // ChangeUserPassword admin 改他人密码（admin only；仅本地密码账号）。

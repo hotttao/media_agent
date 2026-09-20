@@ -34,9 +34,9 @@ func CreateWorkspace(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	value, err := workspaceService.Create(ctx, service.CreateCommand{OwnerUserID: middleware.UserID(ctx), Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey})
+	value, err := workspaceService.Create(ctx, service.CreateCommand{UserID: middleware.UserID(ctx), OrganizationID: req.OrganizationId, TeamID: req.TeamId, Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey})
 	if err != nil {
-		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeError(c, err)
 		return
 	}
 	c.JSON(consts.StatusCreated, toResponse(value))
@@ -108,9 +108,13 @@ func GetRuntimeContext(ctx context.Context, c *app.RequestContext) {
 }
 
 func toResponse(value *domain.ConfiguredWorkspace) *workspace.WorkspaceResponse {
-	return &workspace.WorkspaceResponse{Id: value.Workspace.ID, Name: value.Workspace.Name, AgentId: value.AgentID, AgentType: value.AgentType, ApiKeyConfigured: len(value.EncryptedAPIKey) > 0, ConfigurationVersion: value.AgentConfiguration.Version, CreatedAt: value.Workspace.CreatedAt.UnixMilli(), UpdatedAt: value.Workspace.UpdatedAt.UnixMilli(), AgentConfigurationId: value.AgentConfiguration.ID}
+	return &workspace.WorkspaceResponse{Id: value.Workspace.ID, Name: value.Workspace.Name, AgentId: value.AgentID, AgentType: value.AgentType, ApiKeyConfigured: len(value.EncryptedAPIKey) > 0, ConfigurationVersion: value.AgentConfiguration.Version, CreatedAt: value.Workspace.CreatedAt.UnixMilli(), UpdatedAt: value.Workspace.UpdatedAt.UnixMilli(), AgentConfigurationId: value.AgentConfiguration.ID, OrganizationId: value.OrganizationID, TeamId: value.TeamID, CreatedBy: value.CreatedBy, DesiredState: value.DesiredState}
 }
 func writeError(c *app.RequestContext, err error) {
+	if errors.Is(err, service.ErrForbidden) {
+		c.JSON(consts.StatusForbidden, map[string]string{"error": err.Error()})
+		return
+	}
 	if errors.Is(err, domain.ErrNotFound) {
 		c.JSON(consts.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -129,7 +133,7 @@ func UpdateWorkspace(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	value, err := workspaceService.Update(ctx, service.UpdateCommand{WorkspaceID: req.WorkspaceId, OwnerUserID: middleware.UserID(ctx), Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey})
+	value, err := workspaceService.Update(ctx, service.UpdateCommand{WorkspaceID: req.WorkspaceId, UserID: middleware.UserID(ctx), Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey})
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			writeError(c, err)
@@ -139,4 +143,35 @@ func UpdateWorkspace(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	c.JSON(consts.StatusOK, toResponse(value))
+}
+
+// CheckWorkspaceAccess is an internal service endpoint. The acting user is
+// established by the control service credential middleware, never by JSON.
+func CheckWorkspaceAccess(ctx context.Context, c *app.RequestContext) {
+	var req struct {
+		WorkspaceID string `json:"workspace_id"`
+		Action      string `json:"action"`
+	}
+	if err := c.BindAndValidate(&req); err != nil {
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if req.WorkspaceID == "" || req.Action == "" {
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": "workspace_id and action are required"})
+		return
+	}
+	allowed, err := workspaceService.CheckAccess(ctx, req.WorkspaceID, middleware.UserID(ctx), req.Action)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidAction) {
+			c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(consts.StatusOK, map[string]bool{"allowed": false})
+			return
+		}
+		c.JSON(consts.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	c.JSON(consts.StatusOK, map[string]bool{"allowed": allowed})
 }

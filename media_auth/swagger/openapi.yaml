@@ -1551,6 +1551,36 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/users/{id}/status:
+        patch:
+            tags:
+                - UserService
+            operationId: UserService_UpdateUserStatus
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateUserStatusRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UpdateUserStatusResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
 components:
     schemas:
         AcceptInviteResponse:
@@ -2228,6 +2258,18 @@ components:
                     type: string
                 description:
                     type: string
+        UpdateUserStatusRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                status:
+                    type: string
+        UpdateUserStatusResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
         UserIdentity:
             type: object
             properties:

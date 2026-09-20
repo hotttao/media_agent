@@ -6,6 +6,7 @@ dependencies:
 related_workflow:
     - wecom_login_bind
     - user_soft_delete
+    - user_suspension
 ---
 
 ## 一句话职责
@@ -20,6 +21,7 @@ auth 负责平台账号的本地密码 / LDAP 双路登录、会话（JWT cookie
 - 本地账号改密（仅 `password_hash` 非空）。
 - 设置 / 清除 `default_prompt_id`，开关 `auto_evolution`。
 - 登录成功后可 ensure Platform Token（委托 `platform_token` domain 的内部能力）。
+- 管理 User 的临时禁用与恢复；禁用会撤销现有会话和长期凭证，恢复不复活旧凭证。
 - 软删除 User：禁止新登录，撤销全部凭证并保留历史 user_id。
 
 ### 不做什么
@@ -41,7 +43,8 @@ auth 负责平台账号的本地密码 / LDAP 双路登录、会话（JWT cookie
 | 设置默认 prompt | 设/清新 workspace 默认 prompt（opaque id） | `SetDefaultPrompt` `PUT /api/auth/me/default-prompt` |
 | 签发 Session | 内部：登录/企微登录成功后签 JWT 并下 cookie | `issueSession(userID)` |
 | 校验 Session | 内部：middleware 本地验 cookie JWT + 滑动续期 | `verifySession(cookie)` |
-| 软删除用户 | 管理员将用户标记 deleted 并撤销全部访问能力 | 待 IDL 定义 |
+| 禁用/恢复用户 | 管理员在 active 与 disabled 间切换；禁用时撤销访问能力 | `PATCH /api/users/{id}/status` |
+| 软删除用户 | 管理员将用户标记 deleted 并撤销全部访问能力 | `DELETE /api/users/{id}` |
 
 ## 聚合与不变量
 
@@ -52,7 +55,8 @@ auth 负责平台账号的本地密码 / LDAP 双路登录、会话（JWT cookie
 - User 状态为 `active/disabled/deleted`；disabled 可由管理员恢复，deleted 为终态。
 - disabled/deleted User 不能登录、续期 Cookie JWT、创建新 Service/Platform Token 或发起新的代表调用。
 - 软删除不级联删除历史 Session、Task、Workspace、Team 审计记录；跨服务保留稳定 user_id。
-- 删除事务递增 `auth_version` 并发布 `UserAccessRevoked`。当前旧 control-plane 通过 media_auth Session introspection 即时检查该版本；Edge 事件消费者完成后才可改用带撤销缓存的纯本地验签。
+- 禁用、恢复和删除事务都递增 `auth_version`；禁用/删除发布 `UserAccessRevoked`。恢复只允许签发新凭证，不恢复已经撤销的凭证或 Kratos Session。
+- 浏览器身份只能从已验证的 Kratos Session 建立业务用户映射；`metadata_admin.role=platform_admin` 是受信任的管理员引导声明，只能把对应业务用户提升为平台管理员，客户端请求体不能直接声明该权限。
 
 ## 数据模型
 
@@ -163,6 +167,14 @@ verifySession(cookie):
 3. Token Worker 幂等撤销该用户全部 Service Token、Platform Token 和 MCP OAuth Credential。
 4. 当前旧 control-plane 通过 Session introspection 立即拒绝旧 Cookie JWT；未来 Edge 消费 `UserAccessRevoked` 后，才可按 user_id 维护最低 auth_version 缓存。
 5. 已开始请求允许自然结束；删除提交后禁止新请求和后台长期委托启动。
+
+### UpdateUserStatus
+
+1. 仅接受 `active | disabled`；`deleted` 只能由 SoftDeleteUser 进入且不可恢复。
+2. `active -> disabled` 禁止操作者禁用自己，并保护最后一个 active 平台管理员；事务写 `disabled_at`、递增 `auth_version` 并写撤销 Outbox。
+3. 撤销 Worker 幂等撤销 Service/Platform/OAuth/MCP 凭证，并通过 Kratos Admin API 删除该 Identity 的全部 Web Session。
+4. `disabled -> active` 清空 `disabled_at` 并再次递增 `auth_version`；旧凭证和旧 Session 不复活，用户必须重新登录或重新创建委托凭证。
+5. 请求把 User 设置为其当前状态视为幂等成功；任何从 `deleted` 出发的状态修改返回冲突。
 
 ## 关联关系
 

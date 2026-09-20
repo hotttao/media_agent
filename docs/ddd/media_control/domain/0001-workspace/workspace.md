@@ -74,3 +74,10 @@ Workspace 负责企业部门下业务资源与运行数据的隔离、可运行�
 Organization/Team 查询失败时 fail closed。Workspace 创建时验证 Team 属于 Organization；由于 Team 不允许迁移 Organization，后续不需要跨服务外键维持该不变量。
 
 创建事务提交前必须确认 Team 仍为 active；decommissioning/decommissioned Team 一律拒绝创建 Workspace。Team Decommission Workflow 只在没有非 deleted Workspace 时提交终态，从而避免部门停用后遗留可运行 Workspace。
+
+### 接口契约
+
+- `POST /api/v1/workspaces` 必须携带 `organization_id`、`team_id`、`name` 和 Agent 配置；服务端从认证主体取得 `created_by`，并以 `create_workspace` 权限回查 Team，禁止信任客户端提交 owner。
+- `GET /api/v1/workspaces` 只返回调用者当前可见 Team 下的 Workspace；平台管理员也不能用普通用户接口绕过 Organization/Team 范围。
+- `GET/PUT /api/v1/workspaces/{workspace_id}` 先从 Workspace 读取不可变 Team，再分别检查 `view`/`manage`，禁止用请求中的 Team ID 替代真实归属。
+- 内部 `POST /internal/workspaces:check` 按 Workspace 真实归属执行相同判定，供资源服务验证 Workspace 边界；必须使用内部服务凭证。

@@ -27,6 +27,7 @@ func Register(r *server.Hertz) {
 			{
 				_id := _users.Group("/:id", _idMw()...)
 				_id.PUT("/password", append(_changeuserpasswordMw(), user.ChangeUserPassword)...)
+				_id.PATCH("/status", append(_updateuserstatusMw(), user.UpdateUserStatus)...)
 			}
 		}
 	}

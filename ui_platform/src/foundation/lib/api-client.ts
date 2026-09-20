@@ -96,9 +96,25 @@ class ApiClient {
   }
 
   async logout(): Promise<void> {
-    await this.request<{ success: boolean }>("/auth/logout", {
-      method: "POST",
-    });
+    const returnTo = new URL("/login", window.location.origin).toString();
+    const response = await fetch(
+      `/self-service/logout/browser?return_to=${encodeURIComponent(returnTo)}`,
+      { credentials: "include", headers: { Accept: "application/json" } },
+    );
+    if (!response.ok) throw new Error("Unable to create logout flow");
+    const body = (await response.json()) as { logout_url?: string };
+    const logoutURL = new URL(body.logout_url ?? "", window.location.origin);
+    if (
+      logoutURL.origin !== window.location.origin ||
+      logoutURL.pathname !== "/self-service/logout"
+    ) {
+      throw new Error("Kratos returned an invalid logout URL");
+    }
+    window.location.assign(logoutURL.toString());
+
+    // Keep callers from navigating to /login before Kratos invalidates its
+    // httpOnly session cookie. The browser navigation above owns completion.
+    await new Promise<void>(() => {});
   }
 
   async changeMyPassword(

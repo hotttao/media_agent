@@ -28,9 +28,9 @@ func ParseAgentType(value string) (AgentType, error) {
 }
 
 type Workspace struct {
-	ID, OwnerUserID, Name, DesiredState string
-	Version                             int64
-	CreatedAt, UpdatedAt                time.Time
+	ID, OrganizationID, TeamID, CreatedBy, OwnerUserID, Name, DesiredState string
+	Version                                                                int64
+	CreatedAt, UpdatedAt                                                   time.Time
 }
 
 type AgentConfiguration struct {
@@ -50,4 +50,27 @@ type Repository interface {
 	ListOwned(context.Context, string) ([]ConfiguredWorkspace, error)
 	GetOwned(context.Context, string, string) (*ConfiguredWorkspace, error)
 	Update(context.Context, *Workspace, *AgentConfiguration) error
+}
+
+// AccessRepository adds organization-scoped reads used by the Workspace API.
+// Legacy owner-scoped methods remain on Repository for callers that have not
+// yet migrated their own authorization boundary.
+type AccessRepository interface {
+	Repository
+	ListByTeams(context.Context, []string) ([]ConfiguredWorkspace, error)
+	Get(context.Context, string) (*ConfiguredWorkspace, error)
+}
+
+type TeamAuthorization struct {
+	Allowed           bool
+	OrganizationID    string
+	TeamID            string
+	TeamRole          string
+	OrganizationRole  string
+	EffectiveFeatures []string
+}
+
+type TeamAccess interface {
+	ListTeams(context.Context, string) ([]string, error)
+	Authorize(context.Context, string, string, string) (TeamAuthorization, error)
 }

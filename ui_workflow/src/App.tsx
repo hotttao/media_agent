@@ -1,8 +1,6 @@
 /**
  * Standalone root. Gate on auth: while loading or unauthenticated, show a
- * spinner and trigger the OAuth redirect (login() jumps to
- * /api/v1/auth/login; the materials/workflow auth middleware does the full
- * PKCE flow and 302s back with the mw_token cookie set). Once authenticated,
+ * spinner and trigger the Kratos browser login flow. Once authenticated,
  * mount the Desktop shell.
  */
 import { Desktop } from "@/components/shell/Desktop";

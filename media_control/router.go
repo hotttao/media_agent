@@ -1,7 +1,11 @@
 package main
 
-import "github.com/cloudwego/hertz/pkg/app/server"
+import (
+	"github.com/cloudwego/hertz/pkg/app/server"
+	workspacehandler "media_agent/media_control/biz/handler/workspace"
+	"media_agent/media_control/biz/middleware"
+)
 
 func customizedRegister(r *server.Hertz) {
-	// your code ...
+	r.POST("/internal/workspaces:check", middleware.RequireInternal(), workspacehandler.CheckWorkspaceAccess)
 }

@@ -39,6 +39,10 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./auth/kratos:/etc/config/kratos:ro
+    ports:
+      # Host-run media_auth needs the Admin API to revoke sessions during local
+      # integration tests; keep it loopback-only and out of the LAN gateway.
+      - "127.0.0.1:4434:4434"
     networks: [auth]
     restart: unless-stopped
 
@@ -125,6 +129,11 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./auth/keto:/etc/config/keto:ro
+    ports:
+      # Loopback-only endpoints let host-run services project/check relations
+      # without exposing Keto's read or administrative API to the LAN gateway.
+      - "127.0.0.1:4466:4466"
+      - "127.0.0.1:4467:4467"
     networks: [auth]
     restart: unless-stopped
 

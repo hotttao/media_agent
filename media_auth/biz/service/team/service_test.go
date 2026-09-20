@@ -551,3 +551,49 @@ func TestSetEntitlementsInheritClearsConfiguredKeys(t *testing.T) {
 		t.Fatalf("view=%+v", view)
 	}
 }
+
+func TestAuthorizeUsesActiveMembershipAndEffectiveEntitlement(t *testing.T) {
+	repo := newFakeRepo("u1", "u2")
+	svc := newTestService(repo, fakeTx{})
+	teamID := seedTeamWithAdmin(t, svc, repo, "u1")
+	if err := repo.AddMember(context.Background(), teamID, "u2", domainteam.RoleMember); err != nil {
+		t.Fatal(err)
+	}
+
+	materials, err := svc.Authorize(context.Background(), "u2", teamID, "use_materials")
+	if err != nil || !materials.Allowed {
+		t.Fatalf("materials authorization=%+v err=%v", materials, err)
+	}
+	if materials.OrganizationID != "org1" || materials.TeamRole != "member" {
+		t.Fatalf("unexpected authorization context: %+v", materials)
+	}
+
+	repo.entitlements[teamID] = []string{"workflow.run"}
+	team := repo.teams[teamID]
+	team.EntitlementMode = "restricted"
+	repo.teams[teamID] = team
+	materials, err = svc.Authorize(context.Background(), "u2", teamID, "use_materials")
+	if err != nil || materials.Allowed {
+		t.Fatalf("restricted materials authorization=%+v err=%v", materials, err)
+	}
+	workflow, err := svc.Authorize(context.Background(), "u2", teamID, "use_workflow")
+	if err != nil || !workflow.Allowed {
+		t.Fatalf("restricted workflow authorization=%+v err=%v", workflow, err)
+	}
+}
+
+func TestAuthorizeOrganizationAdminCanManageButNeedsTeamMembershipForFeatureUse(t *testing.T) {
+	repo := newFakeRepo("u1", "u2")
+	seedSvc := newTestService(repo, fakeTx{})
+	teamID := seedTeamWithAdmin(t, seedSvc, repo, "u1")
+	svc := NewService(repo, fakeTx{}, allAdminOrg{})
+
+	manage, err := svc.Authorize(context.Background(), "u2", teamID, "manage")
+	if err != nil || !manage.Allowed {
+		t.Fatalf("organization admin manage=%+v err=%v", manage, err)
+	}
+	use, err := svc.Authorize(context.Background(), "u2", teamID, "use_materials")
+	if err != nil || use.Allowed {
+		t.Fatalf("non-team organization admin use=%+v err=%v", use, err)
+	}
+}

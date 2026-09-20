@@ -103,6 +103,7 @@ func TestUserE2E(t *testing.T) {
 	login(t, adminClient, addr, adminUser, adminPass)
 
 	var createdID string
+	managedClient := httpClient(t)
 
 	t.Run("CreateUser_admin", func(t *testing.T) {
 		status, body := doJSON(t, adminClient, "POST", addr+"/api/users",
@@ -117,6 +118,36 @@ func TestUserE2E(t *testing.T) {
 		createdID = resp.ID
 		if createdID == "" {
 			t.Fatal("create user: empty id")
+		}
+	})
+
+	t.Run("DisableUser_revokesExistingSession", func(t *testing.T) {
+		login(t, managedClient, addr, managedUsername, "e2eadmin1")
+		status, body := doJSON(t, adminClient, "PATCH", addr+"/api/users/"+createdID+"/status",
+			json.RawMessage(`{"status":"disabled"}`))
+		if status != 200 {
+			t.Fatalf("disable user: status=%d body=%s", status, body)
+		}
+		status, body = doJSON(t, managedClient, "GET", addr+"/api/auth/me", nil)
+		if status != 401 {
+			t.Fatalf("disabled session: want 401, got %d body=%s", status, body)
+		}
+	})
+
+	t.Run("RestoreUser_requiresNewLogin", func(t *testing.T) {
+		status, body := doJSON(t, adminClient, "PATCH", addr+"/api/users/"+createdID+"/status",
+			json.RawMessage(`{"status":"active"}`))
+		if status != 200 {
+			t.Fatalf("restore user: status=%d body=%s", status, body)
+		}
+		status, _ = doJSON(t, managedClient, "GET", addr+"/api/auth/me", nil)
+		if status != 401 {
+			t.Fatalf("old session after restore: want 401, got %d", status)
+		}
+		login(t, managedClient, addr, managedUsername, "e2eadmin1")
+		status, body = doJSON(t, managedClient, "GET", addr+"/api/auth/me", nil)
+		if status != 200 {
+			t.Fatalf("new session after restore: status=%d body=%s", status, body)
 		}
 	})
 

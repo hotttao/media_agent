@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"media_agent/hertz_infra/authn/internaljwt"
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_control/biz/dal"
@@ -60,6 +61,7 @@ import (
 	workspaceservice "media_agent/media_control/biz/service/workspace"
 	metadataservice "media_agent/media_control/biz/service/workspace_metadata"
 	sharedclient "media_agent/media_control/biz/shared/client"
+	mediaauthclient "media_agent/media_control/biz/shared/client/mediaauth"
 	"media_agent/media_control/biz/shared/secret"
 	teamworkchange "media_agent/media_control/biz/workflow/teamwork_change"
 )
@@ -105,8 +107,14 @@ func main() {
 	}
 	internalToken := envOr("CONTROL_INTERNAL_TOKEN", "")
 	middleware.Configure(cfg.GetAuth().GetJwtSecret(), internalToken)
+	mediaAuthURL := envOr("MEDIA_AUTH_URL", "http://127.0.0.1:8001")
+	mediaAuthInternalToken := envOr("MEDIA_AUTH_INTERNAL_TOKEN", "")
+	if jwksURL := os.Getenv("INTERNAL_JWKS_URL"); jwksURL != "" {
+		middleware.ConfigureOry(internaljwt.NewVerifier(jwksURL, os.Getenv("INTERNAL_JWT_ISSUER"), "internal-api", nil), os.Getenv("ORY_KRATOS_PUBLIC_URL"), mediaAuthURL, mediaAuthInternalToken)
+	}
+	teamAccess := mediaauthclient.New(mediaAuthURL, mediaAuthInternalToken, nil)
 	workspacehandler.Configure(
-		workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret()))),
+		workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())), teamAccess),
 		internalToken,
 	)
 	prompthandler.Configure(promptservice.New(promptrepo.New(db), dal.NewTxRunner(db), repo.New(db)))

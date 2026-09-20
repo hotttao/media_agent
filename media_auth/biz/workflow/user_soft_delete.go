@@ -10,7 +10,10 @@ import (
 	"media_agent/media_auth/biz/shared/ids"
 )
 
-var ErrLastActiveAdmin = errors.New("cannot delete the last active admin")
+var ErrLastActiveAdmin = domainauth.ErrLastActiveAdmin
+var ErrCannotDisableSelf = domainauth.ErrCannotDisableSelf
+var ErrInvalidUserStatus = domainauth.ErrInvalidUserStatus
+var ErrTerminalUserStatus = domainauth.ErrTerminalUserStatus
 
 type TransactionRunner interface {
 	RunInTx(context.Context, func(context.Context) error) error
@@ -20,6 +23,7 @@ type softDeleteUsers interface {
 	FindByID(context.Context, string) (domainauth.User, error)
 	CountActiveAdmins(context.Context) (int, error)
 	SoftDeleteUser(context.Context, string, string) (domainauth.User, error)
+	UpdateStatus(context.Context, string, string, string) (domainauth.User, error)
 }
 type userTokenRevoker interface {
 	RevokeAllForUser(context.Context, string) error
@@ -30,6 +34,9 @@ type userOAuthRevoker interface {
 type userMCPRevoker interface {
 	DeleteTokensForUser(context.Context, string) error
 }
+type identitySessionRevoker interface {
+	RevokeIdentitySessions(context.Context, string) error
+}
 
 // UserSoftDelete 原子提交用户终态与访问撤销事件，并异步清理各认证域凭据。
 type UserSoftDelete struct {
@@ -38,7 +45,14 @@ type UserSoftDelete struct {
 	tokens userTokenRevoker
 	oauth  userOAuthRevoker
 	mcp    userMCPRevoker
+	kratos identitySessionRevoker
 	tx     TransactionRunner
+}
+
+// SetIdentitySessionRevoker attaches the external identity session revoker.
+// It is optional so deployments without Kratos keep the legacy auth path.
+func (w *UserSoftDelete) SetIdentitySessionRevoker(revoker identitySessionRevoker) {
+	w.kratos = revoker
 }
 
 func NewUserSoftDelete(users softDeleteUsers, outbox domainauth.AccessRevocationOutbox,
@@ -56,13 +70,13 @@ func (w *UserSoftDelete) Delete(ctx context.Context, currentUserID, targetID str
 	}
 	return w.tx.RunInTx(ctx, func(txCtx context.Context) error {
 		target, err := w.users.FindByID(txCtx, targetID)
-		if err != nil || !target.IsActive() {
-			if err != nil {
-				return err
-			}
+		if err != nil {
+			return err
+		}
+		if target.Status == domainauth.UserStatusDeleted {
 			return domainauth.ErrUserNotFound
 		}
-		if target.Role == "admin" {
+		if target.Role == "admin" && target.IsActive() {
 			count, err := w.users.CountActiveAdmins(txCtx)
 			if err != nil {
 				return err
@@ -81,6 +95,53 @@ func (w *UserSoftDelete) Delete(ctx context.Context, currentUserID, targetID str
 	})
 }
 
+func (w *UserSoftDelete) UpdateStatus(ctx context.Context, currentUserID, targetID, status string) error {
+	if status != domainauth.UserStatusActive && status != domainauth.UserStatusDisabled {
+		return ErrInvalidUserStatus
+	}
+	if currentUserID == targetID && status == domainauth.UserStatusDisabled {
+		return ErrCannotDisableSelf
+	}
+	if w.tx == nil {
+		return errors.New("transaction runner is required")
+	}
+	return w.tx.RunInTx(ctx, func(txCtx context.Context) error {
+		target, err := w.users.FindByID(txCtx, targetID)
+		if err != nil {
+			return err
+		}
+		if target.Status == domainauth.UserStatusDeleted {
+			return ErrTerminalUserStatus
+		}
+		currentStatus := target.Status
+		if currentStatus == "" {
+			currentStatus = domainauth.UserStatusActive
+		}
+		if currentStatus == status {
+			return nil
+		}
+		if status == domainauth.UserStatusDisabled && target.Role == "admin" {
+			count, err := w.users.CountActiveAdmins(txCtx)
+			if err != nil {
+				return err
+			}
+			if count <= 1 {
+				return ErrLastActiveAdmin
+			}
+		}
+		updated, err := w.users.UpdateStatus(txCtx, targetID, currentStatus, status)
+		if err != nil {
+			return err
+		}
+		if status == domainauth.UserStatusDisabled {
+			return w.outbox.Enqueue(txCtx, domainauth.AccessRevocationEvent{
+				ID: ids.New(), UserID: updated.ID, AuthVersion: updated.AuthVersion,
+			})
+		}
+		return nil
+	})
+}
+
 // ProcessPending 执行一批可靠撤销。各操作幂等，整批单事件置于事务中。
 func (w *UserSoftDelete) ProcessPending(ctx context.Context) error {
 	events, err := w.outbox.ClaimPending(ctx, 20)
@@ -89,6 +150,10 @@ func (w *UserSoftDelete) ProcessPending(ctx context.Context) error {
 	}
 	for _, event := range events {
 		err := w.tx.RunInTx(ctx, func(txCtx context.Context) error {
+			user, err := w.users.FindByID(txCtx, event.UserID)
+			if err != nil {
+				return err
+			}
 			if err := w.tokens.RevokeAllForUser(txCtx, event.UserID); err != nil {
 				return err
 			}
@@ -97,6 +162,11 @@ func (w *UserSoftDelete) ProcessPending(ctx context.Context) error {
 			}
 			if err := w.mcp.DeleteTokensForUser(txCtx, event.UserID); err != nil {
 				return err
+			}
+			if w.kratos != nil && user.KratosIdentityID != "" {
+				if err := w.kratos.RevokeIdentitySessions(txCtx, user.KratosIdentityID); err != nil {
+					return err
+				}
 			}
 			return w.outbox.MarkDelivered(txCtx, event.ID)
 		})

@@ -85,12 +85,31 @@ func (r *fakeRepo) SoftDeleteUser(_ context.Context, id, deletedBy string) (doma
 	r.users[id] = u
 	return u, nil
 }
+func (r *fakeRepo) UpdateStatus(_ context.Context, id, fromStatus, toStatus string) (domainauth.User, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	u, ok := r.users[id]
+	if !ok || u.Status != fromStatus {
+		return domainauth.User{}, domainauth.ErrUserNotFound
+	}
+	u.Status, u.AuthVersion = toStatus, u.AuthVersion+1
+	r.users[id] = u
+	return u, nil
+}
 func (r *fakeRepo) CountActiveAdmins(context.Context) (int, error) { return 2, nil }
 
 type fakeDeleter struct{ repo *fakeRepo }
 
 func (d fakeDeleter) Delete(ctx context.Context, currentUserID, targetID string) error {
 	_, err := d.repo.SoftDeleteUser(ctx, targetID, currentUserID)
+	return err
+}
+func (d fakeDeleter) UpdateStatus(ctx context.Context, _, targetID, status string) error {
+	user, err := d.repo.FindByID(ctx, targetID)
+	if err != nil {
+		return err
+	}
+	_, err = d.repo.UpdateStatus(ctx, targetID, user.Status, status)
 	return err
 }
 func (r *fakeRepo) SetPassword(_ context.Context, id, passwordHash string) error {
@@ -236,6 +255,21 @@ func TestDeleteUser_NotFound(t *testing.T) {
 	err := svc.DeleteUser(context.Background(), "admin", "u1", "nope")
 	if !errors.Is(err, ErrUserNotFound) {
 		t.Errorf("want ErrUserNotFound, got %v", err)
+	}
+}
+
+func TestUpdateUserStatus_AdminOnlyAndDelegates(t *testing.T) {
+	repo := newFakeRepo(domainauth.User{ID: "u2", Username: "bob", Role: "user", Status: "active"})
+	svc := NewService(repo, fakeDeleter{repo})
+	if err := svc.UpdateUserStatus(context.Background(), "user", "u1", "u2", "disabled"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("non-admin: %v", err)
+	}
+	if err := svc.UpdateUserStatus(context.Background(), "admin", "u1", "u2", "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := repo.FindByID(context.Background(), "u2")
+	if got.Status != "disabled" || got.AuthVersion != 1 {
+		t.Fatalf("got=%+v", got)
 	}
 }
 

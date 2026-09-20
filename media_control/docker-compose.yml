@@ -13,6 +13,11 @@ services:
       CONSUL_KV_ENABLED: "false"
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-control?sslmode=disable
       CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
+      MEDIA_AUTH_URL: http://host.docker.internal:8001
+      MEDIA_AUTH_INTERNAL_TOKEN: ${MEDIA_AUTH_INTERNAL_TOKEN:-dev-media-auth-internal-token}
+      ORY_KRATOS_PUBLIC_URL: http://kratos:4433
+      INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
+      INTERNAL_JWT_ISSUER: http://oathkeeper:4456/
       MEDIA_AGENT_GATEWAY_URL: http://host.docker.internal:8006
       LOG_DIR: /media_logs/media-control
     volumes:
@@ -20,4 +25,12 @@ services:
       - ./conf:/app/conf:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - auth
     restart: unless-stopped
+
+networks:
+  auth:
+    external: true
+    name: media-auth

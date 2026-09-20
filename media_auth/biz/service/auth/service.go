@@ -41,7 +41,7 @@ type LdapAuthenticator interface {
 // KratosIdentityRepo is kept separate from the legacy UserRepo contract so
 // other use cases and test doubles do not need an identity-provider concern.
 type KratosIdentityRepo interface {
-	ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string) (domainauth.User, error)
+	ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string, platformAdmin bool) (domainauth.User, error)
 }
 
 // NewService 构造 auth 用例服务。ldap 可为 nil（禁用 LDAP）。
@@ -223,14 +223,14 @@ func (s *Service) GetMe(ctx context.Context, sess domainauth.Session) (ApiUser, 
 
 // ResolveKratosIdentity converts Kratos identity/profile data into the stable
 // media_auth User used by ownership, memberships and authorization tuples.
-func (s *Service) ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string) (ApiUser, error) {
+func (s *Service) ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string, platformAdmin bool) (ApiUser, error) {
 	if identityID == "" {
 		return ApiUser{}, ErrInvalidCredentials
 	}
 	if s.kratosIdentityRepo == nil {
 		return ApiUser{}, errors.New("Kratos identity repository is unavailable")
 	}
-	u, err := s.kratosIdentityRepo.ResolveKratosIdentity(ctx, identityID, email, displayName)
+	u, err := s.kratosIdentityRepo.ResolveKratosIdentity(ctx, identityID, email, displayName, platformAdmin)
 	if err != nil {
 		return ApiUser{}, err
 	}

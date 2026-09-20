@@ -26,6 +26,10 @@ service UserService {
     option (google.api.http) = { put: "/api/users/{id}/password" body: "*" };
     option (api.put) = "/api/users/:id/password";
   }
+  rpc UpdateUserStatus(UpdateUserStatusRequest) returns(UpdateUserStatusResponse) {
+    option (google.api.http) = { patch: "/api/users/{id}/status" body: "*" };
+    option (api.patch) = "/api/users/:id/status";
+  }
 }
 
 message ListUsersRequest {
@@ -58,6 +62,12 @@ message ChangeUserPasswordRequest {
   string password = 2;
 }
 message ChangeUserPasswordResponse { bool success = 1; }
+
+message UpdateUserStatusRequest {
+  string id = 1 [(api.path) = "id"];
+  string status = 2;
+}
+message UpdateUserStatusResponse { bool success = 1; }
 
 message ApiUser {
   string id = 1;

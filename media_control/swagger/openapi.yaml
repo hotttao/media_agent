@@ -6,6 +6,2300 @@ info:
     title: ""
     version: 0.0.1
 paths:
+    /api/v1/admin/clusters:
+        get:
+            tags:
+                - PlatformAdministrationService
+            operationId: PlatformAdministrationService_ListClusterProjections
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListClusterProjectionsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/admin/clusters/{cluster_id}:
+        get:
+            tags:
+                - PlatformAdministrationService
+            operationId: PlatformAdministrationService_GetClusterProjection
+            parameters:
+                - name: cluster_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ClusterProjectionResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/admin/clusters/{cluster_id}/report:
+        put:
+            tags:
+                - PlatformAdministrationService
+            operationId: PlatformAdministrationService_ReportClusterProjection
+            parameters:
+                - name: cluster_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReportClusterProjectionRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ClusterProjectionResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/admin/platform-settings:
+        get:
+            tags:
+                - PlatformAdministrationService
+            operationId: PlatformAdministrationService_ListPlatformSettings
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPlatformSettingsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - PlatformAdministrationService
+            operationId: PlatformAdministrationService_CreatePlatformSetting
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePlatformSettingRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformSettingResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/admin/platform-settings/{setting_key}:
+        get:
+            tags:
+                - PlatformAdministrationService
+            operationId: PlatformAdministrationService_GetPlatformSetting
+            parameters:
+                - name: setting_key
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformSettingResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - PlatformAdministrationService
+            operationId: PlatformAdministrationService_UpdatePlatformSetting
+            parameters:
+                - name: setting_key
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdatePlatformSettingRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformSettingResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/admin/platform-statistics:
+        get:
+            tags:
+                - PlatformAdministrationService
+            operationId: PlatformAdministrationService_ListPlatformStatistics
+            parameters:
+                - name: metric_key
+                  in: query
+                  schema:
+                    type: string
+                - name: period_start_from
+                  in: query
+                  schema:
+                    type: string
+                - name: period_start_to
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPlatformStatisticsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/admin/platform-statistics/report:
+        post:
+            tags:
+                - PlatformAdministrationService
+            operationId: PlatformAdministrationService_ReportPlatformStatistic
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReportPlatformStatisticRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformStatisticResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/admin/workspaces:
+        get:
+            tags:
+                - PlatformAdministrationService
+            operationId: PlatformAdministrationService_ListAdminWorkspaces
+            parameters:
+                - name: owner_user_id
+                  in: query
+                  schema:
+                    type: string
+                - name: desired_state
+                  in: query
+                  schema:
+                    type: string
+                - name: agent_type
+                  in: query
+                  schema:
+                    type: string
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_offset
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAdminWorkspacesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/afs-bindings:
+        get:
+            tags:
+                - AfsBindingService
+            operationId: AfsBindingService_ListBindings
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListBindingsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - AfsBindingService
+            operationId: AfsBindingService_CreateBinding
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateBindingRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BindingResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/afs-bindings/{binding_id}/delete:
+        post:
+            tags:
+                - AfsBindingService
+            operationId: AfsBindingService_DeleteBinding
+            parameters:
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteBindingRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BindingResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/afs-bindings/{binding_id}/members:
+        get:
+            tags:
+                - AfsBindingService
+            operationId: AfsBindingService_ListMembers
+            parameters:
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMembersResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - AfsBindingService
+            operationId: AfsBindingService_AddMember
+            parameters:
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AddMemberRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MemberResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/afs-bindings/{binding_id}/members/{subject_id}/remove:
+        post:
+            tags:
+                - AfsBindingService
+            operationId: AfsBindingService_RemoveMember
+            parameters:
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: subject_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RemoveMemberRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MemberResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/afs-bindings/{binding_id}/reconcile:
+        post:
+            tags:
+                - AfsBindingService
+            operationId: AfsBindingService_ReconcileBinding
+            parameters:
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReconcileBindingRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BindingResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/agent-templates:
+        get:
+            tags:
+                - AgentTemplateService
+            operationId: AgentTemplateService_ListAgentTemplates
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAgentTemplatesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - AgentTemplateService
+            operationId: AgentTemplateService_CreateAgentTemplate
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateAgentTemplateRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentTemplateResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/agent-templates/{template_id}:
+        get:
+            tags:
+                - AgentTemplateService
+            operationId: AgentTemplateService_GetAgentTemplate
+            parameters:
+                - name: template_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentTemplateResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - AgentTemplateService
+            operationId: AgentTemplateService_UpdateAgentTemplate
+            parameters:
+                - name: template_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateAgentTemplateRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentTemplateResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/agent-templates/{template_id}/archive:
+        post:
+            tags:
+                - AgentTemplateService
+            operationId: AgentTemplateService_ArchiveAgentTemplate
+            parameters:
+                - name: template_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ArchiveAgentTemplateRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentTemplateResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/credential-references:
+        get:
+            tags:
+                - CredentialReferenceService
+            operationId: CredentialReferenceService_ListCredentialReferences
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCredentialReferencesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - CredentialReferenceService
+            operationId: CredentialReferenceService_CreateCredentialReference
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateCredentialReferenceRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CredentialReferenceResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/credential-references/{credential_id}:
+        get:
+            tags:
+                - CredentialReferenceService
+            operationId: CredentialReferenceService_GetCredentialReference
+            parameters:
+                - name: credential_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CredentialReferenceResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - CredentialReferenceService
+            operationId: CredentialReferenceService_UpdateCredentialReference
+            parameters:
+                - name: credential_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateCredentialReferenceRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CredentialReferenceResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/credential-references/{credential_id}/revoke:
+        post:
+            tags:
+                - CredentialReferenceService
+            operationId: CredentialReferenceService_RevokeCredentialReference
+            parameters:
+                - name: credential_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RevokeCredentialReferenceRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CredentialReferenceResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/memory-stores:
+        get:
+            tags:
+                - MemoryStoreService
+            operationId: MemoryStoreService_ListMemoryStores
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMemoryStoresResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - MemoryStoreService
+            operationId: MemoryStoreService_CreateMemoryStore
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateMemoryStoreRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MemoryStoreResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/memory-stores/{store_id}:
+        get:
+            tags:
+                - MemoryStoreService
+            operationId: MemoryStoreService_GetMemoryStore
+            parameters:
+                - name: store_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MemoryStoreResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - MemoryStoreService
+            operationId: MemoryStoreService_UpdateMemoryStore
+            parameters:
+                - name: store_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateMemoryStoreRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MemoryStoreResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/memory-stores/{store_id}/status:
+        post:
+            tags:
+                - MemoryStoreService
+            operationId: MemoryStoreService_SetMemoryStoreStatus
+            parameters:
+                - name: store_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetMemoryStoreStatusRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MemoryStoreResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/prompts:
+        get:
+            tags:
+                - PromptService
+            operationId: PromptService_ListPrompts
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPromptsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - PromptService
+            operationId: PromptService_CreatePrompt
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePromptRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/prompts/{prompt_id}:
+        get:
+            tags:
+                - PromptService
+            operationId: PromptService_GetPrompt
+            parameters:
+                - name: prompt_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - PromptService
+            operationId: PromptService_UpdatePrompt
+            parameters:
+                - name: prompt_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdatePromptRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/prompts/{prompt_id}/archive:
+        post:
+            tags:
+                - PromptService
+            operationId: PromptService_ArchivePrompt
+            parameters:
+                - name: prompt_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ArchivePromptRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/providers:
+        get:
+            tags:
+                - ProviderService
+            operationId: ProviderService_ListProviders
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListProvidersResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - ProviderService
+            operationId: ProviderService_CreateProvider
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateProviderRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProviderResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/providers/{provider_id}:
+        get:
+            tags:
+                - ProviderService
+            operationId: ProviderService_GetProvider
+            parameters:
+                - name: provider_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProviderResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - ProviderService
+            operationId: ProviderService_UpdateProvider
+            parameters:
+                - name: provider_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateProviderRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProviderResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/providers/{provider_id}/status:
+        post:
+            tags:
+                - ProviderService
+            operationId: ProviderService_SetProviderStatus
+            parameters:
+                - name: provider_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetProviderStatusRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProviderResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/public-exports:
+        get:
+            tags:
+                - PublicExportService
+            operationId: PublicExportService_ListExports
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+                - name: resource_type
+                  in: query
+                  schema:
+                    type: string
+                - name: resource_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExportsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - PublicExportService
+            operationId: PublicExportService_CreateExport
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateExportRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExportResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/public-exports/{export_id}/status:
+        post:
+            tags:
+                - PublicExportService
+            operationId: PublicExportService_SetExportStatus
+            parameters:
+                - name: export_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetExportStatusRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExportResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/runtime-environments:
+        get:
+            tags:
+                - RuntimeEnvironmentService
+            operationId: RuntimeEnvironmentService_ListEnvironments
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListEnvironmentsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - RuntimeEnvironmentService
+            operationId: RuntimeEnvironmentService_CreateEnvironment
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateEnvironmentRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EnvironmentResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/runtime-environments/{environment_id}:
+        get:
+            tags:
+                - RuntimeEnvironmentService
+            operationId: RuntimeEnvironmentService_GetEnvironment
+            parameters:
+                - name: environment_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EnvironmentResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - RuntimeEnvironmentService
+            operationId: RuntimeEnvironmentService_UpdateEnvironment
+            parameters:
+                - name: environment_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateEnvironmentRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EnvironmentResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/runtime-environments/{environment_id}/delete:
+        post:
+            tags:
+                - RuntimeEnvironmentService
+            operationId: RuntimeEnvironmentService_DeleteEnvironment
+            parameters:
+                - name: environment_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteEnvironmentRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EnvironmentResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/runtime-environments/{environment_id}/grants:
+        get:
+            tags:
+                - EnvironmentGrantService
+            operationId: EnvironmentGrantService_ListGrants
+            parameters:
+                - name: environment_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListGrantsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - EnvironmentGrantService
+            operationId: EnvironmentGrantService_CreateGrant
+            parameters:
+                - name: environment_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateGrantRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GrantResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/runtime-environments/{environment_id}/grants/{grant_id}/revoke:
+        post:
+            tags:
+                - EnvironmentGrantService
+            operationId: EnvironmentGrantService_RevokeGrant
+            parameters:
+                - name: environment_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: grant_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RevokeGrantRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GrantResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/runtime-environments/{environment_id}/tokens:
+        get:
+            tags:
+                - RuntimeEnvironmentService
+            operationId: RuntimeEnvironmentService_ListEnvironmentTokens
+            parameters:
+                - name: environment_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListEnvironmentTokensResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - RuntimeEnvironmentService
+            operationId: RuntimeEnvironmentService_IssueEnvironmentToken
+            parameters:
+                - name: environment_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/IssueEnvironmentTokenRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/IssuedEnvironmentTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/runtime-environments/{environment_id}/tokens/{token_id}/revoke:
+        post:
+            tags:
+                - RuntimeEnvironmentService
+            operationId: RuntimeEnvironmentService_RevokeEnvironmentToken
+            parameters:
+                - name: environment_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: token_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RevokeEnvironmentTokenRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EnvironmentTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/schedule-triggers/{trigger_id}/submission:
+        post:
+            tags:
+                - AgentScheduleService
+            operationId: AgentScheduleService_RecordTaskSubmission
+            parameters:
+                - name: trigger_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RecordTaskSubmissionRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TriggerResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/schedules:
+        get:
+            tags:
+                - AgentScheduleService
+            operationId: AgentScheduleService_ListSchedules
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSchedulesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - AgentScheduleService
+            operationId: AgentScheduleService_CreateSchedule
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateScheduleRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ScheduleResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/schedules/{schedule_id}:
+        get:
+            tags:
+                - AgentScheduleService
+            operationId: AgentScheduleService_GetSchedule
+            parameters:
+                - name: schedule_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ScheduleResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - AgentScheduleService
+            operationId: AgentScheduleService_UpdateSchedule
+            parameters:
+                - name: schedule_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateScheduleRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ScheduleResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/schedules/{schedule_id}/claim-due:
+        post:
+            tags:
+                - AgentScheduleService
+            operationId: AgentScheduleService_ClaimDueSchedule
+            parameters:
+                - name: schedule_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ClaimDueScheduleRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TriggerResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/schedules/{schedule_id}/delete:
+        post:
+            tags:
+                - AgentScheduleService
+            operationId: AgentScheduleService_DeleteSchedule
+            parameters:
+                - name: schedule_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteScheduleRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ScheduleResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/schedules/{schedule_id}/run-now:
+        post:
+            tags:
+                - AgentScheduleService
+            operationId: AgentScheduleService_RunNow
+            parameters:
+                - name: schedule_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RunNowRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TriggerResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/share-metadata:
+        get:
+            tags:
+                - ShareMetadataService
+            operationId: ShareMetadataService_ListShares
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+                - name: resource_type
+                  in: query
+                  schema:
+                    type: string
+                - name: resource_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSharesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - ShareMetadataService
+            operationId: ShareMetadataService_CreateShare
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateShareRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShareResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/share-metadata/{share_id}/revoke:
+        post:
+            tags:
+                - ShareMetadataService
+            operationId: ShareMetadataService_RevokeShare
+            parameters:
+                - name: share_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RevokeShareRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ShareResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills:
+        get:
+            tags:
+                - SkillService
+            operationId: SkillService_ListSkills
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSkillsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - SkillService
+            operationId: SkillService_CreateSkill
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSkillRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}:
+        get:
+            tags:
+                - SkillService
+            operationId: SkillService_GetSkill
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - SkillService
+            operationId: SkillService_UpdateSkill
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSkillRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/archive:
+        post:
+            tags:
+                - SkillService
+            operationId: SkillService_ArchiveSkill
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ArchiveSkillRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/status:
+        post:
+            tags:
+                - SkillService
+            operationId: SkillService_SetSkillStatus
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetSkillStatusRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/teamwork-topologies:
+        get:
+            tags:
+                - TeamworkService
+            operationId: TeamworkService_ListTopologies
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListTopologiesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - TeamworkService
+            operationId: TeamworkService_CreateTopology
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateTopologyRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TopologyResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/teamwork-topologies/{topology_id}:
+        get:
+            tags:
+                - TeamworkService
+            operationId: TeamworkService_GetTopology
+            parameters:
+                - name: topology_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TopologyResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - TeamworkService
+            operationId: TeamworkService_UpdateTopology
+            parameters:
+                - name: topology_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateTopologyRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TopologyResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/teamwork-topologies/{topology_id}/delete:
+        post:
+            tags:
+                - TeamworkService
+            operationId: TeamworkService_DeleteTopology
+            parameters:
+                - name: topology_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteTopologyRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TopologyResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/teamwork-topologies/{topology_id}/runtime-context:
+        get:
+            tags:
+                - TeamworkService
+            operationId: TeamworkService_GetRuntimeContext
+            parameters:
+                - name: topology_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RuntimeContextResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspace-resources/{resource_type}/{resource_id}/tags:
+        get:
+            tags:
+                - WorkspaceMetadataService
+            operationId: WorkspaceMetadataService_ListResourceTags
+            parameters:
+                - name: resource_type
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: resource_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListResourceTagsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspace-tags:
+        get:
+            tags:
+                - WorkspaceMetadataService
+            operationId: WorkspaceMetadataService_ListTags
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListTagsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - WorkspaceMetadataService
+            operationId: WorkspaceMetadataService_CreateTag
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateTagRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TagResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspace-tags/{tag_id}:
+        put:
+            tags:
+                - WorkspaceMetadataService
+            operationId: WorkspaceMetadataService_UpdateTag
+            parameters:
+                - name: tag_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateTagRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TagResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspace-tags/{tag_id}/attach:
+        post:
+            tags:
+                - WorkspaceMetadataService
+            operationId: WorkspaceMetadataService_AttachTag
+            parameters:
+                - name: tag_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AttachTagRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ResourceTagResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspace-tags/{tag_id}/delete:
+        post:
+            tags:
+                - WorkspaceMetadataService
+            operationId: WorkspaceMetadataService_DeleteTag
+            parameters:
+                - name: tag_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteTagRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TagResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspace-tags/{tag_id}/detach:
+        post:
+            tags:
+                - WorkspaceMetadataService
+            operationId: WorkspaceMetadataService_DetachTag
+            parameters:
+                - name: tag_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DetachTagRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ResourceTagResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/v1/workspaces:
         get:
             tags:
@@ -71,6 +2365,89 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - WorkspaceService
+            operationId: WorkspaceService_UpdateWorkspace
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateWorkspaceRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkspaceResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspaces/{workspace_id}/placement:
+        get:
+            tags:
+                - RuntimeEnvironmentService
+            operationId: RuntimeEnvironmentService_GetPlacementStatus
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlacementResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspaces/{workspace_id}/placement/reconcile:
+        post:
+            tags:
+                - RuntimeEnvironmentService
+            operationId: RuntimeEnvironmentService_ReconcilePlacement
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReconcilePlacementRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlacementResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/v1/workspaces/{workspace_id}/runtime-context:
         get:
             tags:
@@ -89,6 +2466,36 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/RuntimeContextResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspaces/{workspace_id}/runtime-directory/ensure:
+        post:
+            tags:
+                - RuntimeEnvironmentService
+            operationId: RuntimeEnvironmentService_EnsureWorkspaceRuntimeDirectory
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/EnsureWorkspaceRuntimeDirectoryRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlacementResponse'
                 default:
                     description: Default error response
                     content:
@@ -115,6 +2522,283 @@ paths:
                                 $ref: '#/components/schemas/Status'
 components:
     schemas:
+        AddMemberRequest:
+            type: object
+            properties:
+                binding_id:
+                    type: string
+                subject_id:
+                    type: string
+                subject_type:
+                    type: string
+                external_member_ref:
+                    type: string
+        AdminWorkspaceResponse:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                owner_user_id:
+                    type: string
+                name:
+                    type: string
+                desired_state:
+                    type: string
+                workspace_version:
+                    type: string
+                agent_id:
+                    type: string
+                agent_type:
+                    type: string
+                context_version:
+                    type: string
+                environment_id:
+                    type: string
+                placement_status:
+                    type: string
+                updated_at:
+                    type: string
+        AgentTemplateResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                configuration_json:
+                    type: string
+                status:
+                    type: string
+                version:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        ArchiveAgentTemplateRequest:
+            type: object
+            properties:
+                template_id:
+                    type: string
+                expected_version:
+                    type: string
+        ArchivePromptRequest:
+            type: object
+            properties:
+                prompt_id:
+                    type: string
+                expected_version:
+                    type: string
+        ArchiveSkillRequest:
+            type: object
+            properties:
+                skill_id:
+                    type: string
+                expected_version:
+                    type: string
+        AttachTagRequest:
+            type: object
+            properties:
+                tag_id:
+                    type: string
+                workspace_id:
+                    type: string
+                resource_type:
+                    type: string
+                resource_id:
+                    type: string
+        BindingResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                external_ref:
+                    type: string
+                desired_state:
+                    type: string
+                observed_state:
+                    type: string
+                version:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        ClaimDueScheduleRequest:
+            type: object
+            properties:
+                schedule_id:
+                    type: string
+                due_at:
+                    type: string
+        ClusterProjectionResponse:
+            type: object
+            properties:
+                cluster_id:
+                    type: string
+                status:
+                    type: string
+                capacity_json:
+                    type: string
+                observed_at:
+                    type: string
+        CreateAgentTemplateRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                configuration_json:
+                    type: string
+        CreateBindingRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                external_ref:
+                    type: string
+                desired_state:
+                    type: string
+        CreateCredentialReferenceRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                provider_id:
+                    type: string
+                secret_ref:
+                    type: string
+        CreateEnvironmentRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                endpoint:
+                    type: string
+                capacity_json:
+                    type: string
+        CreateExportRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                resource_type:
+                    type: string
+                resource_id:
+                    type: string
+                object_path:
+                    type: string
+        CreateGrantRequest:
+            type: object
+            properties:
+                environment_id:
+                    type: string
+                subject_id:
+                    type: string
+                subject_type:
+                    type: string
+                permission:
+                    type: string
+        CreateMemoryStoreRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                store_type:
+                    type: string
+                configuration_json:
+                    type: string
+                credential_reference_id:
+                    type: string
+        CreatePlatformSettingRequest:
+            type: object
+            properties:
+                key:
+                    type: string
+                value_json:
+                    type: string
+        CreatePromptRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                content:
+                    type: string
+        CreateProviderRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                provider_type:
+                    type: string
+                endpoint:
+                    type: string
+                capabilities_json:
+                    type: string
+        CreateScheduleRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                rule:
+                    type: string
+                timezone:
+                    type: string
+        CreateShareRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                resource_type:
+                    type: string
+                resource_id:
+                    type: string
+        CreateSkillRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                content_path:
+                    type: string
+                checksum:
+                    type: string
+        CreateTagRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                color:
+                    type: string
+        CreateTopologyRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                entry_member_id:
+                    type: string
+                members_json:
+                    type: string
+                edges_json:
+                    type: string
         CreateWorkspaceRequest:
             type: object
             properties:
@@ -124,6 +2808,131 @@ components:
                     type: string
                 api_key:
                     type: string
+                organization_id:
+                    type: string
+                team_id:
+                    type: string
+        CredentialReferenceResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                provider_id:
+                    type: string
+                status:
+                    type: string
+                version:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        DeleteBindingRequest:
+            type: object
+            properties:
+                binding_id:
+                    type: string
+        DeleteEnvironmentRequest:
+            type: object
+            properties:
+                environment_id:
+                    type: string
+                expected_version:
+                    type: string
+        DeleteScheduleRequest:
+            type: object
+            properties:
+                schedule_id:
+                    type: string
+                expected_version:
+                    type: string
+        DeleteTagRequest:
+            type: object
+            properties:
+                tag_id:
+                    type: string
+                expected_version:
+                    type: string
+        DeleteTopologyRequest:
+            type: object
+            properties:
+                topology_id:
+                    type: string
+                expected_version:
+                    type: string
+        DetachTagRequest:
+            type: object
+            properties:
+                tag_id:
+                    type: string
+                workspace_id:
+                    type: string
+                resource_type:
+                    type: string
+                resource_id:
+                    type: string
+        EnsureWorkspaceRuntimeDirectoryRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+        EnvironmentResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                endpoint:
+                    type: string
+                capacity_json:
+                    type: string
+                status:
+                    type: string
+                version:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        EnvironmentTokenResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                environment_id:
+                    type: string
+                name:
+                    type: string
+                created_by:
+                    type: string
+                created_at:
+                    type: string
+                revoked_at:
+                    type: string
+        ExportResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                resource_type:
+                    type: string
+                resource_id:
+                    type: string
+                object_path:
+                    type: string
+                status:
+                    type: string
+                created_by:
+                    type: string
+                created_at:
+                    type: string
         GoogleProtobufAny:
             type: object
             properties:
@@ -132,11 +2941,199 @@ components:
                     description: The type of the serialized message.
             additionalProperties: true
             description: Contains an arbitrary serialized message along with a @type that describes the type of the serialized message.
+        GrantResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                environment_id:
+                    type: string
+                subject_id:
+                    type: string
+                subject_type:
+                    type: string
+                permission:
+                    type: string
+                status:
+                    type: string
+                created_at:
+                    type: string
+                revoked_at:
+                    type: string
         HealthResponse:
             type: object
             properties:
                 status:
                     type: string
+        IssueEnvironmentTokenRequest:
+            type: object
+            properties:
+                environment_id:
+                    type: string
+                name:
+                    type: string
+        IssuedEnvironmentTokenResponse:
+            type: object
+            properties:
+                metadata:
+                    $ref: '#/components/schemas/EnvironmentTokenResponse'
+                token:
+                    type: string
+        ListAdminWorkspacesResponse:
+            type: object
+            properties:
+                workspaces:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminWorkspaceResponse'
+                total:
+                    type: string
+                page_size:
+                    type: integer
+                    format: int32
+                page_offset:
+                    type: integer
+                    format: int32
+        ListAgentTemplatesResponse:
+            type: object
+            properties:
+                templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentTemplateResponse'
+        ListBindingsResponse:
+            type: object
+            properties:
+                bindings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BindingResponse'
+        ListClusterProjectionsResponse:
+            type: object
+            properties:
+                clusters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ClusterProjectionResponse'
+        ListCredentialReferencesResponse:
+            type: object
+            properties:
+                credentials:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CredentialReferenceResponse'
+        ListEnvironmentTokensResponse:
+            type: object
+            properties:
+                tokens:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EnvironmentTokenResponse'
+        ListEnvironmentsResponse:
+            type: object
+            properties:
+                environments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EnvironmentResponse'
+        ListExportsResponse:
+            type: object
+            properties:
+                exports:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExportResponse'
+        ListGrantsResponse:
+            type: object
+            properties:
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GrantResponse'
+        ListMembersResponse:
+            type: object
+            properties:
+                members:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MemberResponse'
+        ListMemoryStoresResponse:
+            type: object
+            properties:
+                stores:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MemoryStoreResponse'
+        ListPlatformSettingsResponse:
+            type: object
+            properties:
+                settings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PlatformSettingResponse'
+        ListPlatformStatisticsResponse:
+            type: object
+            properties:
+                statistics:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PlatformStatisticResponse'
+        ListPromptsResponse:
+            type: object
+            properties:
+                prompts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptResponse'
+        ListProvidersResponse:
+            type: object
+            properties:
+                providers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ProviderResponse'
+        ListResourceTagsResponse:
+            type: object
+            properties:
+                tags:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TagResponse'
+        ListSchedulesResponse:
+            type: object
+            properties:
+                schedules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ScheduleResponse'
+        ListSharesResponse:
+            type: object
+            properties:
+                shares:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ShareResponse'
+        ListSkillsResponse:
+            type: object
+            properties:
+                skills:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillResponse'
+        ListTagsResponse:
+            type: object
+            properties:
+                tags:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TagResponse'
+        ListTopologiesResponse:
+            type: object
+            properties:
+                topologies:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TopologyResponse'
         ListWorkspacesResponse:
             type: object
             properties:
@@ -144,18 +3141,338 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/WorkspaceResponse'
-        RuntimeContextResponse:
+        MemberResponse:
+            type: object
+            properties:
+                binding_id:
+                    type: string
+                subject_id:
+                    type: string
+                subject_type:
+                    type: string
+                external_member_ref:
+                    type: string
+                status:
+                    type: string
+                updated_at:
+                    type: string
+        MemoryStoreResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                store_type:
+                    type: string
+                configuration_json:
+                    type: string
+                credential_reference_id:
+                    type: string
+                status:
+                    type: string
+                version:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        PlacementResponse:
             type: object
             properties:
                 workspace_id:
                     type: string
-                agent_id:
+                environment_id:
                     type: string
-                agent_type:
+                status:
                     type: string
-                api_key:
+                reason:
                     type: string
-                context_version:
+                volume_ref:
+                    type: string
+                version:
+                    type: string
+                updated_at:
+                    type: string
+        PlatformSettingResponse:
+            type: object
+            properties:
+                key:
+                    type: string
+                value_json:
+                    type: string
+                version:
+                    type: string
+                updated_by:
+                    type: string
+                updated_at:
+                    type: string
+        PlatformStatisticResponse:
+            type: object
+            properties:
+                metric_key:
+                    type: string
+                period_start:
+                    type: string
+                dimensions_json:
+                    type: string
+                value:
+                    type: string
+                refreshed_at:
+                    type: string
+        PromptResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                content:
+                    type: string
+                status:
+                    type: string
+                version:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        ProviderResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                provider_type:
+                    type: string
+                endpoint:
+                    type: string
+                capabilities_json:
+                    type: string
+                status:
+                    type: string
+                version:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        ReconcileBindingRequest:
+            type: object
+            properties:
+                binding_id:
+                    type: string
+                observed_state:
+                    type: string
+        ReconcilePlacementRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+        RecordTaskSubmissionRequest:
+            type: object
+            properties:
+                trigger_id:
+                    type: string
+                status:
+                    type: string
+                agent_task_id:
+                    type: string
+                error_code:
+                    type: string
+        RemoveMemberRequest:
+            type: object
+            properties:
+                binding_id:
+                    type: string
+                subject_id:
+                    type: string
+        ReportClusterProjectionRequest:
+            type: object
+            properties:
+                cluster_id:
+                    type: string
+                status:
+                    type: string
+                capacity_json:
+                    type: string
+                observed_at:
+                    type: string
+        ReportPlatformStatisticRequest:
+            type: object
+            properties:
+                metric_key:
+                    type: string
+                period_start:
+                    type: string
+                dimensions_json:
+                    type: string
+                value:
+                    type: string
+                refreshed_at:
+                    type: string
+        ResourceTagResponse:
+            type: object
+            properties:
+                tag_id:
+                    type: string
+                workspace_id:
+                    type: string
+                resource_type:
+                    type: string
+                resource_id:
+                    type: string
+                created_at:
+                    type: string
+        RevokeCredentialReferenceRequest:
+            type: object
+            properties:
+                credential_id:
+                    type: string
+                expected_version:
+                    type: string
+        RevokeEnvironmentTokenRequest:
+            type: object
+            properties:
+                environment_id:
+                    type: string
+                token_id:
+                    type: string
+        RevokeGrantRequest:
+            type: object
+            properties:
+                environment_id:
+                    type: string
+                grant_id:
+                    type: string
+        RevokeShareRequest:
+            type: object
+            properties:
+                share_id:
+                    type: string
+        RunNowRequest:
+            type: object
+            properties:
+                schedule_id:
+                    type: string
+        RuntimeContextResponse:
+            type: object
+            properties:
+                topology_id:
+                    type: string
+                workspace_id:
+                    type: string
+                topology_version:
+                    type: string
+                entry_member_id:
+                    type: string
+                members_json:
+                    type: string
+                edges_json:
+                    type: string
+        ScheduleResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                requested_by:
+                    type: string
+                agent_config_id:
+                    type: string
+                rule:
+                    type: string
+                timezone:
+                    type: string
+                status:
+                    type: string
+                next_run_at:
+                    type: string
+                version:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        SetExportStatusRequest:
+            type: object
+            properties:
+                export_id:
+                    type: string
+                status:
+                    type: string
+        SetMemoryStoreStatusRequest:
+            type: object
+            properties:
+                store_id:
+                    type: string
+                status:
+                    type: string
+                expected_version:
+                    type: string
+        SetProviderStatusRequest:
+            type: object
+            properties:
+                provider_id:
+                    type: string
+                status:
+                    type: string
+                expected_version:
+                    type: string
+        SetSkillStatusRequest:
+            type: object
+            properties:
+                skill_id:
+                    type: string
+                status:
+                    type: string
+                expected_version:
+                    type: string
+        ShareResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                resource_type:
+                    type: string
+                resource_id:
+                    type: string
+                owner_user_id:
+                    type: string
+                status:
+                    type: string
+                created_at:
+                    type: string
+                revoked_at:
+                    type: string
+        SkillResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                content_path:
+                    type: string
+                checksum:
+                    type: string
+                status:
+                    type: string
+                version:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
                     type: string
         Status:
             type: object
@@ -173,6 +3490,211 @@ components:
                         $ref: '#/components/schemas/GoogleProtobufAny'
                     description: A list of messages that carry the error details.  There is a common set of message types for APIs to use.
             description: 'The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors).'
+        TagResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                color:
+                    type: string
+                version:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        TopologyResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                entry_member_id:
+                    type: string
+                members_json:
+                    type: string
+                edges_json:
+                    type: string
+                version:
+                    type: string
+                status:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        TriggerResponse:
+            type: object
+            properties:
+                id:
+                    type: string
+                schedule_id:
+                    type: string
+                due_at:
+                    type: string
+                status:
+                    type: string
+                created_at:
+                    type: string
+        UpdateAgentTemplateRequest:
+            type: object
+            properties:
+                template_id:
+                    type: string
+                name:
+                    type: string
+                configuration_json:
+                    type: string
+                expected_version:
+                    type: string
+        UpdateCredentialReferenceRequest:
+            type: object
+            properties:
+                credential_id:
+                    type: string
+                name:
+                    type: string
+                provider_id:
+                    type: string
+                secret_ref:
+                    type: string
+                expected_version:
+                    type: string
+        UpdateEnvironmentRequest:
+            type: object
+            properties:
+                environment_id:
+                    type: string
+                name:
+                    type: string
+                endpoint:
+                    type: string
+                capacity_json:
+                    type: string
+                status:
+                    type: string
+                expected_version:
+                    type: string
+        UpdateMemoryStoreRequest:
+            type: object
+            properties:
+                store_id:
+                    type: string
+                name:
+                    type: string
+                store_type:
+                    type: string
+                configuration_json:
+                    type: string
+                credential_reference_id:
+                    type: string
+                expected_version:
+                    type: string
+        UpdatePlatformSettingRequest:
+            type: object
+            properties:
+                setting_key:
+                    type: string
+                value_json:
+                    type: string
+                expected_version:
+                    type: string
+        UpdatePromptRequest:
+            type: object
+            properties:
+                prompt_id:
+                    type: string
+                name:
+                    type: string
+                content:
+                    type: string
+                expected_version:
+                    type: string
+        UpdateProviderRequest:
+            type: object
+            properties:
+                provider_id:
+                    type: string
+                name:
+                    type: string
+                provider_type:
+                    type: string
+                endpoint:
+                    type: string
+                capabilities_json:
+                    type: string
+                expected_version:
+                    type: string
+        UpdateScheduleRequest:
+            type: object
+            properties:
+                schedule_id:
+                    type: string
+                rule:
+                    type: string
+                timezone:
+                    type: string
+                status:
+                    type: string
+                expected_version:
+                    type: string
+        UpdateSkillRequest:
+            type: object
+            properties:
+                skill_id:
+                    type: string
+                name:
+                    type: string
+                content_path:
+                    type: string
+                checksum:
+                    type: string
+                expected_version:
+                    type: string
+        UpdateTagRequest:
+            type: object
+            properties:
+                tag_id:
+                    type: string
+                name:
+                    type: string
+                color:
+                    type: string
+                expected_version:
+                    type: string
+        UpdateTopologyRequest:
+            type: object
+            properties:
+                topology_id:
+                    type: string
+                name:
+                    type: string
+                entry_member_id:
+                    type: string
+                members_json:
+                    type: string
+                edges_json:
+                    type: string
+                expected_version:
+                    type: string
+        UpdateWorkspaceRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                name:
+                    type: string
+                agent_type:
+                    type: string
+                api_key:
+                    type: string
         WorkspaceResponse:
             type: object
             properties:
@@ -192,6 +3714,31 @@ components:
                     type: string
                 updated_at:
                     type: string
+                agent_configuration_id:
+                    type: string
+                organization_id:
+                    type: string
+                team_id:
+                    type: string
+                created_by:
+                    type: string
+                desired_state:
+                    type: string
 tags:
+    - name: AfsBindingService
+    - name: AgentScheduleService
+    - name: AgentTemplateService
+    - name: CredentialReferenceService
+    - name: EnvironmentGrantService
     - name: HealthService
+    - name: MemoryStoreService
+    - name: PlatformAdministrationService
+    - name: PromptService
+    - name: ProviderService
+    - name: PublicExportService
+    - name: RuntimeEnvironmentService
+    - name: ShareMetadataService
+    - name: SkillService
+    - name: TeamworkService
+    - name: WorkspaceMetadataService
     - name: WorkspaceService

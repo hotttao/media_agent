@@ -28,7 +28,7 @@ import (
 // validated a browser session. It never accepts a caller-supplied business ID.
 func ResolveKratosIdentity(ctx context.Context, c *app.RequestContext) {
 	expected := os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN")
-	if expected != "" && subtle.ConstantTimeCompare(c.Request.Header.Peek("X-Media-Auth-Internal-Token"), []byte(expected)) != 1 {
+	if expected == "" || subtle.ConstantTimeCompare(c.Request.Header.Peek("X-Media-Auth-Internal-Token"), []byte(expected)) != 1 {
 		c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal token"})
 		return
 	}
@@ -41,7 +41,7 @@ func ResolveKratosIdentity(ctx context.Context, c *app.RequestContext) {
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	u, err := AuthSvc.ResolveKratosIdentity(ctx, req.IdentityID, req.Email, req.Name)
+	u, err := AuthSvc.ResolveKratosIdentity(ctx, req.IdentityID, req.Email, req.Name, false)
 	if err != nil {
 		writeAuthError(c, err)
 		return

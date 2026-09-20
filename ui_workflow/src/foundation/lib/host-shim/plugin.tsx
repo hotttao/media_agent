@@ -1,5 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/foundation/lib/api-client";
+import {
+  browserFlowURL,
+  createBrowserLogoutURL,
+} from "@/foundation/lib/ory-browser";
 import { getTos } from "@/foundation/lib/plugin-host";
 import type { User } from "@/foundation/types/auth";
 import type { HostShim, ShellContext } from "./types";
@@ -29,10 +33,10 @@ function useCurrentUser() {
     user: data ?? null,
     isLoading,
     login: () => {
-      window.location.href = "/api/auth/login";
+      window.location.assign(browserFlowURL("login", window.location.pathname));
     },
     logout: async () => {
-      await api.logout();
+      window.location.assign(await createBrowserLogoutURL("/login"));
     },
   };
 }

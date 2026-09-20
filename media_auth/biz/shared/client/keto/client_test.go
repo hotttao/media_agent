@@ -12,6 +12,13 @@ func TestClientRelationTupleContract(t *testing.T) {
 	var methods []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		methods = append(methods, r.Method)
+		if r.URL.Path == "/relation-tuples/check/openapi" {
+			if r.URL.Query().Get("relation") != "use_materials" || r.URL.Query().Get("subject_id") != "u1" {
+				t.Fatalf("unexpected check request: %s", r.URL.String())
+			}
+			_ = json.NewEncoder(w).Encode(map[string]bool{"allowed": true})
+			return
+		}
 		switch r.Method {
 		case http.MethodGet:
 			if r.URL.Path != "/relation-tuples" || r.URL.Query().Get("namespace") != "Organization" || r.URL.Query().Get("object") != "org1" {
@@ -44,7 +51,11 @@ func TestClientRelationTupleContract(t *testing.T) {
 	if err := client.Delete(context.Background(), tuples[0]); err != nil {
 		t.Fatal(err)
 	}
-	if len(methods) != 3 {
+	allowed, err := client.Check(context.Background(), CheckRequest{Namespace: "Team", Object: "t1", Relation: "use_materials", SubjectID: "u1"})
+	if err != nil || !allowed {
+		t.Fatalf("check allowed=%v err=%v", allowed, err)
+	}
+	if len(methods) != 4 {
 		t.Fatalf("methods=%v", methods)
 	}
 }

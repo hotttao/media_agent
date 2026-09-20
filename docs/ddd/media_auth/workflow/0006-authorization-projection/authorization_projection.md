@@ -49,12 +49,23 @@ Team 聚合的任何授权相关变更（创建、成员增删/角色变更、�
 3. `materials.*`、`workflow.*` 分别映射为 Team 的 `materials_users`、`workflow_users`，subject set 指向 Team 的 `members/admins`。
 4. Organization Entitlement 变化时，除更新 Organization tuple 外，还必须为该 Organization 下的 Team 创建投影事件，保证继承与交集结果及时收缩。
 
+## 在线判定
+
+下游服务不接收浏览器提供的角色或 Team 列表作为授权事实。它们使用内部服务凭证调用 `POST /internal/team-authorization/check`，提交稳定的 `user_id`、`team_id` 与 `permission`：
+
+1. media_auth 先回查 active Organization、active Team、Membership 和实时有效 Entitlement，得到事实源决定。
+2. 同时用相同主体检查 Keto 的 Team permit；shadow 阶段只记录差异，不能扩大事实源权限。
+3. enforce 阶段要求“事实源允许且 Keto 允许”。Keto 不可用、响应不可解析或投影尚未包含授权时 fail closed。
+4. 撤权敏感动作始终保留事实源回查，因此旧 tuple 在收敛前也不能继续授权。
+
+固定 permission 为 `view | manage | create_workspace | use_materials | use_workflow`，分别映射 Keto Team permit；任意未知值拒绝，禁止形成可由调用方自由拼接 namespace/relation 的通用代理。
+
 ## 当前实现状态（2026-09-20）
 
 - Organization 投影已落地：Worker 按聚合最小 sequence 领取事件，使用 30 秒 claim lease、指数退避和 `authorization_projection_checkpoints`；checkpoint 与 `delivered_at` 在同一事务提交。
 - 每次事件从 media_auth 读取 Organization 当前快照并与 Keto 现有 tuple 做差量同步；重复投递不会产生重复关系。
 - `workflow.*` 与 `materials.*` entitlement 分别投影为 `workflow_entitled`、`materials_entitled` 对 Organization `members/admins` subject set 的关系；disabled Organization 的全部 tuple 会被撤销。
-- Team 投影覆盖归属、成员、管理员和有效功能；Workspace、资源 Grant 投影以及全量重建命令仍待实现。在这些投影和 shadow comparison 完成前不得开启 Keto enforce。
+- Team 投影覆盖归属、成员、管理员和有效功能，并提供受内部凭证保护的事实源/Keto 双判定入口；Workspace、资源 Grant 投影以及全量重建命令仍待实现。在 shadow comparison 完成前不得全局开启 Keto enforce。
 
 ## 可观测与验收
 

@@ -13,12 +13,32 @@ import (
 
 var UserCmd = &cobra.Command{
 	Use:   "user",
-	Short: "media_auth UserService 接口 e2e（list/create/soft-delete/change-password，需 admin）",
+	Short: "media_auth UserService 接口 e2e（list/create/status/soft-delete/change-password，需 admin）",
 }
 
 func init() {
-	UserCmd.AddCommand(listCmd(), createCmd(), deleteCmd(), changePasswordCmd())
+	UserCmd.AddCommand(listCmd(), createCmd(), statusCmd(), deleteCmd(), changePasswordCmd())
 	mediamauth.MediaAuthCmd.AddCommand(UserCmd)
+}
+
+func statusCmd() *cobra.Command {
+	var id, status string
+	c := &cobra.Command{
+		Use:   "status",
+		Short: "PATCH /api/users/:id/status - 禁用或恢复用户（admin）",
+		RunE: func(c *cobra.Command, args []string) error {
+			if _, _, err := Client().UpdateUserStatus(context.Background(), &userpb.UpdateUserStatusRequest{Id: id, Status: status}); err != nil {
+				return fmt.Errorf("update user status: %w", err)
+			}
+			fmt.Printf("✅ user status updated to %s\n", status)
+			return nil
+		},
+	}
+	c.Flags().StringVar(&id, "id", "", "用户 id")
+	c.Flags().StringVar(&status, "status", "", "active|disabled")
+	_ = c.MarkFlagRequired("id")
+	_ = c.MarkFlagRequired("status")
+	return c
 }
 
 func listCmd() *cobra.Command {

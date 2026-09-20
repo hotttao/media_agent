@@ -165,8 +165,34 @@ func writeUserError(c *app.RequestContext, err error) {
 		c.JSON(consts.StatusConflict, map[string]string{"error": err.Error()})
 	case errors.Is(err, userservice.ErrPasswordNotSet):
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
+	case errors.Is(err, userservice.ErrCannotDisableSelf):
+		c.JSON(consts.StatusForbidden, map[string]string{"error": err.Error()})
+	case errors.Is(err, userservice.ErrLastActiveAdmin),
+		errors.Is(err, userservice.ErrTerminalUserStatus):
+		c.JSON(consts.StatusConflict, map[string]string{"error": err.Error()})
+	case errors.Is(err, userservice.ErrInvalidUserStatus):
+		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
 	default:
 		// policy 校验错误（ErrUsernameRequired/ErrPasswordTooShort/ErrInvalidRole/ErrCannotDeleteSelf）-> 400。
 		c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
+}
+
+// UpdateUserStatus .
+// @router /api/users/:id/status [PATCH]
+func UpdateUserStatus(ctx context.Context, c *app.RequestContext) {
+	userID, role, ok := requireSession(ctx, c)
+	if !ok {
+		return
+	}
+	var req userpb.UpdateUserStatusRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	if err := UserSvc.UpdateUserStatus(ctx, role, userID, req.GetId(), req.GetStatus()); err != nil {
+		writeUserError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, &userpb.UpdateUserStatusResponse{Success: true})
 }

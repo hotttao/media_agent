@@ -1,11 +1,9 @@
 /**
  * Auth provider (standalone mode only).
  *
- * On mount, calls /api/v1/auth/me to restore the session from the mw_token
- * cookie. `login()` redirects to /api/v1/auth/login - the materials/workflow
- * auth middleware handles the full OAuth flow (PKCE -> media_auth authorize ->
- * callback -> sets mw_token cookie -> 302 back to `next`). The frontend never
- * touches OAuth code/token.
+ * On mount, calls /api/auth/me to restore the business User from the Kratos
+ * browser session. Login and logout use Kratos browser flows; the frontend
+ * never reads or stores the httpOnly session cookie.
  *
  * Plugin mode does NOT mount this - it reads the current user via host-shim
  * (the host already authenticated the user).
@@ -14,13 +12,17 @@
  * changed from username/password POST to OAuth redirect).
  */
 import { api } from "@/foundation/lib/api-client";
+import {
+  browserFlowURL,
+  createBrowserLogoutURL,
+} from "@/foundation/lib/ory-browser";
 import type { User } from "@/foundation/types/auth";
 import { type ReactNode, createContext, useCallback, useContext, useEffect, useState } from "react";
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  /** Redirect to /api/v1/auth/login (OAuth via media_auth). */
+  /** Redirect to the Kratos browser login flow. */
   login: (next?: string) => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -41,13 +43,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback((next?: string) => {
-    const q = next ? `?next=${encodeURIComponent(next)}` : "";
-    window.location.href = `/api/auth/login${q}`;
+    window.location.assign(browserFlowURL("login", next ?? "/"));
   }, []);
 
   const logout = useCallback(async () => {
+    const logoutURL = await createBrowserLogoutURL("/login");
     setUser(null);
-    window.location.href = "/self-service/logout/browser";
+    window.location.assign(logoutURL);
   }, []);
 
   const refreshUser = useCallback(async () => {

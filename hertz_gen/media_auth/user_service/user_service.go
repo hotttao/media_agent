@@ -24,6 +24,8 @@ type Client interface {
 	DeleteUser(context context.Context, req *user.DeleteUserRequest, reqOpt ...config.RequestOption) (resp *user.DeleteUserResponse, rawResponse *protocol.Response, err error)
 
 	ChangeUserPassword(context context.Context, req *user.ChangeUserPasswordRequest, reqOpt ...config.RequestOption) (resp *user.ChangeUserPasswordResponse, rawResponse *protocol.Response, err error)
+
+	UpdateUserStatus(context context.Context, req *user.UpdateUserStatusRequest, reqOpt ...config.RequestOption) (resp *user.UpdateUserStatusResponse, rawResponse *protocol.Response, err error)
 }
 
 type UserServiceClient struct {
@@ -139,6 +141,30 @@ func (s *UserServiceClient) ChangeUserPassword(context context.Context, req *use
 	return resp, rawResponse, nil
 }
 
+func (s *UserServiceClient) UpdateUserStatus(context context.Context, req *user.UpdateUserStatusRequest, reqOpt ...config.RequestOption) (resp *user.UpdateUserStatusResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &user.UpdateUserStatusResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"id": req.GetId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("PATCH", "/api/users/:id/status")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
 var defaultClient, _ = NewUserServiceClient("")
 
 func ConfigDefaultClient(ops ...Option) (err error) {
@@ -160,4 +186,8 @@ func DeleteUser(context context.Context, req *user.DeleteUserRequest, reqOpt ...
 
 func ChangeUserPassword(context context.Context, req *user.ChangeUserPasswordRequest, reqOpt ...config.RequestOption) (resp *user.ChangeUserPasswordResponse, rawResponse *protocol.Response, err error) {
 	return defaultClient.ChangeUserPassword(context, req, reqOpt...)
+}
+
+func UpdateUserStatus(context context.Context, req *user.UpdateUserStatusRequest, reqOpt ...config.RequestOption) (resp *user.UpdateUserStatusResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.UpdateUserStatus(context, req, reqOpt...)
 }

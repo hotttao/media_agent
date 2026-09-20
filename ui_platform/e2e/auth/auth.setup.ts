@@ -12,9 +12,9 @@ setup("authenticate", async ({ page }) => {
 
   await page.goto("/login");
 
-  await page.getByLabel("Username").fill(username);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByLabel(/email/i).fill(username);
+  await page.getByRole("textbox", { name: /^password \*$/i }).fill(password);
+  await page.getByRole("button", { name: /sign in with password/i }).click();
 
   // Wait for redirect to dashboard after successful login
   await page.waitForURL("**/");

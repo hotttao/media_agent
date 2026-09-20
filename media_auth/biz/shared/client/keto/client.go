@@ -31,6 +31,13 @@ type Client struct {
 	http              *http.Client
 }
 
+type CheckRequest struct {
+	Namespace string
+	Object    string
+	Relation  string
+	SubjectID string
+}
+
 func New(readURL, writeURL string, client *http.Client) *Client {
 	if client == nil {
 		client = http.DefaultClient
@@ -47,6 +54,25 @@ func (c *Client) List(ctx context.Context, namespace, object string) ([]Tuple, e
 		return nil, err
 	}
 	return response.Tuples, nil
+}
+
+// Check evaluates a Keto permit/relation for one concrete subject. The
+// OpenAPI-compatible endpoint returns a JSON decision for both allow and deny,
+// unlike /relation-tuples/check which represents deny as HTTP 403.
+func (c *Client) Check(ctx context.Context, check CheckRequest) (bool, error) {
+	q := url.Values{
+		"namespace":  {check.Namespace},
+		"object":     {check.Object},
+		"relation":   {check.Relation},
+		"subject_id": {check.SubjectID},
+	}
+	var response struct {
+		Allowed bool `json:"allowed"`
+	}
+	if err := c.do(ctx, http.MethodGet, c.readURL+"/relation-tuples/check/openapi?"+q.Encode(), nil, &response); err != nil {
+		return false, err
+	}
+	return response.Allowed, nil
 }
 
 func (c *Client) Put(ctx context.Context, tuple Tuple) error {

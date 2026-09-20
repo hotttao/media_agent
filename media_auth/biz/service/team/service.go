@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	domainorganization "media_agent/media_auth/biz/domain/organization"
@@ -67,7 +68,63 @@ var (
 	ErrOrganizationNotFound           = domainorganization.ErrNotFound
 	ErrInvalidEntitlementMode         = errors.New("entitlement_mode must be inherit or restricted")
 	ErrEntitlementExceedsOrganization = errors.New("team entitlement exceeds organization entitlement")
+	ErrInvalidPermission              = errors.New("invalid team permission")
 )
+
+// Authorize evaluates the authoritative Organization/Team facts. It is used
+// for immediate fail-closed checks and as the reference decision for Keto
+// shadow comparison.
+func (s *Service) Authorize(ctx context.Context, userID, teamID, permission string) (AuthorizationView, error) {
+	team, err := s.repo.GetTeam(ctx, teamID)
+	if err != nil {
+		return AuthorizationView{}, err
+	}
+	view := AuthorizationView{TeamID: team.ID, OrganizationID: team.OrganizationID, Permission: permission}
+	if team.Status != "active" {
+		return view, nil
+	}
+	organization, err := s.organizations.Get(ctx, team.OrganizationID)
+	if err != nil {
+		return AuthorizationView{}, err
+	}
+	if organization.Status != "active" {
+		return view, nil
+	}
+	if membership, membershipErr := s.repo.GetMembership(ctx, teamID, userID); membershipErr == nil {
+		view.TeamRole = string(membership.Role)
+	} else if !errors.Is(membershipErr, domainteam.ErrNotMember) {
+		return AuthorizationView{}, membershipErr
+	}
+	if membership, membershipErr := s.organizations.GetMembership(ctx, team.OrganizationID, userID); membershipErr == nil {
+		view.OrganizationRole = membership.Role
+	} else if !errors.Is(membershipErr, domainorganization.ErrNotMember) {
+		return AuthorizationView{}, membershipErr
+	}
+
+	switch permission {
+	case "view":
+		view.Allowed = view.TeamRole != "" || view.OrganizationRole == "admin"
+	case "manage":
+		view.Allowed = view.TeamRole == "admin" || view.OrganizationRole == "admin"
+	case "create_workspace", "use_materials", "use_workflow":
+		if view.TeamRole == "" {
+			return view, nil
+		}
+		configured, err := s.repo.GetEntitlements(ctx, teamID)
+		if err != nil {
+			return AuthorizationView{}, err
+		}
+		organizationKeys, err := s.organizations.GetEntitlements(ctx, team.OrganizationID)
+		if err != nil {
+			return AuthorizationView{}, err
+		}
+		view.EffectiveFeatureKeys = entitlementView(team.EntitlementMode, configured, organizationKeys).EffectiveFeatureKeys
+		view.Allowed = hasFeature(view.EffectiveFeatureKeys, permissionFeaturePrefix(permission))
+	default:
+		return AuthorizationView{}, ErrInvalidPermission
+	}
+	return view, nil
+}
 
 // ListMyTeams 查当前 user 所属全部 team（含 my_role + member_count）。
 func (s *Service) ListMyTeams(ctx context.Context, userID string) ([]TeamView, error) {
@@ -562,4 +619,29 @@ func intersection(left, right []string) []string {
 		}
 	}
 	return out
+}
+
+func permissionFeaturePrefix(permission string) string {
+	switch permission {
+	case "create_workspace":
+		return "workspace"
+	case "use_materials":
+		return "materials"
+	case "use_workflow":
+		return "workflow"
+	default:
+		return ""
+	}
+}
+
+func hasFeature(keys []string, prefix string) bool {
+	if prefix == "" {
+		return false
+	}
+	for _, key := range keys {
+		if key == prefix || strings.HasPrefix(key, prefix+".") {
+			return true
+		}
+	}
+	return false
 }

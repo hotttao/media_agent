@@ -9,6 +9,7 @@
 import { ONE_COLUMN_SLOTS, OneColumnLayout } from "@/components/shell/layout/OneColumnLayout";
 import { useStandaloneApps } from "@/components/shell/useStandaloneApps";
 import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
 import { STANDALONE_WORKSPACE_ID } from "@/foundation/lib/constants";
 import { SlotProvider } from "@/foundation/providers/slot-provider";
 import { useRequiredSlotContext } from "@/foundation/providers/slot-provider";
@@ -56,6 +57,7 @@ export function Desktop() {
 
 function ShellHeader({ shell }: { shell: ReturnType<typeof hostShim.useShellContext> }) {
   const slots = useRequiredSlotContext();
+  const { user, logout } = hostShim.useCurrentUser();
   const active = slots.getState("slot-a").active?.appId;
   const openApp = (appId: string) => {
     const target = slots.ensureInstance(appId);
@@ -71,9 +73,15 @@ function ShellHeader({ shell }: { shell: ReturnType<typeof hostShim.useShellCont
             <button type="button" className={active === "workflow" ? "rounded bg-foreground/10 px-2 py-1" : "rounded px-2 py-1 text-muted-foreground hover:bg-foreground/10"} onClick={() => openApp("workflow")}>Workflow</button>
           </nav>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {shell.organization.name} / {shell.team.name} / {shell.workspace.name}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {shell.organization.name} / {shell.team.name} / {shell.workspace.name}
+          </span>
+          <span className="text-xs text-muted-foreground">{user?.username}</span>
+          <Button type="button" variant="ghost" size="sm" onClick={() => void logout()}>
+            Sign out
+          </Button>
+        </div>
       </div>
     </header>
   );

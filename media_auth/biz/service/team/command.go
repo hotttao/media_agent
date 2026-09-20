@@ -31,6 +31,16 @@ type EntitlementsView struct {
 	EffectiveFeatureKeys  []string
 }
 
+type AuthorizationView struct {
+	TeamID               string
+	OrganizationID       string
+	Permission           string
+	Allowed              bool
+	TeamRole             string
+	OrganizationRole     string
+	EffectiveFeatureKeys []string
+}
+
 // AddMemberCommand 是 AddMember 用例入参。Role nil=默认 member。
 type AddMemberCommand struct {
 	UserID string

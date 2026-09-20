@@ -3,9 +3,9 @@ package model
 import "time"
 
 type Workspace struct {
-	ID, OwnerUserID, Name, DesiredState string
-	Version                             int64
-	CreatedAt, UpdatedAt                time.Time
+	ID, OrganizationID, TeamID, CreatedBy, OwnerUserID, Name, DesiredState string
+	Version                                                                int64
+	CreatedAt, UpdatedAt                                                   time.Time
 }
 
 func (Workspace) TableName() string { return "workspaces" }

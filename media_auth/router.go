@@ -45,6 +45,7 @@ func customizedRegister(r *server.Hertz) {
 
 	// internal teams 查询：供下游服务 fetchTeams 调用（不挂网关，session skip list 内）。
 	r.POST("/internal/teams:byUser", teaminternalhandler.ListUserTeams)
+	r.POST("/internal/team-authorization/check", teaminternalhandler.AuthorizeTeam)
 	r.POST("/internal/identities/kratos:resolve", authhandler.ResolveKratosIdentity)
 	// your code ...
 }

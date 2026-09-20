@@ -45,3 +45,8 @@ func _changeuserpasswordMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _updateuserstatusMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
