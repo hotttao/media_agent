@@ -3,20 +3,40 @@
  * spinner and trigger the Kratos browser login flow. Once authenticated,
  * mount the Desktop shell.
  */
-import { Desktop } from "@/components/shell/Desktop";
+import { lazy, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/foundation/providers/auth-provider";
+import { AuthPage } from "@/pages/auth/AuthPage";
+
+const Desktop = lazy(() =>
+  import("@/components/shell/Desktop").then((module) => ({
+    default: module.Desktop,
+  })),
+);
+
+function AppLoading() {
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <Spinner className="h-6 w-6" />
+    </div>
+  );
+}
 
 export default function App() {
   const { user, isLoading, login } = useAuth();
+  const pathname = window.location.pathname;
+
+  if (pathname === "/login" || pathname.startsWith("/login/")) {
+    return <AuthPage kind="login" />;
+  }
+
+  if (pathname === "/registration" || pathname.startsWith("/registration/")) {
+    return <AuthPage kind="registration" />;
+  }
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Spinner className="h-6 w-6" />
-      </div>
-    );
+    return <AppLoading />;
   }
 
   if (!user) {
@@ -25,13 +45,21 @@ export default function App() {
         <div className="flex w-full max-w-sm flex-col gap-4 rounded-lg border p-6 shadow-sm">
           <div>
             <h1 className="text-lg font-semibold">Media Workflow</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Sign in to use Materials and Workflow.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Sign in to use Materials and Workflow.
+            </p>
           </div>
-          <Button onClick={() => login(window.location.pathname)}>Sign in</Button>
+          <Button onClick={() => login(window.location.pathname)}>
+            Sign in
+          </Button>
         </div>
       </div>
     );
   }
 
-  return <Desktop />;
+  return (
+    <Suspense fallback={<AppLoading />}>
+      <Desktop />
+    </Suspense>
+  );
 }

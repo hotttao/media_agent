@@ -34,8 +34,10 @@ L3  src/pages/materials/     Materials panel 组合
 - 入口：`src/main.tsx`。
 - 自建 Query、Theme、Auth、Tooltip Provider。
 - 使用 Desktop/Dock/Slot/AppWindow shell 组合 Materials 与 Workflow app。
-- 使用 Ory Kratos browser session；未认证时进入 Kratos login flow。
+- 使用 Ory Kratos browser session；`/login` 与 `/registration` 由本工程展示 Kratos browser flow，业务页面未认证时进入登录 flow。
 - 产物目录：`dist/standalone/`。
+
+认证页面属于 standalone composition，不进入 Materials/Workflow panel，也不复刻 Desktop、Dock 或 Workspace 导航。页面只解释和提交 Kratos `ui.nodes`；身份字段、错误、CSRF、分步状态与 session 始终以 Kratos 为准。
 
 ### 3.2 Agent Platform plugin
 
@@ -73,6 +75,7 @@ yarn build
 - 资源端点放对应 L2 domain，不允许 page 直接拼接 URL。
 - Standalone dev server 可分别代理 Materials 与 Workflow 路径。
 - Production/plugin 必须由部署网关提供同源路由与 cookie 身份契约；共享 cookie 并不能替代 HTTP 路由。
+- 网关将 `/login`、`/registration` 路由到 standalone frontend；其余 Kratos 自助页面可继续由通用 Login UI 承载。
 - 浏览器不得持有 service token，也不得调用 internal API。
 
 ## 7. 验收标准

@@ -14,7 +14,7 @@ http:
       priority: 122
       service: ory-consent
     ory-login-ui:
-      rule: "Path(`/login`) || PathPrefix(`/login/`) || Path(`/registration`) || PathPrefix(`/registration/`) || Path(`/settings`) || PathPrefix(`/settings/`) || Path(`/recovery`) || PathPrefix(`/recovery/`) || Path(`/verification`) || PathPrefix(`/verification/`) || Path(`/logout`) || PathPrefix(`/logout/`) || Path(`/error`) || PathPrefix(`/error/`)"
+      rule: "Path(`/settings`) || PathPrefix(`/settings/`) || Path(`/recovery`) || PathPrefix(`/recovery/`) || Path(`/verification`) || PathPrefix(`/verification/`) || Path(`/logout`) || PathPrefix(`/logout/`) || Path(`/error`) || PathPrefix(`/error/`)"
       priority: 120
       service: ory-login-ui
     authenticated-user:

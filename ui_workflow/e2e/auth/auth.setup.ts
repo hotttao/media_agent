@@ -4,7 +4,9 @@ import { config } from "../config";
 setup("authenticate", async ({ page }) => {
   if (process.env.E2E_DEV_AUTH === "true") {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Media Workflow" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Media Workflow" }),
+    ).toBeVisible();
     await page.context().storageState({ path: "e2e/auth/storage-state.json" });
     return;
   }
@@ -25,7 +27,11 @@ setup("authenticate", async ({ page }) => {
 
   // Kratos returns to the requested application path with its session cookie.
   await page.waitForURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "Media Workflow" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Media Workflow" }),
+  ).toBeVisible({
+    timeout: 15_000,
+  });
 
   // Save signed-in state
   await page.context().storageState({ path: "e2e/auth/storage-state.json" });

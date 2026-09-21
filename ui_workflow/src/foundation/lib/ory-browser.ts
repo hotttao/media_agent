@@ -1,4 +1,4 @@
-type BrowserFlow = "login" | "logout";
+export type BrowserFlow = "login" | "registration" | "logout";
 
 function safePath(path: string): string {
   return path.startsWith("/") && !path.startsWith("//") ? path : "/";

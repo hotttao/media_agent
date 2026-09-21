@@ -3,7 +3,9 @@ import { browserFlowURL, createBrowserLogoutURL } from "./ory-browser";
 
 describe("browserFlowURL", () => {
   it("builds a same-origin Kratos browser flow return URL", () => {
-    expect(browserFlowURL("login", "/materials?tab=all", "https://media.test")).toBe(
+    expect(
+      browserFlowURL("login", "/materials?tab=all", "https://media.test"),
+    ).toBe(
       "/self-service/login/browser?return_to=https%3A%2F%2Fmedia.test%2Fmaterials%3Ftab%3Dall",
     );
   });
@@ -11,6 +13,12 @@ describe("browserFlowURL", () => {
   it("rejects protocol-relative return paths", () => {
     expect(browserFlowURL("logout", "//evil.test", "https://media.test")).toBe(
       "/self-service/logout/browser?return_to=https%3A%2F%2Fmedia.test%2F",
+    );
+  });
+
+  it("builds a registration browser flow URL", () => {
+    expect(browserFlowURL("registration", "/", "https://media.test")).toBe(
+      "/self-service/registration/browser?return_to=https%3A%2F%2Fmedia.test%2F",
     );
   });
 

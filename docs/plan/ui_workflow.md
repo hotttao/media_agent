@@ -336,6 +336,14 @@ panel 内按资源切换，panel 间按后端领域隔离。对应的 `mcp_catal
 
 workflow 域（DAG 编辑器、SSE 监控）作为下一阶段，复用首期打通的双产物链路。
 
+## 6.1 登录注册页面增量（当前）
+
+- [x] 新增仅用于 standalone 的认证页面，参考 `ui_platform` 的卡片、间距和表单层级，不复制其业务 Shell。
+- [x] 从 Kratos `ui.nodes` 动态呈现登录与分步注册字段、CSRF 和消息。
+- [x] 限制 flow action 与完成后的跳转为当前同源地址。
+- [x] 将 Traefik 的 `/login`、`/registration` 路由切到 frontend，保留恢复、设置、验证和错误页的现有承载方式。
+- [x] 增加 flow 单元测试与登录/注册浏览器 E2E，并执行 typecheck、lint、test、build。
+
 ## 7. 待确认项 / 前置依赖
 
 | # | 项 | 影响 | 负责方 |
