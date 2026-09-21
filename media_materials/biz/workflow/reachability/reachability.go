@@ -192,7 +192,7 @@ func (f *Flow) AssetRead(ctx context.Context, resourceType, id string) (url, con
 		if e != nil {
 			return "", "", "", fmt.Errorf("material %q: %w", id, e)
 		}
-		return m.URL, m.Content, "", nil
+		return m.ObjectPath, m.Content, m.Metadata, nil
 	case "ASSET":
 		a, e := f.genAssetSvc.Get(ctx, id)
 		if e != nil {

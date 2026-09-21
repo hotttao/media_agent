@@ -24,17 +24,21 @@ const (
 // url（IMAGE/VIDEO）/ content（TEXT）至少一个非空。
 // scope 创建后不可改；asset_kind 不可改。
 type Material struct {
-	ID          string
-	Scope       string
-	Name        string
-	AssetKind   string // → asset_kinds.name (MATERIAL)
-	URL         string
-	Content     string
-	OwnerUserID string
-	Visibility  Visibility
-	TeamID      string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID             string
+	OrganizationID string
+	Scope          string
+	Name           string
+	Description    string
+	Prompt         string
+	AssetKind      string // → asset_kinds.name (MATERIAL)
+	ObjectPath     string
+	Content        string
+	Metadata       string
+	OwnerUserID    string
+	Visibility     Visibility
+	TeamID         string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 // Binding material ↔ virtual_ip / material ↔ product 关联（N:N）。

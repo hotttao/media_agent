@@ -11,9 +11,12 @@ type Repo interface {
 }
 
 type ListQuery struct {
-	Scope  string
-	Name   string
-	Status string
-	Limit  int
-	Offset int
+	OrganizationID string
+	Scope          string
+	Name           string
+	TargetAudience string
+	Tag            string
+	Status         string
+	Limit          int
+	Offset         int
 }

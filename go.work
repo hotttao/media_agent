@@ -1,6 +1,7 @@
 go 1.26.3
 
 use (
+	./media_storage
 	./media_control
 	./media_agent_gateway
 	./media_gen

@@ -3,12 +3,19 @@
 package generated_asset
 
 import (
+	"context"
+
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
 
 func rootMw() []app.HandlerFunc {
-	// your code...
-	return nil
+	return []app.HandlerFunc{milestoneDisabled}
+}
+
+func milestoneDisabled(_ context.Context, c *app.RequestContext) {
+	c.JSON(consts.StatusNotFound, map[string]string{"error": "route not available in this milestone"})
+	c.Abort()
 }
 
 func _apiMw() []app.HandlerFunc {

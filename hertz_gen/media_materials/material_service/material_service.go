@@ -23,15 +23,9 @@ type Client interface {
 
 	ListMaterials(context context.Context, req *material.ListMaterialsReq, reqOpt ...config.RequestOption) (resp *material.ListMaterialsResp, rawResponse *protocol.Response, err error)
 
-	ListMaterialsByOwner(context context.Context, req *material.ListMaterialsByOwnerReq, reqOpt ...config.RequestOption) (resp *material.ListMaterialsByOwnerResp, rawResponse *protocol.Response, err error)
-
 	UpdateMaterial(context context.Context, req *material.UpdateMaterialReq, reqOpt ...config.RequestOption) (resp *material.Material, rawResponse *protocol.Response, err error)
 
 	DeleteMaterial(context context.Context, req *material.GetMaterialReq, reqOpt ...config.RequestOption) (resp *material.Material, rawResponse *protocol.Response, err error)
-
-	AddMaterialBinding(context context.Context, req *material.AddMaterialBindingReq, reqOpt ...config.RequestOption) (resp *material.Material, rawResponse *protocol.Response, err error)
-
-	RemoveMaterialBinding(context context.Context, req *material.RemoveMaterialBindingReq, reqOpt ...config.RequestOption) (resp *material.Material, rawResponse *protocol.Response, err error)
 }
 
 type MaterialServiceClient struct {
@@ -54,8 +48,8 @@ func (s *MaterialServiceClient) CreateMaterial(context context.Context, req *mat
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{
-			"scope":         req.GetScope(),
-			"owner_user_id": req.GetOwnerUserId(),
+			"organization_id": req.GetOrganizationId(),
+			"scope":           req.GetScope(),
 		}).
 		setPathParams(map[string]string{}).
 		addHeaders(map[string]string{}).
@@ -78,7 +72,9 @@ func (s *MaterialServiceClient) GetMaterial(context context.Context, req *materi
 	httpResp := &material.Material{}
 	ret, err := s.client.r().
 		setContext(context).
-		setQueryParams(map[string]interface{}{}).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+		}).
 		setPathParams(map[string]string{
 			"id": req.GetId(),
 		}).
@@ -103,12 +99,13 @@ func (s *MaterialServiceClient) ListMaterials(context context.Context, req *mate
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{
-			"scope":      req.GetScope(),
-			"asset_kind": req.GetAssetKind(),
-			"owner":      req.GetOwner(),
-			"visibility": req.GetVisibility(),
-			"page":       req.GetPage(),
-			"page_size":  req.GetPageSize(),
+			"organization_id": req.GetOrganizationId(),
+			"scope":           req.GetScope(),
+			"asset_kind":      req.GetAssetKind(),
+			"only_mine":       req.GetOnlyMine(),
+			"visibility":      req.GetVisibility(),
+			"page":            req.GetPage(),
+			"page_size":       req.GetPageSize(),
 		}).
 		setPathParams(map[string]string{}).
 		addHeaders(map[string]string{}).
@@ -127,36 +124,13 @@ func (s *MaterialServiceClient) ListMaterials(context context.Context, req *mate
 	return resp, rawResponse, nil
 }
 
-func (s *MaterialServiceClient) ListMaterialsByOwner(context context.Context, req *material.ListMaterialsByOwnerReq, reqOpt ...config.RequestOption) (resp *material.ListMaterialsByOwnerResp, rawResponse *protocol.Response, err error) {
-	httpResp := &material.ListMaterialsByOwnerResp{}
-	ret, err := s.client.r().
-		setContext(context).
-		setQueryParams(map[string]interface{}{
-			"owner_kind": req.GetOwnerKind(),
-			"owner_id":   req.GetOwnerId(),
-		}).
-		setPathParams(map[string]string{}).
-		addHeaders(map[string]string{}).
-		setFormParams(map[string]string{}).
-		setFormFileParams(map[string]string{}).
-		setBodyParam(req).
-		setRequestOption(reqOpt...).
-		setResult(httpResp).
-		execute("GET", "/api/v1/materials/by-owner")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	resp = httpResp
-	rawResponse = ret.rawResponse
-	return resp, rawResponse, nil
-}
-
 func (s *MaterialServiceClient) UpdateMaterial(context context.Context, req *material.UpdateMaterialReq, reqOpt ...config.RequestOption) (resp *material.Material, rawResponse *protocol.Response, err error) {
 	httpResp := &material.Material{}
 	ret, err := s.client.r().
 		setContext(context).
-		setQueryParams(map[string]interface{}{}).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+		}).
 		setPathParams(map[string]string{
 			"id": req.GetId(),
 		}).
@@ -180,7 +154,9 @@ func (s *MaterialServiceClient) DeleteMaterial(context context.Context, req *mat
 	httpResp := &material.Material{}
 	ret, err := s.client.r().
 		setContext(context).
-		setQueryParams(map[string]interface{}{}).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+		}).
 		setPathParams(map[string]string{
 			"id": req.GetId(),
 		}).
@@ -191,58 +167,6 @@ func (s *MaterialServiceClient) DeleteMaterial(context context.Context, req *mat
 		setRequestOption(reqOpt...).
 		setResult(httpResp).
 		execute("DELETE", "/api/v1/materials/:id")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	resp = httpResp
-	rawResponse = ret.rawResponse
-	return resp, rawResponse, nil
-}
-
-func (s *MaterialServiceClient) AddMaterialBinding(context context.Context, req *material.AddMaterialBindingReq, reqOpt ...config.RequestOption) (resp *material.Material, rawResponse *protocol.Response, err error) {
-	httpResp := &material.Material{}
-	ret, err := s.client.r().
-		setContext(context).
-		setQueryParams(map[string]interface{}{
-			"bound_by": req.GetBoundBy(),
-		}).
-		setPathParams(map[string]string{
-			"material_id": req.GetMaterialId(),
-		}).
-		addHeaders(map[string]string{}).
-		setFormParams(map[string]string{}).
-		setFormFileParams(map[string]string{}).
-		setBodyParam(req).
-		setRequestOption(reqOpt...).
-		setResult(httpResp).
-		execute("POST", "/api/v1/materials/:material_id/bindings")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	resp = httpResp
-	rawResponse = ret.rawResponse
-	return resp, rawResponse, nil
-}
-
-func (s *MaterialServiceClient) RemoveMaterialBinding(context context.Context, req *material.RemoveMaterialBindingReq, reqOpt ...config.RequestOption) (resp *material.Material, rawResponse *protocol.Response, err error) {
-	httpResp := &material.Material{}
-	ret, err := s.client.r().
-		setContext(context).
-		setQueryParams(map[string]interface{}{}).
-		setPathParams(map[string]string{
-			"material_id": req.GetMaterialId(),
-			"owner_kind":  req.GetOwnerKind(),
-			"owner_id":    req.GetOwnerId(),
-		}).
-		addHeaders(map[string]string{}).
-		setFormParams(map[string]string{}).
-		setFormFileParams(map[string]string{}).
-		setBodyParam(req).
-		setRequestOption(reqOpt...).
-		setResult(httpResp).
-		execute("DELETE", "/api/v1/materials/:material_id/bindings/:owner_kind/:owner_id")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -271,22 +195,10 @@ func ListMaterials(context context.Context, req *material.ListMaterialsReq, reqO
 	return defaultClient.ListMaterials(context, req, reqOpt...)
 }
 
-func ListMaterialsByOwner(context context.Context, req *material.ListMaterialsByOwnerReq, reqOpt ...config.RequestOption) (resp *material.ListMaterialsByOwnerResp, rawResponse *protocol.Response, err error) {
-	return defaultClient.ListMaterialsByOwner(context, req, reqOpt...)
-}
-
 func UpdateMaterial(context context.Context, req *material.UpdateMaterialReq, reqOpt ...config.RequestOption) (resp *material.Material, rawResponse *protocol.Response, err error) {
 	return defaultClient.UpdateMaterial(context, req, reqOpt...)
 }
 
 func DeleteMaterial(context context.Context, req *material.GetMaterialReq, reqOpt ...config.RequestOption) (resp *material.Material, rawResponse *protocol.Response, err error) {
 	return defaultClient.DeleteMaterial(context, req, reqOpt...)
-}
-
-func AddMaterialBinding(context context.Context, req *material.AddMaterialBindingReq, reqOpt ...config.RequestOption) (resp *material.Material, rawResponse *protocol.Response, err error) {
-	return defaultClient.AddMaterialBinding(context, req, reqOpt...)
-}
-
-func RemoveMaterialBinding(context context.Context, req *material.RemoveMaterialBindingReq, reqOpt ...config.RequestOption) (resp *material.Material, rawResponse *protocol.Response, err error) {
-	return defaultClient.RemoveMaterialBinding(context, req, reqOpt...)
 }

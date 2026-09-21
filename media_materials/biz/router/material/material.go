@@ -25,21 +25,9 @@ func Register(r *server.Hertz) {
 			_v1.POST("/materials", append(_creatematerialMw(), material.CreateMaterial)...)
 			{
 				_materials := _v1.Group("/materials", _materialsMw()...)
-				_materials.GET("/by-owner", append(_listmaterialsbyownerMw(), material.ListMaterialsByOwner)...)
 				_materials.DELETE("/:id", append(_deletematerialMw(), material.DeleteMaterial)...)
 				_materials.GET("/:id", append(_getmaterialMw(), material.GetMaterial)...)
 				_materials.PUT("/:id", append(_updatematerialMw(), material.UpdateMaterial)...)
-				{
-					_material_id := _materials.Group("/:material_id", _material_idMw()...)
-					_material_id.POST("/bindings", append(_addmaterialbindingMw(), material.AddMaterialBinding)...)
-					{
-						_bindings := _material_id.Group("/bindings", _bindingsMw()...)
-						{
-							_owner_kind := _bindings.Group("/:owner_kind", _owner_kindMw()...)
-							_owner_kind.DELETE("/:owner_id", append(_removematerialbindingMw(), material.RemoveMaterialBinding)...)
-						}
-					}
-				}
 			}
 		}
 	}

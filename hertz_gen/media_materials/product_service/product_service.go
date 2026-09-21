@@ -50,8 +50,8 @@ func (s *ProductServiceClient) CreateProduct(context context.Context, req *produ
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{
-			"scope":      req.GetScope(),
-			"created_by": req.GetCreatedBy(),
+			"organization_id": req.GetOrganizationId(),
+			"scope":           req.GetScope(),
 		}).
 		setPathParams(map[string]string{}).
 		addHeaders(map[string]string{}).
@@ -74,7 +74,9 @@ func (s *ProductServiceClient) GetProduct(context context.Context, req *product.
 	httpResp := &product.Product{}
 	ret, err := s.client.r().
 		setContext(context).
-		setQueryParams(map[string]interface{}{}).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+		}).
 		setPathParams(map[string]string{
 			"id": req.GetId(),
 		}).
@@ -99,11 +101,14 @@ func (s *ProductServiceClient) ListProducts(context context.Context, req *produc
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{
-			"scope":     req.GetScope(),
-			"name":      req.GetName(),
-			"status":    req.GetStatus(),
-			"page":      req.GetPage(),
-			"page_size": req.GetPageSize(),
+			"organization_id": req.GetOrganizationId(),
+			"scope":           req.GetScope(),
+			"name":            req.GetName(),
+			"target_audience": req.GetTargetAudience(),
+			"tag":             req.GetTag(),
+			"status":          req.GetStatus(),
+			"page":            req.GetPage(),
+			"page_size":       req.GetPageSize(),
 		}).
 		setPathParams(map[string]string{}).
 		addHeaders(map[string]string{}).
@@ -127,7 +132,7 @@ func (s *ProductServiceClient) UpdateProduct(context context.Context, req *produ
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{
-			"updated_by": req.GetUpdatedBy(),
+			"organization_id": req.GetOrganizationId(),
 		}).
 		setPathParams(map[string]string{
 			"id": req.GetId(),
@@ -152,7 +157,9 @@ func (s *ProductServiceClient) ArchiveProduct(context context.Context, req *prod
 	httpResp := &product.Product{}
 	ret, err := s.client.r().
 		setContext(context).
-		setQueryParams(map[string]interface{}{}).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+		}).
 		setPathParams(map[string]string{
 			"id": req.GetId(),
 		}).
@@ -176,7 +183,9 @@ func (s *ProductServiceClient) DeleteProduct(context context.Context, req *produ
 	httpResp := &product.Product{}
 	ret, err := s.client.r().
 		setContext(context).
-		setQueryParams(map[string]interface{}{}).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+		}).
 		setPathParams(map[string]string{
 			"id": req.GetId(),
 		}).

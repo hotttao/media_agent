@@ -616,8 +616,8 @@ health:
 	writeFile(newPath, "conf/dev.yaml", devContent)
 
 	// migrations
-	writeFile(newPath, "migrations/000001_init.up.sql", fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;\n", newApp))
-	writeFile(newPath, "migrations/000001_init.down.sql", fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE;\n", newApp))
+	writeFile(newPath, "migrations/000001_init.up.sql", fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;\n", newModule))
+	writeFile(newPath, "migrations/000001_init.down.sql", fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE;\n", newModule))
 
 	// Dockerfile
 	writeFile(newPath, "Dockerfile", fmt.Sprintf(`FROM golang:1.26-alpine AS builder
@@ -627,23 +627,23 @@ ENV GOSUMDB=off
 WORKDIR /workspace
 COPY hertz_gen/go.mod hertz_gen/go.sum hertz_gen/
 COPY hertz_infra/go.mod hertz_infra/go.sum hertz_infra/
-COPY %s/go.mod %s/go.sum %s/
-RUN cd %s && GOWORK=off go mod download
+COPY %[1]s/go.mod %[1]s/go.sum %[1]s/
+RUN cd %[1]s && GOWORK=off go mod download
 COPY hertz_gen/ hertz_gen/
 COPY hertz_infra/ hertz_infra/
-COPY %s/ %s/
-RUN cd %s && GOWORK=off CGO_ENABLED=0 go build -o /out/%s .
+COPY %[1]s/ %[1]s/
+RUN cd %[1]s && GOWORK=off CGO_ENABLED=0 go build -o /out/%[1]s .
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
-COPY --from=builder /out/%s /app/%s
-COPY %s/migrations/ /app/migrations/
-COPY %s/conf/ /app/conf/
-COPY %s/.env /app/.env
-EXPOSE %s
-ENTRYPOINT ["/app/%s"]
-`, newModule, newModule, newModule, newModule, newModule, newModule, newModule, newModule, newModule, newModule, newModule, newModule, newModule, newModule, portStr, newModule))
+COPY --from=builder /out/%[1]s /app/%[1]s
+COPY %[1]s/migrations/ /app/migrations/
+COPY %[1]s/conf/ /app/conf/
+COPY %[1]s/.env /app/.env
+EXPOSE %[2]s
+ENTRYPOINT ["/app/%[1]s"]
+`, newModule, portStr))
 
 	// docker-compose.yml
 	writeFile(newPath, "docker-compose.yml", fmt.Sprintf(`services:

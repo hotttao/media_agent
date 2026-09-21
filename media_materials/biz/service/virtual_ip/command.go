@@ -3,26 +3,30 @@ package virtual_ip
 import domain "media_agent/media_materials/biz/domain/virtual_ip"
 
 type CreateCommand struct {
-	Scope        string
-	Name         string
-	Description  string
-	AvatarURL    string
-	FullBodyURL  string
-	ThreeViewURL string
-	NineViewURL  string
-	OwnerUserID  string
-	Visibility   string
+	OrganizationID      string
+	Scope               string
+	Name                string
+	Description         string
+	AvatarObjectPath    string
+	FullBodyObjectPath  string
+	ThreeViewObjectPath string
+	NineViewObjectPath  string
+	PersonaProfile      string
+	OwnerUserID         string
+	Visibility          string
 }
 
 type UpdateCommand struct {
-	ID           string
-	Name         string
-	Description  string
-	AvatarURL    string
-	FullBodyURL  string
-	ThreeViewURL string
-	NineViewURL  string
-	CallerID     string
+	ID                  string
+	OrganizationID      string
+	Name                string
+	Description         string
+	AvatarObjectPath    string
+	FullBodyObjectPath  string
+	ThreeViewObjectPath string
+	NineViewObjectPath  string
+	PersonaProfile      string
+	CallerID            string
 }
 
 type GrantCommand struct {

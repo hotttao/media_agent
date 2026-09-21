@@ -28,12 +28,6 @@ type Client interface {
 	ArchiveVirtualIp(context context.Context, req *virtual_ip.GetVirtualIpReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error)
 
 	DeleteVirtualIp(context context.Context, req *virtual_ip.GetVirtualIpReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error)
-
-	GrantVirtualIp(context context.Context, req *virtual_ip.GrantReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error)
-
-	RevokeVirtualIp(context context.Context, req *virtual_ip.RevokeReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error)
-
-	ChangeVirtualIpVisibility(context context.Context, req *virtual_ip.ChangeVisibilityReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error)
 }
 
 type VirtualIpServiceClient struct {
@@ -56,8 +50,8 @@ func (s *VirtualIpServiceClient) CreateVirtualIp(context context.Context, req *v
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{
-			"scope":         req.GetScope(),
-			"owner_user_id": req.GetOwnerUserId(),
+			"organization_id": req.GetOrganizationId(),
+			"scope":           req.GetScope(),
 		}).
 		setPathParams(map[string]string{}).
 		addHeaders(map[string]string{}).
@@ -80,7 +74,9 @@ func (s *VirtualIpServiceClient) GetVirtualIp(context context.Context, req *virt
 	httpResp := &virtual_ip.VirtualIp{}
 	ret, err := s.client.r().
 		setContext(context).
-		setQueryParams(map[string]interface{}{}).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+		}).
 		setPathParams(map[string]string{
 			"id": req.GetId(),
 		}).
@@ -105,12 +101,13 @@ func (s *VirtualIpServiceClient) ListVirtualIps(context context.Context, req *vi
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{
-			"scope":      req.GetScope(),
-			"name":       req.GetName(),
-			"status":     req.GetStatus(),
-			"visibility": req.GetVisibility(),
-			"page":       req.GetPage(),
-			"page_size":  req.GetPageSize(),
+			"organization_id": req.GetOrganizationId(),
+			"scope":           req.GetScope(),
+			"name":            req.GetName(),
+			"status":          req.GetStatus(),
+			"visibility":      req.GetVisibility(),
+			"page":            req.GetPage(),
+			"page_size":       req.GetPageSize(),
 		}).
 		setPathParams(map[string]string{}).
 		addHeaders(map[string]string{}).
@@ -133,7 +130,9 @@ func (s *VirtualIpServiceClient) UpdateVirtualIp(context context.Context, req *v
 	httpResp := &virtual_ip.VirtualIp{}
 	ret, err := s.client.r().
 		setContext(context).
-		setQueryParams(map[string]interface{}{}).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+		}).
 		setPathParams(map[string]string{
 			"id": req.GetId(),
 		}).
@@ -157,7 +156,9 @@ func (s *VirtualIpServiceClient) ArchiveVirtualIp(context context.Context, req *
 	httpResp := &virtual_ip.VirtualIp{}
 	ret, err := s.client.r().
 		setContext(context).
-		setQueryParams(map[string]interface{}{}).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+		}).
 		setPathParams(map[string]string{
 			"id": req.GetId(),
 		}).
@@ -181,7 +182,9 @@ func (s *VirtualIpServiceClient) DeleteVirtualIp(context context.Context, req *v
 	httpResp := &virtual_ip.VirtualIp{}
 	ret, err := s.client.r().
 		setContext(context).
-		setQueryParams(map[string]interface{}{}).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+		}).
 		setPathParams(map[string]string{
 			"id": req.GetId(),
 		}).
@@ -192,81 +195,6 @@ func (s *VirtualIpServiceClient) DeleteVirtualIp(context context.Context, req *v
 		setRequestOption(reqOpt...).
 		setResult(httpResp).
 		execute("DELETE", "/api/v1/virtual-ips/:id")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	resp = httpResp
-	rawResponse = ret.rawResponse
-	return resp, rawResponse, nil
-}
-
-func (s *VirtualIpServiceClient) GrantVirtualIp(context context.Context, req *virtual_ip.GrantReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error) {
-	httpResp := &virtual_ip.VirtualIp{}
-	ret, err := s.client.r().
-		setContext(context).
-		setQueryParams(map[string]interface{}{
-			"granted_by": req.GetGrantedBy(),
-		}).
-		setPathParams(map[string]string{
-			"id": req.GetId(),
-		}).
-		addHeaders(map[string]string{}).
-		setFormParams(map[string]string{}).
-		setFormFileParams(map[string]string{}).
-		setBodyParam(req).
-		setRequestOption(reqOpt...).
-		setResult(httpResp).
-		execute("POST", "/api/v1/virtual-ips/:id/grants")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	resp = httpResp
-	rawResponse = ret.rawResponse
-	return resp, rawResponse, nil
-}
-
-func (s *VirtualIpServiceClient) RevokeVirtualIp(context context.Context, req *virtual_ip.RevokeReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error) {
-	httpResp := &virtual_ip.VirtualIp{}
-	ret, err := s.client.r().
-		setContext(context).
-		setQueryParams(map[string]interface{}{}).
-		setPathParams(map[string]string{
-			"id":      req.GetId(),
-			"team_id": req.GetTeamId(),
-		}).
-		addHeaders(map[string]string{}).
-		setFormParams(map[string]string{}).
-		setFormFileParams(map[string]string{}).
-		setBodyParam(req).
-		setRequestOption(reqOpt...).
-		setResult(httpResp).
-		execute("DELETE", "/api/v1/virtual-ips/:id/grants/:team_id")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	resp = httpResp
-	rawResponse = ret.rawResponse
-	return resp, rawResponse, nil
-}
-
-func (s *VirtualIpServiceClient) ChangeVirtualIpVisibility(context context.Context, req *virtual_ip.ChangeVisibilityReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error) {
-	httpResp := &virtual_ip.VirtualIp{}
-	ret, err := s.client.r().
-		setContext(context).
-		setQueryParams(map[string]interface{}{}).
-		setPathParams(map[string]string{
-			"id": req.GetId(),
-		}).
-		addHeaders(map[string]string{}).
-		setFormParams(map[string]string{}).
-		setFormFileParams(map[string]string{}).
-		setBodyParam(req).
-		setRequestOption(reqOpt...).
-		setResult(httpResp).
-		execute("POST", "/api/v1/virtual-ips/:id/visibility")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -305,16 +233,4 @@ func ArchiveVirtualIp(context context.Context, req *virtual_ip.GetVirtualIpReq, 
 
 func DeleteVirtualIp(context context.Context, req *virtual_ip.GetVirtualIpReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error) {
 	return defaultClient.DeleteVirtualIp(context, req, reqOpt...)
-}
-
-func GrantVirtualIp(context context.Context, req *virtual_ip.GrantReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error) {
-	return defaultClient.GrantVirtualIp(context, req, reqOpt...)
-}
-
-func RevokeVirtualIp(context context.Context, req *virtual_ip.RevokeReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error) {
-	return defaultClient.RevokeVirtualIp(context, req, reqOpt...)
-}
-
-func ChangeVirtualIpVisibility(context context.Context, req *virtual_ip.ChangeVisibilityReq, reqOpt ...config.RequestOption) (resp *virtual_ip.VirtualIp, rawResponse *protocol.Response, err error) {
-	return defaultClient.ChangeVirtualIpVisibility(context, req, reqOpt...)
 }

@@ -22,10 +22,13 @@ type BindingRepo interface {
 
 // ListQuery 列表过滤。
 type ListQuery struct {
-	Scope      string
-	AssetKind  string
-	Owner      string
-	Visibility string
-	Limit      int
-	Offset     int
+	OrganizationID string
+	Scope          string
+	AssetKind      string
+	Owner          string
+	Visibility     string
+	CallerID       string
+	CallerTeamIDs  []string
+	Limit          int
+	Offset         int
 }

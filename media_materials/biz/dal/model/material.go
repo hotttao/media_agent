@@ -4,18 +4,22 @@ import "time"
 
 // Material 对应 PG media_materials.materials 表（curated 原料）。
 type Material struct {
-	ID          string     `gorm:"column:id;primaryKey"`
-	Scope       string     `gorm:"column:scope;not null"`
-	Name        string     `gorm:"column:name;not null"`
-	AssetKind   string     `gorm:"column:asset_kind;not null"`
-	URL         string     `gorm:"column:url"`
-	Content     string     `gorm:"column:content"`
-	OwnerUserID string     `gorm:"column:owner_user_id;not null"`
-	Visibility  string     `gorm:"column:visibility;not null;default:private"`
-	TeamID      string     `gorm:"column:team_id"`
-	CreatedAt   time.Time  `gorm:"column:created_at;not null"`
-	UpdatedAt   time.Time  `gorm:"column:updated_at;not null"`
-	DeletedAt   *time.Time `gorm:"column:deleted_at"`
+	ID             string     `gorm:"column:id;primaryKey"`
+	OrganizationID string     `gorm:"column:organization_id;not null"`
+	Scope          string     `gorm:"column:scope;not null"`
+	Name           string     `gorm:"column:name;not null"`
+	Description    string     `gorm:"column:description"`
+	Prompt         string     `gorm:"column:prompt"`
+	AssetKind      string     `gorm:"column:asset_kind;not null"`
+	ObjectPath     string     `gorm:"column:object_path"`
+	Content        string     `gorm:"column:content"`
+	Metadata       string     `gorm:"column:metadata;type:jsonb"`
+	OwnerUserID    string     `gorm:"column:owner_user_id;not null"`
+	Visibility     string     `gorm:"column:visibility;not null;default:private"`
+	TeamID         string     `gorm:"column:team_id"`
+	CreatedAt      time.Time  `gorm:"column:created_at;not null"`
+	UpdatedAt      time.Time  `gorm:"column:updated_at;not null"`
+	DeletedAt      *time.Time `gorm:"column:deleted_at"`
 }
 
 func (Material) TableName() string { return "media_materials.materials" }

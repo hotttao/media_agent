@@ -113,7 +113,9 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	authSvc.SetPlatformTokenEnsurer(stSvc)
 
 	organizationRepo := dalorganization.NewRepo(db)
-	organizationhandler.Svc = organizationservice.NewService(organizationRepo)
+	organizationSvc := organizationservice.NewService(organizationRepo)
+	organizationhandler.Svc = organizationSvc
+	teaminternalhandler.OrganizationSvc = organizationSvc
 	var ketoClient *ketoclient.Client
 	if readURL, writeURL := os.Getenv("KETO_READ_URL"), os.Getenv("KETO_WRITE_URL"); readURL != "" && writeURL != "" {
 		projectionRepo := dalauthorizationprojection.New(db)

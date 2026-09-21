@@ -21,35 +21,46 @@ func (r *Repo) Save(ctx context.Context, v *domain.VirtualIp) error {
 	row := toModel(v)
 	row.CreatedAt = time.Now()
 	row.UpdatedAt = time.Now()
-	return query.Use(dal.FromContext(ctx, r.db)).VirtualIp.WithContext(ctx).Create(row)
+	return dal.FromContext(ctx, r.db).WithContext(ctx).Create(row).Error
 }
 
 func (r *Repo) Get(ctx context.Context, id string) (*domain.VirtualIp, error) {
-	Q := query.Use(dal.FromContext(ctx, r.db))
-	row, err := Q.VirtualIp.WithContext(ctx).
-		Where(Q.VirtualIp.ID.Eq(id), Q.VirtualIp.DeletedAt.IsNull()).First()
-	if err != nil {
-		return nil, err
-	}
-	return toDomain(row), nil
+	var row model.VirtualIp
+	err := dal.FromContext(ctx, r.db).WithContext(ctx).Where("id = ? AND deleted_at IS NULL", id).First(&row).Error
+	return toDomain(&row), err
 }
 
 func (r *Repo) List(ctx context.Context, q domain.ListQuery) ([]*domain.VirtualIp, int, error) {
-	Q := query.Use(dal.FromContext(ctx, r.db))
-	tx := Q.VirtualIp.WithContext(ctx).Where(Q.VirtualIp.DeletedAt.IsNull())
+	tx := dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.VirtualIp{}).Where("deleted_at IS NULL")
+	if q.OrganizationID != "" {
+		tx = tx.Where("organization_id = ?", q.OrganizationID)
+	}
 	if q.Scope != "" {
-		tx = tx.Where(Q.VirtualIp.Scope.Eq(q.Scope))
+		tx = tx.Where("scope = ?", q.Scope)
 	}
 	if q.Name != "" {
-		tx = tx.Where(Q.VirtualIp.Name.Like("%" + q.Name + "%"))
+		tx = tx.Where("name ILIKE ?", "%"+q.Name+"%")
 	}
 	if q.Status != "" {
-		tx = tx.Where(Q.VirtualIp.Status.Eq(q.Status))
+		tx = tx.Where("status = ?", q.Status)
 	}
 	if q.Visibility != "" {
-		tx = tx.Where(Q.VirtualIp.Visibility.Eq(q.Visibility))
+		tx = tx.Where("visibility = ?", q.Visibility)
 	}
-	total, err := tx.Count()
+	if len(q.CallerTeamIDs) > 0 {
+		tx = tx.Where(`owner_user_id = ? OR visibility = 'public' OR (
+			visibility = 'team' AND EXISTS (
+				SELECT 1 FROM media_materials.virtual_ip_grants grants
+				WHERE grants.virtual_ip_id = media_materials.virtual_ips.id
+				  AND grants.organization_id = media_materials.virtual_ips.organization_id
+				  AND grants.team_id IN ?
+			)
+		)`, q.CallerID, q.CallerTeamIDs)
+	} else {
+		tx = tx.Where("owner_user_id = ? OR visibility = 'public'", q.CallerID)
+	}
+	var total int64
+	err := tx.Count(&total).Error
 	if err != nil {
 		return nil, 0, err
 	}
@@ -59,40 +70,34 @@ func (r *Repo) List(ctx context.Context, q domain.ListQuery) ([]*domain.VirtualI
 	if q.Offset > 0 {
 		tx = tx.Offset(q.Offset)
 	}
-	rows, err := tx.Order(Q.VirtualIp.UpdatedAt.Desc()).Find()
+	var rows []model.VirtualIp
+	err = tx.Order("updated_at DESC").Find(&rows).Error
 	if err != nil {
 		return nil, 0, err
 	}
 	out := make([]*domain.VirtualIp, len(rows))
 	for i := range rows {
-		out[i] = toDomain(rows[i])
+		out[i] = toDomain(&rows[i])
 	}
 	return out, int(total), nil
 }
 
 func (r *Repo) Update(ctx context.Context, v *domain.VirtualIp) error {
-	Q := query.Use(dal.FromContext(ctx, r.db))
-	_, err := Q.VirtualIp.WithContext(ctx).
-		Where(Q.VirtualIp.ID.Eq(v.ID), Q.VirtualIp.DeletedAt.IsNull()).
+	return dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.VirtualIp{}).
+		Where("id = ? AND organization_id = ? AND deleted_at IS NULL", v.ID, v.OrganizationID).
 		Updates(map[string]any{
-			"name":           v.Name,
-			"description":    v.Description,
-			"avatar_url":     v.AvatarURL,
-			"full_body_url":  v.FullBodyURL,
-			"three_view_url": v.ThreeViewURL,
-			"nine_view_url":  v.NineViewURL,
-			"status":         string(v.Status),
-			"visibility":     string(v.Visibility),
-			"updated_at":     time.Now(),
-		})
-	return err
+			"name": v.Name, "description": v.Description,
+			"avatar_object_path": v.AvatarObjectPath, "full_body_object_path": v.FullBodyObjectPath,
+			"three_view_object_path": v.ThreeViewObjectPath, "nine_view_object_path": v.NineViewObjectPath,
+			"persona_profile": v.PersonaProfile, "status": string(v.Status),
+			"visibility": string(v.Visibility), "updated_at": time.Now(),
+		}).Error
 }
 
 func (r *Repo) Delete(ctx context.Context, id string) error {
-	Q := query.Use(dal.FromContext(ctx, r.db))
-	res, err := Q.VirtualIp.WithContext(ctx).
-		Where(Q.VirtualIp.ID.Eq(id), Q.VirtualIp.DeletedAt.IsNull()).
-		Updates(map[string]any{"deleted_at": time.Now()})
+	res := dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.VirtualIp{}).
+		Where("id = ? AND deleted_at IS NULL", id).Update("deleted_at", time.Now())
+	err := res.Error
 	if err != nil {
 		return err
 	}
@@ -104,20 +109,22 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 
 func toModel(v *domain.VirtualIp) *model.VirtualIp {
 	return &model.VirtualIp{
-		ID: v.ID, Scope: v.Scope, Name: v.Name, Description: v.Description,
-		AvatarURL: v.AvatarURL, FullBodyURL: v.FullBodyURL,
-		ThreeViewURL: v.ThreeViewURL, NineViewURL: v.NineViewURL,
-		Status: string(v.Status), Visibility: string(v.Visibility), OwnerUserID: v.OwnerUserID,
+		ID: v.ID, OrganizationID: v.OrganizationID, Scope: v.Scope, Name: v.Name, Description: v.Description,
+		AvatarObjectPath: v.AvatarObjectPath, FullBodyObjectPath: v.FullBodyObjectPath,
+		ThreeViewObjectPath: v.ThreeViewObjectPath, NineViewObjectPath: v.NineViewObjectPath,
+		PersonaProfile: v.PersonaProfile,
+		Status:         string(v.Status), Visibility: string(v.Visibility), OwnerUserID: v.OwnerUserID,
 		CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
 }
 
 func toDomain(row *model.VirtualIp) *domain.VirtualIp {
 	return &domain.VirtualIp{
-		ID: row.ID, Scope: row.Scope, Name: row.Name, Description: row.Description,
-		AvatarURL: row.AvatarURL, FullBodyURL: row.FullBodyURL,
-		ThreeViewURL: row.ThreeViewURL, NineViewURL: row.NineViewURL,
-		Status: domain.Status(row.Status), Visibility: domain.Visibility(row.Visibility),
+		ID: row.ID, OrganizationID: row.OrganizationID, Scope: row.Scope, Name: row.Name, Description: row.Description,
+		AvatarObjectPath: row.AvatarObjectPath, FullBodyObjectPath: row.FullBodyObjectPath,
+		ThreeViewObjectPath: row.ThreeViewObjectPath, NineViewObjectPath: row.NineViewObjectPath,
+		PersonaProfile: row.PersonaProfile,
+		Status:         domain.Status(row.Status), Visibility: domain.Visibility(row.Visibility),
 		OwnerUserID: row.OwnerUserID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 }
@@ -130,7 +137,7 @@ func NewGrantRepo(db *gorm.DB) *GrantRepo { return &GrantRepo{db: db} }
 
 func (r *GrantRepo) AddGrant(ctx context.Context, g *domain.Grant) error {
 	row := &model.VirtualIpGrant{
-		VirtualIPID: g.VirtualIPID, TeamID: g.TeamID,
+		OrganizationID: g.OrganizationID, VirtualIPID: g.VirtualIPID, TeamID: g.TeamID,
 		Permission: string(g.Permission), GrantedBy: g.GrantedBy, GrantedAt: time.Now(),
 	}
 	// ON CONFLICT (virtual_ip_id, team_id) DO UPDATE — 覆盖 permission
@@ -163,7 +170,7 @@ func (r *GrantRepo) ListGrants(ctx context.Context, virtualIPID string) ([]*doma
 	out := make([]*domain.Grant, len(rows))
 	for i := range rows {
 		out[i] = &domain.Grant{
-			VirtualIPID: rows[i].VirtualIPID, TeamID: rows[i].TeamID,
+			OrganizationID: rows[i].OrganizationID, VirtualIPID: rows[i].VirtualIPID, TeamID: rows[i].TeamID,
 			Permission: domain.Permission(rows[i].Permission), GrantedBy: rows[i].GrantedBy,
 			GrantedAt: rows[i].GrantedAt,
 		}
@@ -180,7 +187,7 @@ func (r *GrantRepo) ListByTeam(ctx context.Context, teamID string) ([]*domain.Gr
 	out := make([]*domain.Grant, len(rows))
 	for i := range rows {
 		out[i] = &domain.Grant{
-			VirtualIPID: rows[i].VirtualIPID, TeamID: rows[i].TeamID,
+			OrganizationID: rows[i].OrganizationID, VirtualIPID: rows[i].VirtualIPID, TeamID: rows[i].TeamID,
 			Permission: domain.Permission(rows[i].Permission), GrantedBy: rows[i].GrantedBy,
 			GrantedAt: rows[i].GrantedAt,
 		}

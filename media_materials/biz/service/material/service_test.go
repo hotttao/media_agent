@@ -96,7 +96,7 @@ func TestCreate_InvalidAssetKind(t *testing.T) {
 	s := newTestService()
 	_, err := s.Create(context.Background(), CreateCommand{
 		Scope: "ai_clothing", Name: "test", AssetKind: "nonexistent",
-		URL: "https://x.png", OwnerUserID: "u1",
+		OrganizationID: "org1", ObjectPath: "objects/x.png", OwnerUserID: "u1",
 	})
 	if err == nil {
 		t.Fatal("expected error for invalid asset_kind")
@@ -107,7 +107,7 @@ func TestCreate_WrongResourceType(t *testing.T) {
 	s := newTestService()
 	_, err := s.Create(context.Background(), CreateCommand{
 		Scope: "ai_clothing", Name: "test", AssetKind: "model_image", // ASSET, not MATERIAL
-		URL: "https://x.png", OwnerUserID: "u1",
+		OrganizationID: "org1", ObjectPath: "objects/x.png", OwnerUserID: "u1",
 	})
 	if err == nil {
 		t.Fatal("expected error for ASSET kind on material")
@@ -120,7 +120,7 @@ func TestCreate_DisabledAssetKind(t *testing.T) {
 	s.kindLookup = &disabledLookup{}
 	_, err := s.Create(context.Background(), CreateCommand{
 		Scope: "ai_clothing", Name: "test", AssetKind: "scene",
-		URL: "https://x.png", OwnerUserID: "u1",
+		OrganizationID: "org1", ObjectPath: "objects/x.png", OwnerUserID: "u1",
 	})
 	if err == nil {
 		t.Fatal("expected error for disabled asset_kind")
@@ -148,7 +148,7 @@ func TestCreate_Success(t *testing.T) {
 	s := newTestService()
 	mat, err := s.Create(context.Background(), CreateCommand{
 		Scope: "ai_clothing", Name: "test_scene", AssetKind: "scene",
-		URL: "https://x.png", OwnerUserID: "u1", Visibility: "private",
+		OrganizationID: "org1", ObjectPath: "objects/x.png", OwnerUserID: "u1", Visibility: "private",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -165,7 +165,7 @@ func TestGet_OwnerCanRead(t *testing.T) {
 	s := newTestService()
 	mat, _ := s.Create(context.Background(), CreateCommand{
 		Scope: "ai_clothing", Name: "test", AssetKind: "scene",
-		URL: "https://x.png", OwnerUserID: "u1",
+		OrganizationID: "org1", ObjectPath: "objects/x.png", OwnerUserID: "u1",
 	})
 	got, err := s.Get(context.Background(), mat.ID, "u1", nil)
 	if err != nil {
@@ -180,7 +180,7 @@ func TestGet_NonOwnerPrivateDenied(t *testing.T) {
 	s := newTestService()
 	mat, _ := s.Create(context.Background(), CreateCommand{
 		Scope: "ai_clothing", Name: "test", AssetKind: "scene",
-		URL: "https://x.png", OwnerUserID: "u1", Visibility: "private",
+		OrganizationID: "org1", ObjectPath: "objects/x.png", OwnerUserID: "u1", Visibility: "private",
 	})
 	_, err := s.Get(context.Background(), mat.ID, "u2", nil)
 	if err == nil {
@@ -192,7 +192,7 @@ func TestGet_PublicReadableByAnyone(t *testing.T) {
 	s := newTestService()
 	mat, _ := s.Create(context.Background(), CreateCommand{
 		Scope: "ai_clothing", Name: "test", AssetKind: "scene",
-		URL: "https://x.png", OwnerUserID: "u1", Visibility: "public",
+		OrganizationID: "org1", ObjectPath: "objects/x.png", OwnerUserID: "u1", Visibility: "public",
 	})
 	_, err := s.Get(context.Background(), mat.ID, "u2", nil)
 	if err != nil {
@@ -204,7 +204,7 @@ func TestUpdate_OnlyOwner(t *testing.T) {
 	s := newTestService()
 	mat, _ := s.Create(context.Background(), CreateCommand{
 		Scope: "ai_clothing", Name: "test", AssetKind: "scene",
-		URL: "https://x.png", OwnerUserID: "u1",
+		OrganizationID: "org1", ObjectPath: "objects/x.png", OwnerUserID: "u1",
 	})
 	_, err := s.Update(context.Background(), UpdateCommand{
 		ID: mat.ID, Name: "updated", CallerID: "u2",
@@ -218,9 +218,9 @@ func TestDelete_OnlyOwner(t *testing.T) {
 	s := newTestService()
 	mat, _ := s.Create(context.Background(), CreateCommand{
 		Scope: "ai_clothing", Name: "test", AssetKind: "scene",
-		URL: "https://x.png", OwnerUserID: "u1",
+		OrganizationID: "org1", ObjectPath: "objects/x.png", OwnerUserID: "u1",
 	})
-	_, err := s.Delete(context.Background(), mat.ID, "u2")
+	_, err := s.Delete(context.Background(), mat.ID, "org1", "u2")
 	if err == nil {
 		t.Fatal("non-owner should not delete")
 	}
@@ -230,7 +230,7 @@ func TestAddBinding_InvalidOwnerKind(t *testing.T) {
 	s := newTestService()
 	mat, _ := s.Create(context.Background(), CreateCommand{
 		Scope: "ai_clothing", Name: "test", AssetKind: "scene",
-		URL: "https://x.png", OwnerUserID: "u1",
+		OrganizationID: "org1", ObjectPath: "objects/x.png", OwnerUserID: "u1",
 	})
 	_, err := s.AddBinding(context.Background(), AddBindingCommand{
 		MaterialID: mat.ID, OwnerKind: "invalid", OwnerID: "vip1",
@@ -244,7 +244,7 @@ func TestAddBinding_Success(t *testing.T) {
 	s := newTestService()
 	mat, _ := s.Create(context.Background(), CreateCommand{
 		Scope: "ai_clothing", Name: "test", AssetKind: "scene",
-		URL: "https://x.png", OwnerUserID: "u1",
+		OrganizationID: "org1", ObjectPath: "objects/x.png", OwnerUserID: "u1",
 	})
 	_, err := s.AddBinding(context.Background(), AddBindingCommand{
 		MaterialID: mat.ID, OwnerKind: "virtual_ip", OwnerID: "vip1", BoundBy: "u1",

@@ -13,16 +13,32 @@ const (
 // Product 业务产品实体（无 user 归属、无 visibility，scope 级共享）。
 // created_by / updated_by 仅审计，不作 ACL。任意已认证 user 可 CRUD。
 type Product struct {
+	ID               string
+	OrganizationID   string
+	Scope            string
+	Name             string
+	Description      string
+	TargetAudience   string
+	ProductDetails   string
+	DisplayActions   string
+	Tags             string
+	ExternalCommerce string
+	Metadata         string
+	Images           []Image
+	Status           Status
+	CreatedBy        string
+	UpdatedBy        string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type Image struct {
 	ID             string
-	Scope          string
-	Name           string
-	Description    string
-	TargetAudience string
-	ProductDetails string
-	DisplayActions string
-	Status         Status
-	CreatedBy      string
-	UpdatedBy      string
+	OrganizationID string
+	ProductID      string
+	ObjectPath     string
+	IsMain         bool
+	SortOrder      int
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

@@ -12,24 +12,17 @@ import (
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_materials/biz/dal"
 	assetkindrepo "media_agent/media_materials/biz/dal/repo/asset_kind"
-	genassetrepo "media_agent/media_materials/biz/dal/repo/generated_asset"
 	materialrepo "media_agent/media_materials/biz/dal/repo/material"
 	productrepo "media_agent/media_materials/biz/dal/repo/product"
 	viprepo "media_agent/media_materials/biz/dal/repo/virtual_ip"
-	assetkindhandler "media_agent/media_materials/biz/handler/asset_kind"
-	genassethandler "media_agent/media_materials/biz/handler/generated_asset"
 	materialhandler "media_agent/media_materials/biz/handler/material"
 	producthandler "media_agent/media_materials/biz/handler/product"
-	reachhandler "media_agent/media_materials/biz/handler/reachability"
 	viphandler "media_agent/media_materials/biz/handler/virtual_ip"
 	assetkindsvc "media_agent/media_materials/biz/service/asset_kind"
-	genassetsvc "media_agent/media_materials/biz/service/generated_asset"
 	materialsvc "media_agent/media_materials/biz/service/material"
 	productsvc "media_agent/media_materials/biz/service/product"
 	vipsvc "media_agent/media_materials/biz/service/virtual_ip"
-	"media_agent/media_materials/biz/shared"
 	"media_agent/media_materials/biz/shared/auth"
-	wflow "media_agent/media_materials/biz/workflow/reachability"
 )
 
 func main() {
@@ -72,7 +65,6 @@ func main() {
 	// service 装配（repo → service → handler 注入）
 	assetKindRepo := assetkindrepo.NewRepo(db)
 	assetKindSvc := assetkindsvc.NewService(assetKindRepo)
-	assetkindhandler.Svc = assetKindSvc
 
 	productRepo := productrepo.NewRepo(db)
 	productSvc := productsvc.NewService(productRepo)
@@ -83,23 +75,9 @@ func main() {
 	vipSvc := vipsvc.NewService(vipRepo, vipGrantRepo)
 	viphandler.Svc = vipSvc
 
-	ownerScopeLookup := shared.NewOwnerScopeLookup(vipSvc.GetOwnerScope, productSvc.GetOwnerScope)
 	materialRepo := materialrepo.NewRepo(db)
-	materialBindingRepo := materialrepo.NewBindingRepo(db)
-	materialSvc := materialsvc.NewService(materialRepo, materialBindingRepo, assetKindSvc, ownerScopeLookup)
+	materialSvc := materialsvc.NewService(materialRepo, nil, assetKindSvc, nil)
 	materialhandler.Svc = materialSvc
-	// owner 软删时失效其 material_bindings（跨 domain 写，接口注入，见 shared.BindingEnder）。
-	vipSvc.SetBindingEnder(materialSvc)
-	productSvc.SetBindingEnder(materialSvc)
-
-	genAssetRepo := genassetrepo.NewRepo(db)
-	genAssetSvc := genassetsvc.NewService(genAssetRepo)
-	genassethandler.Svc = genAssetSvc
-
-	// reachability workflow：编排 material/generated_asset/vip/product 只读 + policy 决策。
-	// 供 caller（BFF）组装 JobInput bundle 时调用（ADR 0006）。
-	reachFlow := wflow.NewFlow(materialSvc, genAssetSvc, vipSvc, productSvc, assetKindSvc)
-	reachhandler.FlowSvc = reachFlow
 
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
 	mediaAuthURL := "http://127.0.0.1:8001"
@@ -125,6 +103,7 @@ func main() {
 		KratosPublicURL:        os.Getenv("ORY_KRATOS_PUBLIC_URL"),
 		MediaAuthInternalToken: os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN"),
 		DevUserID:              os.Getenv("MW_DEV_USER_ID"),
+		DevOrganizationID:      os.Getenv("MW_DEV_ORGANIZATION_ID"),
 		// skip 运维端点 + internal RPC（服务间调用不带 user session，靠网络隔离）
 		SkipPaths: map[string]bool{
 			"/health": true, "/metrics": true, "/ping": true, "/openapi.yaml": true,

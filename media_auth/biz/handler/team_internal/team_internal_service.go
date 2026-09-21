@@ -14,12 +14,14 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	organizationservice "media_agent/media_auth/biz/service/organization"
 	teamservice "media_agent/media_auth/biz/service/team"
 	ketoclient "media_agent/media_auth/biz/shared/client/keto"
 )
 
 // TeamSvc 由 wire_gen.go InitDI() 注入（复用 team domain service）。
 var TeamSvc *teamservice.Service
+var OrganizationSvc *organizationservice.Service
 var KetoClient *ketoclient.Client
 var KetoEnforce bool
 
@@ -52,6 +54,30 @@ func ListUserTeams(ctx context.Context, c *app.RequestContext) {
 		ids = append(ids, t.Team.ID)
 	}
 	c.JSON(consts.StatusOK, map[string]any{"team_ids": ids})
+}
+
+// ListUserOrganizations returns the active Organizations a user belongs to.
+func ListUserOrganizations(ctx context.Context, c *app.RequestContext) {
+	if !authorizeInternal(c) {
+		return
+	}
+	var req struct {
+		UserID string `json:"user_id"`
+	}
+	if err := json.Unmarshal(c.Request.Body(), &req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	if req.UserID == "" {
+		c.String(consts.StatusBadRequest, "user_id required")
+		return
+	}
+	ids, err := OrganizationSvc.ListActiveIDs(ctx, req.UserID)
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	c.JSON(consts.StatusOK, map[string]any{"organization_ids": ids})
 }
 
 // AuthorizeTeam POST /internal/team-authorization/check evaluates current facts and,

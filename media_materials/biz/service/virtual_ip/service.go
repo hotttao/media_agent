@@ -2,8 +2,10 @@ package virtual_ip
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/google/uuid"
@@ -33,6 +35,9 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Virtua
 	if name == "" {
 		return nil, errors.New("virtual_ip name is required")
 	}
+	if strings.TrimSpace(cmd.OrganizationID) == "" {
+		return nil, errors.New("virtual_ip organization_id is required")
+	}
 	if !shared.IsKnownScope(cmd.Scope) {
 		return nil, errors.New("virtual_ip scope is not supported")
 	}
@@ -43,11 +48,25 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Virtua
 	if err := validVisibility(vis); err != nil {
 		return nil, err
 	}
+	for _, p := range []string{cmd.AvatarObjectPath, cmd.FullBodyObjectPath, cmd.ThreeViewObjectPath, cmd.NineViewObjectPath} {
+		if err := validObjectPath(p); err != nil {
+			return nil, err
+		}
+	}
+	profile := cmd.PersonaProfile
+	if strings.TrimSpace(profile) == "" {
+		profile = "{}"
+	}
+	if !json.Valid([]byte(profile)) {
+		return nil, errors.New("persona_profile must be valid JSON")
+	}
 	v := &domain.VirtualIp{
-		ID: "vip_" + uuid.NewString(), Scope: cmd.Scope, Name: name, Description: cmd.Description,
-		AvatarURL: cmd.AvatarURL, FullBodyURL: cmd.FullBodyURL,
-		ThreeViewURL: cmd.ThreeViewURL, NineViewURL: cmd.NineViewURL,
-		Status: domain.StatusActive, Visibility: vis, OwnerUserID: cmd.OwnerUserID,
+		ID: "vip_" + uuid.NewString(), OrganizationID: cmd.OrganizationID,
+		Scope: cmd.Scope, Name: name, Description: cmd.Description,
+		AvatarObjectPath: cmd.AvatarObjectPath, FullBodyObjectPath: cmd.FullBodyObjectPath,
+		ThreeViewObjectPath: cmd.ThreeViewObjectPath, NineViewObjectPath: cmd.NineViewObjectPath,
+		PersonaProfile: profile,
+		Status:         domain.StatusActive, Visibility: vis, OwnerUserID: cmd.OwnerUserID,
 	}
 	if err := s.repo.Save(ctx, v); err != nil {
 		return nil, fmt.Errorf("save virtual_ip: %w", err)
@@ -70,23 +89,18 @@ func (s *Service) List(ctx context.Context, q ListQuery, callerID string, caller
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
-	items, total, err := s.repo.List(ctx, q)
-	if err != nil {
-		return nil, 0, err
-	}
-	out := items[:0]
-	for _, v := range items {
-		if s.canRead(ctx, v, callerID, callerTeams) {
-			out = append(out, v)
-		}
-	}
-	return out, total, nil
+	q.CallerID = callerID
+	q.CallerTeamIDs = callerTeams
+	return s.repo.List(ctx, q)
 }
 
 func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.VirtualIp, error) {
 	v, err := s.repo.Get(ctx, cmd.ID)
 	if err != nil {
 		return nil, err
+	}
+	if v.OrganizationID != cmd.OrganizationID {
+		return nil, errors.New("virtual_ip not found")
 	}
 	if v.OwnerUserID != cmd.CallerID {
 		return nil, errors.New("only owner can update virtual_ip")
@@ -95,20 +109,39 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Virtua
 		v.Name = cmd.Name
 	}
 	v.Description = cmd.Description
-	v.AvatarURL = cmd.AvatarURL
-	v.FullBodyURL = cmd.FullBodyURL
-	v.ThreeViewURL = cmd.ThreeViewURL
-	v.NineViewURL = cmd.NineViewURL
+	for _, p := range []string{cmd.AvatarObjectPath, cmd.FullBodyObjectPath, cmd.ThreeViewObjectPath, cmd.NineViewObjectPath} {
+		if err := validObjectPath(p); err != nil {
+			return nil, err
+		}
+	}
+	v.AvatarObjectPath = cmd.AvatarObjectPath
+	v.FullBodyObjectPath = cmd.FullBodyObjectPath
+	v.ThreeViewObjectPath = cmd.ThreeViewObjectPath
+	v.NineViewObjectPath = cmd.NineViewObjectPath
+	profile := cmd.PersonaProfile
+	if strings.TrimSpace(profile) == "" {
+		profile = "{}"
+	}
+	if !json.Valid([]byte(profile)) {
+		return nil, errors.New("persona_profile must be valid JSON")
+	}
+	v.PersonaProfile = profile
 	if err := s.repo.Update(ctx, v); err != nil {
 		return nil, fmt.Errorf("update virtual_ip: %w", err)
 	}
 	return s.repo.Get(ctx, cmd.ID)
 }
 
-func (s *Service) Archive(ctx context.Context, id string) (*domain.VirtualIp, error) {
+func (s *Service) Archive(ctx context.Context, id, organizationID, callerID string) (*domain.VirtualIp, error) {
 	v, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if v.OrganizationID != organizationID {
+		return nil, errors.New("virtual_ip not found")
+	}
+	if v.OwnerUserID != callerID {
+		return nil, errors.New("only owner can archive virtual_ip")
 	}
 	v.Status = domain.StatusArchived
 	if err := s.repo.Update(ctx, v); err != nil {
@@ -117,10 +150,13 @@ func (s *Service) Archive(ctx context.Context, id string) (*domain.VirtualIp, er
 	return s.repo.Get(ctx, id)
 }
 
-func (s *Service) Delete(ctx context.Context, id, callerID string) (*domain.VirtualIp, error) {
+func (s *Service) Delete(ctx context.Context, id, organizationID, callerID string) (*domain.VirtualIp, error) {
 	v, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if v.OrganizationID != organizationID {
+		return nil, errors.New("virtual_ip not found")
 	}
 	if v.OwnerUserID != callerID {
 		return nil, errors.New("only owner can delete virtual_ip")
@@ -150,7 +186,7 @@ func (s *Service) Grant(ctx context.Context, cmd GrantCommand) (*domain.VirtualI
 		return nil, fmt.Errorf("invalid permission %q", cmd.Permission)
 	}
 	g := &domain.Grant{
-		VirtualIPID: cmd.ID, TeamID: cmd.TeamID, Permission: perm, GrantedBy: cmd.GrantedBy,
+		OrganizationID: v.OrganizationID, VirtualIPID: cmd.ID, TeamID: cmd.TeamID, Permission: perm, GrantedBy: cmd.GrantedBy,
 	}
 	if err := s.grants.AddGrant(ctx, g); err != nil {
 		return nil, fmt.Errorf("add grant: %w", err)
@@ -226,6 +262,16 @@ func validVisibility(v domain.Visibility) error {
 		return nil
 	}
 	return fmt.Errorf("invalid visibility %q", v)
+}
+
+func validObjectPath(value string) error {
+	if value == "" {
+		return nil
+	}
+	if strings.HasPrefix(value, "/") || path.Clean(value) != value || value == "." || strings.HasPrefix(value, "../") {
+		return errors.New("object_path must be a clean storage-relative path")
+	}
+	return nil
 }
 
 // GetOwnerScope 实现 material.OwnerScopeLookup 端口。

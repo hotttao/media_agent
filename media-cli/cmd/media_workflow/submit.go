@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	reachpb "media_agent/hertz_gen/model/media_materials/reachability"
 	prodpb "media_agent/hertz_gen/model/media_materials/product"
+	reachpb "media_agent/hertz_gen/model/media_materials/reachability"
 	vippb "media_agent/hertz_gen/model/media_materials/virtual_ip"
 	jobpb "media_agent/hertz_gen/model/media_workflow/job"
 	wfpb "media_agent/hertz_gen/model/media_workflow/workflow"
@@ -92,9 +92,13 @@ func runSubmitJob(ctx context.Context, userID, workflowID string, version int, p
 		if err != nil {
 			return fmt.Errorf("get virtual_ip: %w", err)
 		}
+		// JobInput still uses legacy *Url field names. The organization-library
+		// contract carries stable object paths; URL resolution belongs to the
+		// deferred workflow/storage integration and this command is not exposed
+		// in the current milestone.
 		bundle.VirtualIp = &jobpb.VirtualIpData{
-			Id: v.GetId(), Name: v.GetName(), AvatarUrl: v.GetAvatarUrl(),
-			FullBodyUrl: v.GetFullBodyUrl(), ThreeViewUrl: v.GetThreeViewUrl(), NineViewUrl: v.GetNineViewUrl(),
+			Id: v.GetId(), Name: v.GetName(), AvatarUrl: v.GetAvatarObjectPath(),
+			FullBodyUrl: v.GetFullBodyObjectPath(), ThreeViewUrl: v.GetThreeViewObjectPath(), NineViewUrl: v.GetNineViewObjectPath(),
 		}
 	}
 

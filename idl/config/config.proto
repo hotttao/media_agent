@@ -36,6 +36,7 @@ message Config {
   // ---- 数据存储 ----
   DatabaseConfig database = 10;
   RedisConfig redis = 11;
+  ObjectStorageConfig object_storage = 12;
 
   // ---- 注册中心 / 服务发现 ----
   // consul：服务端注册（本服务把自己注册进去）
@@ -137,6 +138,12 @@ message RedisConfig {
   int32 db = 4;
   int32 pool_size = 5;
   int32 dial_timeout_ms = 6;
+}
+
+message ObjectStorageConfig {
+  bool enabled = 1;
+  string driver = 2;      // local_file / aliyun_oss
+  string local_root = 3;  // local_file 根目录；其他 driver 忽略
 }
 
 // ============================================================================

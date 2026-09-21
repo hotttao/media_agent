@@ -31,7 +31,19 @@ log:
   console: true
 
 # ---- 被测 client（dev 默认空；需要时按 local.yaml 模式补全） ----
-# client:
+client:
+
+  media_storage:
+    enabled: true
+    service_name: media-storage
+    base_domain: ${MEDIA_STORAGE_ADDR:-http://127.0.0.1:8008}
+    use_discovery: false
+    timeout:
+      enabled: true
+      connect_timeout_ms: 200
+      read_timeout_ms: 5000
+      write_timeout_ms: 5000
+      request_timeout_ms: 10000
 
   media_control:
     enabled: true
@@ -92,4 +104,3 @@ log:
       read_timeout_ms: 5000
       write_timeout_ms: 5000
       request_timeout_ms: 10000
-

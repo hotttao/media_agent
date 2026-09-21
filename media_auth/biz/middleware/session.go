@@ -79,6 +79,7 @@ var skipAllPaths = map[string]bool{
 	"/internal/token/session":  true,
 	// internal teams 查询：供下游服务 fetchTeams 调用。
 	"/internal/teams:byUser":              true,
+	"/internal/organizations:byUser":      true,
 	"/internal/team-authorization/check":  true,
 	"/internal/identities/kratos:resolve": true,
 	// 运维端点（health/pprof/metrics/swagger/openapi/ping）不走 session 鉴权

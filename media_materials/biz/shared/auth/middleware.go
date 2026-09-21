@@ -55,13 +55,15 @@ type Config struct {
 	InternalJWTVerifier    *internaljwt.Verifier
 	// DevUserID enables a local-only authenticated session when explicitly set.
 	// It is intentionally empty by default and must never be configured in prod.
-	DevUserID    string
-	SkipPaths    map[string]bool
-	SkipPrefixes []string
+	DevUserID         string
+	DevOrganizationID string
+	SkipPaths         map[string]bool
+	SkipPrefixes      []string
 }
 
 type callerKey struct{}
 type teamsKey struct{}
+type organizationsKey struct{}
 
 // CallerFromContext 从 ctx 取 User（middleware 注入）。
 func CallerFromContext(ctx context.Context) *User {
@@ -82,6 +84,23 @@ func CallerID(ctx context.Context) string {
 func TeamsFromContext(ctx context.Context) []string {
 	t, _ := ctx.Value(teamsKey{}).([]string)
 	return t
+}
+
+func OrganizationsFromContext(ctx context.Context) []string {
+	ids, _ := ctx.Value(organizationsKey{}).([]string)
+	return ids
+}
+
+func HasOrganization(ctx context.Context, organizationID string) bool {
+	if organizationID == "" {
+		return false
+	}
+	for _, id := range OrganizationsFromContext(ctx) {
+		if id == organizationID {
+			return true
+		}
+	}
+	return false
 }
 
 // —— service token 缓存 ——
@@ -196,12 +215,13 @@ func (c *teamCache) set(userID string, teams []string) {
 
 // Middleware auth 中间件实例。
 type Middleware struct {
-	cfg       *Config
-	cache     *tokenCache
-	teams     *teamCache
-	pkce      *pkceStore
-	http      *http.Client
-	cookieMax int
+	cfg           *Config
+	cache         *tokenCache
+	teams         *teamCache
+	organizations *teamCache
+	pkce          *pkceStore
+	http          *http.Client
+	cookieMax     int
 }
 
 func New(cfg *Config) *Middleware {
@@ -212,12 +232,13 @@ func New(cfg *Config) *Middleware {
 		cfg.JWTExpiresSec = 7 * 24 * 3600
 	}
 	return &Middleware{
-		cfg:       cfg,
-		cache:     newTokenCache(60 * time.Second),
-		teams:     newTeamCache(60 * time.Second),
-		pkce:      newPKCEStore(),
-		http:      &http.Client{Timeout: 10 * time.Second},
-		cookieMax: cfg.JWTExpiresSec,
+		cfg:           cfg,
+		cache:         newTokenCache(60 * time.Second),
+		teams:         newTeamCache(60 * time.Second),
+		organizations: newTeamCache(60 * time.Second),
+		pkce:          newPKCEStore(),
+		http:          &http.Client{Timeout: 10 * time.Second},
+		cookieMax:     cfg.JWTExpiresSec,
 	}
 }
 
@@ -227,6 +248,9 @@ func (m *Middleware) Handler() app.HandlerFunc {
 		path := string(c.Request.Path())
 		if m.cfg.DevUserID != "" && path != "/api/auth/login" && path != "/api/auth/callback" && path != "/api/auth/logout" {
 			ctx = context.WithValue(ctx, callerKey{}, &User{Sub: m.cfg.DevUserID, Username: m.cfg.DevUserID, Name: "Local Developer", Role: "admin"})
+			if m.cfg.DevOrganizationID != "" {
+				ctx = context.WithValue(ctx, organizationsKey{}, []string{m.cfg.DevOrganizationID})
+			}
 			c.Next(ctx)
 			return
 		}
@@ -258,6 +282,13 @@ func (m *Middleware) Handler() app.HandlerFunc {
 					if teamIDs != nil {
 						ctx = context.WithValue(ctx, teamsKey{}, teamIDs)
 					}
+					organizationIDs, orgErr := m.fetchOrganizations(ctx, user.Sub)
+					if orgErr != nil {
+						c.JSON(consts.StatusServiceUnavailable, map[string]string{"error": "organization authorization unavailable"})
+						c.Abort()
+						return
+					}
+					ctx = context.WithValue(ctx, organizationsKey{}, organizationIDs)
 					c.Next(ctx)
 					return
 				}
@@ -269,8 +300,17 @@ func (m *Middleware) Handler() app.HandlerFunc {
 				return
 			}
 			ctx = context.WithValue(ctx, callerKey{}, user)
-			// 异步取 teams（不阻塞请求；teams 为空时 service 跳过 team 校验）
-			go m.prefetchTeams(user.Sub)
+			teamIDs, _ := m.fetchTeams(ctx, user.Sub)
+			if teamIDs != nil {
+				ctx = context.WithValue(ctx, teamsKey{}, teamIDs)
+			}
+			organizationIDs, orgErr := m.fetchOrganizations(ctx, user.Sub)
+			if orgErr != nil {
+				c.JSON(consts.StatusServiceUnavailable, map[string]string{"error": "organization authorization unavailable"})
+				c.Abort()
+				return
+			}
+			ctx = context.WithValue(ctx, organizationsKey{}, organizationIDs)
 			c.Next(ctx)
 			return
 		}
@@ -284,6 +324,13 @@ func (m *Middleware) Handler() app.HandlerFunc {
 				if teamIDs != nil {
 					ctx = context.WithValue(ctx, teamsKey{}, teamIDs)
 				}
+				organizationIDs, orgErr := m.fetchOrganizations(ctx, user.Sub)
+				if orgErr != nil {
+					c.JSON(consts.StatusServiceUnavailable, map[string]string{"error": "organization authorization unavailable"})
+					c.Abort()
+					return
+				}
+				ctx = context.WithValue(ctx, organizationsKey{}, organizationIDs)
 				c.Next(ctx)
 				return
 			}
@@ -304,6 +351,13 @@ func (m *Middleware) Handler() app.HandlerFunc {
 		if teamIDs != nil {
 			ctx = context.WithValue(ctx, teamsKey{}, teamIDs)
 		}
+		organizationIDs, orgErr := m.fetchOrganizations(ctx, user.Sub)
+		if orgErr != nil {
+			c.JSON(consts.StatusServiceUnavailable, map[string]string{"error": "organization authorization unavailable"})
+			c.Abort()
+			return
+		}
+		ctx = context.WithValue(ctx, organizationsKey{}, organizationIDs)
 		c.Next(ctx)
 	}
 }
@@ -440,6 +494,43 @@ func (m *Middleware) fetchTeams(ctx context.Context, userID string) ([]string, e
 	}
 	m.teams.set(userID, out.TeamIDs)
 	return out.TeamIDs, nil
+}
+
+func (m *Middleware) fetchOrganizations(ctx context.Context, userID string) ([]string, error) {
+	if userID == "" {
+		return nil, errors.New("user_id is required")
+	}
+	if cached, ok := m.organizations.get(userID); ok {
+		return cached, nil
+	}
+	body, err := json.Marshal(map[string]string{"user_id": userID})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.cfg.MediaAuthURL+"/internal/organizations:byUser", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if m.cfg.MediaAuthInternalToken != "" {
+		req.Header.Set("X-Media-Auth-Internal-Token", m.cfg.MediaAuthInternalToken)
+	}
+	resp, err := m.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch organizations: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("media_auth /internal/organizations:byUser: status %d", resp.StatusCode)
+	}
+	var out struct {
+		OrganizationIDs []string `json:"organization_ids"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode organizations resp: %w", err)
+	}
+	m.organizations.set(userID, out.OrganizationIDs)
+	return out.OrganizationIDs, nil
 }
 
 // verifyServiceToken 调 media_auth GET /api/auth/me with Bearer token。

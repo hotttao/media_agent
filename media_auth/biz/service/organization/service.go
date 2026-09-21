@@ -30,6 +30,20 @@ var (
 func (s *Service) List(ctx context.Context, userID string) ([]domain.Summary, error) {
 	return s.repo.ListForUser(ctx, userID)
 }
+
+func (s *Service) ListActiveIDs(ctx context.Context, userID string) ([]string, error) {
+	rows, err := s.repo.ListForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.Status == "active" {
+			ids = append(ids, row.ID)
+		}
+	}
+	return ids, nil
+}
 func (s *Service) Create(ctx context.Context, userID, platformRole, name string) (domain.Summary, error) {
 	if platformRole != "admin" {
 		return domain.Summary{}, ErrPlatformAdmin

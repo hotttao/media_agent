@@ -140,7 +140,7 @@ func BatchGetAssetKind(ctx context.Context, c *app.RequestContext) {
 		out[i] = map[string]string{
 			"name":          ak.Name,
 			"resource_type": string(ak.ResourceType),
-			"media_type":     string(ak.MediaType),
+			"media_type":    string(ak.MediaType),
 			"source_table":  ak.SourceTable,
 			"status":        string(ak.Status),
 		}

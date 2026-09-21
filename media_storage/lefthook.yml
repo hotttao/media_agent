@@ -1,0 +1,9 @@
+pre-commit:
+  commands:
+    gofmt:
+      glob: "*.go"
+      run: gofmt -w {staged_files} && git add {staged_files}
+    arch-check:
+      run: go run ../harness/tools/archcheck
+    test:
+      run: go test ./...

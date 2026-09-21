@@ -2,8 +2,10 @@ package material
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/google/uuid"
@@ -37,8 +39,18 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Materi
 	if name == "" {
 		return nil, errors.New("material name is required")
 	}
-	if strings.TrimSpace(cmd.URL) == "" && strings.TrimSpace(cmd.Content) == "" {
-		return nil, errors.New("material url or content is required")
+	if strings.TrimSpace(cmd.OrganizationID) == "" {
+		return nil, errors.New("material organization_id is required")
+	}
+	if strings.TrimSpace(cmd.ObjectPath) == "" && strings.TrimSpace(cmd.Content) == "" {
+		return nil, errors.New("material object_path or content is required")
+	}
+	if err := validObjectPath(cmd.ObjectPath); err != nil {
+		return nil, err
+	}
+	metadata, err := normalizedJSON(cmd.Metadata, "{}")
+	if err != nil {
+		return nil, fmt.Errorf("material metadata: %w", err)
 	}
 	if !shared.IsKnownScope(cmd.Scope) {
 		return nil, errors.New("material scope is not supported")
@@ -62,15 +74,10 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Materi
 		return nil, err
 	}
 	m := &domain.Material{
-		ID:          "mat_" + uuid.NewString(),
-		Scope:       cmd.Scope,
-		Name:        name,
-		AssetKind:   cmd.AssetKind,
-		URL:         cmd.URL,
-		Content:     cmd.Content,
-		OwnerUserID: cmd.OwnerUserID,
-		Visibility:  vis,
-		TeamID:      cmd.TeamID,
+		ID: "mat_" + uuid.NewString(), OrganizationID: cmd.OrganizationID,
+		Scope: cmd.Scope, Name: name, Description: cmd.Description, Prompt: cmd.Prompt,
+		AssetKind: cmd.AssetKind, ObjectPath: cmd.ObjectPath, Content: cmd.Content, Metadata: metadata,
+		OwnerUserID: cmd.OwnerUserID, Visibility: vis, TeamID: cmd.TeamID,
 	}
 	if err := s.repo.Save(ctx, m); err != nil {
 		return nil, fmt.Errorf("save material: %w", err)
@@ -95,17 +102,9 @@ func (s *Service) List(ctx context.Context, q ListQuery, callerID string, caller
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
-	items, total, err := s.repo.List(ctx, q)
-	if err != nil {
-		return nil, 0, err
-	}
-	out := items[:0]
-	for _, m := range items {
-		if s.canRead(m, callerID, callerTeams) {
-			out = append(out, m)
-		}
-	}
-	return out, total, nil
+	q.CallerID = callerID
+	q.CallerTeamIDs = callerTeams
+	return s.repo.List(ctx, q)
 }
 
 // Update 改可变字段。仅 owner。
@@ -114,14 +113,30 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Materi
 	if err != nil {
 		return nil, err
 	}
+	if m.OrganizationID != cmd.OrganizationID {
+		return nil, errors.New("material not found")
+	}
 	if m.OwnerUserID != cmd.CallerID {
 		return nil, errors.New("only owner can update material")
 	}
 	if cmd.Name != "" {
-		m.Name = cmd.Name
+		m.Name = strings.TrimSpace(cmd.Name)
 	}
-	m.URL = cmd.URL
+	m.Description = cmd.Description
+	m.Prompt = cmd.Prompt
+	if err := validObjectPath(cmd.ObjectPath); err != nil {
+		return nil, err
+	}
+	m.ObjectPath = cmd.ObjectPath
 	m.Content = cmd.Content
+	if m.ObjectPath == "" && strings.TrimSpace(m.Content) == "" {
+		return nil, errors.New("material object_path or content is required")
+	}
+	metadata, err := normalizedJSON(cmd.Metadata, "{}")
+	if err != nil {
+		return nil, fmt.Errorf("material metadata: %w", err)
+	}
+	m.Metadata = metadata
 	if cmd.Visibility != "" {
 		vis := domain.Visibility(cmd.Visibility)
 		if err := validVisibility(vis); err != nil {
@@ -137,10 +152,13 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Materi
 }
 
 // Delete 软删。仅 owner。
-func (s *Service) Delete(ctx context.Context, id, callerID string) (*domain.Material, error) {
+func (s *Service) Delete(ctx context.Context, id, organizationID, callerID string) (*domain.Material, error) {
 	m, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if m.OrganizationID != organizationID {
+		return nil, errors.New("material not found")
 	}
 	if m.OwnerUserID != callerID {
 		return nil, errors.New("only owner can delete material")
@@ -227,4 +245,24 @@ func validVisibility(v domain.Visibility) error {
 		return nil
 	}
 	return fmt.Errorf("invalid visibility %q", v)
+}
+
+func validObjectPath(value string) error {
+	if value == "" {
+		return nil
+	}
+	if strings.HasPrefix(value, "/") || path.Clean(value) != value || value == "." || strings.HasPrefix(value, "../") {
+		return errors.New("object_path must be a clean storage-relative path")
+	}
+	return nil
+}
+
+func normalizedJSON(value, fallback string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		return fallback, nil
+	}
+	if !json.Valid([]byte(value)) {
+		return "", errors.New("must be valid JSON")
+	}
+	return value, nil
 }

@@ -31,12 +31,6 @@ func Register(r *server.Hertz) {
 				{
 					_id := _virtual_ips.Group("/:id", _idMw()...)
 					_id.POST("/archive", append(_archivevirtualipMw(), virtual_ip.ArchiveVirtualIp)...)
-					_id.POST("/grants", append(_grantvirtualipMw(), virtual_ip.GrantVirtualIp)...)
-					_id.POST("/visibility", append(_changevirtualipvisibilityMw(), virtual_ip.ChangeVirtualIpVisibility)...)
-					{
-						_grants := _id.Group("/grants", _grantsMw()...)
-						_grants.DELETE("/:team_id", append(_revokevirtualipMw(), virtual_ip.RevokeVirtualIp)...)
-					}
 				}
 			}
 		}
