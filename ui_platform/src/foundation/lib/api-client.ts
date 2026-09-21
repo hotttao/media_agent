@@ -95,7 +95,7 @@ class ApiClient {
     }).then((r) => r.user);
   }
 
-  async logout(): Promise<void> {
+  async createLogoutURL(): Promise<string> {
     const returnTo = new URL("/login", window.location.origin).toString();
     const response = await fetch(
       `/self-service/logout/browser?return_to=${encodeURIComponent(returnTo)}`,
@@ -110,11 +110,7 @@ class ApiClient {
     ) {
       throw new Error("Kratos returned an invalid logout URL");
     }
-    window.location.assign(logoutURL.toString());
-
-    // Keep callers from navigating to /login before Kratos invalidates its
-    // httpOnly session cookie. The browser navigation above owns completion.
-    await new Promise<void>(() => {});
+    return logoutURL.toString();
   }
 
   async changeMyPassword(

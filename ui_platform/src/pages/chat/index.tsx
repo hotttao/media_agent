@@ -23,18 +23,18 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { MessageBubble } from "@/domains/chat/components/message-bubble";
 import { AgentRequestCard } from "@/domains/chat/components/agent-request-card";
+import { MessageBubble } from "@/domains/chat/components/message-bubble";
 import {
   createClientId,
   createSession,
   interruptTurn,
   itemText,
-  listMessages,
   listAgentRequests,
+  listMessages,
   listSessions,
-  runTurn,
   resolveAgentRequest,
+  runTurn,
   subscribeSessionEvents,
 } from "@/domains/chat/lib/chat-client";
 import { isSessionCompatible } from "@/domains/chat/lib/session-compatibility";
@@ -49,8 +49,8 @@ import { listWorkspaces } from "@/domains/workspace/lib/workspace-client";
 import { agentTypeLabel, type Workspace } from "@/domains/workspace/types";
 import { useAppHeaderSlot } from "@/foundation/components/app-window";
 import { SegmentedDock } from "@/foundation/components/segmented-dock";
+import { SignOutButton } from "@/foundation/components/sign-out-button";
 import { WorkspaceLayout } from "@/foundation/components/workspace-layout";
-import { api } from "@/foundation/lib/api-client";
 import { useAuth } from "@/foundation/providers/auth-provider";
 import { SlotProvider, useSlots } from "@/foundation/providers/slot-provider";
 import { createAppRegistry } from "@/foundation/slots/app-registry";
@@ -479,17 +479,7 @@ function Menubar({
           )}
         </div>
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() =>
-          api.logout().then(() => {
-            window.location.href = "/login";
-          })
-        }
-      >
-        Sign out
-      </Button>
+      <SignOutButton />
     </header>
   );
 }

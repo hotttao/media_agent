@@ -58,7 +58,13 @@ export class MockEventSource {
 // Stub global navigation for 401 redirect tests
 Object.defineProperty(window, "location", {
   writable: true,
-  value: { href: "", assign: vi.fn(), replace: vi.fn() },
+  value: {
+    href: "",
+    origin: "http://localhost",
+    pathname: "/",
+    assign: vi.fn(),
+    replace: vi.fn(),
+  },
 });
 
 // Install EventSource polyfill before any module imports it

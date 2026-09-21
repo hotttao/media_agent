@@ -46,8 +46,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await api.logout();
-    setUser(null);
+    const logoutURL = await api.createLogoutURL();
+    // Kratos owns completion: navigating to its one-time URL invalidates the
+    // httpOnly session cookie and redirects back to /login.
+    window.location.assign(logoutURL);
   }, []);
 
   const refreshUser = useCallback(async () => {

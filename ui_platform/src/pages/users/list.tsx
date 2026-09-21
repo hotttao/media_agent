@@ -4,13 +4,14 @@ import { useTranslation } from "react-i18next";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { canSoftDeleteUser, statusTone } from "@/domains/user/lib/user-status";
+import { SignOutButton } from "@/foundation/components/sign-out-button";
 import { api } from "@/foundation/lib/api-client";
 import { useAuth } from "@/foundation/providers/auth-provider";
 import type { UserRecord } from "@/foundation/types/auth";
 
 export function UsersListPage() {
   const { t } = useTranslation();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState<UserRecord[]>([]);
   const [query, setQuery] = useState("");
@@ -85,14 +86,12 @@ export function UsersListPage() {
         </button>
         <Shield size={17} />
         <strong className="text-sm">{t("users.title")}</strong>
-        <Button
+        <SignOutButton
           className="ml-auto"
           variant="ghost"
           size="sm"
-          onClick={() => void logout().then(() => navigate("/login"))}
-        >
-          {t("users.actions.signOut")}
-        </Button>
+          label={t("users.actions.signOut")}
+        />
       </header>
       <section className="mx-auto w-full max-w-6xl flex-1 p-5 sm:p-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
