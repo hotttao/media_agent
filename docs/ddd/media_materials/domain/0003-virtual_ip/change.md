@@ -1,5 +1,12 @@
 # virtual_ip domain 变更记录
 
+## 2026-09-21 · media_ai Virtual IP 能力复核
+
+- 补齐 `workspace_id` 和完整 Persona Profile 值对象，覆盖年龄、体型、教育职业、家庭背景、性格、爱好与表达习惯。
+- avatar/full-body/three-view/nine-view 从完整 URL 改为 Storage `object_path`。
+- 第一阶段只实现 Virtual IP CRUD，不实现 Workflow 或 Binding；图片由调用方先上传至 media_storage，聚合只保存 object path。
+- 明确旧 `IpMaterial` 不在本轮迁移范围。
+
 ## 2026-07-03 · 初始建模（media_agent v1）
 - 来自 `media_ai` 的 `VirtualIp` 设计迁入并扩展：
   - 把 IP 基础图片（avatar / full_body / three_view / nine_view）作为 URL 字段写在 `virtual_ips` 上，**不**走 asset_bindings——理由：IP 的形象是身份信息，不是从素材库里挑选的；要改 IP 形象直接 URL 改写。

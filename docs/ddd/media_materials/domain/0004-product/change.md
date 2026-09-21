@@ -1,5 +1,12 @@
 # product domain 变更记录
 
+## 2026-09-21 · media_ai Product 能力复核
+
+- 补齐 `workspace_id`；保持 Product 无 owner/visibility/grants，但明确所有操作先校验 Workspace 使用权。
+- 新增 Product Image 聚合内实体，支持有序图片、至多一张主图、整组替换和单图增删。
+- 将 target audience、product details、display actions、tags 提升为稳定业务字段；外部电商字段收口为 External Commerce Reference。
+- 第一阶段只实现 Product CRUD，不实现 Workflow 或 Binding；Product 删除不级联删除 Storage 对象或生成历史。
+
 ## 2026-07-03 · 初始建模（media_agent v1）
 - 来自 `media_ai` 的 `Product` 设计迁入并按新权限模型重塑：
   - 旧 Product 字段 `userId` / `teamId` **移除**：用户明确"product 没有 user 概念"。product 不走资源级 ACL（无 owner / visibility / grants）。
@@ -22,8 +29,8 @@
 - 校验细则 5 补 `bindings_end_at` 置位（对齐 asset domain 声明）。
 
 ## 来自业务规则的强约束
-1. product 无 user 归属；CRUD 不做 user 级权限校验（任意已认证 user 可操作，与"创建不限 scope"立场一致）。
-2. product 绑定 asset 强制同 scope。
+1. Product 无 user 归属；Principal 通过 Workspace 使用权校验后，CRUD 不再做资源级 user ACL。
+2. Product 绑定 Asset 强制同 Workspace、同 Scope。
 3. product 可作 workflow_input（type=product），但不能作 step_binding source。slot.asset_kind 充当解析选择器；解析到 0 或 >1 个 asset → 报错。
 4. product 元数据不直接进 prompt——slot 只接 asset。
-5. scope 不可改。
+5. Workspace 与 Scope 不可改。

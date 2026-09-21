@@ -1,8 +1,17 @@
 # asset domain 变更记录
 
+## 2026-09-21 · media_ai 素材能力复核
+
+- 补齐 Material 的 description、prompt、内联 content 与 object_path 二选一承载方式。
+- 将旧 Movement Material 归入 `asset_kind=movement`，把其同名异义字段 `scope` 改为 `applicable_clothing`，并新增 pose → movement 的 Material Compatibility。
+- 按 `docs/human/research/004_matrials.md` 收窄第一阶段：只实现 Material CRUD，Binding 与 Pose/Movement Compatibility 延后。
+- 用户明确旧 `IpMaterial` 暂不考虑；本轮不把 IP 专属素材折叠进 Material 或 Asset Binding。
+- 所有业务唯一键补入 `workspace_id`，文件引用统一为 Storage `object_path`。
+- Material 与 Generated Asset 列表默认 `only_mine=true`；CRUD 只保存预先上传得到的 object path，不编排 Storage 上传。
+
 ## 2026-07-03 · 初始建模（media_agent v1）
 - 由 `media_ai` 的 `materials` + `generated_assets` 设计迁入。
-- 旧版 media_ai 的 `Material` / `IpMaterial` / `MovementMaterial` 归纳为 `materials` 表 + `material_bindings`（material ↔ vip / material ↔ product，N:N）。
+- 当时把旧版 media_ai 的 `Material` / `IpMaterial` / `MovementMaterial` 归纳为 `materials` + `material_bindings`；该结论已被 2026-09-21 复核取代：Movement Material 保留 Compatibility 语义，`IpMaterial` 本轮暂不迁移且不得折叠为 Binding。
 - 历史生成产物（ModelImage / StyleImage / FirstFrame / Video 等）统一为 `generated_assets` 表，持生成记录链接。
 
 ## 修改记录

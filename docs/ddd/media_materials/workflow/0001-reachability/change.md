@@ -1,5 +1,11 @@
 # reachability workflow 变更记录
 
+## 2026-09-21 · Workspace 与失败语义补全
+
+- 按 Workflow 规范补齐触发/结果、步骤说明、关键参数、一致性边界、重试与失败矩阵。
+- 明确 Product 虽无资源级 user ACL，Principal 仍必须具有 Workspace 使用权。
+- `ResolveAssetByKind` 对 0 条或多条结果都失败，不允许隐式选择最新资源。
+
 ## 2026-07-21 · 初始建立
 
 - 把原先散落在 asset / virtual_ip / product domain 的跨域可达性 RPC（`AssetReachability` / `ResolveAssetByKind` / `AssetRead` / `CheckProductAccessible` / `CheckVirtualIPAccessible` / `ResolveVirtualIpForReachability`）集中上提到本 workflow。
