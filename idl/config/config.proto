@@ -116,6 +116,8 @@ message ServerConfig {
   string address = 2;
   // Hertz server-level 超时
   TimeoutConfig timeout = 3;
+  // HTTP 请求体传输上限；0 使用 Hertz 默认值。业务层仍需执行更小的语义限制。
+  int64 max_request_body_bytes = 4;
 }
 
 // ============================================================================

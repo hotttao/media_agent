@@ -6,6 +6,7 @@ app:
 server:
   enabled: true
   address: ${SERVER_ADDR:-:8003}
+  max_request_body_bytes: 5242880
 
 database:
   enabled: true
@@ -81,3 +82,10 @@ client:
     service_name: "media-auth"
     base_domain: ${MEDIA_AUTH_URL:-http://127.0.0.1:8001}
     use_discovery: false
+  media_storage:
+    enabled: true
+    service_name: "media-storage"
+    base_domain: ${MEDIA_STORAGE_URL:-http://127.0.0.1:8008}
+    timeout:
+      enabled: true
+      request_timeout_ms: 15000

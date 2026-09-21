@@ -10,6 +10,8 @@ services:
     environment:
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-materials?sslmode=disable
       MEDIA_AUTH_URL: http://host.docker.internal:8001
+      MEDIA_STORAGE_URL: http://host.docker.internal:8008
+      MEDIA_STORAGE_INTERNAL_TOKEN: ${MEDIA_STORAGE_INTERNAL_TOKEN:-dev-media-storage-internal-token}
       LOG_DIR: /media_logs/media-materials
     volumes:
     - ../media_logs/media-materials:/media_logs/media-materials

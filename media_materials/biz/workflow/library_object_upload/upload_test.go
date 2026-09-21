@@ -1,0 +1,93 @@
+package library_object_upload
+
+import (
+	"context"
+	"errors"
+	"io"
+	"strings"
+	"testing"
+
+	storageclient "media_agent/media_materials/biz/shared/client/media_storage"
+)
+
+var pngBytes = []byte("\x89PNG\r\n\x1a\nimage-data")
+
+type fakeStorage struct {
+	input storageclient.PutInput
+	err   error
+}
+
+func (s *fakeStorage) Put(_ context.Context, input storageclient.PutInput) (storageclient.ObjectInfo, error) {
+	s.input = input
+	if s.err != nil {
+		return storageclient.ObjectInfo{}, s.err
+	}
+	data, _ := io.ReadAll(input.Body)
+	return storageclient.ObjectInfo{ObjectPath: input.ObjectPath, SizeBytes: int64(len(data)), ContentType: input.ContentType, Checksum: "sha256:test"}, nil
+}
+
+func validCommand() Command {
+	return Command{OrganizationID: "org-1", Scope: "ai_clothing", Purpose: "material", CallerID: "user-1",
+		IdempotencyKey: "upload-1", SizeBytes: int64(len(pngBytes)), Body: strings.NewReader(string(pngBytes))}
+}
+
+func TestUploadBuildsStableObjectPath(t *testing.T) {
+	storage := &fakeStorage{}
+	workflow := New(storage)
+	first, err := workflow.Upload(context.Background(), validCommand())
+	if err != nil {
+		t.Fatalf("Upload: %v", err)
+	}
+	secondCommand := validCommand()
+	second, err := workflow.Upload(context.Background(), secondCommand)
+	if err != nil {
+		t.Fatalf("retry Upload: %v", err)
+	}
+	if first.ObjectPath != second.ObjectPath || !strings.HasPrefix(first.ObjectPath, "materials/org-1/ai_clothing/material/") || !strings.HasSuffix(first.ObjectPath, ".png") {
+		t.Fatalf("unstable object paths: %q %q", first.ObjectPath, second.ObjectPath)
+	}
+	if storage.input.ContentType != "image/png" {
+		t.Fatalf("content type=%q, want image/png", storage.input.ContentType)
+	}
+}
+
+func TestUploadRejectsInvalidInputsBeforeStorage(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(*Command)
+		want error
+	}{
+		{"unsafe organization", func(c *Command) { c.OrganizationID = "../other" }, ErrInvalid},
+		{"unknown scope", func(c *Command) { c.Scope = "unknown" }, ErrInvalid},
+		{"unknown purpose", func(c *Command) { c.Purpose = "other" }, ErrInvalid},
+		{"missing idempotency key", func(c *Command) { c.IdempotencyKey = "" }, ErrInvalid},
+		{"too large", func(c *Command) { c.SizeBytes = MaxUploadBytes + 1 }, ErrTooLarge},
+		{"not image", func(c *Command) { c.Body = strings.NewReader("plain text"); c.SizeBytes = 10 }, ErrInvalid},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			storage := &fakeStorage{}
+			command := validCommand()
+			test.edit(&command)
+			_, err := New(storage).Upload(context.Background(), command)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("error=%v, want %v", err, test.want)
+			}
+			if storage.input.ObjectPath != "" {
+				t.Fatal("storage must not be called for invalid input")
+			}
+		})
+	}
+}
+
+func TestUploadMapsStorageFailures(t *testing.T) {
+	for _, test := range []struct {
+		storageErr error
+		want       error
+	}{{storageclient.ErrConflict, ErrConflict}, {storageclient.ErrUnavailable, ErrUnavailable}} {
+		_, err := New(&fakeStorage{err: test.storageErr}).Upload(context.Background(), validCommand())
+		if !errors.Is(err, test.want) {
+			t.Fatalf("error=%v, want %v", err, test.want)
+		}
+	}
+}

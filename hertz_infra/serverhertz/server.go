@@ -20,6 +20,9 @@ func buildServerOptions(cfg *configpb.Config) []config.Option {
 	if srv != nil && srv.GetAddress() != "" {
 		opts = append(opts, server.WithHostPorts(srv.GetAddress()))
 	}
+	if srv != nil && srv.GetMaxRequestBodyBytes() > 0 {
+		opts = append(opts, server.WithMaxRequestBodySize(int(srv.GetMaxRequestBodyBytes())))
+	}
 	if t := srv.GetTimeout(); t != nil && t.GetEnabled() {
 		if t.GetReadTimeoutMs() > 0 {
 			opts = append(opts, server.WithReadTimeout(msToDuration(t.GetReadTimeoutMs())))

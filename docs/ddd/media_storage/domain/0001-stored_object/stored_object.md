@@ -4,6 +4,7 @@ description: 域名无关对象路径、对象元数据与物理回收
 dependencies: []
 related_workflow:
     - media_workflow_execution
+    - library_object_upload
     - object_retention_gc
 ---
 
@@ -15,7 +16,7 @@ Stored Object 负责按业务服务指定的 Object Path 保存、读取和物�
 
 ### 做什么
 - Put、Open、Stat、Delete 和 ResolveURL。
-- 校验 mTLS CallerService 是否允许访问路径 Namespace。
+- 校验受信 Caller Service 凭证是否允许访问路径 Namespace；当前内部 HTTP 使用独立共享凭证，生产可替换为 mTLS 而不改变领域语义。
 - 通过 Driver 适配 LocalFile 与 AliyunOSS。
 
 ### 不做什么
@@ -57,7 +58,7 @@ Storage 不生成业务 ID；`object_path` 由调用业务服务生成并作为�
 
 ### PutObject
 
-1. 从 mTLS 获取 CallerService，校验 Namespace allowlist 和路径合法性。
+1. 从受信内部凭证取得 CallerService，校验 Namespace allowlist 和路径合法性；最终用户凭证不能替代服务身份。
 2. 流式写 Driver 临时对象并计算 checksum，成功后原子完成 backend key。
 3. upsert 元数据；同路径不同内容返回冲突。
 

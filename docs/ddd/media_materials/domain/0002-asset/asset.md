@@ -4,6 +4,7 @@ description: material（curated 原料）+ generated_asset（workflow 产物）�
 dependencies:
     - asset_kind
 related_workflow:
+    - library_object_upload
     - reachability
     - media_workflow.workflow_validation
     - media_workflow.workflow_execution
@@ -20,7 +21,7 @@ asset domain 管理**两类物理资源**，分落两张表：
 
 ### 不做什么
 - 不存素材二进制（只保存 `object_path`，文件由 `media_storage` 提供）；文本类素材可保存内联 `content`。
-- 不在 CRUD 内调用 media_storage 上传或删除对象；调用方先上传取得 `object_path`，本 domain 只保存逻辑引用。
+- 不在 CRUD 内调用 media_storage 上传或删除对象；调用方先经 [Library Object Upload](../../../workflow/0008-library-object-upload/library_object_upload.md) 取得 `object_path`，本 domain 只保存逻辑引用。
 - 不管理旧系统 `IpMaterial`；IP 专属素材已明确不在本轮迁移范围，也不得用普通 Asset Binding 冒充其派生语义。
 - 不执行 workflow / job / render（归 `media_workflow`）。
 - 不把 material 与 generated_asset 混在一张表--generated_asset 必须记录"怎么生成的"，material 不需要，字段与生命周期不同。

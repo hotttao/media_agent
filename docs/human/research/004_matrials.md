@@ -41,12 +41,12 @@ Scope 是 Organization 内的业务品类限定，例如某个 Virtual IP 主要
 
 `media_materials` 不感知 provider、bucket、域名或签名 URL，只保存 Storage 返回的逻辑 `object_path`。
 
-本期不在 CRUD 内编排跨服务上传，采用两步式调用：
+本期不在 CRUD 事务内编排跨服务上传，采用两步式调用：
 
-1. 客户端先调用 `media_storage` 上传文件，得到 `object_path`；
+1. 客户端先调用 `media_materials` 的 Library Object Upload 接口；`media_materials` 校验用户与 Organization Membership、生成 Object Path，再以服务身份调用 `media_storage`，返回 `object_path`；
 2. 客户端调用 Material / Virtual IP / Product CRUD，把 `object_path` 写入业务记录。
 
-读取图片时，由网关或客户端按 `object_path` 向 `media_storage` 获取访问地址或内容。删除业务记录不直接删除 Storage 对象，避免共享引用和失败补偿问题；对象保留与垃圾回收归 `media_storage`。
+浏览器不直接调用 `media_storage`，Storage 也不接收最终用户身份。读取图片必须先由拥有业务语义的服务按 Material / Virtual IP / Product 权限完成授权，再代理内容或签发短期地址；不得开放仅凭任意 `object_path` 读取的公共接口。删除业务记录不直接删除 Storage 对象，避免共享引用和失败补偿问题；对象保留与垃圾回收归 `media_storage`。
 
 ## Owner 与默认筛选
 

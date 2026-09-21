@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package media_materials.library_object;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_materials/library_object";
+
+service LibraryObjectService {
+  rpc UploadLibraryObject(UploadLibraryObjectReq) returns (UploadLibraryObjectResp) {
+    option (google.api.http) = { post: "/api/v1/library-objects:upload" };
+    option (api.post) = "/api/v1/library-objects:upload";
+  }
+}
+
+message UploadLibraryObjectReq {
+  string organization_id = 1 [(api.query) = "organization_id"];
+  string scope = 2 [(api.query) = "scope"];
+  string purpose = 3 [(api.query) = "purpose"];
+  string idempotency_key = 4 [(api.header) = "Idempotency-Key"];
+}
+
+message UploadLibraryObjectResp {
+  string object_path = 1;
+  int64 size_bytes = 2;
+  string content_type = 3;
+  string checksum = 4;
+}

@@ -11,7 +11,10 @@ import (
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_storage/biz/dal"
 	"media_agent/media_storage/biz/dal/driver/localfile"
+	storedobjectrepo "media_agent/media_storage/biz/dal/repo/stored_object"
 	domain "media_agent/media_storage/biz/domain/stored_object"
+	objecthandler "media_agent/media_storage/biz/handler/object"
+	storedobjectsvc "media_agent/media_storage/biz/service/stored_object"
 )
 
 func main() {
@@ -50,13 +53,14 @@ func main() {
 	if err := dal.Migrate("migrations", dbCfg); err != nil {
 		log.Fatalf("db migrate: %v", err)
 	}
-	_ = db
 
 	storageDriver, err := newStorageDriver(cfg.GetObjectStorage())
 	if err != nil {
 		log.Fatalf("init object storage: %v", err)
 	}
-	_ = storageDriver
+	storageRepo := storedobjectrepo.NewRepo(db)
+	objecthandler.Svc = storedobjectsvc.NewService(storageDriver, storageRepo, normalizedDriverName(cfg.GetObjectStorage().GetDriver()))
+	objecthandler.InternalToken = os.Getenv("MEDIA_STORAGE_INTERNAL_TOKEN")
 
 	h := suite.NewServer()
 	register(h)
@@ -73,6 +77,13 @@ func main() {
 
 	log.Printf("media-storage: listening on %s", cfg.GetServer().GetAddress())
 	h.Spin()
+}
+
+func normalizedDriverName(value string) string {
+	if value == "" {
+		return "local_file"
+	}
+	return value
 }
 
 func newStorageDriver(cfg interface {

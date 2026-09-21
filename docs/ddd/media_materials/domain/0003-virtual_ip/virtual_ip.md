@@ -4,6 +4,7 @@ description: VirtualIp（虚拟形象）的存储、资源权限与关联 Asset 
 dependencies:
     - asset_kind
 related_workflow:
+    - library_object_upload
     - reachability
     - media_workflow.workflow_validation
 ---
@@ -13,7 +14,7 @@ virtual_ip domain 管理可写、可共享的 AI 形象，归属一个 Organizat
 
 ### 不做什么
 - 不存 IP 形象二进制（基础图只保存 Storage `object_path`；生成产物落 Generated Asset）。
-- 不在 CRUD 内上传或删除 Storage 对象；调用方先从 media_storage 取得 `object_path`。
+- 不在 CRUD 内上传或删除 Storage 对象；调用方先经 [Library Object Upload](../../../workflow/0008-library-object-upload/library_object_upload.md) 由 media_materials 取得 `object_path`。
 - 不管理旧系统 `IpMaterial`；IP 专属素材已明确暂不迁移。
 - 不执行 prompt / workflow / job（归 `media_workflow`）。
 - 不做跨域可达性决策（`CheckVirtualIPAccessible` / `ResolveVirtualIpForReachability` 归 [reachability workflow](../../workflow/0001-reachability/reachability.md)，见 [ADR 0006](../../../adr/0006-reachability-layering.md)）；本 domain 仅暴露可见性只读查询供其编排。

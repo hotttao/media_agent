@@ -1,5 +1,11 @@
 # asset domain 变更记录
 
+## 2026-09-21 · 固化对象上传入口
+
+- Material CRUD 仍只保存 Object Path，但不再允许浏览器直接调用 media_storage。
+- 新增全局 Library Object Upload Workflow：media_materials 完成用户与 Organization 授权并生成路径，再以服务身份写入 Storage。
+- 上传与 Material 创建保持两个事务；未被 Material 引用的成功上传由后续 Retention/GC 回收。
+
 ## 2026-09-21 · Organization 级资源共享
 
 - 用户明确 Material、Virtual IP、Product 在 Organization 内共享；Material 与 Generated Asset 的归属列和业务唯一键由 `workspace_id` 修正为 `organization_id`。

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"media_agent/hertz_infra/authn/internaljwt"
 	"media_agent/hertz_infra/config"
@@ -15,6 +16,7 @@ import (
 	materialrepo "media_agent/media_materials/biz/dal/repo/material"
 	productrepo "media_agent/media_materials/biz/dal/repo/product"
 	viprepo "media_agent/media_materials/biz/dal/repo/virtual_ip"
+	libraryobjecthandler "media_agent/media_materials/biz/handler/library_object"
 	materialhandler "media_agent/media_materials/biz/handler/material"
 	producthandler "media_agent/media_materials/biz/handler/product"
 	viphandler "media_agent/media_materials/biz/handler/virtual_ip"
@@ -23,6 +25,8 @@ import (
 	productsvc "media_agent/media_materials/biz/service/product"
 	vipsvc "media_agent/media_materials/biz/service/virtual_ip"
 	"media_agent/media_materials/biz/shared/auth"
+	storageclient "media_agent/media_materials/biz/shared/client/media_storage"
+	uploadworkflow "media_agent/media_materials/biz/workflow/library_object_upload"
 )
 
 func main() {
@@ -78,6 +82,20 @@ func main() {
 	materialRepo := materialrepo.NewRepo(db)
 	materialSvc := materialsvc.NewService(materialRepo, nil, assetKindSvc, nil)
 	materialhandler.Svc = materialSvc
+
+	storageCfg, ok := cfg.GetClient()["media_storage"]
+	if !ok || !storageCfg.GetEnabled() || storageCfg.GetBaseDomain() == "" {
+		log.Fatal("media_storage client is required")
+	}
+	storageToken := os.Getenv("MEDIA_STORAGE_INTERNAL_TOKEN")
+	if storageToken == "" {
+		log.Fatal("MEDIA_STORAGE_INTERNAL_TOKEN is required")
+	}
+	storageTimeout := 15 * time.Second
+	if ms := storageCfg.GetTimeout().GetRequestTimeoutMs(); ms > 0 {
+		storageTimeout = time.Duration(ms) * time.Millisecond
+	}
+	libraryobjecthandler.Flow = uploadworkflow.New(storageclient.New(storageCfg.GetBaseDomain(), storageToken, storageTimeout))
 
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
 	mediaAuthURL := "http://127.0.0.1:8001"

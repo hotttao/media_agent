@@ -10,6 +10,10 @@
 一个 Organization 内共享的 Material、Generated Asset、Virtual IP 和 Product 集合；资源读取、写入和唯一键必须限定 `organization_id`。Workspace 是这些资源的使用上下文，不拥有或复制企业资源。
 _禁用替代词_：Workspace Library、Tenant Scope、Team Library
 
+**Library Object Upload（企业资源对象上传）**:
+用户为某个 Organization 和 Scope 上传二进制内容、取得稳定 Object Path、再由 Material、Virtual IP 或 Product 引用的独立过程。上传成功不等于已经创建业务资源；尚未被业务资源引用的内容属于待回收对象。
+_禁用替代词_：Material Upload（只有创建 Material 时才可使用）、Direct Storage Upload、Attachment
+
 ### 业务范围
 
 **Scope（业务范围）**:

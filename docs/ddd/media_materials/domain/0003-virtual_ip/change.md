@@ -1,5 +1,10 @@
 # virtual_ip domain 变更记录
 
+## 2026-09-21 · 固化对象上传入口
+
+- Virtual IP 身份图片先经 media_materials 的 Library Object Upload Workflow 上传，CRUD 只保存返回的 Object Path。
+- 浏览器不直接获得 media_storage 的调用权限；Storage 不参与 Virtual IP 的 Organization、owner 或 visibility 判断。
+
 ## 2026-09-21 · Organization 级资源共享
 
 - Virtual IP 归属和唯一键由 Workspace 修正为 Organization；Organization 成员可按资源 ACL 在企业内共享使用。

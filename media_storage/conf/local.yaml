@@ -6,6 +6,7 @@ app:
 server:
   enabled: true
   address: ${SERVER_ADDR:-:8008}
+  max_request_body_bytes: 4194304
 
 database:
   enabled: true

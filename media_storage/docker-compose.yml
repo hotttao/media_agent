@@ -11,6 +11,7 @@ services:
       SERVER_ADDR: ":8008"
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-storage?sslmode=disable
       MEDIA_STORAGE_LOCAL_ROOT: /data/media-storage
+      MEDIA_STORAGE_INTERNAL_TOKEN: ${MEDIA_STORAGE_INTERNAL_TOKEN:-dev-media-storage-internal-token}
       LOG_DIR: /media_logs/media-storage
     volumes:
       - ../media_logs/media-storage:/media_logs/media-storage

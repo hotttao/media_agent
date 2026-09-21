@@ -16,8 +16,12 @@ _禁用替代词_：Material、Asset、Business Resource
 Object Path 的首段，用于约束已认证服务可访问的路径范围。
 _禁用替代词_：Bucket、Workspace
 
+**Caller Service（调用服务）**:
+通过受信服务身份调用对象能力的上游业务服务；每个 Caller Service 只可访问被授予的 Storage Namespace。最终用户身份不能替代 Caller Service 身份。
+_禁用替代词_：End User、Browser Client、Anonymous Caller
+
 **Storage Driver（存储驱动）**:
-实现统一对象操作的物理后端适配器，首期包括 LocalFile 和 AliyunOSS。
+实现统一对象操作的物理后端适配器；首期实现 LocalFile，AliyunOSS 等云后端属于后续扩展。
 _禁用替代词_：Storage Service、Bucket
 
 **Resolved URL（解析地址）**:

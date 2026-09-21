@@ -8,9 +8,11 @@ import (
 )
 
 var (
-	ErrInvalidObjectPath = errors.New("invalid object path")
-	ErrObjectConflict    = errors.New("object path already contains different content")
-	ErrObjectNotFound    = errors.New("stored object not found")
+	ErrInvalidObjectPath  = errors.New("invalid object path")
+	ErrNamespaceForbidden = errors.New("storage namespace forbidden")
+	ErrObjectConflict     = errors.New("object path already contains different content")
+	ErrObjectNotFound     = errors.New("stored object not found")
+	ErrStorageUnavailable = errors.New("object storage unavailable")
 )
 
 // BlobInfo describes physical content. Business ownership and access policy
@@ -19,6 +21,20 @@ type BlobInfo struct {
 	ObjectPath string
 	SizeBytes  int64
 	Checksum   string
+}
+
+type StoredObject struct {
+	ObjectPath  string
+	Namespace   string
+	Driver      string
+	BackendKey  string
+	ContentType string
+	SizeBytes   int64
+	Checksum    string
+}
+
+type Repository interface {
+	SaveActive(ctx context.Context, object StoredObject) (StoredObject, error)
 }
 
 // Driver is the replaceable physical storage port used by Stored Object.

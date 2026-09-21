@@ -1,5 +1,10 @@
 # product domain 变更记录
 
+## 2026-09-21 · 固化对象上传入口
+
+- Product Image 先经 media_materials 的 Library Object Upload Workflow 上传，Product 聚合事务只维护有序 Object Path 集合。
+- 上传成功但 Product 创建/更新失败时不立即删除对象，由后续 Retention/GC 识别未引用对象。
+
 ## 2026-09-21 · Organization 级资源共享
 
 - Product 与 Product Image 归属和唯一键由 Workspace 修正为 Organization。

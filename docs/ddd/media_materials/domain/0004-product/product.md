@@ -5,6 +5,7 @@ dependencies:
     - asset
     - asset_kind
 related_workflow:
+    - library_object_upload
     - reachability
     - media_workflow.workflow_validation
     - media_workflow.workflow_execution
@@ -19,7 +20,7 @@ product domain 管理**业务产品**及其有序 Product Image 集合。Product
 - 不管理 material / generated_asset 本身（仅持 material_bindings 关系；material 归 [asset](../0002-asset/asset.md)，generated_asset 通过 source_product_id 反向关联）。
 - 不做跨域可达性决策（`CheckProductAccessible` 归 [reachability workflow](../../workflow/0001-reachability/reachability.md)，见 [ADR 0006](../../../adr/0006-reachability-layering.md)）。
 - 不把 Product Image 当成 Material；图片随 Product 聚合维护。
-- 不在 CRUD 内上传或删除 Storage 对象；Product Image 只保存 media_storage 返回的 `object_path`。
+- 不在 CRUD 内上传或删除 Storage 对象；调用方先经 [Library Object Upload](../../../workflow/0008-library-object-upload/library_object_upload.md) 由 media_materials 取得 `object_path`，Product Image 只保存该逻辑引用。
 - 不管理 publication_plan（待后续建模）。
 
 ## 边界
