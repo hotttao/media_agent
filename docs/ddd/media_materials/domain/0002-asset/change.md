@@ -1,5 +1,11 @@
 # asset domain 变更记录
 
+## 2026-09-21 · Organization 级资源共享
+
+- 用户明确 Material、Virtual IP、Product 在 Organization 内共享；Material 与 Generated Asset 的归属列和业务唯一键由 `workspace_id` 修正为 `organization_id`。
+- Workspace 不再拥有素材记录；后续运行流程从 Workspace 所属 Team 反查 Organization 后引用企业资源。
+- `only_mine` 仍按 owner 过滤，但关闭后也只能读取同 Organization、同 Scope 内通过 visibility/Team Grant 授权的素材。
+
 ## 2026-09-21 · media_ai 素材能力复核
 
 - 补齐 Material 的 description、prompt、内联 content 与 object_path 二选一承载方式。

@@ -1,5 +1,10 @@
 # virtual_ip domain 变更记录
 
+## 2026-09-21 · Organization 级资源共享
+
+- Virtual IP 归属和唯一键由 Workspace 修正为 Organization；Organization 成员可按资源 ACL 在企业内共享使用。
+- Team Grant 只能引用同一 Organization 的 Team，Workspace 不拥有或复制 Virtual IP。
+
 ## 2026-09-21 · media_ai Virtual IP 能力复核
 
 - 补齐 `workspace_id` 和完整 Persona Profile 值对象，覆盖年龄、体型、教育职业、家庭背景、性格、爱好与表达习惯。

@@ -22,13 +22,14 @@
 
 ## Scope 语义
 
-Scope 是 Workspace 内的业务品类限定，例如某个 Virtual IP 主要从事的带货品类。
+Scope 是 Organization 内的业务品类限定，例如某个 Virtual IP 主要从事的带货品类。
 
-- Virtual IP、Material、Product 都必须属于一个 Workspace 和一个 Scope。
-- 同一 Workspace、同一 Scope 表示三类资源处在同一个可组合业务集合中。
-- 当前不建立显式 Binding；列表和选择器通过 Workspace + Scope 过滤相关资源。
+- Virtual IP、Material、Product 都必须属于一个 Organization 和一个 Scope，在企业内共享，不属于单个 Workspace。
+- 同一 Organization、同一 Scope 表示三类资源处在同一个可组合业务集合中。
+- 当前不建立显式 Binding；列表和选择器通过 Organization + Scope 过滤相关资源。
 - Scope 不是租户边界，也不是旧 Movement Material 中“适用服装范围”的含义。
-- Workspace 和 Scope 创建后不可修改；跨 Workspace 或跨 Scope 引用一律禁止。
+- Organization 和 Scope 创建后不可修改；跨 Organization 或跨 Scope 引用一律禁止。
+- Workspace 只是后续生产流程的运行上下文；它通过所属 Team 反查 Organization 后使用企业资源，不复制资源记录。
 
 ## 图片与 Media Storage
 
@@ -51,21 +52,21 @@ Scope 是 Workspace 内的业务品类限定，例如某个 Virtual IP 主要从
 
 - 用户上传的 Material 和 Workflow 生成的 Generated Asset 都必须记录 `owner_user_id`。
 - Material 列表默认 `only_mine=true`，即只返回当前 Principal 拥有的素材。
-- 用户显式传 `only_mine=false` 时，才按 visibility、Team Grant、Workspace 和 Scope 返回其他可见素材。
-- Principal 和 Workspace 必须来自可信认证上下文，不能由请求 body 覆盖。
-- Product 沿用已确认规则：没有资源级 owner/visibility/grants；通过 Workspace 权限后在 Scope 内共享。
+- 用户显式传 `only_mine=false` 时，才按 visibility、Team Grant、Organization 和 Scope 返回其他可见素材。
+- Principal 和 Organization 必须来自可信认证上下文，不能由请求 body 覆盖；Principal 必须是该 Organization 的 active member。
+- Product 沿用已确认规则：没有资源级 owner/visibility/grants；通过 Organization Membership 校验后在 Scope 内共享。
 - Virtual IP 仍有 owner、visibility 和 Team Grant。
 
 ## 唯一键与不可变量
 
-软删记录不占用业务唯一键；所有业务唯一键必须包含 Workspace，禁止不同公司相互冲突。
+软删记录不占用业务唯一键；所有业务唯一键必须包含 Organization，禁止不同公司相互冲突。
 
 | 对象 | 业务唯一键 | 说明 |
 |:---|:---|:---|
-| Material | `(workspace_id, scope, asset_kind, name)` | 相同品类和素材类别下名称唯一 |
-| Generated Asset | `(workspace_id, scope, asset_kind, name)` | 为后续生成链路保留；本期不实现创建流程 |
-| Virtual IP | `(workspace_id, scope, name)` | 同一业务品类下 IP 名唯一 |
-| Product | `(workspace_id, scope, name)` | 同一业务品类下产品名唯一 |
+| Material | `(organization_id, scope, asset_kind, name)` | 相同企业、品类和素材类别下名称唯一 |
+| Generated Asset | `(organization_id, scope, asset_kind, name)` | 为后续生成链路保留；本期不实现创建流程 |
+| Virtual IP | `(organization_id, scope, name)` | 同一企业业务品类下 IP 名唯一 |
+| Product | `(organization_id, scope, name)` | 同一企业业务品类下产品名唯一 |
 | Product Image | `(product_id, sort_order)` | 同一 Product 内顺序唯一，且至多一张主图 |
 
 写接口遇到唯一键冲突必须返回稳定的 `already_exists` 业务错误，不允许把数据库错误直接暴露给客户端。
@@ -74,7 +75,7 @@ Scope 是 Workspace 内的业务品类限定，例如某个 Virtual IP 主要从
 
 ### Material
 
-- Workspace、Scope、Asset Kind；
+- Organization、Scope、Asset Kind；
 - name、description、prompt；
 - `object_path` 或内联 `content`，至少一个存在；
 - tags / metadata；
@@ -83,7 +84,7 @@ Scope 是 Workspace 内的业务品类限定，例如某个 Virtual IP 主要从
 
 ### Virtual IP
 
-- Workspace、Scope、name、description；
+- Organization、Scope、name、description；
 - avatar/full-body/three-view/nine-view 的 `object_path`；
 - Persona Profile；
 - owner、visibility、Team Grant、status；
@@ -91,7 +92,7 @@ Scope 是 Workspace 内的业务品类限定，例如某个 Virtual IP 主要从
 
 ### Product
 
-- Workspace、Scope、name、description；
+- Organization、Scope、name、description；
 - target audience、product details、display actions、tags；
 - External Commerce Reference；
 - 有序 Product Image 集合；
@@ -102,7 +103,7 @@ Scope 是 Workspace 内的业务品类限定，例如某个 Virtual IP 主要从
 
 - 三个对象的 CRUD、分页、条件筛选和软删均可用；
 - Material 默认只看自己的素材，可显式查看其他有权素材；
-- 所有查询和唯一键均受 Workspace + Scope 限制；
+- 所有查询和唯一键均受 Organization + Scope 限制；
 - 图片通过 `media_storage` 接口上传，本地存储适配器可完成测试；
 - 数据库和 API 不出现完整存储 URL、provider 或 bucket；
 - 本期不存在 Workflow、Binding、生成、发布相关接口或后台任务。

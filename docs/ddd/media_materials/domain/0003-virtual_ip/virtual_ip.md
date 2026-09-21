@@ -9,7 +9,7 @@ related_workflow:
 ---
 
 ## 一句话职责
-virtual_ip domain 管理可写、可共享的 AI 形象，归属一个 Workspace、Scope 和 owner；持身份图片与 Persona Profile，带 visibility + grants，按 [My Permission](../../../resource_access/CONTEXT.md#my-permission有效资源权限) 推导。对 [reachability workflow](../../workflow/0001-reachability/reachability.md) 暴露可见性只读查询。
+virtual_ip domain 管理可写、可共享的 AI 形象，归属一个 Organization、Scope 和 owner；持身份图片与 Persona Profile，带 visibility + grants，按 [My Permission](../../../resource_access/CONTEXT.md#my-permission有效资源权限) 推导。对 [reachability workflow](../../workflow/0001-reachability/reachability.md) 暴露可见性只读查询。
 
 ### 不做什么
 - 不存 IP 形象二进制（基础图只保存 Storage `object_path`；生成产物落 Generated Asset）。
@@ -22,7 +22,7 @@ virtual_ip domain 管理可写、可共享的 AI 形象，归属一个 Workspace
 ## 边界
 
 ### 做什么
-- Virtual IP 增删改查（含身份图片与 Persona Profile）；Workspace、Scope 创建后不可改。
+- Virtual IP 增删改查（含身份图片与 Persona Profile）；Organization、Scope 创建后不可改。
 - VirtualIp 的资源权限（visibility + grants + derived my_permission）遵循 [共享资源访问语言](../../../resource_access/CONTEXT.md)。
 - VirtualIp 名单可见性查询（`ListVirtualIpsVisibleTo(userID)`）。
 - 对 reachability workflow 暴露 vip 可见性只读查询（供 `ResolveVirtualIpForReachability` / `CheckVirtualIPAccessible` 编排）。
@@ -54,7 +54,7 @@ virtual_ip domain 管理可写、可共享的 AI 形象，归属一个 Workspace
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
 | id | bigserial | 主键 |
-| workspace_id | text not null | 所属 Workspace；不可改 |
+| organization_id | text not null | 所属 Organization；不可改 |
 | scope | text not null | 业务范围；1:1；不可改 |
 | name | text not null | IP 名；迁移旧字段 `nickname` |
 | description | text nullable | 说明 |
@@ -66,7 +66,7 @@ virtual_ip domain 管理可写、可共享的 AI 形象，归属一个 Workspace
 | owner_user_id | text not null | 拥有者 |
 | created_at / updated_at / deleted_at | timestamptz | 时间戳 |
 
-约束：UNIQUE `(workspace_id, scope, name)` WHERE `deleted_at IS NULL`；INDEX `(workspace_id, scope, status)`；INDEX `(owner_user_id)`。
+约束：UNIQUE `(organization_id, scope, name)` WHERE `deleted_at IS NULL`；INDEX `(organization_id, scope, status)`；INDEX `(owner_user_id)`。
 
 ### Value Object - `PersonaProfile`
 
@@ -85,14 +85,14 @@ Persona Profile 整体随 Virtual IP 更新，不拥有独立 ID 或生命周期
 
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
-| workspace_id | text not null | 租户归属；必须与 Virtual IP 一致 |
+| organization_id | text not null | 企业归属；必须与 Virtual IP 一致 |
 | virtual_ip_id | bigint not null | FK；复合 PK；ON DELETE CASCADE |
 | team_id | text not null | 团队 id；复合 PK |
 | permission | text not null | viewer / editor；CHECK in ('viewer','editor') |
 | granted_by | text not null | 授权者；仅 owner 可写 |
 | granted_at | timestamptz | 时间戳 |
 
-约束：PK `(virtual_ip_id, team_id)`；INDEX `(workspace_id, team_id)`。
+约束：PK `(virtual_ip_id, team_id)`；INDEX `(organization_id, team_id)`。
 
 ## 权限规则
 
@@ -118,7 +118,7 @@ virtual_ip 可作为 `workflow_input(type=virtual_ip)`，调用方在 SubmitJob 
 
 ## 校验细则
 
-1. 调用 Principal 必须可进入目标 Workspace；`workspace_id` 与 scope 创建后不可改，scope 必须是该 Workspace 中已知业务范围。
+1. 调用 Principal 必须是目标 Organization 的 active member；`organization_id` 与 scope 创建后不可改，Grant 的 Team 必须属于同一 Organization。
 2. status=archived 不允许改回 active（archived 终态，与 template / workflow 的 archived 一致；vip 无 published 档）。
 3. 第一阶段 SoftDelete 只提交 Virtual IP 软删；本期没有 Binding。后续引入 Binding 时必须同时结束有效关联且保留 Generated Asset 历史。
 

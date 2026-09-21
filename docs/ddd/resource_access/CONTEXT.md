@@ -6,14 +6,14 @@
 
 **Scope（业务范围）**:
 资源所属业务线的不可变分类，例如 `ai_clothing` 或 `ai_guoxue`；同一业务流程禁止跨 Scope 引用。
-_禁用替代词_：Workspace（Workspace 是业务资源隔离边界）、Organization、Team、Business
+_禁用替代词_：Workspace、Organization、Team、Business
 
 **Resource Visibility（资源可见性）**:
-资源的可见度档位：`private | team | public`；public 只放开读取，不绕过 Workspace 和 Scope 约束。
+资源的可见度档位：`private | team | public`；public 表示在资源所属边界内公开读取，不绕过 Organization/Workspace 归属与 Scope 约束。
 _禁用替代词_：ACL、Permission
 
 **Resource Grant（资源授权）**:
-资源所属服务保存的 `(resource_id, team_id) -> viewer | editor` 显式授权；Team Membership 由 `media_auth` 提供。
+资源所属服务保存的 `(resource_id, team_id) -> viewer | editor` 显式授权；Team 必须与资源属于同一 Organization，Team Membership 由 `media_auth` 提供。
 _禁用替代词_：Team Membership、Share Link
 
 **My Permission（有效资源权限）**:

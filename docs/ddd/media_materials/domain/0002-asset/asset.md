@@ -14,7 +14,7 @@ asset domain 管理**两类物理资源**，分落两张表：
 - **material**（`materials` 表，resource_type=MATERIAL）：curated 原料（scene/pose/makeup/movement/music/caption），用户上传/策展，**无生成记录**；可由 Storage 对象或内联文本承载。
 - **generated_asset**（`generated_assets` 表，resource_type=ASSET）：workflow 执行产物（model_image/style_image/first_frame/ai_video），**持生成记录**（job_id / step_run_id / template_id / template_version）。
 
-两者都引用 [asset_kind](../0005-asset_kind/asset_kind.md) 注册表；都持 Workspace、Scope、owner 和 visibility；可见性沿用 [共享资源访问语言](../../../resource_access/CONTEXT.md) 的 `private/team/public` 三档。
+两者都引用 [asset_kind](../0005-asset_kind/asset_kind.md) 注册表；都持 Organization、Scope、owner 和 visibility；可见性沿用 [共享资源访问语言](../../../resource_access/CONTEXT.md) 的 `private/team/public` 三档。
 
 跨域可达性校验（`AssetReachability` / `ResolveAssetByKind` / `AssetRead` 等）**不在本 domain**--归 [reachability workflow](../../workflow/0001-reachability/reachability.md) 编排 + policy 决策（见 [ADR 0006](../../../adr/0006-reachability-layering.md)）。
 
@@ -46,7 +46,7 @@ asset domain 管理**两类物理资源**，分落两张表：
 | UpsertMaterial | 新建/更新 material；asset_kind.resource_type 必须=MATERIAL | `POST /api/v1/materials`、`PUT /api/v1/materials/{id}` |
 | ListMaterials | 按 scope/asset_kind/owner/visibility 过滤；默认 `only_mine=true` | `GET /api/v1/materials?scope=&asset_kind=&only_mine=&visibility=` |
 | SoftDeleteMaterial | 软删 | `DELETE /api/v1/materials/{id}` |
-| AddMaterialBinding | Material ↔ Virtual IP / Product；两端同 Workspace、同 Scope | `POST /api/v1/materials/{id}/bindings` |
+| AddMaterialBinding | Material ↔ Virtual IP / Product；两端同 Organization、同 Scope | `POST /api/v1/materials/{id}/bindings` |
 | RemoveMaterialBinding | 解绑 | `DELETE /api/v1/materials/{id}/bindings/{owner_kind}/{owner_id}` |
 | ReplacePoseCompatibilities | 原子替换 movement 可兼容的 pose 集合 | `PUT /api/v1/materials/{movement_id}/compatible-poses` |
 | GetGeneratedAsset | 按 id 取（含生成记录链接） | `GET /api/v1/generated-assets/{id}` |
@@ -63,10 +63,10 @@ asset domain 管理**两类物理资源**，分落两张表：
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
 | id | bigserial | 主键 |
-| workspace_id | text not null | 所属 Workspace；跨服务 ID，不建外键 |
+| organization_id | text not null | 所属 Organization；跨服务 ID，不建外键 |
 | scope | text not null | 业务范围；1:1；校验 `IsKnownScope`（service 调 `shared/scope`） |
 | asset_kind | text not null | 素材类别；引用 `asset_kinds.name`，且其 resource_type=MATERIAL；校验已注册未停用 |
-| name | text not null | 素材名；Workspace + Scope 内同 kind 唯一 |
+| name | text not null | 素材名；Organization + Scope 内同 kind 唯一 |
 | description | text nullable | 人类可读说明 |
 | prompt | text nullable | 策展时保存的提示词；不是 Workflow 渲染后的 prompt |
 | object_path | text nullable | Storage 对象路径；域名无关，不保存完整 URL |
@@ -77,7 +77,7 @@ asset domain 管理**两类物理资源**，分落两张表：
 | team_id | text nullable | 可见 team；仅 visibility=team 时使用 |
 | created_at / updated_at / deleted_at | timestamptz | 时间戳 |
 
-约束：UNIQUE `(workspace_id, scope, asset_kind, name)` WHERE `deleted_at IS NULL`；CHECK `object_path IS NOT NULL OR content IS NOT NULL`；INDEX `(workspace_id, scope, asset_kind, updated_at desc)`；INDEX `(owner_user_id)`。
+约束：UNIQUE `(organization_id, scope, asset_kind, name)` WHERE `deleted_at IS NULL`；CHECK `object_path IS NOT NULL OR content IS NOT NULL`；INDEX `(organization_id, scope, asset_kind, updated_at desc)`；INDEX `(owner_user_id)`。
 
 movement 类型 Material 的稳定字段为 `metadata.applicable_clothing` 与 `metadata.is_general`。`applicable_clothing` 对应旧系统同名为 `scope` 的服装适用范围，**不是业务 Scope**；`is_general=false` 时至少存在一个 pose → movement Compatibility，`is_general=true` 时不保留 Compatibility。
 
@@ -86,10 +86,10 @@ movement 类型 Material 的稳定字段为 `metadata.applicable_clothing` 与 `
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
 | id | bigserial | 主键 |
-| workspace_id | text not null | 所属 Workspace；跨服务 ID，不建外键 |
+| organization_id | text not null | 所属 Organization；跨服务 ID，不建外键 |
 | scope | text not null | 业务范围；沿用 job.workflow.scope |
 | asset_kind | text not null | 产物类别；引用 `asset_kinds.name`，且其 resource_type=ASSET；= 产出该 asset 的 template.output_asset_kind |
-| name | text not null | 产物名；Workspace + Scope 内同 kind 唯一；语义见下「UpsertGeneratedAsset 与 retry 的 name 语义」 |
+| name | text not null | 产物名；Organization + Scope 内同 kind 唯一；语义见下「UpsertGeneratedAsset 与 retry 的 name 语义」 |
 | object_path | text not null | Storage 对象路径；域名无关，不保存完整 URL |
 | metadata | jsonb | 渲染 hint；default '{}' |
 | owner_user_id | text not null | 提交者；= job.submitted_by |
@@ -103,7 +103,7 @@ movement 类型 Material 的稳定字段为 `metadata.applicable_clothing` 与 `
 | source_product_id | bigint nullable | 源产品；job 输入里的 product（若有） |
 | created_at / updated_at / deleted_at | timestamptz | 时间戳 |
 
-约束：UNIQUE `(workspace_id, scope, asset_kind, name)` WHERE `deleted_at IS NULL`；INDEX `(workspace_id, scope, asset_kind, created_at desc)`；INDEX `(job_id)`；INDEX `(source_virtual_ip_id)`；INDEX `(source_product_id)`。
+约束：UNIQUE `(organization_id, scope, asset_kind, name)` WHERE `deleted_at IS NULL`；INDEX `(organization_id, scope, asset_kind, created_at desc)`；INDEX `(job_id)`；INDEX `(source_virtual_ip_id)`；INDEX `(source_product_id)`。
 
 > **生成记录**：`generated_asset` 持 `job_id` + `step_run_id` 反向链接到 execution 域的 StepRun（StepRun 已存 resolved_inputs / rendered_prompt / template_version 等完整生成上下文）。不另建 generation_records 表，避免冗余。
 
@@ -113,7 +113,7 @@ material ↔ virtual_ip / material ↔ product 的 N:N 绑定。
 
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
-| workspace_id | text not null | 租户归属；必须与两端一致 |
+| organization_id | text not null | 企业归属；必须与两端一致 |
 | material_id | bigint not null | FK materials；复合 PK 一段 |
 | owner_kind | text not null | virtual_ip / product；复合 PK 二段 |
 | owner_id | bigint not null | vip_id 或 product_id；复合 PK 三段 |
@@ -121,7 +121,7 @@ material ↔ virtual_ip / material ↔ product 的 N:N 绑定。
 | bound_at | timestamptz | 绑定时间戳 |
 | bindings_end_at | timestamptz nullable | 失效时间戳；默认 NULL=生效中；owner（vip/product）软删时置 `now()`，绑定即时失效但保留可查 |
 
-约束：PK `(material_id, owner_kind, owner_id)`；INDEX `(workspace_id, owner_kind, owner_id)`；PARTIAL INDEX `(workspace_id, owner_kind, owner_id) WHERE bindings_end_at IS NULL`（生效绑定查询）。写入时校验两端同 Workspace、同 Scope。
+约束：PK `(material_id, owner_kind, owner_id)`；INDEX `(organization_id, owner_kind, owner_id)`；PARTIAL INDEX `(organization_id, owner_kind, owner_id) WHERE bindings_end_at IS NULL`（生效绑定查询）。写入时校验两端同 Organization、同 Scope。
 
 > generated_asset 不走 material_bindings--它的"容器"是生成记录里的 `source_virtual_ip_id` / `source_product_id`，由 execution 在 upsert 时填入。
 > `bindings_end_at` 替代"软删级联删除"：owner 软删时 binding 不删，置失效时间戳；可达性查询过滤 `bindings_end_at IS NULL`，既保留历史追溯又让绑定即时失效（与 [virtual_ip](../0003-virtual_ip/virtual_ip.md) / [product](../0004-product/product.md) 的软删规则统一）。
@@ -130,20 +130,20 @@ material ↔ virtual_ip / material ↔ product 的 N:N 绑定。
 
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
-| workspace_id | text not null | 租户归属 |
+| organization_id | text not null | 企业归属 |
 | scope | text not null | 业务范围 |
 | source_material_id | bigint not null | pose Material |
 | target_material_id | bigint not null | movement Material |
 | relation_kind | text not null | 当前固定 `pose_movement` |
 | created_by / created_at | text / timestamptz | 审计 |
 
-约束：PK `(source_material_id, target_material_id, relation_kind)`；两端必须同 Workspace、同 Scope，且 Asset Kind 分别为 pose、movement。关系与 Material 同属 asset domain，在一个本地事务内整组替换。
+约束：PK `(source_material_id, target_material_id, relation_kind)`；两端必须同 Organization、同 Scope，且 Asset Kind 分别为 pose、movement。关系与 Material 同属 asset domain，在一个本地事务内整组替换。
 
 ## UpsertGeneratedAsset 与 retry 的 name 语义
 
-generated_asset 唯一键 `(workspace_id, scope, asset_kind, name) WHERE deleted_at IS NULL`。`name` 是**业务维度稳定标识**（如 `model_image_v1`），不是 attempt 标识。
+generated_asset 唯一键 `(organization_id, scope, asset_kind, name) WHERE deleted_at IS NULL`。`name` 是**业务维度稳定标识**（如 `model_image_v1`），不是 attempt 标识。
 
-- **Upsert 语义**：按 `(workspace_id, scope, asset_kind, name)` upsert--存在则更新（覆盖 object_path / metadata / 生成记录字段），不存在则插入。用于 step 首次产出。
+- **Upsert 语义**：按 `(organization_id, scope, asset_kind, name)` upsert--存在则更新（覆盖 object_path / metadata / 生成记录字段），不存在则插入。用于 step 首次产出。
 - **Retry 覆盖语义**：retry 重跑同一 StepRun 时，新 attempt 产物**复用同一 name**，经 upsert 覆盖该 generated_asset 行的 object_path / metadata / 生成记录字段；旧 attempt 的 object_path 由 execution 写入 `retry_history`（保留可追溯），generated_asset 行本身被覆盖。
 - **若需保留旧 attempt 产物为独立 asset**：调用方在 retry 时传新 name（如 `model_image_v1_retry2`），upsert 落新行；name 增量策略由调用方决定，本 domain 不自动加 attempt 后缀。
 
@@ -153,7 +153,7 @@ generated_asset 唯一键 `(workspace_id, scope, asset_kind, name) WHERE deleted
 
 1. material.asset_kind / generated_asset.asset_kind 必须 ∈ asset_kinds 注册表且 status∈{SYSTEM, ENABLED}；resource_type 与表一致（material->MATERIAL，generated_asset->ASSET）。
 2. 创建后 scope 不可改；asset_kind 不可改。scope 校验由 service 层调 `shared/scope.IsKnownScope` 完成（见 [scope](../0001-scope-del/scope.md) 降级说明）。
-3. material_bindings 强制两端同 Workspace、同 Scope；Binding 不在第一阶段 CRUD 实现范围。
+3. material_bindings 强制两端同 Organization、同 Scope；Binding 不在第一阶段 CRUD 实现范围。
 4. visibility=team 时 team_id 必填。
 5. generated_asset 的 job_id / step_run_id / template_id / template_version 在 upsert 时由 execution 填入，不可改。
 6. SoftDelete material：不级联删 material_bindings，保留历史；可达性查询忽略已软删 material。

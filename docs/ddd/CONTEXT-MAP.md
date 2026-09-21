@@ -34,7 +34,7 @@ Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存
 ## 全局不变量
 
 - Organization 是企业客户与功能授权边界；Team 是 Organization 内的部门，不能脱离 Organization 存在。
-- Workspace 是业务资源与运行数据的隔离边界；每个 Workspace 只属于一个 Team，Workspace 内业务资源必须持有 `workspace_id`。
+- 资源归属边界由权威上下文声明：Workspace 私有的运行数据持 `workspace_id`；Organization 内共享的 Material、Virtual IP、Product 与 Generated Asset 持 `organization_id`。Workspace 只属于一个 Team/Organization，跨边界引用必须同时校验 Organization 与业务 Scope。
 - 每项业务事实只有一个权威写入上下文；跨上下文只引用 ID，不共享表或建立跨库外键。
 - 直接调用服务身份与被代表用户身份是两个独立维度。
 - 资源所属上下文执行最终资源授权。

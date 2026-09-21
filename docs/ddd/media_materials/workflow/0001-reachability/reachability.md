@@ -1,6 +1,6 @@
 ---
 name: Asset Reachability
-description: 在 Workspace、Scope 和资源 ACL 约束下解析 Workflow 输入
+description: 在 Organization、Scope 和资源 ACL 约束下解析 Workflow 输入
 participants:
   - trusted caller
   - media_materials/asset
@@ -22,7 +22,7 @@ media_materials 加载 Material、Generated Asset、Virtual IP 与 Product 事�
 | 项目 | 内容 |
 |:---|:---|
 | 触发 | 受信内部服务在 Workflow 提交或执行前调用批量 Resolve/Check |
-| 前置条件 | Principal、Workspace 与 Workflow Scope 来自可信上下文；Asset Kind 已解析 |
+| 前置条件 | Principal、Organization 与 Workflow Scope 来自可信上下文；Asset Kind 已解析 |
 | 成功结果 | 返回保持输入顺序的解析结果、object path、metadata 与事实版本 |
 | 失败结果 | 任一必需输入不可达则 fail closed；批量响应可按契约返回逐项稳定拒绝原因 |
 
@@ -34,7 +34,7 @@ sequenceDiagram
     participant R as Reachability
     participant D as Asset/VIP/Product Domains
     participant A as media_auth
-    C->>R: Resolve(principal, workspace_id, scope, refs)
+    C->>R: Resolve(principal, organization_id, scope, refs)
     R->>D: 批量加载本地权威事实
     R->>A: BatchCheckTeamAccess（需要 Team Grant 时）
     R->>R: workspace ∧ scope ∧ visibility/grant ∧ binding
@@ -45,7 +45,7 @@ sequenceDiagram
 
 1. Reachability 按 resource type 批量加载本地权威事实，不允许调用方提供 visibility、owner、binding 等判定字段。
 2. 涉及 team visibility/grant 时，按本次请求的 Team 集合一次性向 media_auth 查询成员关系；Auth 不可用时不降级放行。
-3. Policy 依次验证 Workspace、Scope、资源 ACL 和容器可达性。Product 路径无资源级 user ACL，但仍要求 Principal 可进入 Workspace。
+3. Policy 依次验证 Organization Membership、Scope、资源 ACL 和容器可达性。Product 路径无资源级 user ACL，但仍要求 Principal 是该 Organization 的有效成员。
 4. `ResolveAssetByKind` 只能得到唯一 active 资源；0 个或多个都返回不可解析，不做“取最新一条”的隐式选择。
 
 ## 关键参数
@@ -53,7 +53,7 @@ sequenceDiagram
 | 参数 | 产生方 | 使用方 | 语义 |
 |:---|:---|:---|:---|
 | principal | Edge 认证链 | Reachability/Auth | 用户身份；mTLS 只证明调用服务，不替代 Principal |
-| workspace_id | 可信请求上下文 | 所有本地查询 | 必须与每个资源真实归属一致 |
+| organization_id | 可信请求上下文 | 所有本地查询 | 必须与每个资源真实归属一致 |
 | scope | Workflow 定义/提交上下文 | Policy | 必须与 Workflow 和每个资源一致 |
 | refs / asset_kind | 调用方 | Resolver | 待解析引用与唯一选择条件 |
 
@@ -64,14 +64,14 @@ sequenceDiagram
 | 能力 | 说明 |
 |:---|:---|
 | `AssetReachability` | 批量校验并解析 Material/Generated Asset 引用 |
-| `CheckProductAccessible` | 校验 Product 的 Workspace/Scope 并解析绑定资源 |
+| `CheckProductAccessible` | 校验 Product 的 Organization/Scope 并解析绑定资源 |
 | `CheckVirtualIPAccessible` | 校验 Virtual IP 的有效权限与绑定资源 |
 | `ResolveAssetByKind` | 按 Asset Kind 选择匹配的 Material/Generated Asset |
 
 ## 幂等与失败
 
 - 全流程只读，同一事实版本下结果确定。
-- 资源不存在、Workspace/Scope 不一致或权限不足均 fail closed。
+- 资源不存在、Organization/Scope 不一致或权限不足均 fail closed。
 - 批量加载 Team Membership，禁止逐资源 N+1 Auth RPC。
 - media_workflow 只保存解析后的资源 ID/Object Path 快照，不复制 Materials 业务记录。
 
@@ -98,14 +98,14 @@ sequenceDiagram
 | 失败 | 分类 | 处理 |
 |:---|:---|:---|
 | 资源不存在、已删除或无权限 | 不可重试 | 对外统一不可达，避免枚举 |
-| Workspace/Scope 不匹配 | 不可重试 | 返回边界冲突 |
+| Organization/Scope 不匹配 | 不可重试 | 返回边界冲突 |
 | Resolve 得到 0 或多条 | 不可重试 | 返回不可解析，要求调用方修正绑定 |
 | Auth 超时/不可用 | 可重试 | 有限重试后 fail closed |
 | 调用取消/超时 | 可重试 | 不保留状态，调用方可重新发起 |
 
 ## 权限与身份
 
-服务间 mTLS 只证明调用服务；Principal 必须来自 Edge JWT 或 Session Token 的可信解析结果。Materials 不信任请求 body 覆盖 user/workspace，并对每个资源执行最终授权。
+服务间 mTLS 只证明调用服务；Principal 必须来自 Edge JWT 或 Session Token 的可信解析结果。Materials 不信任请求 body 覆盖 user/organization，并对每个资源执行最终授权。
 
 ## 结果事件
 

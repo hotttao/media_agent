@@ -1,5 +1,10 @@
 # product domain 变更记录
 
+## 2026-09-21 · Organization 级资源共享
+
+- Product 与 Product Image 归属和唯一键由 Workspace 修正为 Organization。
+- Product 无资源级 ACL；active Organization Member 在同 Scope 内共享 CRUD，Workspace 不拥有或复制 Product。
+
 ## 2026-09-21 · media_ai Product 能力复核
 
 - 补齐 `workspace_id`；保持 Product 无 owner/visibility/grants，但明确所有操作先校验 Workspace 使用权。

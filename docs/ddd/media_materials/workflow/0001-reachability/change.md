@@ -1,5 +1,10 @@
 # reachability workflow 变更记录
 
+## 2026-09-21 · Organization 共享边界修正
+
+- Material、Generated Asset、Virtual IP、Product 改为 Organization 级共享资源；可达性锚点由 Workspace 改为 Organization Membership + Scope。
+- Workspace 只作为后续 Workflow 的运行上下文，必须反查其 Organization 后引用企业资源，不再与资源记录直接比对 `workspace_id`。
+
 ## 2026-09-21 · Workspace 与失败语义补全
 
 - 按 Workflow 规范补齐触发/结果、步骤说明、关键参数、一致性边界、重试与失败矩阵。

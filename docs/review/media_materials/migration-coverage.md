@@ -30,9 +30,9 @@
 - 覆盖矩阵没有 `missing` 项；Binding、兼容关系、生成和发布能力按第一阶段边界明确交给外部所有者或有理由暂缓。
 - 旧系统的 `IpMaterial` 有独立多视图与派生链语义，不能误折叠成 `material_bindings`；但用户已明确本轮暂不考虑，因此目标 DDD 不引入该聚合。
 - 旧系统 Movement Material 的字段 `scope` 与当前业务 Scope 同名异义；目标统一改为 `applicable_clothing`，迁移不得原名直拷。
-- Product 延续已确认的新规则：没有 owner/visibility/grants；但所有读写先受 Workspace 成员权限约束，资源只在同 Workspace、同 Scope 内共享。
+- Product 延续已确认的新规则：没有 owner/visibility/grants；但所有读写先校验 Organization Membership，资源只在同 Organization、同 Scope 内共享。
 - 旧系统保存完整 URL；目标只保存 Storage `object_path`。迁移阶段必须先完成 URL 到逻辑对象路径的转换，不能把域名、bucket 或签名 URL 写入业务库。
-- 当前代码和初始迁移尚未完全实现本次 DDD（尤其 `workspace_id`、Product Image、Persona Profile 和兼容关系）；本文件只证明需求归属完整，不代表实现完成。
+- 当前代码和初始迁移尚未完全实现本次 DDD（尤其 `organization_id`、Product Image、Persona Profile 和兼容关系）；本文件只证明需求归属完整，不代表实现完成。
 
 ## Harness 实现落点
 
@@ -40,8 +40,8 @@
 |:---|:---|:---|
 | Material、Virtual IP、Product 聚合与 Policy | `media_materials/biz/domain/<domain>` | 第一阶段只实现三个聚合 CRUD；Domain 之间不得直接依赖 |
 | Reachability 及其他 Workflow | 后续阶段 | 第一阶段不得加入 Workflow 入口、后台任务或编排逻辑 |
-| HTTP/RPC DTO 与认证上下文提取 | `media_materials/biz/service` + `idl/media_materials` | Service 只适配协议；user/workspace 不得从 body 信任 |
-| PostgreSQL Repository | `media_materials/infra` | 只实现 Domain Port；业务唯一键全部包含 Workspace 边界 |
+| HTTP/RPC DTO 与认证上下文提取 | `media_materials/biz/service` + `idl/media_materials` | Service 只适配协议；user/organization 不得从 body 信任 |
+| PostgreSQL Repository | `media_materials/infra` | 只实现 Domain Port；业务唯一键全部包含 Organization 边界 |
 | Storage Object 上传/签名 URL | `media_storage` 适配器或独立服务 | Materials 只保存 `object_path`，不把 Provider/域名带入 Domain |
 
 本轮未进入实现阶段；IDL、Migration、Domain、Service 与 e2e 计划必须在开始迁移代码前依据上述落点另行固化，第一阶段计划不得包含 Workflow 或 Binding。
