@@ -4,7 +4,6 @@ package router
 
 import (
 	"github.com/cloudwego/hertz/pkg/app/server"
-	health "media_agent/media_storage/biz/router/health"
 	object "media_agent/media_storage/biz/router/object"
 )
 
@@ -12,6 +11,4 @@ import (
 func GeneratedRegister(r *server.Hertz) {
 	//INSERT_POINT: DO NOT DELETE THIS LINE!
 	object.Register(r)
-
-	health.Register(r)
 }
