@@ -82,7 +82,7 @@ export function AuthPage({ kind }: AuthPageProps) {
           cause instanceof OryFlowError &&
           [403, 404, 410].includes(cause.status)
         ) {
-          startFlow(kind);
+          setError("This authentication form has expired. Please try again.");
           return;
         }
         setError(
@@ -112,7 +112,7 @@ export function AuthPage({ kind }: AuthPageProps) {
         cause instanceof OryFlowError &&
         [403, 404, 410].includes(cause.status)
       ) {
-        startFlow(kind);
+        setError("This authentication form has expired. Please try again.");
         return;
       }
       setError(

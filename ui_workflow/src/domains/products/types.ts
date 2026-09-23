@@ -18,15 +18,23 @@ export type ProductStatus = "active" | "archived";
 
 export interface Product {
   id: string;
+  organization_id?: string;
   scope: string;
   name: string;
   description?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | string;
+  external_commerce?: Record<string, unknown> | string;
+  images?: Array<{
+    id: string;
+    object_path: string;
+    is_main?: boolean;
+    sort_order?: number;
+  }>;
   status: ProductStatus;
   created_by: string;
   updated_by?: string;
-  created_at: string;
-  updated_at: string;
+  created_at: string | number;
+  updated_at: string | number;
 }
 
 /** Create/update payload. status is intentionally absent - it is only

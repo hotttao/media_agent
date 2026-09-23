@@ -25,3 +25,13 @@ func _uploadlibraryobjectMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _readlibraryobjectMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _resolvelibraryobjectMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

@@ -5,15 +5,22 @@ package library_object
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	library_object "media_agent/hertz_gen/model/media_materials/library_object"
 	"media_agent/media_materials/biz/shared/auth"
+	"media_agent/media_materials/biz/shared/objectstorage"
 	uploadworkflow "media_agent/media_materials/biz/workflow/library_object_upload"
 )
 
-var Flow *uploadworkflow.Workflow
+var (
+	Flow     *uploadworkflow.Workflow
+	Resolver interface {
+		PresignGet(context.Context, string) (objectstorage.ResolvedObject, error)
+	}
+)
 
 // UploadLibraryObject .
 // @router /api/v1/library-objects:upload [POST]
@@ -59,4 +66,40 @@ func UploadLibraryObject(ctx context.Context, c *app.RequestContext) {
 	}
 	c.JSON(consts.StatusOK, &library_object.UploadLibraryObjectResp{ObjectPath: result.ObjectPath,
 		SizeBytes: result.SizeBytes, ContentType: result.ContentType, Checksum: result.Checksum})
+}
+
+// ResolveLibraryObject .
+// @router /api/v1/library-objects:resolve [GET]
+func ResolveLibraryObject(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req library_object.ResolveLibraryObjectReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	if !auth.HasOrganization(ctx, req.GetOrganizationId()) {
+		c.String(consts.StatusNotFound, "organization not found")
+		return
+	}
+	objectPath := req.GetObjectPath()
+	if !strings.HasPrefix(objectPath, "materials/"+req.GetOrganizationId()+"/") {
+		c.String(consts.StatusForbidden, "object is outside the organization namespace")
+		return
+	}
+	if Resolver == nil {
+		c.String(consts.StatusServiceUnavailable, "media storage unavailable")
+		return
+	}
+	resolved, err := Resolver.PresignGet(ctx, objectPath)
+	if err != nil {
+		if errors.Is(err, objectstorage.ErrNotFound) {
+			c.String(consts.StatusNotFound, "object not found")
+		} else {
+			c.String(consts.StatusServiceUnavailable, "media storage unavailable")
+		}
+		return
+	}
+	c.JSON(consts.StatusOK, &library_object.ResolveLibraryObjectResp{Url: resolved.URL, ExpiresAt: resolved.ExpiresAt})
 }

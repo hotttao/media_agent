@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +13,7 @@ import (
 	"strings"
 
 	"media_agent/media_materials/biz/shared"
-	storageclient "media_agent/media_materials/biz/shared/client/media_storage"
+	"media_agent/media_materials/biz/shared/objectstorage"
 )
 
 const MaxUploadBytes int64 = 4 << 20
@@ -36,7 +37,7 @@ var (
 )
 
 type Storage interface {
-	Put(context.Context, storageclient.PutInput) (storageclient.ObjectInfo, error)
+	PutIfAbsent(context.Context, objectstorage.PutInput) (objectstorage.ObjectInfo, error)
 }
 
 type Command struct {
@@ -53,41 +54,42 @@ type Workflow struct{ storage Storage }
 
 func New(storage Storage) *Workflow { return &Workflow{storage: storage} }
 
-func (w *Workflow) Upload(ctx context.Context, command Command) (storageclient.ObjectInfo, error) {
+func (w *Workflow) Upload(ctx context.Context, command Command) (objectstorage.ObjectInfo, error) {
 	if w == nil || w.storage == nil || !validSegment(command.OrganizationID) || !shared.IsKnownScope(command.Scope) ||
 		!purposes[command.Purpose] || command.CallerID == "" || len(command.IdempotencyKey) == 0 || len(command.IdempotencyKey) > 128 || command.Body == nil {
-		return storageclient.ObjectInfo{}, ErrInvalid
+		return objectstorage.ObjectInfo{}, ErrInvalid
 	}
 	if command.SizeBytes <= 0 {
-		return storageclient.ObjectInfo{}, ErrInvalid
+		return objectstorage.ObjectInfo{}, ErrInvalid
 	}
 	if command.SizeBytes > MaxUploadBytes {
-		return storageclient.ObjectInfo{}, ErrTooLarge
+		return objectstorage.ObjectInfo{}, ErrTooLarge
 	}
 	payload, err := io.ReadAll(io.LimitReader(command.Body, MaxUploadBytes+1))
 	if err != nil {
-		return storageclient.ObjectInfo{}, fmt.Errorf("%w: read file", ErrInvalid)
+		return objectstorage.ObjectInfo{}, fmt.Errorf("%w: read file", ErrInvalid)
 	}
 	if int64(len(payload)) > MaxUploadBytes {
-		return storageclient.ObjectInfo{}, ErrTooLarge
+		return objectstorage.ObjectInfo{}, ErrTooLarge
 	}
 	if len(payload) == 0 || int64(len(payload)) != command.SizeBytes {
-		return storageclient.ObjectInfo{}, ErrInvalid
+		return objectstorage.ObjectInfo{}, ErrInvalid
 	}
 	contentType := http.DetectContentType(payload)
 	extension, ok := contentTypes[contentType]
 	if !ok {
-		return storageclient.ObjectInfo{}, ErrInvalid
+		return objectstorage.ObjectInfo{}, ErrInvalid
 	}
 	digest := sha256.Sum256([]byte(strings.Join([]string{command.CallerID, command.IdempotencyKey}, "\x00")))
+	payloadDigest := sha256.Sum256(payload)
 	objectPath := fmt.Sprintf("materials/%s/%s/%s/%x%s", command.OrganizationID, command.Scope, command.Purpose, digest[:16], extension)
-	result, err := w.storage.Put(ctx, storageclient.PutInput{ObjectPath: objectPath, ContentType: contentType,
-		SizeBytes: int64(len(payload)), Body: bytes.NewReader(payload)})
-	if errors.Is(err, storageclient.ErrConflict) {
-		return storageclient.ObjectInfo{}, ErrConflict
+	result, err := w.storage.PutIfAbsent(ctx, objectstorage.PutInput{ObjectPath: objectPath, ContentType: contentType,
+		Checksum: hex.EncodeToString(payloadDigest[:]), SizeBytes: int64(len(payload)), Body: bytes.NewReader(payload)})
+	if errors.Is(err, objectstorage.ErrConflict) {
+		return objectstorage.ObjectInfo{}, ErrConflict
 	}
 	if err != nil {
-		return storageclient.ObjectInfo{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return objectstorage.ObjectInfo{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 	return result, nil
 }

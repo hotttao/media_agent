@@ -1,6 +1,21 @@
 # @media/ui-workflow
 
-Skeleton frontend project under `/home/tao/code/github/media_agent/ui_workflow`. **No business code is included** — only the layer model, configuration, and toolchain required by the contributing guides.
+Materials and workflow UI, published as both a standalone application and a
+plugin bundle for the platform shell.
+
+## Local development topology
+
+During development, open the Vite server directly at
+`http://192.168.2.41:5173`. Vite proxies API and Ory browser-flow paths to the
+Traefik backend gateway at `http://192.168.2.41:18080`:
+
+```text
+browser -> Vite :5173 -> Traefik :18080 -> Ory / Go services
+```
+
+Traefik does not serve the development frontend. After the standalone UI is
+ready for deployment, it is built as static assets and served by Nginx behind
+Traefik.
 
 ## Architecture
 

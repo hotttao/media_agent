@@ -24,17 +24,21 @@ export type Visibility = "private" | "team" | "public";
 
 export interface Material {
   id: string;
+  organization_id?: string;
   scope: string;
   asset_kind: string;
   name: string;
-  url: string;
+  url?: string;
+  object_path?: string;
+  description?: string;
+  prompt?: string;
   content?: string;
   owner_user_id: string;
   visibility: Visibility;
   team_id?: string;
-  metadata?: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
+  metadata?: Record<string, unknown> | string;
+  created_at: string | number;
+  updated_at: string | number;
 }
 
 export interface MaterialInput {

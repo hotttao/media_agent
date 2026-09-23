@@ -15,6 +15,8 @@ export interface ShellContext {
   team: { id: string; name: string };
   workspace: { id: string; name: string };
   capabilities: string[];
+  isLoading?: boolean;
+  error?: string;
 }
 
 /**

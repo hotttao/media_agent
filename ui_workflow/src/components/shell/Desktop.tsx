@@ -6,19 +6,25 @@
  *
  * Plugin mode does NOT use this - the host's Desktop provides the shell.
  */
-import { ONE_COLUMN_SLOTS, OneColumnLayout } from "@/components/shell/layout/OneColumnLayout";
+
+import { useEffect } from "react";
+import {
+  ONE_COLUMN_SLOTS,
+  OneColumnLayout,
+} from "@/components/shell/layout/OneColumnLayout";
 import { useStandaloneApps } from "@/components/shell/useStandaloneApps";
-import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { STANDALONE_WORKSPACE_ID } from "@/foundation/lib/constants";
-import { SlotProvider } from "@/foundation/providers/slot-provider";
-import { useRequiredSlotContext } from "@/foundation/providers/slot-provider";
 import { hostShim } from "@/foundation/lib/host-shim";
+import {
+  SlotProvider,
+  useRequiredSlotContext,
+} from "@/foundation/providers/slot-provider";
 import {
   useWorkspaceProfileLoaded,
   useWorkspaceProfileStore,
 } from "@/foundation/stores/workspace-profile-store";
-import { useEffect } from "react";
 
 export function Desktop() {
   const shell = hostShim.useShellContext();
@@ -30,10 +36,18 @@ export function Desktop() {
     ensureLoaded(STANDALONE_WORKSPACE_ID);
   }, [ensureLoaded]);
 
-  if (!loaded) {
+  if (!loaded || shell.isLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Spinner className="h-6 w-6" />
+      </div>
+    );
+  }
+
+  if (shell.error) {
+    return (
+      <div className="flex h-screen items-center justify-center p-6 text-sm text-destructive">
+        Unable to load company context: {shell.error}
       </div>
     );
   }
@@ -55,7 +69,11 @@ export function Desktop() {
   );
 }
 
-function ShellHeader({ shell }: { shell: ReturnType<typeof hostShim.useShellContext> }) {
+function ShellHeader({
+  shell,
+}: {
+  shell: ReturnType<typeof hostShim.useShellContext>;
+}) {
   const slots = useRequiredSlotContext();
   const { user, logout } = hostShim.useCurrentUser();
   const active = slots.getState("slot-a").active?.appId;
@@ -69,16 +87,44 @@ function ShellHeader({ shell }: { shell: ReturnType<typeof hostShim.useShellCont
         <div className="flex items-center gap-3">
           <h1 className="font-semibold">Media Workflow</h1>
           <nav aria-label="Applications" className="flex items-center gap-1">
-            <button type="button" className={active === "materials" ? "rounded bg-foreground/10 px-2 py-1" : "rounded px-2 py-1 text-muted-foreground hover:bg-foreground/10"} onClick={() => openApp("materials")}>Materials</button>
-            <button type="button" className={active === "workflow" ? "rounded bg-foreground/10 px-2 py-1" : "rounded px-2 py-1 text-muted-foreground hover:bg-foreground/10"} onClick={() => openApp("workflow")}>Workflow</button>
+            <button
+              type="button"
+              className={
+                active === "materials"
+                  ? "rounded bg-foreground/10 px-2 py-1"
+                  : "rounded px-2 py-1 text-muted-foreground hover:bg-foreground/10"
+              }
+              onClick={() => openApp("materials")}
+            >
+              Materials
+            </button>
+            <button
+              type="button"
+              className={
+                active === "workflow"
+                  ? "rounded bg-foreground/10 px-2 py-1"
+                  : "rounded px-2 py-1 text-muted-foreground hover:bg-foreground/10"
+              }
+              onClick={() => openApp("workflow")}
+            >
+              Workflow
+            </button>
           </nav>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground">
-            {shell.organization.name} / {shell.team.name} / {shell.workspace.name}
+            {shell.organization.name} / {shell.team.name} /{" "}
+            {shell.workspace.name}
           </span>
-          <span className="text-xs text-muted-foreground">{user?.username}</span>
-          <Button type="button" variant="ghost" size="sm" onClick={() => void logout()}>
+          <span className="text-xs text-muted-foreground">
+            {user?.username}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => void logout()}
+          >
             Sign out
           </Button>
         </div>

@@ -330,7 +330,7 @@ panel 内按资源切换，panel 间按后端领域隔离。对应的 `mcp_catal
 
 1. **基建**：拷贝 ui_platform foundation → 扩展 api-client 多服务（cookie + onUnauthorized）；落 theme/i18n/auth；拷贝 agent-platform shell（Desktop/Dock/Slot/AppWindow/instance-state-store）+ Provider 栈（参考 `main.tsx`/`lib/i18n.ts`）；建 host-shim（standalone + plugin 两实现）。
 2. **materials 域**：5 实体 types/lib/api/hooks/components + pages（app 组合器 + list/create/edit/show）。
-3. **standalone 跑通**：BrowserRouter + Desktop 菜单 + 全部 materials app 可访问，接 Traefik 网关联调 + OAuth 登录。
+3. **standalone 跑通**：BrowserRouter + Desktop 菜单 + 全部 materials app 可访问；开发期浏览器直连 Vite，由 Vite 将 API/Ory 路径代理至 Traefik 后端网关。
 4. **plugin 跑通**：3 个 materials panel registerPanel，`window.tos` 嵌入验证（含 panel id 匹配 mcp_catalog）。**前置：确认 §4.3 plugin query/i18n 方案**。
 5. **验收**：双产物都能 CRUD materials，样式与 agent-platform 一致。
 
@@ -341,7 +341,7 @@ workflow 域（DAG 编辑器、SSE 监控）作为下一阶段，复用首期打
 - [x] 新增仅用于 standalone 的认证页面，参考 `ui_platform` 的卡片、间距和表单层级，不复制其业务 Shell。
 - [x] 从 Kratos `ui.nodes` 动态呈现登录与分步注册字段、CSRF 和消息。
 - [x] 限制 flow action 与完成后的跳转为当前同源地址。
-- [x] 将 Traefik 的 `/login`、`/registration` 路由切到 frontend，保留恢复、设置、验证和错误页的现有承载方式。
+- [x] 开发期由 Vite 承载 `/login`、`/registration` 页面并代理 Ory 路径至 Traefik；正式部署再由 Nginx 静态服务经 Traefik 对外提供。
 - [x] 增加 flow 单元测试与登录/注册浏览器 E2E，并执行 typecheck、lint、test、build。
 
 ## 7. 待确认项 / 前置依赖

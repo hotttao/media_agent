@@ -7,23 +7,23 @@ import (
 	"strings"
 	"testing"
 
-	storageclient "media_agent/media_materials/biz/shared/client/media_storage"
+	"media_agent/media_materials/biz/shared/objectstorage"
 )
 
 var pngBytes = []byte("\x89PNG\r\n\x1a\nimage-data")
 
 type fakeStorage struct {
-	input storageclient.PutInput
+	input objectstorage.PutInput
 	err   error
 }
 
-func (s *fakeStorage) Put(_ context.Context, input storageclient.PutInput) (storageclient.ObjectInfo, error) {
+func (s *fakeStorage) PutIfAbsent(_ context.Context, input objectstorage.PutInput) (objectstorage.ObjectInfo, error) {
 	s.input = input
 	if s.err != nil {
-		return storageclient.ObjectInfo{}, s.err
+		return objectstorage.ObjectInfo{}, s.err
 	}
 	data, _ := io.ReadAll(input.Body)
-	return storageclient.ObjectInfo{ObjectPath: input.ObjectPath, SizeBytes: int64(len(data)), ContentType: input.ContentType, Checksum: "sha256:test"}, nil
+	return objectstorage.ObjectInfo{ObjectPath: input.ObjectPath, SizeBytes: int64(len(data)), ContentType: input.ContentType, Checksum: input.Checksum}, nil
 }
 
 func validCommand() Command {
@@ -84,7 +84,7 @@ func TestUploadMapsStorageFailures(t *testing.T) {
 	for _, test := range []struct {
 		storageErr error
 		want       error
-	}{{storageclient.ErrConflict, ErrConflict}, {storageclient.ErrUnavailable, ErrUnavailable}} {
+	}{{objectstorage.ErrConflict, ErrConflict}, {objectstorage.ErrUnavailable, ErrUnavailable}} {
 		_, err := New(&fakeStorage{err: test.storageErr}).Upload(context.Background(), validCommand())
 		if !errors.Is(err, test.want) {
 			t.Fatalf("error=%v, want %v", err, test.want)

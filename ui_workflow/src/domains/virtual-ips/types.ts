@@ -28,19 +28,25 @@ export interface VirtualIpGrant {
 
 export interface VirtualIp {
   id: string;
+  organization_id?: string;
   scope: string;
   name: string;
   description?: string;
   avatar_url?: string;
+  avatar_object_path?: string;
   full_body_url?: string;
+  full_body_object_path?: string;
   three_view_url?: string;
+  three_view_object_path?: string;
   nine_view_url?: string;
+  nine_view_object_path?: string;
+  persona_profile?: Record<string, unknown> | string;
   status: VirtualIpStatus;
   visibility: Visibility;
   owner_user_id: string;
   grants?: VirtualIpGrant[];
-  created_at: string;
-  updated_at: string;
+  created_at: string | number;
+  updated_at: string | number;
 }
 
 export interface VirtualIpInput {

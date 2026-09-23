@@ -1,11 +1,28 @@
 import { useEffect, useState } from "react";
+import { Spinner } from "@/components/ui/spinner";
+import { ProductForm } from "@/domains/products/components/product-form";
 import { useProduct } from "@/domains/products/hooks/use-product";
 import { useUpdateProduct } from "@/domains/products/hooks/use-product-mutations";
-import { ProductForm } from "@/domains/products/components/product-form";
-import { Spinner } from "@/components/ui/spinner";
 import type { ProductInput } from "@/domains/products/types";
 
-export function ProductEdit({ id, onDone }: { id: string; onDone: () => void }) {
+function editableMetadata(
+  metadata: Record<string, unknown> | string | undefined,
+): Record<string, unknown> | undefined {
+  if (typeof metadata !== "string") return metadata;
+  try {
+    return JSON.parse(metadata) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+export function ProductEdit({
+  id,
+  onDone,
+}: {
+  id: string;
+  onDone: () => void;
+}) {
   const { data: product, isLoading } = useProduct(id);
   const updateProduct = useUpdateProduct();
   const [value, setValue] = useState<ProductInput | null>(null);
@@ -16,7 +33,7 @@ export function ProductEdit({ id, onDone }: { id: string; onDone: () => void }) 
         scope: product.scope,
         name: product.name,
         description: product.description,
-        metadata: product.metadata,
+        metadata: editableMetadata(product.metadata),
       });
     }
   }, [product]);
@@ -35,7 +52,9 @@ export function ProductEdit({ id, onDone }: { id: string; onDone: () => void }) 
       <ProductForm
         value={value}
         onChange={setValue}
-        onSubmit={() => updateProduct.mutate({ id, patch: value }, { onSuccess: onDone })}
+        onSubmit={() =>
+          updateProduct.mutate({ id, patch: value }, { onSuccess: onDone })
+        }
         submitLabel="Save"
         isPending={updateProduct.isPending}
         onCancel={onDone}

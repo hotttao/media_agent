@@ -25,7 +25,7 @@ import (
 	productsvc "media_agent/media_materials/biz/service/product"
 	vipsvc "media_agent/media_materials/biz/service/virtual_ip"
 	"media_agent/media_materials/biz/shared/auth"
-	storageclient "media_agent/media_materials/biz/shared/client/media_storage"
+	"media_agent/media_materials/biz/shared/objectstorage"
 	uploadworkflow "media_agent/media_materials/biz/workflow/library_object_upload"
 )
 
@@ -83,19 +83,20 @@ func main() {
 	materialSvc := materialsvc.NewService(materialRepo, nil, assetKindSvc, nil)
 	materialhandler.Svc = materialSvc
 
-	storageCfg, ok := cfg.GetClient()["media_storage"]
-	if !ok || !storageCfg.GetEnabled() || storageCfg.GetBaseDomain() == "" {
-		log.Fatal("media_storage client is required")
+	storageCfg := cfg.GetObjectStorage()
+	if storageCfg == nil || !storageCfg.GetEnabled() {
+		log.Fatal("object_storage is required")
 	}
-	storageToken := os.Getenv("MEDIA_STORAGE_INTERNAL_TOKEN")
-	if storageToken == "" {
-		log.Fatal("MEDIA_STORAGE_INTERNAL_TOKEN is required")
+	storageClient, err := objectstorage.New(context.Background(), objectstorage.Config{
+		Provider: storageCfg.GetProvider(), Endpoint: storageCfg.GetEndpoint(), PublicEndpoint: storageCfg.GetPublicEndpoint(),
+		Region: storageCfg.GetRegion(), Bucket: storageCfg.GetBucket(), AccessKey: storageCfg.GetAccessKey(), SecretKey: storageCfg.GetSecretKey(),
+		ForcePathStyle: storageCfg.GetForcePathStyle(), PresignTTL: time.Duration(storageCfg.GetPresignTtlSeconds()) * time.Second,
+	})
+	if err != nil {
+		log.Fatalf("init object storage: %v", err)
 	}
-	storageTimeout := 15 * time.Second
-	if ms := storageCfg.GetTimeout().GetRequestTimeoutMs(); ms > 0 {
-		storageTimeout = time.Duration(ms) * time.Millisecond
-	}
-	libraryobjecthandler.Flow = uploadworkflow.New(storageclient.New(storageCfg.GetBaseDomain(), storageToken, storageTimeout))
+	libraryobjecthandler.Flow = uploadworkflow.New(storageClient)
+	libraryobjecthandler.Resolver = storageClient
 
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
 	mediaAuthURL := "http://127.0.0.1:8001"

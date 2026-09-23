@@ -13,7 +13,8 @@ const analyze = process.env.ANALYZE === "true";
 //    are bundled (v7 vs host v6 not shareable; query/i18n use plugin-local
 //    Provider per §4.3 方案 C).
 const target = process.env.VITE_TARGET ?? "standalone";
-const gatewayTarget = process.env.VITE_GATEWAY_URL ?? "http://192.168.2.41:18080";
+const gatewayTarget =
+  process.env.VITE_GATEWAY_URL ?? "http://192.168.2.41:18080";
 
 const plugins = [
   react(),
@@ -84,6 +85,10 @@ const standaloneConfig: UserConfig = {
         target: gatewayTarget,
         changeOrigin: true,
       },
+      "/api/v1/library-objects": {
+        target: gatewayTarget,
+        changeOrigin: true,
+      },
       // media_workflow (8002): workflow/template/job + auth (OAuth via media_auth 8001)
       "/api/v1/workflows": {
         target: gatewayTarget,
@@ -98,7 +103,19 @@ const standaloneConfig: UserConfig = {
         target: gatewayTarget,
         changeOrigin: true,
       },
+      "/api/v1/workspaces": {
+        target: gatewayTarget,
+        changeOrigin: true,
+      },
       "/api/auth": { target: gatewayTarget, changeOrigin: true },
+      "/api/organizations": { target: gatewayTarget, changeOrigin: true },
+      "/api/teams": { target: gatewayTarget, changeOrigin: true },
+      // Ory browser flows stay on the Vite origin during development. Vite
+      // proxies their APIs to Traefik, which remains the single backend
+      // gateway; the frontend itself is not served through Traefik.
+      "/self-service": { target: gatewayTarget, changeOrigin: true },
+      "/sessions": { target: gatewayTarget, changeOrigin: true },
+      "/schemas": { target: gatewayTarget, changeOrigin: true },
     },
   },
 };

@@ -33,19 +33,6 @@ log:
 
 # ---- 被测 client：本地默认打 http://127.0.0.1:8888 的 media_example ----
 client:
-
-  media_storage:
-    enabled: true
-    service_name: media-storage
-    base_domain: ${MEDIA_STORAGE_ADDR:-http://127.0.0.1:8008}
-    use_discovery: false
-    timeout:
-      enabled: true
-      connect_timeout_ms: 200
-      read_timeout_ms: 5000
-      write_timeout_ms: 5000
-      request_timeout_ms: 10000
-
   media_control:
     enabled: true
     service_name: media-control

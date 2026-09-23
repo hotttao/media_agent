@@ -1,11 +1,28 @@
 import { useEffect, useState } from "react";
+import { Spinner } from "@/components/ui/spinner";
+import { MaterialForm } from "@/domains/materials/components/material-form";
 import { useMaterial } from "@/domains/materials/hooks/use-material";
 import { useUpdateMaterial } from "@/domains/materials/hooks/use-material-mutations";
-import { MaterialForm } from "@/domains/materials/components/material-form";
-import { Spinner } from "@/components/ui/spinner";
 import type { MaterialInput } from "@/domains/materials/types";
 
-export function MaterialsEdit({ id, onDone }: { id: string; onDone: () => void }) {
+function editableMetadata(
+  metadata: Record<string, unknown> | string | undefined,
+): Record<string, unknown> | undefined {
+  if (typeof metadata !== "string") return metadata;
+  try {
+    return JSON.parse(metadata) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+export function MaterialsEdit({
+  id,
+  onDone,
+}: {
+  id: string;
+  onDone: () => void;
+}) {
   const { data: material, isLoading } = useMaterial(id);
   const updateMaterial = useUpdateMaterial();
   const [value, setValue] = useState<MaterialInput | null>(null);
@@ -16,11 +33,11 @@ export function MaterialsEdit({ id, onDone }: { id: string; onDone: () => void }
         scope: material.scope,
         asset_kind: material.asset_kind,
         name: material.name,
-        url: material.url,
+        url: material.url ?? material.object_path ?? "",
         content: material.content,
         visibility: material.visibility,
         team_id: material.team_id,
-        metadata: material.metadata,
+        metadata: editableMetadata(material.metadata),
       });
     }
   }, [material]);

@@ -7,7 +7,7 @@
 - [Agent 网关上下文](media_agent_gateway/CONTEXT.md) — Agent Session 注册、访问控制、执行任务接入、SSE 协议适配与 Platform MCP
 - [Agent 执行上下文](media_agents/CONTEXT.md) — Runtime Session、Turn 队列、模型/工具执行、交互记录与可恢复事件
 - [Plugin 上下文](media_plugin/CONTEXT.md) — 受控 MCP 目录、Workspace 启用关系与外部 OAuth MCP 连接
-- [存储上下文](media_storage/CONTEXT.md) — 对象路径、对象读写、URL 解析与物理回收
+- [对象存储上下文](media_storage/CONTEXT.md) — 由 S3 兼容服务提供对象读写、临时地址与物理生命周期
 - [通知上下文](media_notification/CONTEXT.md) — 用户通知、投递偏好和渠道投递
 - [共享资源访问语言](resource_access/CONTEXT.md) — Scope、Visibility、Grant 与有效权限的跨服务统一语义
 - [工作流上下文](media_workflow/CONTEXT.md) — 媒体工作流定义、校验与执行
@@ -28,7 +28,7 @@ Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存
 - 同一 Runtime Session 的 Turn 由 `media_agents` 持久化排队并串行执行；Gateway 不以进程内锁、SSE 连接或节点亲和性决定执行顺序。
 - `media_plugin` 发布 Plugin Binding 变更；Gateway 据此重建快照，Agent 运行期直连平台内业务 MCP。
 - `media_workflow` 编排 `media_crawler`、`media_gen` 和 `media_materials`，各服务保留自身任务事实。
-- 所有需要二进制对象的业务服务依赖 `media_storage`，但业务归属、分享和删除决策仍归业务服务。
+- 所有需要二进制对象的业务服务通过 S3 Storage Port 依赖逻辑 `media_storage`；本地部署由 SeaweedFS 提供，生产可切换 MinIO、Aliyun OSS、AWS S3 等兼容实现。业务归属、分享、读取授权和删除决策仍归业务服务。
 - 各业务服务发布通知请求，`media_notification` 负责投递，不反向拥有业务事件。
 
 ## 全局不变量

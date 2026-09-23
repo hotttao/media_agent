@@ -1,8 +1,9 @@
 /**
- * Login page - username/password + WeCom SSO (optional).
+ * Login page - Kratos password flow + WeCom SSO (optional).
  *
  * Adapted from agent-platform/web/src/pages/LoginPage.tsx.
- * API: POST /api/auth/login, GET /api/auth/wecom/enabled, GET /api/auth/wecom/authorize
+ * API: Kratos browser login flow, GET /api/auth/wecom/enabled,
+ * GET /api/auth/wecom/authorize
  */
 
 import { MessageSquare } from "lucide-react";
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/foundation/lib/api-client";
@@ -112,11 +114,12 @@ export function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">Email</Label>
               <Input
                 id="username"
                 type="text"
-                placeholder="Enter your username"
+                placeholder="Enter your email"
+                autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -125,10 +128,10 @@ export function LoginPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 placeholder="Enter your password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

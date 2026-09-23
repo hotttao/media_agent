@@ -19,6 +19,8 @@ import { QueryProvider } from "@/foundation/providers/query-provider";
 import { ThemeProvider } from "@/foundation/providers/theme-provider";
 import "./index.css";
 
+let authenticationRedirectStarted = false;
+
 configureApi({
   onUnauthorized: () => {
     const isAuthPage = ["/login", "/registration"].some(
@@ -26,8 +28,9 @@ configureApi({
         window.location.pathname === path ||
         window.location.pathname.startsWith(`${path}/`),
     );
-    if (!isAuthPage) {
-      window.location.assign(
+    if (!isAuthPage && !authenticationRedirectStarted) {
+      authenticationRedirectStarted = true;
+      window.location.replace(
         browserFlowURL(
           "login",
           window.location.pathname + window.location.search,

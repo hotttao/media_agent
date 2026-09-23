@@ -12,6 +12,20 @@ service LibraryObjectService {
     option (google.api.http) = { post: "/api/v1/library-objects:upload" };
     option (api.post) = "/api/v1/library-objects:upload";
   }
+  rpc ResolveLibraryObject(ResolveLibraryObjectReq) returns (ResolveLibraryObjectResp) {
+    option (google.api.http) = { get: "/api/v1/library-objects:resolve" };
+    option (api.get) = "/api/v1/library-objects:resolve";
+  }
+}
+
+message ResolveLibraryObjectReq {
+  string organization_id = 1 [(api.query) = "organization_id"];
+  string object_path = 2 [(api.query) = "object_path"];
+}
+
+message ResolveLibraryObjectResp {
+  string url = 1;
+  int64 expires_at = 2;
 }
 
 message UploadLibraryObjectReq {

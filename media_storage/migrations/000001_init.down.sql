@@ -1,1 +1,0 @@
-DROP SCHEMA IF EXISTS media_storage CASCADE;

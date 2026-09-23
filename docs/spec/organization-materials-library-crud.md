@@ -16,9 +16,9 @@
 
 ## 3. Storage contract
 
-业务库禁止保存 provider、bucket、域名或签名 URL，只保存由业务服务生成的稳定 `object_path`。media_storage 的 Stored Object Driver 提供 `Put/Open/Stat/Delete`，首个实现为受配置根目录约束的 LocalFile；MinIO/OSS 后端后续替换，不影响 Domain 端口。
+业务库禁止保存 provider、bucket、域名、ETag 或签名 URL，只保存由业务服务生成的稳定 `object_path`。`media_materials` 定义 S3 Storage Port，提供 `PutIfAbsent/Stat/Delete/PresignGet`；本地 `media-storage` 部署使用 SeaweedFS，MinIO、Aliyun OSS 与 AWS S3 通过同一端口和配置替换。
 
-浏览器只调用 media_materials 的 `POST /api/v1/library-objects:upload`，不得直连 media_storage。media_materials 从认证上下文取得 caller，校验 active Organization Membership、Scope、用途、媒体类型与大小，生成 Object Path 后，以 `media-materials` 服务身份调用 media_storage 内部 PutObject。media_storage 只认证 Caller Service 并将其限制到 `materials` Namespace，不读取用户会话，也不做 Organization/owner/visibility 判断。
+上传时 Browser 只调用 media_materials 的 `POST /api/v1/library-objects:upload`。media_materials 从认证上下文取得 caller，校验 active Organization Membership、Scope、用途、媒体类型与大小，生成 Object Path 和 SHA-256 后，以受限 S3 凭证调用 Storage Provider。Provider 的 Bucket/Prefix Policy 必须把该凭证限制到 `materials/` Namespace；用户会话不得作为 S3 凭证。
 
 上传与资源 CRUD 是两个事务。上传成功返回 Object Path、size、content type、checksum，不自动创建或更新业务聚合。后续 CRUD 失败时不立即删除对象，未引用对象由 Retention/GC 后续回收。
 
@@ -32,13 +32,33 @@
 - 同一 caller + Idempotency Key + 上传语义产生稳定路径；同内容重试成功，不同内容返回 409。
 - 非 Organization Member 返回 404；非法请求 400；超限 413；Storage 不可用或结果不明确 503。
 
-### 3.2 Internal storage API
+### 3.2 S3 Storage Port
 
-`PUT /api/internal/v1/objects?object_path=`，请求体为原始字节，`Content-Type` 是对象媒体类型；调用方携带 `X-Media-Storage-Internal-Token`。配置未设置、凭证不匹配、Caller Service 不允许 `materials` Namespace 时均 fail closed。
+Storage Port 位于 `media_materials/biz/shared/objectstorage`，不得依赖 Hertz DTO。实现使用 AWS SDK for Go v2 的 S3 client 与 presign client：
 
-首期 Caller Service 与 Namespace 是静态映射：该凭证仅代表 `media-materials`，只能写 `materials/`。内部接口返回 `object_path`、`size_bytes`、`content_type`、`checksum`；非法路径 400、未认证 401、越权 Namespace 403、内容冲突 409、后端失败 500。
+- `PutIfAbsent`：先 HeadObject；已有 `checksum_sha256` 相同则返回幂等成功，不同则 conflict。不存在时执行 `If-None-Match: *` PutObject 并写 content type 与 checksum metadata；并发条件失败后再次 HeadObject 收敛。
+- `Stat`：区分 not found 与 unavailable，返回 size、content type、checksum、ETag；ETag 不作为 SHA-256。
+- `PresignGet`：先 Stat 确认对象存在，再生成默认五分钟有效的 URL 与 `expires_at`。
+- `Delete`：NotFound 视为幂等成功；只允许由业务生命周期或 Retention Workflow 调用。
 
-读取接口不在本次上传里程碑开放。通用 `object_path` 读取会绕过 Material/Virtual IP 的资源可见性；后续必须按已绑定业务资源完成授权后代理读取或签发短期 URL，不能仅凭 Organization Membership 暴露任意对象。
+Storage 配置必须包含 provider、endpoint、region、bucket、access key、secret key、path-style 与 presign TTL。`provider` 首期统一为 `s3`，其他字段允许按部署替换。配置缺失必须启动失败；Secret 不写入日志。
+
+部署配置只改变 Adapter 参数，不改变业务代码：
+
+| Provider | endpoint / public_endpoint | region | force_path_style | 说明 |
+|:---|:---|:---|:---|:---|
+| SeaweedFS（本地默认） | `http://media-storage:8333` / Browser 可达的 `http://<LAN-IP>:8333` | `us-east-1` | `true` | Compose 服务名固定为 `media-storage` |
+| MinIO | MinIO S3 API 的内外网 Endpoint | 部署 Region | `true` | Bucket 与受限 Access Key 预先创建 |
+| Aliyun OSS S3 compatibility | 对应 Region 的 S3 兼容 Endpoint | 对应 OSS Region | `false` | 使用支持 S3 协议的 Endpoint 与 RAM 最小权限凭证 |
+| AWS S3 | endpoint 与 public endpoint 留空，使用 SDK 默认地址 | AWS Region | `false` | IAM Policy 只授权目标 Bucket 的 `materials/*` |
+
+`endpoint` 是业务服务访问地址；`public_endpoint` 只决定签名 URL 中 Browser 访问的 Host。二者指向同一对象命名空间且签名端必须与实际请求 Host 一致，不能把已签名请求任意改写到业务网关。
+
+### 3.3 Public resolution API
+
+`GET /api/v1/library-objects:resolve?organization_id=&object_path=` 由 media_materials 认证。caller 不是 active Organization Member 返回 404；Object Path 不以 `materials/{organization_id}/` 开头返回 403；对象不存在返回 404；Provider 不可用返回 503。
+
+成功返回 `{url, expires_at}`。Browser 直接请求 Presigned URL，media_materials 和业务 API 网关不代理对象字节。本地开发直接访问 SeaweedFS 的公开 S3 端口；生产云 Provider 返回 OSS/S3 的外部 Endpoint 或对象存储专用域名。业务表和日志不得持久化完整 Presigned URL。
 
 ## 4. Database
 
@@ -69,16 +89,18 @@
 - PostgreSQL 实现：`media_materials/biz/dal/repo/<domain>`。
 - DTO 适配：`idl/media_materials` 与 `biz/handler`。
 - Organization Membership client：`media_materials/biz/shared/auth`；Handler 只消费认证上下文，不信任请求中的 owner。
-- 上传编排：`media_materials/biz/workflow/library_object_upload`；Storage client 放 `media_materials/biz/shared/client/media_storage`，不得 import Hertz DTO。
-- Stored Object 单 Domain 用例：`media_storage/biz/service/stored_object`；内部 handler 只做凭证、绑定和错误映射。
+- 上传编排：`media_materials/biz/workflow/library_object_upload`；Storage Port 与 S3 adapter 放 `media_materials/biz/shared/objectstorage`，不得 import Hertz DTO。
+- 地址解析：`media_materials/biz/handler/library_object` 完成 Organization/path 授权后调用 Storage Port；Browser 直连 Provider。
+- 本地 Storage Provider：`docker-compose/docker-compose.storage.yml`，服务名 `media-storage`，持久化目录挂载到 SeaweedFS `/data`；不启用额外可观测性服务。
 
 ## 7. Tests
 
 - Domain/Service 单元测试覆盖名称、载荷、object path、owner、only_mine、Organization 隔离和 Product Image 不变量。
 - Repository 测试覆盖部分唯一索引、软删后重建、Product + Images 原子更新。
 - HTTP e2e 放 `media-cli/e2e/`，通过统一网关登录后完成三类资源 CRUD；服务和基础设施由 docker-compose 启动，测试自身不管理进程。
-- media_storage LocalBackend 使用临时目录测试路径逃逸、重复上传、读取和删除。
-- upload workflow 使用 fake Storage client 覆盖路径确定性、用途/媒体类型/大小校验、冲突和不可用映射；Storage internal handler 覆盖缺失/错误凭证与 Namespace 越权。
+- S3 adapter 使用 `httptest.Server` 或 S3-compatible test double 覆盖签名配置、Head/Put 条件竞争、checksum 幂等、冲突、not found 与 presign TTL。
+- upload workflow 使用 fake Storage Port 覆盖路径确定性、用途/媒体类型/大小校验、冲突和不可用映射。
+- HTTP E2E 经统一网关完成登录、上传、resolve，并使用返回的 URL 直接读取图片；断言 URL 请求不经过 media_materials 字节代理。
 
 ## 8. Migration capability coverage
 
@@ -87,7 +109,8 @@
 | Material CRUD | media_materials | asset | covered | 第一阶段已实现 |
 | Virtual IP CRUD 与身份图片引用 | media_materials | virtual_ip + library_object_upload | covered | 第一阶段已实现 |
 | Product CRUD 与有序图片 | media_materials | product + library_object_upload | covered | 第一阶段已实现 |
-| 浏览器文件上传 | media_materials / media_storage | library_object_upload + stored_object | covered | 浏览器不直连 Storage |
+| 浏览器文件上传 | media_materials / media_storage | library_object_upload + stored_object | covered | media_materials 校验并通过 S3 Port 写入 |
+| 企业对象短期读取 | media_materials / media_storage | library_object_resolution + stored_object | covered | Browser 使用 Presigned URL 直连 Provider |
 | Workflow 生成产物 | media_workflow / media_materials | workflow_execution + generated_asset | external-owner | 本期不迁移，由 media_workflow 后续执行链拥有 |
 | Material Binding / Reachability | media_materials | asset + reachability | deprecated-with-reason | 第一阶段明确不开放写入口，保留后续领域设计 |
 | Pose / Movement Compatibility | media_materials | asset | deprecated-with-reason | 第一阶段明确排除 |

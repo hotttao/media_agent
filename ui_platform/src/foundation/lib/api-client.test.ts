@@ -8,7 +8,7 @@ describe("ApiClient", () => {
     vi.unstubAllGlobals();
   });
 
-  it("unwraps the user returned by media_auth", async () => {
+  it("logs in through a Kratos browser flow and resolves the business user", async () => {
     const user: User = {
       id: "u_1",
       username: "alice",
@@ -17,22 +17,52 @@ describe("ApiClient", () => {
       default_prompt_id: null,
       auto_evolution: false,
     };
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ user }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    const action = `${window.location.origin}/self-service/login?flow=flow-1`;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ui: {
+              action,
+              nodes: [{ attributes: { name: "csrf_token", value: "csrf-1" } }],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(user), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(api.login("alice", "secret")).resolves.toEqual(user);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/auth/login",
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      expect.stringMatching(/^\/self-service\/login\/browser\?return_to=/),
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      action,
       expect.objectContaining({
         method: "POST",
         credentials: "include",
-        body: JSON.stringify({ username: "alice", password: "secret" }),
+        body: expect.any(URLSearchParams),
       }),
+    );
+    const loginBody = fetchMock.mock.calls[1]?.[1]?.body as URLSearchParams;
+    expect(loginBody.get("identifier")).toBe("alice");
+    expect(loginBody.get("password")).toBe("secret");
+    expect(loginBody.get("csrf_token")).toBe("csrf-1");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/auth/me",
+      expect.objectContaining({ credentials: "include" }),
     );
   });
 

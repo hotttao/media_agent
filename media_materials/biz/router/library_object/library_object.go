@@ -21,6 +21,7 @@ func Register(r *server.Hertz) {
 		_api := root.Group("/api", _apiMw()...)
 		{
 			_v1 := _api.Group("/v1", _v1Mw()...)
+			_v1.GET("/library-objects:resolve", append(_resolvelibraryobjectMw(), library_object.ResolveLibraryObject)...)
 			_v1.POST("/library-objects:upload", append(_uploadlibraryobjectMw(), library_object.UploadLibraryObject)...)
 		}
 	}

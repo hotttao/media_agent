@@ -144,8 +144,16 @@ message RedisConfig {
 
 message ObjectStorageConfig {
   bool enabled = 1;
-  string driver = 2;      // local_file / aliyun_oss
-  string local_root = 3;  // local_file 根目录；其他 driver 忽略
+  string provider = 2;             // s3；具体实现由 endpoint 决定
+  string endpoint = 3;             // 服务端访问的 S3 endpoint；AWS S3 可留空
+  string public_endpoint = 4;      // presigned URL 中 Browser 可达的 endpoint；为空则复用 endpoint
+  string region = 5;
+  string bucket = 6;
+  string access_key = 7;
+  string secret_key = 8;
+  bool force_path_style = 9;       // SeaweedFS/MinIO 常为 true，Aliyun OSS/AWS S3 为 false
+  int32 presign_ttl_seconds = 10;  // 短期读取地址有效期，默认且上限 300 秒
+
 }
 
 // ============================================================================

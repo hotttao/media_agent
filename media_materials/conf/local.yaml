@@ -68,6 +68,18 @@ health:
   enabled: true
   path: "/health"
 
+object_storage:
+  enabled: true
+  provider: ${MEDIA_STORAGE_PROVIDER:-s3}
+  endpoint: ${MEDIA_STORAGE_ENDPOINT:-http://127.0.0.1:8333}
+  public_endpoint: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://192.168.2.41:8333}
+  region: ${MEDIA_STORAGE_REGION:-us-east-1}
+  bucket: ${MEDIA_STORAGE_BUCKET:-media}
+  access_key: ${MEDIA_STORAGE_ACCESS_KEY:-media-materials}
+  secret_key: ${MEDIA_STORAGE_SECRET_KEY:-media-materials-local-secret}
+  force_path_style: ${MEDIA_STORAGE_FORCE_PATH_STYLE:-true}
+  presign_ttl_seconds: ${MEDIA_STORAGE_PRESIGN_TTL_SECONDS:-300}
+
 
 # auth 中间件配置（jwt_secret/jwt_expires 走 AuthConfig；其余走环境变量）
 auth:
@@ -82,10 +94,3 @@ client:
     service_name: "media-auth"
     base_domain: ${MEDIA_AUTH_URL:-http://127.0.0.1:8001}
     use_discovery: false
-  media_storage:
-    enabled: true
-    service_name: "media-storage"
-    base_domain: ${MEDIA_STORAGE_URL:-http://127.0.0.1:8008}
-    timeout:
-      enabled: true
-      request_timeout_ms: 15000

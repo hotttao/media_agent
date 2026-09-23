@@ -1,0 +1,23 @@
+# S3-compatible object storage for local development and integration tests.
+# Business services access it with the internal endpoint; browsers use the
+# published 8333 data port from presigned URLs.
+
+services:
+  media-storage:
+    image: chrislusf/seaweedfs:4.47
+    command: mini -dir=/data
+    environment:
+      AWS_ACCESS_KEY_ID: ${MEDIA_STORAGE_ACCESS_KEY:-media-materials}
+      AWS_SECRET_ACCESS_KEY: ${MEDIA_STORAGE_SECRET_KEY:-media-materials-local-secret}
+      S3_BUCKET: ${MEDIA_STORAGE_BUCKET:-media}
+    ports:
+      - "8333:8333"
+    volumes:
+      - ${DATA_ROOT:-/data}/seaweedfs:/data
+    restart: unless-stopped
+    networks: [media-net]
+
+networks:
+  media-net:
+    name: media-net
+    external: true

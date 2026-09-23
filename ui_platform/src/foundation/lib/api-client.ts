@@ -17,6 +17,27 @@ import type {
   WeComEnabledResponse,
 } from "@/foundation/types/auth";
 
+interface KratosLoginFlow {
+  ui: {
+    action: string;
+    nodes: Array<{
+      attributes: { name?: string; value?: unknown };
+      messages?: Array<{ text?: string }>;
+    }>;
+    messages?: Array<{ text?: string }>;
+  };
+}
+
+function kratosErrorMessage(body: Record<string, unknown>): string | undefined {
+  const ui = body.ui as KratosLoginFlow["ui"] | undefined;
+  return [
+    ...(ui?.messages ?? []),
+    ...(ui?.nodes.flatMap((n) => n.messages ?? []) ?? []),
+  ]
+    .map((message) => message.text)
+    .find((message): message is string => Boolean(message));
+}
+
 export class ApiClientError extends Error {
   readonly status: number;
   readonly body: Record<string, unknown>;
@@ -77,10 +98,61 @@ class ApiClient {
   }
 
   async login(username: string, password: string): Promise<User> {
-    return this.request<{ user: User }>("/auth/login", {
+    const returnTo = new URL("/", window.location.origin).toString();
+    const flowResponse = await fetch(
+      `/self-service/login/browser?return_to=${encodeURIComponent(returnTo)}`,
+      {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      },
+    );
+    if (!flowResponse.ok) {
+      throw new ApiClientError(
+        "Unable to create login flow",
+        flowResponse.status,
+        {},
+      );
+    }
+
+    const flow = (await flowResponse.json()) as KratosLoginFlow;
+    const action = new URL(flow.ui.action, window.location.origin);
+    if (
+      action.origin !== window.location.origin ||
+      action.pathname !== "/self-service/login"
+    ) {
+      throw new Error("Kratos returned an invalid login action");
+    }
+    const csrfToken = flow.ui.nodes.find(
+      (node) => node.attributes.name === "csrf_token",
+    )?.attributes.value;
+    if (typeof csrfToken !== "string" || csrfToken === "") {
+      throw new Error("Kratos login flow is missing a CSRF token");
+    }
+
+    const form = new URLSearchParams({
+      method: "password",
+      identifier: username,
+      password,
+      csrf_token: csrfToken,
+    });
+    const loginResponse = await fetch(action.toString(), {
       method: "POST",
-      body: JSON.stringify({ username, password }),
-    }).then((response) => response.user);
+      body: form,
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (!loginResponse.ok) {
+      const body = (await loginResponse.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      throw new ApiClientError(
+        kratosErrorMessage(body) ?? "Invalid email or password",
+        loginResponse.status,
+        body,
+      );
+    }
+    return this.getMe();
   }
 
   async register(data: {
