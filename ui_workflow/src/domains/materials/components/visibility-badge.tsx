@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/foundation/lib/utils";
 import type { Visibility } from "@/domains/materials/types";
 
@@ -9,9 +10,12 @@ const VISIBILITY_STYLE: Record<Visibility, string> = {
 };
 
 export function VisibilityBadge({ visibility }: { visibility: Visibility }) {
+  const { t } = useTranslation();
   return (
-    <Badge className={cn("font-medium capitalize", VISIBILITY_STYLE[visibility])}>
-      {visibility}
+    <Badge
+      className={cn("font-medium capitalize", VISIBILITY_STYLE[visibility])}
+    >
+      {t(`common.visibility.${visibility}`)}
     </Badge>
   );
 }

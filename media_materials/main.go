@@ -16,6 +16,7 @@ import (
 	materialrepo "media_agent/media_materials/biz/dal/repo/material"
 	productrepo "media_agent/media_materials/biz/dal/repo/product"
 	viprepo "media_agent/media_materials/biz/dal/repo/virtual_ip"
+	assetkindhandler "media_agent/media_materials/biz/handler/asset_kind"
 	libraryobjecthandler "media_agent/media_materials/biz/handler/library_object"
 	materialhandler "media_agent/media_materials/biz/handler/material"
 	producthandler "media_agent/media_materials/biz/handler/product"
@@ -69,6 +70,7 @@ func main() {
 	// service 装配（repo → service → handler 注入）
 	assetKindRepo := assetkindrepo.NewRepo(db)
 	assetKindSvc := assetkindsvc.NewService(assetKindRepo)
+	assetkindhandler.Svc = assetKindSvc
 
 	productRepo := productrepo.NewRepo(db)
 	productSvc := productsvc.NewService(productRepo)

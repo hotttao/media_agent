@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Spinner } from "@/components/ui/spinner";
 import { MaterialForm } from "@/domains/materials/components/material-form";
 import { useMaterial } from "@/domains/materials/hooks/use-material";
@@ -23,6 +24,7 @@ export function MaterialsEdit({
   id: string;
   onDone: () => void;
 }) {
+  const { t } = useTranslation();
   const { data: material, isLoading } = useMaterial(id);
   const updateMaterial = useUpdateMaterial();
   const [value, setValue] = useState<MaterialInput | null>(null);
@@ -54,14 +56,14 @@ export function MaterialsEdit({
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-auto p-4">
-      <h2 className="text-lg font-semibold">Edit Material</h2>
+      <h2 className="text-lg font-semibold">{t("materialForm.editTitle")}</h2>
       <MaterialForm
         value={value}
         onChange={setValue}
         onSubmit={() =>
           updateMaterial.mutate({ id, patch: value }, { onSuccess: onDone })
         }
-        submitLabel="Save"
+        submitLabel={t("common.save")}
         isPending={updateMaterial.isPending}
         onCancel={onDone}
         isEdit

@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-const maxSourceImageBytes = (16 << 20) + 1
+const maxSourceMediaBytes = (16 << 20) + 1
 
 type migrator struct {
 	cfg        config
@@ -25,14 +25,14 @@ type migrator struct {
 }
 
 type migrationStats struct {
-	Materials, VirtualIPs, Products resourceStats
-	Images                          resourceStats
+	Materials, Movements, VirtualIPs, Products resourceStats
+	Images                                     resourceStats
 }
 
 type resourceStats struct{ Created, Updated, Skipped, Failed int }
 
 func (m *migrator) run(ctx context.Context, data sourceData) error {
-	if m.cfg.only == "material" || m.cfg.only == "virtual-ip" || m.cfg.only == "product" {
+	if m.cfg.only != "all" {
 		if m.cfg.only != "material" {
 			data.Materials = nil
 		}
@@ -42,9 +42,12 @@ func (m *migrator) run(ctx context.Context, data sourceData) error {
 		if m.cfg.only != "product" {
 			data.Products = nil
 		}
+		if m.cfg.only != "movement" {
+			data.Movements = nil
+		}
 	}
 	if m.cfg.dryRun {
-		m.logger.Printf("dry-run: materials=%d virtual_ips=%d products=%d product_images=%d", len(data.Materials), len(data.VirtualIPs), len(data.Products), productImageCount(data.Products))
+		m.logger.Printf("dry-run: materials=%d movements=%d virtual_ips=%d products=%d product_images=%d", len(data.Materials), len(data.Movements), len(data.VirtualIPs), len(data.Products), productImageCount(data.Products))
 		return nil
 	}
 	materials, err := m.target.list(ctx, "materials")
@@ -70,6 +73,15 @@ func (m *migrator) run(ctx context.Context, data sourceData) error {
 			m.logger.Printf("[%d/%d] material %q 完成", index+1, len(data.Materials), item.Name)
 		}
 	}
+	for index, item := range data.Movements {
+		if err := m.migrateMovement(ctx, item, materials); err != nil {
+			m.stats.Movements.Failed++
+			failures = append(failures, "movement "+item.ID+": "+err.Error())
+			m.logger.Printf("[%d/%d] movement %q 失败: %v", index+1, len(data.Movements), item.ID, err)
+		} else {
+			m.logger.Printf("[%d/%d] movement %q 完成", index+1, len(data.Movements), item.ID)
+		}
+	}
 	for index, item := range data.VirtualIPs {
 		if err := m.migrateVirtualIP(ctx, item, virtualIPs); err != nil {
 			m.stats.VirtualIPs.Failed++
@@ -93,6 +105,48 @@ func (m *migrator) run(ctx context.Context, data sourceData) error {
 		return fmt.Errorf("%d 条记录迁移失败:\n%s", len(failures), strings.Join(failures, "\n"))
 	}
 	return nil
+}
+
+func (m *migrator) migrateMovement(ctx context.Context, item sourceMovement, existing []targetItem) error {
+	objectPath, err := m.migrateImage(ctx, "movement", item.ID, "video", item.URL.String, "material")
+	if err != nil {
+		return err
+	}
+	metadata := migrationMetadata(item.ID, item.CreatedAt.String(), item.CreatedAt.String())
+	metadata["applicable_clothing"] = item.Scope.String
+	metadata["clothing"] = item.Clothing.String
+	metadata["is_general"] = item.IsGeneral
+	metadata["legacy_pose_ids"] = item.PoseIDs
+	name := movementName(item)
+	payload := map[string]any{
+		"name": name, "description": "", "prompt": "", "asset_kind": "movement",
+		"object_path": objectPath, "content": item.Content,
+		"metadata": mustJSONString(metadata), "visibility": "private", "team_id": "",
+	}
+	id := findExisting(existing, item.ID, name, "movement")
+	_, created, err := m.target.upsert(ctx, "materials", m.cfg.scope, id, payload)
+	if err != nil {
+		return err
+	}
+	increment(&m.stats.Movements, created)
+	return nil
+}
+
+func movementName(item sourceMovement) string {
+	name := strings.TrimSpace(item.Content)
+	name = strings.Join(strings.Fields(name), " ")
+	runes := []rune(name)
+	if len(runes) > 40 {
+		name = string(runes[:40])
+	}
+	if name == "" {
+		name = "动作素材"
+	}
+	shortID := item.ID
+	if len(shortID) > 8 {
+		shortID = shortID[:8]
+	}
+	return name + " · " + shortID
 }
 
 func (m *migrator) migrateMaterial(ctx context.Context, item sourceMaterial, existing []targetItem) error {
@@ -215,14 +269,14 @@ func (m *migrator) migrateImage(ctx context.Context, resource, sourceID, field, 
 		m.stats.Images.Failed++
 		return "", fmt.Errorf("下载 %s: HTTP %d", fullURL, resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxSourceImageBytes))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxSourceMediaBytes))
 	if err != nil {
 		m.stats.Images.Failed++
 		return "", fmt.Errorf("读取 %s: %w", fullURL, err)
 	}
-	if len(data) == 0 || len(data) >= maxSourceImageBytes {
+	if len(data) == 0 || len(data) >= maxSourceMediaBytes {
 		m.stats.Images.Failed++
-		return "", fmt.Errorf("图片为空或超过 16 MiB: %s (%d bytes)", fullURL, len(data))
+		return "", fmt.Errorf("媒体文件为空或超过 16 MiB: %s (%d bytes)", fullURL, len(data))
 	}
 	filename := sourceFilename(rawURL)
 	contentType := normalizedContentType(resp.Header.Get("Content-Type"), filename, data)
@@ -230,7 +284,7 @@ func (m *migrator) migrateImage(ctx context.Context, resource, sourceID, field, 
 	result, err := m.target.upload(ctx, purpose, "media-ai-"+hex.EncodeToString(keyHash[:16]), filename, contentType, data)
 	if err != nil {
 		m.stats.Images.Failed++
-		return "", err
+		return "", fmt.Errorf("上传 %s（filename=%s content_type=%s detected=%s size=%d）: %w", fullURL, filename, contentType, http.DetectContentType(data), len(data), err)
 	}
 	m.stats.Images.Created++
 	return result.ObjectPath, nil

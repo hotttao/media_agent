@@ -39,8 +39,8 @@ func (r *Repo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Material
 	if q.Scope != "" {
 		tx = tx.Where("scope = ?", q.Scope)
 	}
-	if q.AssetKind != "" {
-		tx = tx.Where("asset_kind = ?", q.AssetKind)
+	if len(q.AssetKinds) > 0 {
+		tx = tx.Where("asset_kind IN ?", q.AssetKinds)
 	}
 	if q.Owner != "" {
 		tx = tx.Where("owner_user_id = ?", q.Owner)

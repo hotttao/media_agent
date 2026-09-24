@@ -19,6 +19,8 @@
 | 用户状态与认证版本 | `media_auth` | User Management 页面只读取投影并提交 create/soft-delete 命令，不缓存授权事实 |
 | Kratos 登录身份与 Web Session | Ory Kratos | UI 只消费 self-service flow/session，不复制凭证 |
 | 企业/部门功能授权 | `media_auth` 事实源、Ory Keto 判定投影 | UI 可缓存展示结果，不据此替代服务端授权 |
+| 独立站点语言偏好 | i18next / 浏览器本地存储 | `tos-language`；首次访问默认中文，插件模式跟随宿主 `lang.change` |
+| Material 类型多选筛选、Product 搜索及页码 | 各列表组件 | 当前视图内存；服务端列表查询与总数是事实源；Material 空集合表示全部类型 |
 
 localStorage key 必须带版本与 Workspace ID。Profile 包含 `layoutId`、`slots` 与预留的 `instances`；恢复数据必须迁移版本并校验已注册 App、允许的 Slot 和单实例约束，解析失败回退默认值。不得写入 API Key、消息正文或服务端授权事实。
 

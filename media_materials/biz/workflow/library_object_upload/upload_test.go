@@ -68,6 +68,22 @@ func TestUploadAcceptsLegacyFullBodyImageLargerThanFourMiB(t *testing.T) {
 	}
 }
 
+func TestUploadAcceptsMaterialVideoOnly(t *testing.T) {
+	mp4 := []byte("\x00\x00\x00\x18ftypisom0000")
+	command := validCommand()
+	command.Body = bytes.NewReader(mp4)
+	command.SizeBytes = int64(len(mp4))
+	result, err := New(&fakeStorage{}).Upload(context.Background(), command)
+	if err != nil || result.ContentType != "video/mp4" || !strings.HasSuffix(result.ObjectPath, ".mp4") {
+		t.Fatalf("material mp4: result=%+v err=%v", result, err)
+	}
+	command.Purpose = "product_image"
+	command.Body = bytes.NewReader(mp4)
+	if _, err := New(&fakeStorage{}).Upload(context.Background(), command); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("product image accepted video: %v", err)
+	}
+}
+
 func TestUploadRejectsInvalidInputsBeforeStorage(t *testing.T) {
 	cases := []struct {
 		name string

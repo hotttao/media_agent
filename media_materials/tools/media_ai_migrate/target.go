@@ -179,10 +179,10 @@ func sourceFilename(rawURL string) string {
 }
 
 func normalizedContentType(header, filename string, data []byte) string {
-	if mediaType, _, err := mime.ParseMediaType(header); err == nil && strings.HasPrefix(mediaType, "image/") {
+	if mediaType, _, err := mime.ParseMediaType(header); err == nil && (strings.HasPrefix(mediaType, "image/") || strings.HasPrefix(mediaType, "video/")) {
 		return mediaType
 	}
-	if mediaType := mime.TypeByExtension(path.Ext(filename)); strings.HasPrefix(mediaType, "image/") {
+	if mediaType := mime.TypeByExtension(path.Ext(filename)); strings.HasPrefix(mediaType, "image/") || strings.HasPrefix(mediaType, "video/") {
 		return mediaType
 	}
 	return http.DetectContentType(data)

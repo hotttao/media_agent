@@ -1,5 +1,6 @@
 import { ImagePlus, Loader2, Star, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { LibraryImage } from "@/foundation/components/library-image";
@@ -29,6 +30,7 @@ export function ProductImagesField({
   onChange: (images: ProductImageInput[]) => void;
   onBusyChange?: (busy: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -37,7 +39,7 @@ export function ProductImagesField({
   async function select(files: FileList | null) {
     if (!files?.length) return;
     if (!organizationId || !scope.trim()) {
-      setError("请先填写 Scope，再上传产品图片");
+      setError(t("productImages.scopeFirst"));
       return;
     }
     setBusy(true);
@@ -47,7 +49,9 @@ export function ProductImagesField({
       const uploaded = await Promise.all(
         Array.from(files).map(async (file) => {
           if (!file.type.startsWith("image/") || file.size > 4 * 1024 * 1024)
-            throw new Error(`${file.name} 不是受支持的 4 MiB 以内图片`);
+            throw new Error(
+              t("productImages.invalidFile", { name: file.name }),
+            );
           const result = await uploadLibraryObject({
             organizationId,
             scope,
@@ -63,7 +67,9 @@ export function ProductImagesField({
       );
       onChange(normalizeProductImages([...value, ...uploaded]));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "产品图片上传失败");
+      setError(
+        cause instanceof Error ? cause.message : t("productImages.failed"),
+      );
     } finally {
       setBusy(false);
       onBusyChange?.(false);
@@ -75,9 +81,9 @@ export function ProductImagesField({
     <div className="grid gap-3">
       <div className="flex items-center justify-between">
         <div>
-          <Label>产品图片</Label>
+          <Label>{t("productImages.title")}</Label>
           <p className="text-xs text-muted-foreground">
-            支持多选；星标图片作为主图。
+            {t("productImages.hint")}
           </p>
         </div>
         <Button
@@ -92,7 +98,7 @@ export function ProductImagesField({
           ) : (
             <ImagePlus className="mr-1 h-4 w-4" />
           )}
-          添加图片
+          {t("productImages.add")}
         </Button>
       </div>
       <input
@@ -114,7 +120,7 @@ export function ProductImagesField({
                 <LibraryImage
                   organizationId={organizationId}
                   objectPath={image.object_path}
-                  alt={`产品图片 ${index + 1}`}
+                  alt={t("productImages.imageAlt", { index: index + 1 })}
                 />
               </div>
               <div className="flex items-center justify-between border-t p-2">
@@ -134,7 +140,11 @@ export function ProductImagesField({
                   <Star
                     className={`mr-1 h-4 w-4 ${image.is_main ? "fill-current" : ""}`}
                   />
-                  {image.is_main ? "主图" : "设为主图"}
+                  {t(
+                    image.is_main
+                      ? "productImages.main"
+                      : "productImages.setMain",
+                  )}
                 </Button>
                 <Button
                   type="button"
@@ -162,7 +172,7 @@ export function ProductImagesField({
           disabled={!canUpload}
         >
           <ImagePlus className="mr-2 h-5 w-5" />
-          {canUpload ? "上传产品图片" : "请先填写 Scope"}
+          {t(canUpload ? "productImages.upload" : "uploadField.scopeRequired")}
         </button>
       )}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}

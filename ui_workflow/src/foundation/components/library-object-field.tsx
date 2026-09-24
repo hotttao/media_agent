@@ -1,5 +1,6 @@
 import { ImagePlus, Loader2, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/foundation/lib/utils";
@@ -7,7 +8,7 @@ import {
   type LibraryObjectPurpose,
   uploadLibraryObject,
 } from "../lib/library-object";
-import { LibraryImage } from "./library-image";
+import { LibraryImage, LibraryVideo } from "./library-image";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -22,6 +23,7 @@ export function LibraryObjectField({
   onChange,
   onBusyChange,
   className,
+  acceptVideo = false,
 }: {
   organizationId: string;
   scope: string;
@@ -32,7 +34,9 @@ export function LibraryObjectField({
   onChange: (objectPath: string) => void;
   onBusyChange?: (busy: boolean) => void;
   className?: string;
+  acceptVideo?: boolean;
 }) {
+  const { t } = useTranslation();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string>();
@@ -41,6 +45,9 @@ export function LibraryObjectField({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const canUpload = Boolean(organizationId && scope.trim());
+  const acceptedTypes = acceptVideo
+    ? ["video/mp4", "video/webm"]
+    : ACCEPTED_TYPES;
 
   useEffect(
     () => () => {
@@ -51,7 +58,7 @@ export function LibraryObjectField({
 
   async function upload(nextFile: File, idempotencyKey: string) {
     if (!organizationId || !scope.trim()) {
-      setError("请先填写 Scope，再选择图片");
+      setError(t("uploadField.scopeFirst"));
       return;
     }
     setBusy(true);
@@ -67,7 +74,9 @@ export function LibraryObjectField({
       });
       onChange(uploaded.object_path);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "图片上传失败");
+      setError(
+        cause instanceof Error ? cause.message : t("uploadField.failed"),
+      );
     } finally {
       setBusy(false);
       onBusyChange?.(false);
@@ -76,12 +85,16 @@ export function LibraryObjectField({
 
   function selectFile(nextFile?: File) {
     if (!nextFile) return;
-    if (!ACCEPTED_TYPES.includes(nextFile.type)) {
-      setError("仅支持 JPEG、PNG、WebP 或 GIF 图片");
+    if (!acceptedTypes.includes(nextFile.type)) {
+      setError(
+        acceptVideo ? t("uploadField.videoTypes") : t("uploadField.imageTypes"),
+      );
       return;
     }
-    if (nextFile.size > MAX_BYTES) {
-      setError("图片不能超过 4 MiB");
+    if (nextFile.size > (acceptVideo ? 16 * 1024 * 1024 : MAX_BYTES)) {
+      setError(
+        t(acceptVideo ? "uploadField.videoSize" : "uploadField.imageSize"),
+      );
       return;
     }
     if (preview) URL.revokeObjectURL(preview);
@@ -106,7 +119,7 @@ export function LibraryObjectField({
         ref={inputRef}
         id={inputId}
         type="file"
-        accept={ACCEPTED_TYPES.join(",")}
+        accept={acceptedTypes.join(",")}
         className="sr-only"
         onChange={(event) => selectFile(event.target.files?.[0])}
       />
@@ -118,21 +131,41 @@ export function LibraryObjectField({
           disabled={busy || !canUpload}
         >
           {preview ? (
-            <img
-              src={preview}
-              alt={`${label} local preview`}
-              className="h-full w-full object-cover"
-            />
+            acceptVideo ? (
+              <video
+                src={preview}
+                className="h-full w-full object-contain"
+                muted
+              />
+            ) : (
+              <img
+                src={preview}
+                alt={`${label} ${t("uploadField.localPreview")}`}
+                className="h-full w-full object-cover"
+              />
+            )
           ) : value ? (
-            <LibraryImage
-              organizationId={organizationId}
-              objectPath={value}
-              alt={label}
-            />
+            acceptVideo ? (
+              <LibraryVideo
+                organizationId={organizationId}
+                objectPath={value}
+                controls={false}
+              />
+            ) : (
+              <LibraryImage
+                organizationId={organizationId}
+                objectPath={value}
+                alt={label}
+              />
+            )
           ) : (
             <span className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
               <ImagePlus className="h-8 w-8" />
-              点击选择图片
+              {t(
+                acceptVideo
+                  ? "uploadField.chooseVideo"
+                  : "uploadField.chooseImage",
+              )}
             </span>
           )}
           {busy ? (
@@ -144,12 +177,12 @@ export function LibraryObjectField({
         <div className="flex items-center justify-between gap-2 border-t p-2">
           <span className="min-w-0 truncate text-xs text-muted-foreground">
             {busy
-              ? "正在上传…"
+              ? t("uploadField.uploading")
               : value
-                ? "已保存到素材存储"
+                ? t("uploadField.saved")
                 : canUpload
-                  ? "尚未选择图片"
-                  : "请先填写 Scope"}
+                  ? t("uploadField.notSelected")
+                  : t("uploadField.scopeRequired")}
           </span>
           <div className="flex shrink-0 gap-1">
             {error && file && key ? (
@@ -170,7 +203,7 @@ export function LibraryObjectField({
               disabled={busy || !canUpload}
             >
               <Upload className="mr-1 h-4 w-4" />
-              {hasImage ? "替换" : "上传"}
+              {t(hasImage ? "uploadField.replace" : "uploadField.upload")}
             </Button>
             {hasImage ? (
               <Button

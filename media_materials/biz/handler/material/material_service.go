@@ -2,6 +2,7 @@ package material
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -75,7 +76,7 @@ func ListMaterials(ctx context.Context, c *app.RequestContext) {
 		owner = auth.CallerID(ctx)
 	}
 	items, total, err := Svc.List(ctx, materialsvc.ListQuery{OrganizationID: req.GetOrganizationId(), Scope: req.GetScope(),
-		AssetKind: req.GetAssetKind(), Owner: owner, Visibility: req.GetVisibility(), Limit: size, Offset: (page - 1) * size},
+		AssetKinds: parseAssetKinds(req.GetAssetKind()), Owner: owner, Visibility: req.GetVisibility(), Limit: size, Offset: (page - 1) * size},
 		auth.CallerID(ctx), auth.TeamsFromContext(ctx))
 	if err != nil {
 		httperr.Write(c, err, 500, "material")
@@ -86,6 +87,23 @@ func ListMaterials(ctx context.Context, c *app.RequestContext) {
 		rows[i] = toView(items[i])
 	}
 	c.JSON(200, &pb.ListMaterialsResp{Items: rows, Total: int32(total)})
+}
+
+func parseAssetKinds(value string) []string {
+	seen := make(map[string]struct{})
+	kinds := make([]string, 0)
+	for _, part := range strings.Split(value, ",") {
+		kind := strings.TrimSpace(part)
+		if kind == "" {
+			continue
+		}
+		if _, exists := seen[kind]; exists {
+			continue
+		}
+		seen[kind] = struct{}{}
+		kinds = append(kinds, kind)
+	}
+	return kinds
 }
 
 func UpdateMaterial(ctx context.Context, c *app.RequestContext) {

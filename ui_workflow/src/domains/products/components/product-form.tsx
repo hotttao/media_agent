@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ export function ProductForm({
   onCancel: () => void;
   isEdit?: boolean;
 }) {
+  const { t } = useTranslation();
   const { organization } = hostShim.useShellContext();
   const [uploading, setUploading] = useState(false);
   const [externalText, setExternalText] = useState(() =>
@@ -56,7 +58,8 @@ export function ProductForm({
     } catch (error) {
       setJsonError((old) => ({
         ...old,
-        [key]: error instanceof Error ? error.message : "JSON 格式错误",
+        [key]:
+          error instanceof Error ? error.message : t("materialForm.jsonError"),
       }));
     }
   }
@@ -64,9 +67,9 @@ export function ProductForm({
     <div className="flex flex-col gap-6">
       <section className="grid gap-4 rounded-xl border p-4">
         <div>
-          <h3 className="font-medium">产品信息</h3>
+          <h3 className="font-medium">{t("productForm.productInfo")}</h3>
           <p className="text-xs text-muted-foreground">
-            面向业务和内容生成使用的稳定产品字段。
+            {t("productForm.productInfoHint")}
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
@@ -79,7 +82,7 @@ export function ProductForm({
             />
           </div>
           <div className="grid gap-2">
-            <Label>名称</Label>
+            <Label>{t("materialForm.name")}</Label>
             <Input
               value={value.name}
               onChange={(e) => onChange({ ...value, name: e.target.value })}
@@ -87,7 +90,7 @@ export function ProductForm({
           </div>
         </div>
         <div className="grid gap-2">
-          <Label>描述</Label>
+          <Label>{t("materialForm.description")}</Label>
           <Textarea
             value={value.description ?? ""}
             onChange={(e) =>
@@ -96,7 +99,7 @@ export function ProductForm({
           />
         </div>
         <div className="grid gap-2">
-          <Label>目标人群</Label>
+          <Label>{t("productForm.audience")}</Label>
           <Textarea
             value={value.target_audience ?? ""}
             onChange={(e) =>
@@ -105,7 +108,7 @@ export function ProductForm({
           />
         </div>
         <div className="grid gap-2">
-          <Label>产品详情</Label>
+          <Label>{t("productForm.details")}</Label>
           <Textarea
             rows={6}
             value={value.product_details ?? ""}
@@ -125,9 +128,9 @@ export function ProductForm({
         />
       </section>
       <section className="grid gap-4 rounded-xl border p-4">
-        <h3 className="font-medium">内容生成信息</h3>
+        <h3 className="font-medium">{t("productForm.generation")}</h3>
         <div className="grid gap-2">
-          <Label>展示动作</Label>
+          <Label>{t("productForm.actions")}</Label>
           <Textarea
             value={listText(value.display_actions)}
             onChange={(e) =>
@@ -139,11 +142,11 @@ export function ProductForm({
                   .filter(Boolean),
               })
             }
-            placeholder="每行一个动作"
+            placeholder={t("productForm.actionsHint")}
           />
         </div>
         <div className="grid gap-2">
-          <Label>标签</Label>
+          <Label>{t("productForm.tags")}</Label>
           <Input
             value={value.tags?.join(", ") ?? ""}
             onChange={(e) =>
@@ -155,14 +158,14 @@ export function ProductForm({
                   .filter(Boolean),
               })
             }
-            placeholder="护肤, 夏季, 女性"
+            placeholder={t("productForm.tagsHint")}
           />
         </div>
       </section>
       <section className="grid gap-4 rounded-xl border p-4">
-        <h3 className="font-medium">扩展信息</h3>
+        <h3 className="font-medium">{t("productForm.extended")}</h3>
         <div className="grid gap-2">
-          <Label>外部商城信息 (JSON)</Label>
+          <Label>{t("productForm.externalCommerce")}</Label>
           <Textarea
             className="font-mono text-xs"
             rows={5}
@@ -200,10 +203,10 @@ export function ProductForm({
             !value.name.trim()
           }
         >
-          {uploading ? "图片上传中…" : submitLabel}
+          {uploading ? t("materialForm.uploading") : submitLabel}
         </Button>
         <Button variant="ghost" onClick={onCancel}>
-          取消
+          {t("common.cancel")}
         </Button>
       </div>
     </div>

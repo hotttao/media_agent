@@ -33,6 +33,10 @@ Materials App 为 Organization 成员提供 Material、Virtual IP、Product 的�
 
 ## 页面要求
 
+- Material 列表顶部提供常驻展开的 Asset Kind 多选表单，不使用下拉菜单；候选项来自 Asset Kind 注册表且固定查询 `resource_type=MATERIAL`、`media_type=IMAGE`（对应枚举值 1/1），“全部类型”清空已选项。选中的多个类型以同一次服务端查询提交，切换类型后保留筛选控件并显示空结果。
+- Product 列表使用服务端总数与页码分页；搜索名称时回到第一页，上一页、下一页及当前页状态与服务端结果一致。
+- 旧动作素材显示为 Material 的“动作素材”类型；文字动作显示 `content`，参考视频使用 Storage Object Path 播放，服装适用范围和通用性使用稳定 metadata 字段；未落地的姿势兼容关系只提示追溯状态，不提供虚假的关联编辑入口。
+
 - 创建和编辑页使用分组表单，不显示 URL 或 Object Path 文本输入。
 - 详情页必须以图片区展示图片，并展示稳定业务字段；Object Path 只可在诊断信息中折叠展示，本期默认不展示。
 - 详情页按工具栏、主视觉与摘要、业务信息卡片、审计或权限、危险操作分层；多图使用主图与缩略图切换，不把全部大图纵向堆叠。

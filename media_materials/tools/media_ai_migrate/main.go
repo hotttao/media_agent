@@ -30,14 +30,21 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 	logger := log.New(os.Stdout, "", log.LstdFlags)
-	logger.Printf("源数据: materials=%d virtual_ips=%d products=%d product_images=%d", len(data.Materials), len(data.VirtualIPs), len(data.Products), productImageCount(data.Products))
+	movementVideos, poseLinks := 0, 0
+	for _, movement := range data.Movements {
+		if movement.URL.Valid && movement.URL.String != "" {
+			movementVideos++
+		}
+		poseLinks += len(movement.PoseIDs)
+	}
+	logger.Printf("源数据: materials=%d movements=%d movement_videos=%d pose_links=%d virtual_ips=%d products=%d product_images=%d", len(data.Materials), len(data.Movements), movementVideos, poseLinks, len(data.VirtualIPs), len(data.Products), productImageCount(data.Products))
 	client := &http.Client{Timeout: cfg.requestTimeout}
 	m := &migrator{
 		cfg: cfg, sourceHTTP: client, logger: logger,
 		target: &targetClient{baseURL: cfg.targetURL, organizationID: cfg.organizationID, scope: cfg.scope, sessionCookieName: cfg.sessionCookieName, sessionCookie: cfg.sessionCookie, bearerToken: cfg.bearerToken, http: client},
 	}
 	runErr := m.run(ctx, data)
-	logger.Printf("结果: materials=%s virtual_ips=%s products=%s images=%s", formatStats(m.stats.Materials), formatStats(m.stats.VirtualIPs), formatStats(m.stats.Products), formatStats(m.stats.Images))
+	logger.Printf("结果: materials=%s movements=%s virtual_ips=%s products=%s media=%s", formatStats(m.stats.Materials), formatStats(m.stats.Movements), formatStats(m.stats.VirtualIPs), formatStats(m.stats.Products), formatStats(m.stats.Images))
 	return runErr
 }
 

@@ -8,6 +8,7 @@
  */
 
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ONE_COLUMN_SLOTS,
   OneColumnLayout,
@@ -15,6 +16,7 @@ import {
 import { useStandaloneApps } from "@/components/shell/useStandaloneApps";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { LanguageSwitcher } from "@/foundation/components/language-switcher";
 import { STANDALONE_WORKSPACE_ID } from "@/foundation/lib/constants";
 import { hostShim } from "@/foundation/lib/host-shim";
 import {
@@ -27,6 +29,7 @@ import {
 } from "@/foundation/stores/workspace-profile-store";
 
 export function Desktop() {
+  const { t } = useTranslation();
   const shell = hostShim.useShellContext();
   const apps = useStandaloneApps();
   const ensureLoaded = useWorkspaceProfileStore((s) => s.ensureLoaded);
@@ -47,7 +50,7 @@ export function Desktop() {
   if (shell.error) {
     return (
       <div className="flex h-screen items-center justify-center p-6 text-sm text-destructive">
-        Unable to load company context: {shell.error}
+        {t("shell.companyError")}: {shell.error}
       </div>
     );
   }
@@ -74,6 +77,7 @@ function ShellHeader({
 }: {
   shell: ReturnType<typeof hostShim.useShellContext>;
 }) {
+  const { t } = useTranslation();
   const slots = useRequiredSlotContext();
   const { user, logout } = hostShim.useCurrentUser();
   const active = slots.getState("slot-a").active?.appId;
@@ -83,10 +87,13 @@ function ShellHeader({
   };
   return (
     <header className="border-b border-foreground/[0.06] px-4 py-2 text-sm font-medium">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
+        <div className="flex min-w-0 items-center gap-3">
           <h1 className="font-semibold">Media Workflow</h1>
-          <nav aria-label="Applications" className="flex items-center gap-1">
+          <nav
+            aria-label={t("shell.applications")}
+            className="flex items-center gap-1"
+          >
             <button
               type="button"
               className={
@@ -96,7 +103,7 @@ function ShellHeader({
               }
               onClick={() => openApp("materials")}
             >
-              Materials
+              {t("nav.materials")}
             </button>
             <button
               type="button"
@@ -107,12 +114,13 @@ function ShellHeader({
               }
               onClick={() => openApp("workflow")}
             >
-              Workflow
+              {t("nav.workflow")}
             </button>
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">
+          <LanguageSwitcher />
+          <span className="hidden text-xs text-muted-foreground lg:inline">
             {shell.organization.name} / {shell.team.name} /{" "}
             {shell.workspace.name}
           </span>
@@ -125,7 +133,7 @@ function ShellHeader({
             size="sm"
             onClick={() => void logout()}
           >
-            Sign out
+            {t("shell.signOut")}
           </Button>
         </div>
       </div>

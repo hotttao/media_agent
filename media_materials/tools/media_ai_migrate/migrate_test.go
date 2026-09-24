@@ -99,3 +99,35 @@ func TestMigrateImageDownloadsAndUploadsWithStableKey(t *testing.T) {
 		t.Fatalf("idempotency keys = %#v", keys)
 	}
 }
+
+func TestMigrateMovementPreservesDomainFields(t *testing.T) {
+	var payload map[string]any
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/materials" || r.Method != http.MethodPost {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = io.WriteString(w, `{"id":"42"}`)
+	}))
+	defer target.Close()
+	client := &http.Client{Timeout: time.Second}
+	m := &migrator{cfg: config{scope: "ai_clothing"}, sourceHTTP: client, logger: log.New(io.Discard, "", 0), target: &targetClient{
+		baseURL: target.URL, organizationID: "org", scope: "ai_clothing", http: client,
+	}}
+	item := sourceMovement{ID: "legacy-movement-1", Content: "转身展示", IsGeneral: false, PoseIDs: []string{"pose-1"}, CreatedAt: time.Now()}
+	if err := m.migrateMovement(context.Background(), item, nil); err != nil {
+		t.Fatal(err)
+	}
+	if payload["asset_kind"] != "movement" || payload["content"] != "转身展示" || payload["object_path"] != "" {
+		t.Fatalf("unexpected movement payload: %#v", payload)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(payload["metadata"].(string)), &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if metadata["is_general"] != false || !reflect.DeepEqual(metadata["legacy_pose_ids"], []any{"pose-1"}) {
+		t.Fatalf("movement metadata lost: %#v", metadata)
+	}
+}

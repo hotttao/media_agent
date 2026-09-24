@@ -29,6 +29,8 @@ var (
 		"image/png":  ".png",
 		"image/webp": ".webp",
 		"image/gif":  ".gif",
+		"video/mp4":  ".mp4",
+		"video/webm": ".webm",
 	}
 	purposes = map[string]bool{
 		"material": true, "virtual_ip_avatar": true, "virtual_ip_full_body": true,
@@ -75,9 +77,9 @@ func (w *Workflow) Upload(ctx context.Context, command Command) (objectstorage.O
 	if len(payload) == 0 || int64(len(payload)) != command.SizeBytes {
 		return objectstorage.ObjectInfo{}, ErrInvalid
 	}
-	contentType := http.DetectContentType(payload)
+	contentType := detectContentType(payload)
 	extension, ok := contentTypes[contentType]
-	if !ok {
+	if !ok || (strings.HasPrefix(contentType, "video/") && command.Purpose != "material") {
 		return objectstorage.ObjectInfo{}, ErrInvalid
 	}
 	digest := sha256.Sum256([]byte(strings.Join([]string{command.CallerID, command.IdempotencyKey}, "\x00")))
@@ -92,6 +94,16 @@ func (w *Workflow) Upload(ctx context.Context, command Command) (objectstorage.O
 		return objectstorage.ObjectInfo{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 	return result, nil
+}
+
+func detectContentType(payload []byte) string {
+	if len(payload) >= 12 && string(payload[4:8]) == "ftyp" {
+		return "video/mp4"
+	}
+	if len(payload) >= 4 && payload[0] == 0x1a && payload[1] == 0x45 && payload[2] == 0xdf && payload[3] == 0xa3 {
+		return "video/webm"
+	}
+	return http.DetectContentType(payload)
 }
 
 func validSegment(value string) bool { return segmentPattern.MatchString(value) }

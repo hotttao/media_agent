@@ -10,6 +10,7 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { StatusBadge } from "@/domains/products/components/status-badge";
@@ -48,6 +49,7 @@ export function ProductShow({
   onBack: () => void;
   onEdit: () => void;
 }) {
+  const { t } = useTranslation();
   const { data: product, isLoading } = useProduct(id);
   const remove = useDeleteProduct();
   const archive = useArchiveProduct();
@@ -61,7 +63,7 @@ export function ProductShow({
   if (!product)
     return (
       <div className="p-6 text-sm text-muted-foreground">
-        没有找到这个产品。
+        {t("productDetail.notFound")}
       </div>
     );
   const tags = parseValue<string[]>(product.tags, []);
@@ -81,7 +83,7 @@ export function ProductShow({
       <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/90 p-2 shadow-sm backdrop-blur-xl">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft className="mr-1.5 h-4 w-4" />
-          返回产品列表
+          {t("productDetail.back")}
         </Button>
         <div className="flex gap-2">
           {product.status !== "archived" ? (
@@ -92,12 +94,12 @@ export function ProductShow({
               onClick={() => archive.mutate(id)}
             >
               <Archive className="mr-1.5 h-4 w-4" />
-              归档
+              {t("productDetail.archive")}
             </Button>
           ) : null}
           <Button size="sm" onClick={onEdit}>
             <Edit3 className="mr-1.5 h-4 w-4" />
-            编辑产品
+            {t("productDetail.edit")}
           </Button>
         </div>
       </div>
@@ -106,8 +108,10 @@ export function ProductShow({
           organizationId={product.organization_id ?? organization.id}
           items={images.map((image, index) => ({
             objectPath: image.object_path,
-            label: image.is_main ? "产品主图" : `详情图 ${index + 1}`,
-            badge: image.is_main ? "Main image" : undefined,
+            label: image.is_main
+              ? t("productDetail.mainImage")
+              : t("productDetail.detailImage", { index: index + 1 }),
+            badge: image.is_main ? t("productDetail.mainImage") : undefined,
           }))}
           alt={product.name}
         />
@@ -120,13 +124,13 @@ export function ProductShow({
           </div>
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Product
+              {t("productDetail.type")}
             </p>
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
               {product.name}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
-              {product.description || "这个产品还没有填写描述。"}
+              {product.description || t("productDetail.noDescription")}
             </p>
           </div>
           {tags.length ? (
@@ -142,10 +146,10 @@ export function ProductShow({
             </div>
           ) : null}
           <DetailFieldGrid className="xl:grid-cols-2">
-            <DetailField label="创建时间">
+            <DetailField label={t("materialDetail.createdAt")}>
               {formatDetailDate(product.created_at)}
             </DetailField>
-            <DetailField label="最近更新">
+            <DetailField label={t("materialDetail.updatedAt")}>
               {formatDetailDate(product.updated_at)}
             </DetailField>
           </DetailFieldGrid>
@@ -153,28 +157,28 @@ export function ProductShow({
       </section>
       <div className="grid gap-5 lg:grid-cols-2">
         <DetailSection
-          title="目标人群"
-          description="产品内容主要面向的用户画像"
+          title={t("productForm.audience")}
+          description={t("productDetail.audienceHint")}
           icon={Users}
         >
           <p className="whitespace-pre-wrap text-sm leading-7">
-            {product.target_audience || "暂未填写目标人群。"}
+            {product.target_audience || t("productDetail.noAudience")}
           </p>
         </DetailSection>
         <DetailSection
-          title="产品详情"
-          description="卖点、规格和内容生产所需信息"
+          title={t("productForm.details")}
+          description={t("productDetail.detailsHint")}
           icon={PackageOpen}
         >
           <p className="whitespace-pre-wrap text-sm leading-7">
-            {product.product_details || "暂未填写产品详情。"}
+            {product.product_details || t("productDetail.noDetails")}
           </p>
         </DetailSection>
       </div>
       {actions.length ? (
         <DetailSection
-          title="展示动作"
-          description="拍摄或生成内容时建议采用的展示方式"
+          title={t("productForm.actions")}
+          description={t("productDetail.actionsHint")}
           icon={Sparkles}
         >
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -195,8 +199,8 @@ export function ProductShow({
       <div className="grid gap-5 lg:grid-cols-2">
         {Object.keys(commerce).length ? (
           <DetailSection
-            title="商城信息"
-            description="与外部商品页面和交易渠道关联的信息"
+            title={t("productDetail.commerce")}
+            description={t("productDetail.commerceHint")}
             icon={ExternalLink}
           >
             <StructuredDetails value={commerce} />
@@ -204,8 +208,8 @@ export function ProductShow({
         ) : null}
         {Object.keys(metadata).length ? (
           <DetailSection
-            title="扩展属性"
-            description="尚未进入稳定产品字段的补充信息"
+            title={t("materialDetail.metadata")}
+            description={t("productDetail.metadataHint")}
             icon={Braces}
           >
             <StructuredDetails value={metadata} />
@@ -213,24 +217,28 @@ export function ProductShow({
         ) : null}
       </div>
       <DetailSection
-        title="审计信息"
-        description="产品记录的创建与最后维护信息"
+        title={t("productDetail.audit")}
+        description={t("productDetail.auditHint")}
         icon={ShoppingBag}
       >
         <DetailFieldGrid>
-          <DetailField label="创建人">{product.created_by}</DetailField>
-          <DetailField label="更新人">{product.updated_by}</DetailField>
-          <DetailField label="创建时间">
+          <DetailField label={t("productDetail.createdBy")}>
+            {product.created_by}
+          </DetailField>
+          <DetailField label={t("productDetail.updatedBy")}>
+            {product.updated_by}
+          </DetailField>
+          <DetailField label={t("materialDetail.createdAt")}>
             {formatDetailDate(product.created_at)}
           </DetailField>
-          <DetailField label="更新时间">
+          <DetailField label={t("materialDetail.updatedAt")}>
             {formatDetailDate(product.updated_at)}
           </DetailField>
         </DetailFieldGrid>
       </DetailSection>
       <DetailSection
-        title="产品管理"
-        description="删除后产品将不能再被新的工作流使用"
+        title={t("productDetail.management")}
+        description={t("productDetail.managementHint")}
         icon={ShoppingBag}
         className="border-destructive/20"
       >
@@ -241,7 +249,7 @@ export function ProductShow({
           onClick={() => remove.mutate(id, { onSuccess: onBack })}
         >
           <Trash2 className="mr-1.5 h-4 w-4" />
-          删除产品
+          {t("productDetail.delete")}
         </Button>
       </DetailSection>
     </DetailPage>

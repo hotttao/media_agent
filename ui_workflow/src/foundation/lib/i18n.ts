@@ -35,11 +35,11 @@ void i18n
   .init({
     resources,
     supportedLngs: Object.keys(resources),
-    fallbackLng: "en-US",
+    fallbackLng: "zh-CN",
     load: "currentOnly",
     debug: false,
     detection: {
-      order: ["localStorage", "navigator"],
+      order: ["localStorage"],
       caches: ["localStorage"],
       lookupLocalStorage: LANGUAGE_STORAGE_KEY,
       convertDetectedLanguage: (lng: string) =>
@@ -49,11 +49,20 @@ void i18n
     react: { useSuspense: false },
   });
 
+i18n.on("languageChanged", (language) => {
+  if (typeof document !== "undefined") document.documentElement.lang = language;
+});
+if (typeof document !== "undefined") {
+  document.documentElement.lang = i18n.language || "zh-CN";
+}
+
 // Plugin mode: follow host language changes. Standalone has no window.tos and
 // relies on LanguageDetector alone.
 if (isPluginHost() && window.tos) {
   window.tos.events.on("lang.change", (lng: string) => {
-    void i18n.changeLanguage(lng);
+    void i18n.changeLanguage(
+      lng.toLowerCase().startsWith("zh") ? "zh-CN" : "en-US",
+    );
   });
 }
 

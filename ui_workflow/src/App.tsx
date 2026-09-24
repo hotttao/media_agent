@@ -4,8 +4,10 @@
  * mount the Desktop shell.
  */
 import { lazy, Suspense } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { LanguageSwitcher } from "@/foundation/components/language-switcher";
 import { useAuth } from "@/foundation/providers/auth-provider";
 import { AuthPage } from "@/pages/auth/AuthPage";
 
@@ -24,6 +26,7 @@ function AppLoading() {
 }
 
 export default function App() {
+  const { t } = useTranslation();
   const { user, isLoading, login } = useAuth();
   const pathname = window.location.pathname;
 
@@ -46,12 +49,13 @@ export default function App() {
           <div>
             <h1 className="text-lg font-semibold">Media Workflow</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Sign in to use Materials and Workflow.
+              {t("auth.signInHint")}
             </p>
           </div>
           <Button onClick={() => login(window.location.pathname)}>
-            Sign in
+            {t("auth.signIn")}
           </Button>
+          <LanguageSwitcher />
         </div>
       </div>
     );

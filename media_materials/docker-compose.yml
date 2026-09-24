@@ -10,6 +10,8 @@ services:
     environment:
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-materials?sslmode=disable
       MEDIA_AUTH_URL: http://host.docker.internal:8001
+      INTERNAL_JWKS_URL: http://host.docker.internal:18080/.well-known/jwks.json
+      ORY_KRATOS_PUBLIC_URL: http://host.docker.internal:18080
       MEDIA_STORAGE_PROVIDER: s3
       MEDIA_STORAGE_ENDPOINT: http://media-storage:8333
       MEDIA_STORAGE_PUBLIC_ENDPOINT: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://192.168.2.41:8333}
@@ -25,6 +27,10 @@ services:
     extra_hosts:
     - host.docker.internal:host-gateway
     restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     networks: [media-net]
 
 networks:

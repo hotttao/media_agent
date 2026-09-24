@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Spinner } from "@/components/ui/spinner";
 import { ProductForm } from "@/domains/products/components/product-form";
 import { useProduct } from "@/domains/products/hooks/use-product";
@@ -36,6 +37,7 @@ export function ProductEdit({
   id: string;
   onDone: () => void;
 }) {
+  const { t } = useTranslation();
   const { data: product, isLoading } = useProduct(id);
   const updateProduct = useUpdateProduct();
   const [value, setValue] = useState<ProductInput | null>(null);
@@ -73,14 +75,14 @@ export function ProductEdit({
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-auto p-4">
-      <h2 className="text-lg font-semibold">Edit Product</h2>
+      <h2 className="text-lg font-semibold">{t("productForm.editTitle")}</h2>
       <ProductForm
         value={value}
         onChange={setValue}
         onSubmit={() =>
           updateProduct.mutate({ id, patch: value }, { onSuccess: onDone })
         }
-        submitLabel="Save"
+        submitLabel={t("common.save")}
         isPending={updateProduct.isPending}
         onCancel={onDone}
         isEdit

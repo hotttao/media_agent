@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/foundation/lib/utils";
 import type { ProductStatus } from "@/domains/products/types";
 
@@ -8,9 +9,10 @@ const STATUS_STYLE: Record<ProductStatus, string> = {
 };
 
 export function StatusBadge({ status }: { status: ProductStatus }) {
+  const { t } = useTranslation();
   return (
     <Badge className={cn("font-medium capitalize", STATUS_STYLE[status])}>
-      {status}
+      {t(`common.status.${status}`)}
     </Badge>
   );
 }

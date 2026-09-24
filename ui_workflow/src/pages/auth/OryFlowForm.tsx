@@ -1,5 +1,6 @@
 import { CircleAlert, LoaderCircle } from "lucide-react";
 import type { FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,7 @@ import type { OryBrowserFlow, OryUiNode } from "@/foundation/lib/ory-flow";
 import { cn } from "@/foundation/lib/utils";
 
 interface OryFlowFormProps {
+  kind: "login" | "registration";
   flow: OryBrowserFlow;
   isSubmitting: boolean;
   error: string | null;
@@ -19,11 +21,13 @@ function fieldID(node: OryUiNode): string {
 }
 
 export function OryFlowForm({
+  kind,
   flow,
   isSubmitting,
   error,
   onSubmit,
 }: OryFlowFormProps) {
+  const { t } = useTranslation();
   const inputNodes = flow.ui.nodes.filter(
     (node) =>
       node.type === "input" &&
@@ -79,7 +83,9 @@ export function OryFlowForm({
       {inputNodes.map((node) => {
         const attributes = node.attributes;
         const id = fieldID(node);
-        const label = node.meta.label?.text ?? attributes.name;
+        const label = t(`auth.fields.${attributes.name.replaceAll(".", "_")}`, {
+          defaultValue: node.meta.label?.text ?? attributes.name,
+        });
         return (
           <div className="space-y-2" key={`${node.group}-${attributes.name}`}>
             <Label htmlFor={id}>
@@ -128,7 +134,11 @@ export function OryFlowForm({
             value={node.attributes.value}
           >
             {isSubmitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
-            {node.meta.label?.text ?? "Continue"}
+            {node.attributes.value === "password"
+              ? t(kind === "registration" ? "auth.register" : "auth.signIn")
+              : t(`auth.submit.${node.attributes.value ?? "continue"}`, {
+                  defaultValue: node.meta.label?.text ?? t("auth.continue"),
+                })}
           </Button>
         ))}
       </div>

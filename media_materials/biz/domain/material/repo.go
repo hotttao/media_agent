@@ -24,7 +24,7 @@ type BindingRepo interface {
 type ListQuery struct {
 	OrganizationID string
 	Scope          string
-	AssetKind      string
+	AssetKinds     []string
 	Owner          string
 	Visibility     string
 	CallerID       string

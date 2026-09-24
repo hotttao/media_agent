@@ -7,7 +7,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/ut"
 )
 
-func TestLegacyRoutesAreUnavailableInOrganizationLibraryMilestone(t *testing.T) {
+func TestDeferredRoutesAreUnavailableInOrganizationLibraryMilestone(t *testing.T) {
 	h := server.Default()
 	register(h)
 
@@ -16,7 +16,6 @@ func TestLegacyRoutesAreUnavailableInOrganizationLibraryMilestone(t *testing.T) 
 		path   string
 	}{
 		{method: "GET", path: "/api/v1/generated-assets"},
-		{method: "GET", path: "/api/v1/asset-kinds"},
 		{method: "POST", path: "/api/internal/v1/reachability/asset"},
 	}
 	for _, tt := range tests {

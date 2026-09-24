@@ -1,5 +1,6 @@
 import { ImageIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/foundation/lib/utils";
 
 export function libraryObjectResolveURL(
@@ -89,5 +90,60 @@ export function LibraryImage({
       loading="lazy"
       onError={() => setFailed(true)}
     />
+  );
+}
+
+export function LibraryVideo({
+  organizationId,
+  objectPath,
+  className,
+  controls = true,
+}: {
+  organizationId?: string;
+  objectPath?: string;
+  className?: string;
+  controls?: boolean;
+}) {
+  const { t } = useTranslation();
+  const [src, setSrc] = useState<string>();
+  const [failed, setFailed] = useState(false);
+  const resolveURL = libraryObjectResolveURL(organizationId, objectPath);
+  useEffect(() => {
+    setSrc(undefined);
+    setFailed(false);
+    if (!resolveURL) return;
+    const controller = new AbortController();
+    void fetch(resolveURL, {
+      credentials: "include",
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`resolve video: ${response.status}`);
+        return response.json() as Promise<{ url?: string }>;
+      })
+      .then((result) => {
+        if (!result.url) throw new Error("resolved video URL is empty");
+        setSrc(result.url);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
+        setFailed(true);
+      });
+    return () => controller.abort();
+  }, [resolveURL]);
+  return src && !failed ? (
+    // biome-ignore lint/a11y/useMediaCaption: migrated source videos have no caption track to attach.
+    <video
+      className={cn("h-full w-full object-contain", className)}
+      src={src}
+      controls={controls}
+      preload="metadata"
+      onError={() => setFailed(true)}
+    />
+  ) : (
+    <div className="flex h-full items-center justify-center bg-muted/40 text-xs text-muted-foreground">
+      {t(failed ? "uploadField.videoFailed" : "uploadField.videoLoading")}
+    </div>
   );
 }

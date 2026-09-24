@@ -32,7 +32,7 @@ func parseConfig(args []string) (config, error) {
 	fs.StringVar(&cfg.targetURL, "target-url", env("MEDIA_MATERIALS_URL", "http://127.0.0.1:18080"), "目标网关地址")
 	fs.StringVar(&cfg.organizationID, "organization-id", env("MEDIA_MATERIALS_ORGANIZATION_ID", ""), "目标公司 ID")
 	fs.StringVar(&cfg.scope, "scope", env("MEDIA_MATERIALS_SCOPE", "ai_clothing"), "目标业务 scope")
-	fs.StringVar(&cfg.only, "only", "all", "迁移范围：all、material、virtual-ip、product")
+	fs.StringVar(&cfg.only, "only", "all", "迁移范围：all、material、movement、virtual-ip、product")
 	fs.StringVar(&cfg.sessionCookieName, "session-cookie-name", env("MEDIA_MATERIALS_SESSION_COOKIE_NAME", "ory_kratos_session"), "目标会话 cookie 名")
 	fs.StringVar(&cfg.sessionCookie, "session-cookie", env("MEDIA_E2E_KRATOS_SESSION_COOKIE", ""), "ory_kratos_session cookie 值")
 	fs.StringVar(&cfg.bearerToken, "bearer-token", env("MEDIA_MATERIALS_BEARER_TOKEN", ""), "目标 API Bearer token")
@@ -59,7 +59,7 @@ func parseConfig(args []string) (config, error) {
 		return config{}, errors.New("session-cookie-name 不能为空")
 	}
 	switch cfg.only {
-	case "all", "material", "virtual-ip", "product":
+	case "all", "material", "movement", "virtual-ip", "product":
 	default:
 		return config{}, fmt.Errorf("未知迁移范围: %q", cfg.only)
 	}

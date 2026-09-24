@@ -47,8 +47,17 @@ type sourceProductImage struct {
 	Order   int
 }
 
+type sourceMovement struct {
+	ID, Content          string
+	URL, Clothing, Scope sql.NullString
+	IsGeneral            bool
+	CreatedAt            time.Time
+	PoseIDs              []string
+}
+
 type sourceData struct {
 	Materials  []sourceMaterial
+	Movements  []sourceMovement
 	VirtualIPs []sourceVirtualIP
 	Products   []sourceProduct
 }
@@ -106,6 +115,10 @@ func loadSource(ctx context.Context, db *sql.DB) (sourceData, error) {
 	if err != nil {
 		return sourceData{}, err
 	}
+	movements, err := loadMovements(ctx, db)
+	if err != nil {
+		return sourceData{}, err
+	}
 	virtualIPs, err := loadVirtualIPs(ctx, db)
 	if err != nil {
 		return sourceData{}, err
@@ -114,7 +127,43 @@ func loadSource(ctx context.Context, db *sql.DB) (sourceData, error) {
 	if err != nil {
 		return sourceData{}, err
 	}
-	return sourceData{Materials: materials, VirtualIPs: virtualIPs, Products: products}, nil
+	return sourceData{Materials: materials, Movements: movements, VirtualIPs: virtualIPs, Products: products}, nil
+}
+
+func loadMovements(ctx context.Context, db *sql.DB) ([]sourceMovement, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, url, content, clothing, scope, is_general, created_at FROM movement_materials ORDER BY created_at, id`)
+	if err != nil {
+		return nil, fmt.Errorf("读取 movement_materials: %w", err)
+	}
+	defer rows.Close()
+	var result []sourceMovement
+	index := make(map[string]int)
+	for rows.Next() {
+		var item sourceMovement
+		if err := rows.Scan(&item.ID, &item.URL, &item.Content, &item.Clothing, &item.Scope, &item.IsGeneral, &item.CreatedAt); err != nil {
+			return nil, fmt.Errorf("扫描 movement_material: %w", err)
+		}
+		index[item.ID] = len(result)
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	links, err := db.QueryContext(ctx, `SELECT pose_id, movement_id FROM pose_movements ORDER BY movement_id, pose_id`)
+	if err != nil {
+		return nil, fmt.Errorf("读取 pose_movements: %w", err)
+	}
+	defer links.Close()
+	for links.Next() {
+		var poseID, movementID string
+		if err := links.Scan(&poseID, &movementID); err != nil {
+			return nil, err
+		}
+		if i, ok := index[movementID]; ok {
+			result[i].PoseIDs = append(result[i].PoseIDs, poseID)
+		}
+	}
+	return result, links.Err()
 }
 
 func loadMaterials(ctx context.Context, db *sql.DB) ([]sourceMaterial, error) {

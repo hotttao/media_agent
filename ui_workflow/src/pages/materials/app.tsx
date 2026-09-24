@@ -8,6 +8,7 @@
 
 import { Plus } from "lucide-react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { hostShim } from "@/foundation/lib/host-shim";
 import { AssetKindCreate } from "./asset-kind/create";
@@ -37,15 +38,16 @@ type Resource =
   | "generated_asset";
 type View = "list" | "show" | "create" | "edit";
 
-const RESOURCES: { id: Resource; label: string; readonly?: boolean }[] = [
-  { id: "material", label: "Materials" },
-  { id: "virtual_ip", label: "Virtual IPs" },
-  { id: "product", label: "Products" },
-  { id: "asset_kind", label: "Asset Kinds" },
-  { id: "generated_asset", label: "Generated", readonly: true },
+const RESOURCES: { id: Resource; labelKey: string; readonly?: boolean }[] = [
+  { id: "material", labelKey: "nav.materials" },
+  { id: "virtual_ip", labelKey: "nav.virtualIps" },
+  { id: "product", labelKey: "nav.products" },
+  { id: "asset_kind", labelKey: "nav.assetKinds" },
+  { id: "generated_asset", labelKey: "nav.generated", readonly: true },
 ];
 
 export function MaterialsApp({ instanceId }: { instanceId: string }) {
+  const { t } = useTranslation();
   const {
     useAppHeaderSlot,
     AppHeaderButton,
@@ -90,8 +92,8 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
         createPortal(
           <AppHeaderButton
             icon={Plus}
-            label="New"
-            title="New"
+            label={t("common.new")}
+            title={t("common.new")}
             onClick={() => {
               setSelectedId(null);
               setView("create");
@@ -108,7 +110,7 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
             <TabsList>
               {RESOURCES.map((r) => (
                 <TabsTrigger key={r.id} value={r.id}>
-                  {r.label}
+                  {t(r.labelKey)}
                 </TabsTrigger>
               ))}
             </TabsList>

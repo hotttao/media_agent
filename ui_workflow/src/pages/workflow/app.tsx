@@ -6,6 +6,7 @@
 
 import { Plus } from "lucide-react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { hostShim } from "@/foundation/lib/host-shim";
 import { JobCreate } from "./job/create";
@@ -23,13 +24,14 @@ import { WorkflowShow } from "./workflow/show";
 type Resource = "template" | "workflow" | "job";
 type View = "list" | "show" | "create" | "edit";
 
-const RESOURCES: { id: Resource; label: string }[] = [
-  { id: "template", label: "Templates" },
-  { id: "workflow", label: "Workflows" },
-  { id: "job", label: "Jobs" },
+const RESOURCES: { id: Resource; labelKey: string }[] = [
+  { id: "template", labelKey: "nav.templates" },
+  { id: "workflow", labelKey: "nav.workflows" },
+  { id: "job", labelKey: "nav.jobs" },
 ];
 
 export function WorkflowApp({ instanceId }: { instanceId: string }) {
+  const { t } = useTranslation();
   const {
     useAppHeaderSlot,
     AppHeaderButton,
@@ -70,8 +72,8 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
         createPortal(
           <AppHeaderButton
             icon={Plus}
-            label="New"
-            title="New"
+            label={t("common.new")}
+            title={t("common.new")}
             onClick={() => {
               setSelectedId(null);
               setView("create");
@@ -88,7 +90,7 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
             <TabsList>
               {RESOURCES.map((r) => (
                 <TabsTrigger key={r.id} value={r.id}>
-                  {r.label}
+                  {t(r.labelKey)}
                 </TabsTrigger>
               ))}
             </TabsList>

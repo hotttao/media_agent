@@ -8,8 +8,20 @@ import { WorkflowApp } from "@/pages/workflow/app";
  * panels via window.tos.registerPanel (see src/plugin.tsx).
  */
 export function useStandaloneApps(): AppDefinition[] {
+  const { t } = useTranslation();
   return [
-    { id: "materials", label: "Materials", Component: MaterialsApp, group: "tool" },
-    { id: "workflow", label: "Workflow", Component: WorkflowApp, group: "tool" },
+    {
+      id: "materials",
+      label: t("nav.materials"),
+      Component: MaterialsApp,
+      group: "tool",
+    },
+    {
+      id: "workflow",
+      label: t("nav.workflow"),
+      Component: WorkflowApp,
+      group: "tool",
+    },
   ];
 }
+import { useTranslation } from "react-i18next";
