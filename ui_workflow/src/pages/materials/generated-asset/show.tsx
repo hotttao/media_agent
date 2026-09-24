@@ -1,13 +1,17 @@
+import { ArrowLeft, Boxes, GitBranch, ImageIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useGeneratedAsset } from "@/domains/generated-assets/hooks/use-generated-asset";
 import { useDeleteGeneratedAsset } from "@/domains/generated-assets/hooks/use-generated-asset-mutations";
 import { VisibilityBadge } from "@/domains/materials/components/visibility-badge";
+import {
+  DetailField,
+  DetailFieldGrid,
+  DetailPage,
+  DetailSection,
+  formatDetailDate,
+} from "@/foundation/components/detail-layout";
 
-// GeneratedAsset is read-only (created by workflow execution); show view only
-// has Back + Delete (no Edit). Generation provenance (job_id / step_run_id /
-// template_id / template_version / source_virtual_ip_id / source_product_id)
-// is rendered in a dedicated section.
 export function GeneratedAssetShow({
   id,
   onBack,
@@ -16,92 +20,118 @@ export function GeneratedAssetShow({
   onBack: () => void;
 }) {
   const { data: asset, isLoading } = useGeneratedAsset(id);
-  const deleteGeneratedAsset = useDeleteGeneratedAsset();
-
-  if (isLoading) {
+  const remove = useDeleteGeneratedAsset();
+  if (isLoading)
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Spinner className="h-5 w-5" />
       </div>
     );
-  }
-  if (!asset) {
-    return <div className="p-4 text-sm text-muted-foreground">Not found.</div>;
-  }
-
+  if (!asset)
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        没有找到这个生成产物。
+      </div>
+    );
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex items-center justify-between">
+    <DetailPage>
+      <div className="sticky top-0 z-10 -mx-1 flex items-center rounded-xl border border-border/60 bg-background/90 p-2 shadow-sm backdrop-blur-xl">
         <Button variant="ghost" size="sm" onClick={onBack}>
-          Back
+          <ArrowLeft className="mr-1.5 h-4 w-4" />
+          返回生成产物列表
         </Button>
       </div>
-      <dl className="grid grid-cols-3 gap-2 text-sm">
-        <dt className="text-muted-foreground">Name</dt>
-        <dd className="col-span-2 font-medium">{asset.name}</dd>
-        <dt className="text-muted-foreground">Kind</dt>
-        <dd className="col-span-2">{asset.asset_kind}</dd>
-        <dt className="text-muted-foreground">Visibility</dt>
-        <dd className="col-span-2">
-          <VisibilityBadge visibility={asset.visibility} />
-        </dd>
-        <dt className="text-muted-foreground">Scope</dt>
-        <dd className="col-span-2">{asset.scope}</dd>
-        <dt className="text-muted-foreground">URL</dt>
-        <dd className="col-span-2 break-all">{asset.url}</dd>
-        {asset.content ? (
-          <>
-            <dt className="text-muted-foreground">Content</dt>
-            <dd className="col-span-2">{asset.content}</dd>
-          </>
-        ) : null}
-        <dt className="text-muted-foreground">Owner</dt>
-        <dd className="col-span-2">{asset.owner_user_id}</dd>
-        <dt className="text-muted-foreground">Created</dt>
-        <dd className="col-span-2">{asset.created_at}</dd>
-      </dl>
-      {/* Generation provenance (immutable; populated by workflow execution) */}
-      <div className="rounded-md border border-foreground/[0.06] p-3">
-        <h3 className="mb-2 text-xs uppercase text-muted-foreground">
-          Generation Source
-        </h3>
-        <dl className="grid grid-cols-3 gap-2 text-sm">
-          <dt className="text-muted-foreground">Job</dt>
-          <dd className="col-span-2">{asset.job_id}</dd>
-          <dt className="text-muted-foreground">Step Run</dt>
-          <dd className="col-span-2">{asset.step_run_id}</dd>
-          <dt className="text-muted-foreground">Template</dt>
-          <dd className="col-span-2">
-            {asset.template_id}
-            <span className="text-muted-foreground">
-              {" "}
-              (v{asset.template_version})
+      <section className="grid gap-6 lg:grid-cols-[minmax(300px,480px)_1fr] lg:items-start">
+        <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-muted/70 via-muted/30 to-background shadow-sm">
+          {asset.url ? (
+            <img
+              src={asset.url}
+              alt={asset.name}
+              className="h-full w-full object-contain p-2"
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+              <ImageIcon className="h-10 w-10" />
+              <span className="text-sm">暂无可预览媒体</span>
+            </div>
+          )}
+          <span className="absolute bottom-3 left-3 rounded-full bg-black/60 px-2.5 py-1 text-xs text-white backdrop-blur">
+            {asset.asset_kind}
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-col gap-5 lg:pt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+              Generated
             </span>
-          </dd>
-          {asset.source_virtual_ip_id ? (
-            <>
-              <dt className="text-muted-foreground">Source Virtual IP</dt>
-              <dd className="col-span-2">{asset.source_virtual_ip_id}</dd>
-            </>
-          ) : null}
-          {asset.source_product_id ? (
-            <>
-              <dt className="text-muted-foreground">Source Product</dt>
-              <dd className="col-span-2">{asset.source_product_id}</dd>
-            </>
-          ) : null}
-        </dl>
-      </div>
-      <Button
-        variant="destructive"
-        size="sm"
-        onClick={() => {
-          deleteGeneratedAsset.mutate(id);
-          onBack();
-        }}
+            <VisibilityBadge visibility={asset.visibility} />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Generated Asset
+            </p>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              {asset.name}
+            </h1>
+            <p className="mt-3 text-sm leading-7 text-muted-foreground">
+              由工作流执行生成的只读产物。
+            </p>
+          </div>
+          <DetailFieldGrid className="xl:grid-cols-2">
+            <DetailField label="业务范围">{asset.scope}</DetailField>
+            <DetailField label="所有者">{asset.owner_user_id}</DetailField>
+            <DetailField label="素材类别">{asset.asset_kind}</DetailField>
+            <DetailField label="生成时间">
+              {formatDetailDate(asset.created_at)}
+            </DetailField>
+          </DetailFieldGrid>
+        </div>
+      </section>
+      {asset.content ? (
+        <DetailSection
+          title="文本内容"
+          description="工作流生成的文本产物"
+          icon={Boxes}
+        >
+          <p className="whitespace-pre-wrap text-sm leading-7">
+            {asset.content}
+          </p>
+        </DetailSection>
+      ) : null}
+      <DetailSection
+        title="生成来源"
+        description="用于追溯产物对应的工作流、步骤和输入对象"
+        icon={GitBranch}
       >
-        Delete
-      </Button>
-    </div>
+        <DetailFieldGrid>
+          <DetailField label="Job">{asset.job_id}</DetailField>
+          <DetailField label="Step Run">{asset.step_run_id}</DetailField>
+          <DetailField label="Template">{asset.template_id}</DetailField>
+          <DetailField label="模板版本">v{asset.template_version}</DetailField>
+          <DetailField label="来源 Virtual IP">
+            {asset.source_virtual_ip_id}
+          </DetailField>
+          <DetailField label="来源 Product">
+            {asset.source_product_id}
+          </DetailField>
+        </DetailFieldGrid>
+      </DetailSection>
+      <DetailSection
+        title="产物管理"
+        description="删除只会移除产物记录，不会修改原始工作流执行记录"
+        icon={Boxes}
+        className="border-destructive/20"
+      >
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={remove.isPending}
+          onClick={() => remove.mutate(id, { onSuccess: onBack })}
+        >
+          <Trash2 className="mr-1.5 h-4 w-4" />
+          删除产物
+        </Button>
+      </DetailSection>
+    </DetailPage>
   );
 }

@@ -35,6 +35,8 @@ Materials App 为 Organization 成员提供 Material、Virtual IP、Product 的�
 
 - 创建和编辑页使用分组表单，不显示 URL 或 Object Path 文本输入。
 - 详情页必须以图片区展示图片，并展示稳定业务字段；Object Path 只可在诊断信息中折叠展示，本期默认不展示。
+- 详情页按工具栏、主视觉与摘要、业务信息卡片、审计或权限、危险操作分层；多图使用主图与缩略图切换，不把全部大图纵向堆叠。
+- Metadata、External Commerce 等扩展对象使用可读键值、标签和嵌套卡片展示，不向业务用户直接输出 JSON 文本。
 - Virtual IP 表单覆盖 Persona Profile 的基本属性、身体数据、教育职业、人物设定、表达兴趣全部稳定字段。
 - Product 表单覆盖 target audience、product details、display actions、tags、external commerce、metadata 和有序图片。
 - 桌面宽屏允许表单双栏；窄屏自动单栏。上传中、上传失败、空图片和只读状态都有明确视觉反馈。

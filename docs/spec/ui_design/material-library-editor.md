@@ -10,6 +10,8 @@
 - `LibraryObjectField` 管理单图的 local-preview/uploading/uploaded/error 状态，输出 `object_path`。
 - `ProductImagesField` 复用 Library Object Upload，输出有序 `{object_path,is_main,sort_order}`，删除后重排，主图删除后第一张自动成为主图。
 - `LibraryImage` 继续通过 resolve 获取短期 URL；表单已选本地文件优先显示本地预览。
+- `LibraryGallery` 负责详情页主图与缩略图切换；无图片时显示一致的空态。
+- `StructuredDetails` 将扩展对象递归展示为字段、布尔状态和标签集合，详情页禁止使用 JSON `<pre>`。
 
 ## 数据映射
 

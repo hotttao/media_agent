@@ -1,4 +1,15 @@
-import { ArrowLeft, Edit3, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ArrowLeft,
+  BriefcaseBusiness,
+  Edit3,
+  Heart,
+  KeyRound,
+  Ruler,
+  ShieldCheck,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +32,14 @@ import {
   useRevokeVirtualIp,
 } from "@/domains/virtual-ips/hooks/use-virtual-ip-mutations";
 import type { PersonaProfile, Visibility } from "@/domains/virtual-ips/types";
-import { LibraryImage } from "@/foundation/components/library-image";
+import {
+  DetailField,
+  DetailFieldGrid,
+  DetailPage,
+  DetailSection,
+  formatDetailDate,
+} from "@/foundation/components/detail-layout";
+import { LibraryGallery } from "@/foundation/components/library-gallery";
 import { hostShim } from "@/foundation/lib/host-shim";
 
 function profileOf(value: PersonaProfile | string | undefined): PersonaProfile {
@@ -33,26 +51,15 @@ function profileOf(value: PersonaProfile | string | undefined): PersonaProfile {
     return {};
   }
 }
-const profileLabels: Array<[keyof PersonaProfile, string, string?]> = [
-  ["gender", "性别"],
-  ["age", "年龄", "岁"],
-  ["height", "身高", "cm"],
-  ["weight", "体重", "kg"],
-  ["bust", "胸围", "cm"],
-  ["waist", "腰围", "cm"],
-  ["hip", "臀围", "cm"],
-  ["education", "学历"],
-  ["major", "专业"],
-  ["city", "城市"],
-  ["occupation", "职业"],
-  ["income_level", "收入水平"],
-  ["basic_setting", "基础设定"],
-  ["family_background", "家庭背景"],
-  ["personality", "性格"],
-  ["catchphrase", "口头禅"],
-  ["small_habit", "小习惯"],
-  ["hobbies", "兴趣爱好"],
-];
+function genderLabel(value?: PersonaProfile["gender"]) {
+  return value === "FEMALE"
+    ? "女"
+    : value === "MALE"
+      ? "男"
+      : value === "OTHER"
+        ? "其他"
+        : undefined;
+}
 
 export function VirtualIpShow({
   id,
@@ -74,190 +81,282 @@ export function VirtualIpShow({
   const [grantedTeams, setGrantedTeams] = useState<string[]>([]);
   if (isLoading)
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Spinner className="h-5 w-5" />
       </div>
     );
   if (!virtualIp)
-    return <div className="p-4 text-sm text-muted-foreground">Not found.</div>;
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        没有找到这个 Virtual IP。
+      </div>
+    );
   const profile = profileOf(virtualIp.persona_profile);
-  const pictures = [
-    [virtualIp.avatar_object_path, "头像"],
-    [virtualIp.full_body_object_path, "全身照"],
-    [virtualIp.three_view_object_path, "三视图"],
-    [virtualIp.nine_view_object_path, "九宫格"],
-  ] as const;
   return (
-    <div className="flex h-full flex-col gap-6 overflow-auto p-5">
-      <div className="flex items-center justify-between">
+    <DetailPage>
+      <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/90 p-2 shadow-sm backdrop-blur-xl">
         <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          返回
+          <ArrowLeft className="mr-1.5 h-4 w-4" />
+          返回 Virtual IP 列表
         </Button>
         <Button size="sm" onClick={onEdit}>
-          <Edit3 className="mr-1 h-4 w-4" />
-          编辑
+          <Edit3 className="mr-1.5 h-4 w-4" />
+          编辑形象
         </Button>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[minmax(320px,520px)_1fr]">
-        <div className="grid grid-cols-2 gap-2">
-          {pictures.map(([path, label], index) => (
-            <div
-              key={label}
-              className={`relative overflow-hidden rounded-xl border bg-muted/20 ${index === 0 ? "col-span-2 aspect-[4/3]" : "aspect-square"}`}
-            >
-              <LibraryImage
-                organizationId={virtualIp.organization_id ?? organization.id}
-                objectPath={path}
-                alt={`${virtualIp.name} ${label}`}
-                className="object-contain"
-              />
-              <span className="absolute bottom-2 left-2 rounded-full bg-background/80 px-2 py-1 text-xs backdrop-blur">
-                {label}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="grid content-start gap-4">
-          <div className="flex gap-2">
-            <span className="rounded-full bg-muted px-2 py-1 text-xs">
+      <section className="grid gap-6 lg:grid-cols-[minmax(320px,500px)_1fr] lg:items-start">
+        <LibraryGallery
+          organizationId={virtualIp.organization_id ?? organization.id}
+          items={[
+            {
+              objectPath: virtualIp.avatar_object_path,
+              label: "头像",
+              badge: virtualIp.avatar_object_path ? "Avatar" : "尚未上传",
+            },
+            {
+              objectPath: virtualIp.full_body_object_path,
+              label: "全身照",
+              badge: virtualIp.full_body_object_path ? "Full body" : "尚未上传",
+            },
+            {
+              objectPath: virtualIp.three_view_object_path,
+              label: "三视图",
+              badge: virtualIp.three_view_object_path
+                ? "Three view"
+                : "尚未上传",
+            },
+            {
+              objectPath: virtualIp.nine_view_object_path,
+              label: "九宫格",
+              badge: virtualIp.nine_view_object_path ? "Nine view" : "尚未上传",
+            },
+          ]}
+          alt={virtualIp.name}
+          showEmptyItems
+        />
+        <div className="flex min-w-0 flex-col gap-5 lg:pt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium capitalize text-primary">
               {virtualIp.status}
             </span>
             <VisibilityBadge visibility={virtualIp.visibility} />
           </div>
           <div>
-            <h2 className="text-2xl font-semibold">{virtualIp.name}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {virtualIp.description || "暂无描述"}
+            <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Virtual IP
+            </p>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              {virtualIp.name}
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
+              {virtualIp.description ||
+                profile.basic_setting ||
+                "这个形象还没有填写简介。"}
             </p>
           </div>
-          <dl className="grid grid-cols-[90px_1fr] gap-2 text-sm">
-            <dt className="text-muted-foreground">Scope</dt>
-            <dd>{virtualIp.scope}</dd>
-            <dt className="text-muted-foreground">所有者</dt>
-            <dd className="break-all">{virtualIp.owner_user_id}</dd>
-            <dt className="text-muted-foreground">创建时间</dt>
-            <dd>{String(virtualIp.created_at)}</dd>
-            <dt className="text-muted-foreground">更新时间</dt>
-            <dd>{String(virtualIp.updated_at)}</dd>
-          </dl>
+          <DetailFieldGrid className="xl:grid-cols-2">
+            <DetailField label="业务范围">{virtualIp.scope}</DetailField>
+            <DetailField label="所有者">{virtualIp.owner_user_id}</DetailField>
+            <DetailField label="创建时间">
+              {formatDetailDate(virtualIp.created_at)}
+            </DetailField>
+            <DetailField label="最近更新">
+              {formatDetailDate(virtualIp.updated_at)}
+            </DetailField>
+          </DetailFieldGrid>
         </div>
-      </div>
-      <section className="rounded-xl border p-4">
-        <h3 className="mb-4 font-medium">人物画像</h3>
-        <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-          {profileLabels.map(([field, label, unit]) =>
-            profile[field] !== undefined && profile[field] !== "" ? (
-              <div key={field}>
-                <dt className="text-xs text-muted-foreground">{label}</dt>
-                <dd className="mt-1 whitespace-pre-wrap text-sm">
-                  {String(profile[field])}
-                  {unit ? ` ${unit}` : ""}
-                </dd>
-              </div>
-            ) : null,
-          )}
-        </dl>
       </section>
-      <section className="grid gap-4 rounded-xl border p-4">
-        <div>
-          <h3 className="font-medium">权限与生命周期</h3>
-          <p className="text-xs text-muted-foreground">
-            共享范围仍使用现有 visibility 与部门授权模型。
-          </p>
-        </div>
-        <div className="grid gap-2">
-          <Label>可见范围</Label>
-          <Select
-            value={virtualIp.visibility}
-            onValueChange={(visibility) =>
-              changeVisibility.mutate({
-                id,
-                input: { visibility: visibility as Visibility },
-              })
-            }
-          >
-            <SelectTrigger className="max-w-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="private">仅自己</SelectItem>
-              <SelectItem value="team">部门</SelectItem>
-              <SelectItem value="public">组织内公开</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid gap-2">
-          <Label>部门授权</Label>
-          <div className="flex max-w-xl gap-2">
-            <Input
-              placeholder="team_id"
-              value={teamId}
-              onChange={(e) => setTeamId(e.target.value)}
-            />
-            <Button
-              disabled={!teamId || grant.isPending}
-              onClick={() =>
-                grant.mutate(
-                  { id, grant: { team_id: teamId } },
-                  {
-                    onSuccess: () => {
-                      setGrantedTeams((old) =>
-                        old.includes(teamId) ? old : [...old, teamId],
-                      );
-                      setTeamId("");
-                    },
-                  },
-                )
+      <div className="grid gap-5 xl:grid-cols-2">
+        <DetailSection
+          title="基本档案"
+          description="人物的基础身份与所在地信息"
+          icon={UserRound}
+        >
+          <DetailFieldGrid>
+            <DetailField label="性别">
+              {genderLabel(profile.gender)}
+            </DetailField>
+            <DetailField label="年龄">
+              {profile.age === undefined ? undefined : `${profile.age} 岁`}
+            </DetailField>
+            <DetailField label="城市">{profile.city}</DetailField>
+            <DetailField label="职业">{profile.occupation}</DetailField>
+            <DetailField label="学历">{profile.education}</DetailField>
+            <DetailField label="专业">{profile.major}</DetailField>
+          </DetailFieldGrid>
+        </DetailSection>
+        <DetailSection
+          title="外形参数"
+          description="形象生成和服装适配可参考的数据"
+          icon={Ruler}
+        >
+          <DetailFieldGrid>
+            <DetailField label="身高">
+              {profile.height === undefined
+                ? undefined
+                : `${profile.height} cm`}
+            </DetailField>
+            <DetailField label="体重">
+              {profile.weight === undefined
+                ? undefined
+                : `${profile.weight} kg`}
+            </DetailField>
+            <DetailField label="胸围">
+              {profile.bust === undefined ? undefined : `${profile.bust} cm`}
+            </DetailField>
+            <DetailField label="腰围">
+              {profile.waist === undefined ? undefined : `${profile.waist} cm`}
+            </DetailField>
+            <DetailField label="臀围">
+              {profile.hip === undefined ? undefined : `${profile.hip} cm`}
+            </DetailField>
+          </DetailFieldGrid>
+        </DetailSection>
+        <DetailSection
+          title="背景设定"
+          description="人物经历、家庭与社会背景"
+          icon={BriefcaseBusiness}
+        >
+          <DetailFieldGrid className="sm:grid-cols-1">
+            <DetailField label="基础设定">{profile.basic_setting}</DetailField>
+            <DetailField label="家庭背景">
+              {profile.family_background}
+            </DetailField>
+            <DetailField label="收入水平">{profile.income_level}</DetailField>
+          </DetailFieldGrid>
+        </DetailSection>
+        <DetailSection
+          title="性格与表达"
+          description="用于保持角色表达和内容风格一致"
+          icon={Heart}
+        >
+          <DetailFieldGrid className="sm:grid-cols-1">
+            <DetailField label="性格">{profile.personality}</DetailField>
+            <DetailField label="口头禅">{profile.catchphrase}</DetailField>
+            <DetailField label="小习惯">{profile.small_habit}</DetailField>
+            <DetailField label="兴趣爱好">{profile.hobbies}</DetailField>
+          </DetailFieldGrid>
+        </DetailSection>
+      </div>
+      <DetailSection
+        title="权限与共享"
+        description="控制该形象在企业和部门内的可见范围"
+        icon={ShieldCheck}
+      >
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid content-start gap-2">
+            <Label>可见范围</Label>
+            <Select
+              value={virtualIp.visibility}
+              onValueChange={(visibility) =>
+                changeVisibility.mutate({
+                  id,
+                  input: { visibility: visibility as Visibility },
+                })
               }
             >
-              授权
-            </Button>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="private">仅自己</SelectItem>
+                <SelectItem value="team">部门</SelectItem>
+                <SelectItem value="public">组织内公开</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">修改后立即生效。</p>
           </div>
-          {grantedTeams.map((team) => (
-            <div
-              key={team}
-              className="flex max-w-xl items-center justify-between rounded border px-3 py-2 text-sm"
-            >
-              <span className="font-mono">{team}</span>
+          <div className="grid gap-2">
+            <Label>添加部门授权</Label>
+            <div className="flex gap-2">
+              <Input
+                placeholder="输入部门 ID"
+                value={teamId}
+                onChange={(event) => setTeamId(event.target.value)}
+              />
               <Button
-                variant="ghost"
-                size="icon"
+                disabled={!teamId || grant.isPending}
                 onClick={() =>
-                  revoke.mutate(
-                    { id, teamId: team },
+                  grant.mutate(
+                    { id, grant: { team_id: teamId } },
                     {
-                      onSuccess: () =>
-                        setGrantedTeams((old) => old.filter((x) => x !== team)),
+                      onSuccess: () => {
+                        setGrantedTeams((old) =>
+                          old.includes(teamId) ? old : [...old, teamId],
+                        );
+                        setTeamId("");
+                      },
                     },
                   )
                 }
               >
-                <Trash2 className="h-4 w-4" />
+                <KeyRound className="mr-1.5 h-4 w-4" />
+                授权
               </Button>
             </div>
-          ))}
+            {grantedTeams.length ? (
+              <div className="mt-2 grid gap-2">
+                {grantedTeams.map((team) => (
+                  <div
+                    key={team}
+                    className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/25 px-3 py-2"
+                  >
+                    <span className="truncate text-sm">{team}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() =>
+                        revoke.mutate(
+                          { id, teamId: team },
+                          {
+                            onSuccess: () =>
+                              setGrantedTeams((old) =>
+                                old.filter((item) => item !== team),
+                              ),
+                          },
+                        )
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                当前页面还没有新增部门授权。
+              </p>
+            )}
+          </div>
         </div>
-        {virtualIp.status !== "archived" ? (
-          <Button
-            className="self-start"
-            variant="outline"
-            onClick={() => archive.mutate(id)}
-            disabled={archive.isPending}
-          >
-            归档 Virtual IP
-          </Button>
-        ) : null}
-      </section>
-      <Button
-        className="self-start"
-        variant="destructive"
-        size="sm"
-        onClick={() => remove.mutate(id, { onSuccess: onBack })}
+      </DetailSection>
+      <DetailSection
+        title="生命周期管理"
+        description="归档会停止继续使用；删除会移除这条形象记录"
+        icon={Archive}
+        className="border-destructive/20"
       >
-        <Trash2 className="mr-1 h-4 w-4" />
-        删除 Virtual IP
-      </Button>
-    </div>
+        <div className="flex flex-wrap gap-2">
+          {virtualIp.status !== "archived" ? (
+            <Button
+              variant="outline"
+              disabled={archive.isPending}
+              onClick={() => archive.mutate(id)}
+            >
+              <Archive className="mr-1.5 h-4 w-4" />
+              归档 Virtual IP
+            </Button>
+          ) : null}
+          <Button
+            variant="destructive"
+            disabled={remove.isPending}
+            onClick={() => remove.mutate(id, { onSuccess: onBack })}
+          >
+            <Trash2 className="mr-1.5 h-4 w-4" />
+            删除 Virtual IP
+          </Button>
+        </div>
+      </DetailSection>
+    </DetailPage>
   );
 }

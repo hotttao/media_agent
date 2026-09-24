@@ -1,4 +1,15 @@
-import { Archive, ArrowLeft, Edit3, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ArrowLeft,
+  Braces,
+  Edit3,
+  ExternalLink,
+  PackageOpen,
+  ShoppingBag,
+  Sparkles,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { StatusBadge } from "@/domains/products/components/status-badge";
@@ -7,10 +18,18 @@ import {
   useArchiveProduct,
   useDeleteProduct,
 } from "@/domains/products/hooks/use-product-mutations";
-import { LibraryImage } from "@/foundation/components/library-image";
+import {
+  DetailField,
+  DetailFieldGrid,
+  DetailPage,
+  DetailSection,
+  formatDetailDate,
+  StructuredDetails,
+} from "@/foundation/components/detail-layout";
+import { LibraryGallery } from "@/foundation/components/library-gallery";
 import { hostShim } from "@/foundation/lib/host-shim";
 
-function parseJSON<T>(value: T | string | undefined, fallback: T): T {
+function parseValue<T>(value: T | string | undefined, fallback: T): T {
   if (!value) return fallback;
   if (typeof value !== "string") return value;
   try {
@@ -18,20 +37,6 @@ function parseJSON<T>(value: T | string | undefined, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-function Info({
-  label,
-  children,
-}: {
-  label: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="mt-1 whitespace-pre-wrap text-sm">{children || "-"}</div>
-    </div>
-  );
 }
 
 export function ProductShow({
@@ -49,16 +54,20 @@ export function ProductShow({
   const { organization } = hostShim.useShellContext();
   if (isLoading)
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Spinner className="h-5 w-5" />
       </div>
     );
   if (!product)
-    return <div className="p-4 text-sm text-muted-foreground">Not found.</div>;
-  const tags = parseJSON<string[]>(product.tags, []);
-  const actions = parseJSON<unknown[]>(product.display_actions, []);
-  const metadata = parseJSON<Record<string, unknown>>(product.metadata, {});
-  const commerce = parseJSON<Record<string, unknown>>(
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        没有找到这个产品。
+      </div>
+    );
+  const tags = parseValue<string[]>(product.tags, []);
+  const actions = parseValue<unknown[]>(product.display_actions, []);
+  const metadata = parseValue<Record<string, unknown>>(product.metadata, {});
+  const commerce = parseValue<Record<string, unknown>>(
     product.external_commerce,
     {},
   );
@@ -68,11 +77,11 @@ export function ProductShow({
       (a.sort_order ?? 0) - (b.sort_order ?? 0),
   );
   return (
-    <div className="flex h-full flex-col gap-6 overflow-auto p-5">
-      <div className="flex items-center justify-between">
+    <DetailPage>
+      <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/90 p-2 shadow-sm backdrop-blur-xl">
         <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          返回
+          <ArrowLeft className="mr-1.5 h-4 w-4" />
+          返回产品列表
         </Button>
         <div className="flex gap-2">
           {product.status !== "archived" ? (
@@ -82,122 +91,159 @@ export function ProductShow({
               disabled={archive.isPending}
               onClick={() => archive.mutate(id)}
             >
-              <Archive className="mr-1 h-4 w-4" />
+              <Archive className="mr-1.5 h-4 w-4" />
               归档
             </Button>
           ) : null}
           <Button size="sm" onClick={onEdit}>
-            <Edit3 className="mr-1 h-4 w-4" />
-            编辑
+            <Edit3 className="mr-1.5 h-4 w-4" />
+            编辑产品
           </Button>
         </div>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[minmax(300px,480px)_1fr]">
-        <div className="grid grid-cols-2 gap-2">
-          {images.length ? (
-            images.map((image, index) => (
-              <div
-                key={image.id ?? image.object_path}
-                className={`overflow-hidden rounded-xl border bg-muted/20 ${index === 0 ? "col-span-2 aspect-[4/3]" : "aspect-square"}`}
-              >
-                <LibraryImage
-                  organizationId={product.organization_id ?? organization.id}
-                  objectPath={image.object_path}
-                  alt={`${product.name} ${index + 1}`}
-                  className="object-contain"
-                />
-              </div>
-            ))
-          ) : (
-            <div className="col-span-2 aspect-[4/3] overflow-hidden rounded-xl border">
-              <LibraryImage
-                organizationId={organization.id}
-                alt={product.name}
-              />
-            </div>
-          )}
-        </div>
-        <div className="grid content-start gap-5">
-          <div className="flex items-center gap-2">
+      <section className="grid gap-6 lg:grid-cols-[minmax(320px,500px)_1fr] lg:items-start">
+        <LibraryGallery
+          organizationId={product.organization_id ?? organization.id}
+          items={images.map((image, index) => ({
+            objectPath: image.object_path,
+            label: image.is_main ? "产品主图" : `详情图 ${index + 1}`,
+            badge: image.is_main ? "Main image" : undefined,
+          }))}
+          alt={product.name}
+        />
+        <div className="flex min-w-0 flex-col gap-5 lg:pt-3">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={product.status} />
-            <span className="rounded-full bg-muted px-2 py-1 text-xs">
+            <span className="rounded-full border border-border/70 bg-muted/50 px-2.5 py-1 text-xs">
               {product.scope}
             </span>
           </div>
           <div>
-            <h2 className="text-2xl font-semibold">{product.name}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {product.description || "暂无描述"}
+            <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Product
+            </p>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              {product.name}
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
+              {product.description || "这个产品还没有填写描述。"}
             </p>
           </div>
-          <Info label="目标人群">{product.target_audience}</Info>
-          <Info label="产品详情">{product.product_details}</Info>
           {tags.length ? (
             <div className="flex flex-wrap gap-2">
               {tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full border px-2.5 py-1 text-xs"
+                  className="rounded-full border border-primary/15 bg-primary/5 px-3 py-1 text-xs font-medium text-primary"
                 >
                   {tag}
                 </span>
               ))}
             </div>
           ) : null}
+          <DetailFieldGrid className="xl:grid-cols-2">
+            <DetailField label="创建时间">
+              {formatDetailDate(product.created_at)}
+            </DetailField>
+            <DetailField label="最近更新">
+              {formatDetailDate(product.updated_at)}
+            </DetailField>
+          </DetailFieldGrid>
         </div>
+      </section>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <DetailSection
+          title="目标人群"
+          description="产品内容主要面向的用户画像"
+          icon={Users}
+        >
+          <p className="whitespace-pre-wrap text-sm leading-7">
+            {product.target_audience || "暂未填写目标人群。"}
+          </p>
+        </DetailSection>
+        <DetailSection
+          title="产品详情"
+          description="卖点、规格和内容生产所需信息"
+          icon={PackageOpen}
+        >
+          <p className="whitespace-pre-wrap text-sm leading-7">
+            {product.product_details || "暂未填写产品详情。"}
+          </p>
+        </DetailSection>
       </div>
       {actions.length ? (
-        <section className="rounded-xl border p-4">
-          <h3 className="mb-3 font-medium">展示动作</h3>
-          <div className="flex flex-wrap gap-2">
+        <DetailSection
+          title="展示动作"
+          description="拍摄或生成内容时建议采用的展示方式"
+          icon={Sparkles}
+        >
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {actions.map((action, index) => (
-              <span
+              <div
                 key={`${String(action)}-${index}`}
-                className="rounded-lg bg-muted px-3 py-2 text-sm"
+                className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/25 px-3.5 py-3 text-sm"
               >
-                {String(action)}
-              </span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                  {index + 1}
+                </span>
+                <span>{String(action)}</span>
+              </div>
             ))}
           </div>
-        </section>
+        </DetailSection>
       ) : null}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2">
         {Object.keys(commerce).length ? (
-          <section className="rounded-xl border p-4">
-            <h3 className="mb-2 font-medium">外部商城信息</h3>
-            <pre className="overflow-auto rounded bg-muted p-3 text-xs">
-              {JSON.stringify(commerce, null, 2)}
-            </pre>
-          </section>
+          <DetailSection
+            title="商城信息"
+            description="与外部商品页面和交易渠道关联的信息"
+            icon={ExternalLink}
+          >
+            <StructuredDetails value={commerce} />
+          </DetailSection>
         ) : null}
         {Object.keys(metadata).length ? (
-          <section className="rounded-xl border p-4">
-            <h3 className="mb-2 font-medium">Metadata</h3>
-            <pre className="overflow-auto rounded bg-muted p-3 text-xs">
-              {JSON.stringify(metadata, null, 2)}
-            </pre>
-          </section>
+          <DetailSection
+            title="扩展属性"
+            description="尚未进入稳定产品字段的补充信息"
+            icon={Braces}
+          >
+            <StructuredDetails value={metadata} />
+          </DetailSection>
         ) : null}
       </div>
-      <dl className="grid grid-cols-[100px_1fr] gap-2 text-sm">
-        <dt className="text-muted-foreground">Created By</dt>
-        <dd>{product.created_by}</dd>
-        <dt className="text-muted-foreground">Updated By</dt>
-        <dd>{product.updated_by || "-"}</dd>
-        <dt className="text-muted-foreground">Created At</dt>
-        <dd>{String(product.created_at)}</dd>
-        <dt className="text-muted-foreground">Updated At</dt>
-        <dd>{String(product.updated_at)}</dd>
-      </dl>
-      <Button
-        className="self-start"
-        variant="destructive"
-        size="sm"
-        onClick={() => remove.mutate(id, { onSuccess: onBack })}
+      <DetailSection
+        title="审计信息"
+        description="产品记录的创建与最后维护信息"
+        icon={ShoppingBag}
       >
-        <Trash2 className="mr-1 h-4 w-4" />
-        删除产品
-      </Button>
-    </div>
+        <DetailFieldGrid>
+          <DetailField label="创建人">{product.created_by}</DetailField>
+          <DetailField label="更新人">{product.updated_by}</DetailField>
+          <DetailField label="创建时间">
+            {formatDetailDate(product.created_at)}
+          </DetailField>
+          <DetailField label="更新时间">
+            {formatDetailDate(product.updated_at)}
+          </DetailField>
+        </DetailFieldGrid>
+      </DetailSection>
+      <DetailSection
+        title="产品管理"
+        description="删除后产品将不能再被新的工作流使用"
+        icon={ShoppingBag}
+        className="border-destructive/20"
+      >
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={remove.isPending}
+          onClick={() => remove.mutate(id, { onSuccess: onBack })}
+        >
+          <Trash2 className="mr-1.5 h-4 w-4" />
+          删除产品
+        </Button>
+      </DetailSection>
+    </DetailPage>
   );
 }
