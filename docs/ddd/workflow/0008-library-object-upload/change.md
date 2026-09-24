@@ -1,5 +1,10 @@
 # library_object_upload 变更记录
 
+## 2026-09-24 · 支持历史高分辨率身份图
+
+- 将单对象上传上限由 4 MiB 调整为 16 MiB，以无损迁移旧 `media_ai` 中 9 MiB 的 Virtual IP 全身图。
+- 媒体类型、Organization 授权、幂等路径、checksum 冲突和 Storage Provider 边界保持不变；超过 16 MiB 仍在写入对象存储前返回 413。
+
 ## 2026-09-21 · 固化企业资源对象上传边界
 
 - 用户确认浏览器统一调用 `media_materials`，由该服务校验用户和 Organization Membership、生成 Object Path，再以服务身份调用 `media_storage`。

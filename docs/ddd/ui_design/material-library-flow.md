@@ -43,6 +43,6 @@ Materials App 为 Organization 成员提供 Material、Virtual IP、Product 的�
 
 ## 失败与权限
 
-- 401 复用全局登录处理；403/404 显示 Organization 或对象不可用；409 提示重新选择文件；413 明确最大 4 MiB；其他错误允许原文件重试。
+- 401 复用全局登录处理；403/404 显示 Organization 或对象不可用；409 提示重新选择文件；413 明确最大 16 MiB；其他错误允许原文件重试。
 - 上传中禁止提交，避免保存尚未取得 Object Path 的表单。
 - 图片 accept 限制为 JPEG、PNG、WebP、GIF；前端提示不替代服务端校验。
