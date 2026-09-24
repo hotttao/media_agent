@@ -1,6 +1,7 @@
 package library_object_upload
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -48,6 +49,22 @@ func TestUploadBuildsStableObjectPath(t *testing.T) {
 	}
 	if storage.input.ContentType != "image/png" {
 		t.Fatalf("content type=%q, want image/png", storage.input.ContentType)
+	}
+}
+
+func TestUploadAcceptsLegacyFullBodyImageLargerThanFourMiB(t *testing.T) {
+	data := append([]byte{}, pngBytes...)
+	data = append(data, bytes.Repeat([]byte{0}, 9<<20)...)
+	command := validCommand()
+	command.Purpose = "virtual_ip_full_body"
+	command.SizeBytes = int64(len(data))
+	command.Body = bytes.NewReader(data)
+	result, err := New(&fakeStorage{}).Upload(context.Background(), command)
+	if err != nil {
+		t.Fatalf("upload 9 MiB image: %v", err)
+	}
+	if result.SizeBytes != int64(len(data)) {
+		t.Fatalf("stored %d bytes, want %d", result.SizeBytes, len(data))
 	}
 }
 

@@ -16,7 +16,7 @@ import (
 	"media_agent/media_materials/biz/shared/objectstorage"
 )
 
-const MaxUploadBytes int64 = 4 << 20
+const MaxUploadBytes int64 = 16 << 20
 
 var (
 	ErrInvalid     = errors.New("invalid library object upload")
