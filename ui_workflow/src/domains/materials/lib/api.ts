@@ -36,7 +36,9 @@ export {
 
 // ── Material ────────────────────────────────────────────────────────────
 
-export async function listMaterials(params: MaterialListParams = {}): Promise<MaterialsPage> {
+export async function listMaterials(
+  params: MaterialListParams = {},
+): Promise<MaterialsPage> {
   return api.request<MaterialsPage>(`/materials${buildQuery(params)}`);
 }
 
@@ -45,31 +47,56 @@ export async function getMaterial(id: string): Promise<Material> {
 }
 
 export async function createMaterial(input: MaterialInput): Promise<Material> {
-  return api.request<Material>("/materials", {
-    method: "POST",
-    body: JSON.stringify(input),
+  return api.request<Material>(
+    `/materials${buildQuery({ scope: input.scope })}`,
+    {
+      method: "POST",
+      body: JSON.stringify(materialPayload(input)),
+    },
+  );
+}
+
+export async function updateMaterial(
+  id: string,
+  patch: Partial<MaterialInput>,
+): Promise<Material> {
+  return api.request<Material>(`/materials/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(materialPayload(patch)),
   });
 }
 
-export async function updateMaterial(id: string, patch: Partial<MaterialInput>): Promise<Material> {
-  return api.request<Material>(`/materials/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    body: JSON.stringify(patch),
-  });
+function materialPayload(input: Partial<MaterialInput>) {
+  return {
+    name: input.name,
+    description: input.description ?? "",
+    prompt: input.prompt ?? "",
+    object_path: input.object_path ?? "",
+    content: input.content ?? "",
+    metadata: JSON.stringify(input.metadata ?? {}),
+    visibility: input.visibility ?? "private",
+    team_id: input.team_id ?? "",
+    ...(input.asset_kind ? { asset_kind: input.asset_kind } : {}),
+  };
 }
 
 export async function deleteMaterial(id: string): Promise<void> {
-  await api.request<void>(`/materials/${encodeURIComponent(id)}`, { method: "DELETE" });
+  await api.request<void>(`/materials/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function addMaterialBinding(
   materialId: string,
   binding: MaterialBindingInput,
 ): Promise<void> {
-  await api.request<void>(`/materials/${encodeURIComponent(materialId)}/bindings`, {
-    method: "POST",
-    body: JSON.stringify(binding),
-  });
+  await api.request<void>(
+    `/materials/${encodeURIComponent(materialId)}/bindings`,
+    {
+      method: "POST",
+      body: JSON.stringify(binding),
+    },
+  );
 }
 
 export async function removeMaterialBinding(

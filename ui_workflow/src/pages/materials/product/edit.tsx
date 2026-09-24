@@ -16,6 +16,19 @@ function editableMetadata(
   }
 }
 
+function editableList(
+  value: unknown[] | string | undefined,
+): unknown[] | undefined {
+  if (Array.isArray(value)) return value;
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function ProductEdit({
   id,
   onDone,
@@ -33,7 +46,19 @@ export function ProductEdit({
         scope: product.scope,
         name: product.name,
         description: product.description,
+        target_audience: product.target_audience,
+        product_details: product.product_details,
+        display_actions: editableList(product.display_actions),
+        tags: editableList(product.tags)?.map(String),
+        external_commerce: editableMetadata(product.external_commerce),
         metadata: editableMetadata(product.metadata),
+        images: product.images?.map(
+          ({ object_path, is_main = false, sort_order = 0 }) => ({
+            object_path,
+            is_main,
+            sort_order,
+          }),
+        ),
       });
     }
   }, [product]);
@@ -47,7 +72,7 @@ export function ProductEdit({
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex h-full flex-col gap-4 overflow-auto p-4">
       <h2 className="text-lg font-semibold">Edit Product</h2>
       <ProductForm
         value={value}
@@ -58,6 +83,7 @@ export function ProductEdit({
         submitLabel="Save"
         isPending={updateProduct.isPending}
         onCancel={onDone}
+        isEdit
       />
     </div>
   );

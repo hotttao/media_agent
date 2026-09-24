@@ -1,7 +1,7 @@
-import { useAssetKind } from "@/domains/asset-kinds/hooks/use-asset-kind";
-import { useDeleteAssetKind } from "@/domains/asset-kinds/hooks/use-asset-kind-mutations";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { useAssetKind } from "@/domains/asset-kinds/hooks/use-asset-kind";
+import { useDeleteAssetKind } from "@/domains/asset-kinds/hooks/use-asset-kind-mutations";
 
 export function AssetKindShow({
   name,
@@ -57,6 +57,10 @@ export function AssetKindShow({
             <dd className="col-span-2">{assetKind.description}</dd>
           </>
         ) : null}
+        <dt className="text-muted-foreground">Created At</dt>
+        <dd className="col-span-2">{assetKind.created_at}</dd>
+        <dt className="text-muted-foreground">Updated At</dt>
+        <dd className="col-span-2">{assetKind.updated_at}</dd>
       </dl>
       <Button
         variant="destructive"

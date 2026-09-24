@@ -39,10 +39,13 @@ export async function getVirtualIp(id: string): Promise<VirtualIp> {
 export async function createVirtualIp(
   input: VirtualIpInput,
 ): Promise<VirtualIp> {
-  return api.request<VirtualIp>("/virtual-ips", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return api.request<VirtualIp>(
+    `/virtual-ips${buildQuery({ scope: input.scope })}`,
+    {
+      method: "POST",
+      body: JSON.stringify(virtualIpPayload(input, true)),
+    },
+  );
 }
 
 export async function updateVirtualIp(
@@ -51,8 +54,24 @@ export async function updateVirtualIp(
 ): Promise<VirtualIp> {
   return api.request<VirtualIp>(`/virtual-ips/${encodeURIComponent(id)}`, {
     method: "PUT",
-    body: JSON.stringify(patch),
+    body: JSON.stringify(virtualIpPayload(patch, false)),
   });
+}
+
+function virtualIpPayload(
+  input: Partial<VirtualIpInput>,
+  includeVisibility: boolean,
+) {
+  return {
+    name: input.name,
+    description: input.description ?? "",
+    avatar_object_path: input.avatar_object_path ?? "",
+    full_body_object_path: input.full_body_object_path ?? "",
+    three_view_object_path: input.three_view_object_path ?? "",
+    nine_view_object_path: input.nine_view_object_path ?? "",
+    persona_profile: JSON.stringify(input.persona_profile ?? {}),
+    ...(includeVisibility ? { visibility: input.visibility ?? "private" } : {}),
+  };
 }
 
 export async function deleteVirtualIp(id: string): Promise<void> {

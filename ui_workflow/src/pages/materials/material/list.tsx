@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
-import { LibraryImage } from "@/domains/materials/components/library-image";
 import { VisibilityBadge } from "@/domains/materials/components/visibility-badge";
 import { useDeleteMaterial } from "@/domains/materials/hooks/use-material-mutations";
 import { useMaterialsList } from "@/domains/materials/hooks/use-materials-list";
 import type { Material } from "@/domains/materials/types";
+import { LibraryImage } from "@/foundation/components/library-image";
 
 const KIND_STYLES = [
   "from-emerald-500/25 via-teal-500/10 to-cyan-500/20",

@@ -1,11 +1,15 @@
-import { useAssetKindsList } from "@/domains/asset-kinds/hooks/use-asset-kinds-list";
-import { useDeleteAssetKind } from "@/domains/asset-kinds/hooks/use-asset-kind-mutations";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
-import { Trash2 } from "lucide-react";
+import { useDeleteAssetKind } from "@/domains/asset-kinds/hooks/use-asset-kind-mutations";
+import { useAssetKindsList } from "@/domains/asset-kinds/hooks/use-asset-kinds-list";
 
-export function AssetKindList({ onSelect }: { onSelect: (name: string) => void }) {
+export function AssetKindList({
+  onSelect,
+}: {
+  onSelect: (name: string) => void;
+}) {
   const { data, isLoading } = useAssetKindsList();
   const deleteAssetKind = useDeleteAssetKind();
 
@@ -17,7 +21,7 @@ export function AssetKindList({ onSelect }: { onSelect: (name: string) => void }
     );
   }
 
-  const items = data ?? [];
+  const items = data?.items ?? [];
   if (items.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -51,10 +55,16 @@ export function AssetKindList({ onSelect }: { onSelect: (name: string) => void }
                   {k.name}
                 </button>
               </td>
-              <td className="px-3 py-2 text-muted-foreground">{k.resource_type}</td>
-              <td className="px-3 py-2 text-muted-foreground">{k.media_type}</td>
+              <td className="px-3 py-2 text-muted-foreground">
+                {k.resource_type}
+              </td>
+              <td className="px-3 py-2 text-muted-foreground">
+                {k.media_type}
+              </td>
               <td className="px-3 py-2 text-muted-foreground">{k.status}</td>
-              <td className="px-3 py-2 text-muted-foreground">{k.updated_at}</td>
+              <td className="px-3 py-2 text-muted-foreground">
+                {k.updated_at}
+              </td>
               <td className="px-3 py-2">
                 <Button
                   variant="ghost"

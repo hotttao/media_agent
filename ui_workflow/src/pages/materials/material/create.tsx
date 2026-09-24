@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useCreateMaterial } from "@/domains/materials/hooks/use-material-mutations";
 import { MaterialForm } from "@/domains/materials/components/material-form";
+import { useCreateMaterial } from "@/domains/materials/hooks/use-material-mutations";
 import type { MaterialInput } from "@/domains/materials/types";
 
 export function MaterialsCreate({ onDone }: { onDone: () => void }) {
@@ -9,12 +9,12 @@ export function MaterialsCreate({ onDone }: { onDone: () => void }) {
     scope: "",
     asset_kind: "",
     name: "",
-    url: "",
+    object_path: "",
     visibility: "private",
   });
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex h-full flex-col gap-4 overflow-auto p-4">
       <h2 className="text-lg font-semibold">New Material</h2>
       <MaterialForm
         value={value}

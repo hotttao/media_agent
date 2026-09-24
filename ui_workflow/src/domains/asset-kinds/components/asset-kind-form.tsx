@@ -13,6 +13,7 @@ import type {
   AssetKindInput,
   AssetKindMediaType,
   AssetKindResourceType,
+  AssetKindStatus,
 } from "@/domains/asset-kinds/types";
 
 const RESOURCE_TYPES: AssetKindResourceType[] = [
@@ -54,6 +55,26 @@ export function AssetKindForm({
           onChange={(e) => onChange({ ...value, name: e.target.value })}
         />
       </div>
+      {nameDisabled ? (
+        <div className="grid gap-2">
+          <Label>Status</Label>
+          <Select
+            value={value.status ?? "ENABLED"}
+            onValueChange={(status) =>
+              onChange({ ...value, status: status as AssetKindStatus })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ENABLED">ENABLED</SelectItem>
+              <SelectItem value="DISABLED">DISABLED</SelectItem>
+              <SelectItem value="SYSTEM">SYSTEM</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
       <div className="grid gap-2">
         <Label>Resource Type</Label>
         <Select

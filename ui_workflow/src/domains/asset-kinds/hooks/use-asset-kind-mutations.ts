@@ -4,7 +4,10 @@ import {
   deleteAssetKind,
   updateAssetKind,
 } from "@/domains/asset-kinds/lib/api";
-import type { AssetKindInput } from "@/domains/asset-kinds/types";
+import type {
+  AssetKindInput,
+  AssetKindUpdateInput,
+} from "@/domains/asset-kinds/types";
 
 export function useCreateAssetKind() {
   const qc = useQueryClient();
@@ -19,8 +22,13 @@ export function useCreateAssetKind() {
 export function useUpdateAssetKind() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, patch }: { name: string; patch: Partial<AssetKindInput> }) =>
-      updateAssetKind(name, patch),
+    mutationFn: ({
+      name,
+      patch,
+    }: {
+      name: string;
+      patch: AssetKindUpdateInput;
+    }) => updateAssetKind(name, patch),
     onSuccess: (assetKind) => {
       qc.invalidateQueries({ queryKey: ["asset-kinds"] });
       qc.invalidateQueries({ queryKey: ["asset-kind", assetKind.name] });

@@ -5,10 +5,9 @@
  * execution via the internal `UpsertGeneratedAsset` RPC; UI only list/show/delete.
  *
  * Field shapes from idl/media_materials/generated_asset.proto. `updated_at` is
- * present in the generated_assets table (see docs/ddd/media_materials/domain/0002-asset/asset.md)
- * and is exposed by the API even though the proto message omits it; typed as
- * string (int64 serialized as string to preserve precision, matching the
- * Material convention).
+ * The current response exposes created_at but not updated_at; this frontend
+ * follows the HTTP contract rather than assuming every database column is
+ * serialized.
  */
 
 // Visibility is structurally identical to materials' Visibility; duplicated
@@ -34,7 +33,6 @@ export interface GeneratedAsset {
   source_virtual_ip_id?: string;
   source_product_id?: string;
   created_at: string;
-  updated_at: string;
 }
 
 /** Query params for GET /generated-assets (see ListGeneratedAssetsReq). */

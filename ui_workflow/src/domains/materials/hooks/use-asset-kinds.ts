@@ -9,7 +9,9 @@ export function useAssetKinds(resourceType?: AssetKindResourceType) {
     queryKey: ["asset-kinds", resourceType],
     queryFn: async () => {
       const all = await listAssetKinds();
-      return resourceType ? all.filter((k) => k.resource_type === resourceType) : all;
+      return resourceType
+        ? all.items.filter((k) => k.resource_type === resourceType)
+        : all.items;
     },
   });
 }

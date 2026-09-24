@@ -29,7 +29,9 @@ function buildQuery(params: object): string {
 
 // ── Product ─────────────────────────────────────────────────────────────
 
-export async function listProducts(params: ProductListParams = {}): Promise<ProductsPage> {
+export async function listProducts(
+  params: ProductListParams = {},
+): Promise<ProductsPage> {
   return api.request<ProductsPage>(`/products${buildQuery(params)}`);
 }
 
@@ -38,10 +40,13 @@ export async function getProduct(id: string): Promise<Product> {
 }
 
 export async function createProduct(input: ProductInput): Promise<Product> {
-  return api.request<Product>("/products", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return api.request<Product>(
+    `/products${buildQuery({ scope: input.scope })}`,
+    {
+      method: "POST",
+      body: JSON.stringify(productPayload(input)),
+    },
+  );
 }
 
 export async function updateProduct(
@@ -50,12 +55,28 @@ export async function updateProduct(
 ): Promise<Product> {
   return api.request<Product>(`/products/${encodeURIComponent(id)}`, {
     method: "PUT",
-    body: JSON.stringify(patch),
+    body: JSON.stringify(productPayload(patch)),
   });
 }
 
+function productPayload(input: Partial<ProductInput>) {
+  return {
+    name: input.name,
+    description: input.description ?? "",
+    target_audience: input.target_audience ?? "",
+    product_details: input.product_details ?? "",
+    display_actions: JSON.stringify(input.display_actions ?? []),
+    tags: JSON.stringify(input.tags ?? []),
+    external_commerce: JSON.stringify(input.external_commerce ?? {}),
+    metadata: JSON.stringify(input.metadata ?? {}),
+    images: input.images ?? [],
+  };
+}
+
 export async function deleteProduct(id: string): Promise<void> {
-  await api.request<void>(`/products/${encodeURIComponent(id)}`, { method: "DELETE" });
+  await api.request<void>(`/products/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function archiveProduct(id: string): Promise<Product> {

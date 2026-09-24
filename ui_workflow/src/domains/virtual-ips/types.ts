@@ -17,6 +17,27 @@ export type Visibility = "private" | "team" | "public";
 export type VirtualIpStatus = "active" | "archived";
 export type VirtualIpPermission = "viewer" | "editor";
 
+export interface PersonaProfile {
+  age?: number;
+  gender?: "MALE" | "FEMALE" | "OTHER";
+  height?: number;
+  weight?: number;
+  bust?: number;
+  waist?: number;
+  hip?: number;
+  education?: string;
+  major?: string;
+  city?: string;
+  occupation?: string;
+  income_level?: string;
+  basic_setting?: string;
+  family_background?: string;
+  personality?: string;
+  catchphrase?: string;
+  small_habit?: string;
+  hobbies?: string;
+}
+
 // ── VirtualIp (AI 形象 / virtual model) ────────────────────────────────
 
 export interface VirtualIpGrant {
@@ -32,15 +53,11 @@ export interface VirtualIp {
   scope: string;
   name: string;
   description?: string;
-  avatar_url?: string;
   avatar_object_path?: string;
-  full_body_url?: string;
   full_body_object_path?: string;
-  three_view_url?: string;
   three_view_object_path?: string;
-  nine_view_url?: string;
   nine_view_object_path?: string;
-  persona_profile?: Record<string, unknown> | string;
+  persona_profile?: PersonaProfile | string;
   status: VirtualIpStatus;
   visibility: Visibility;
   owner_user_id: string;
@@ -53,10 +70,11 @@ export interface VirtualIpInput {
   scope: string;
   name: string;
   description?: string;
-  avatar_url?: string;
-  full_body_url?: string;
-  three_view_url?: string;
-  nine_view_url?: string;
+  avatar_object_path?: string;
+  full_body_object_path?: string;
+  three_view_object_path?: string;
+  nine_view_object_path?: string;
+  persona_profile?: PersonaProfile;
   visibility?: Visibility;
 }
 

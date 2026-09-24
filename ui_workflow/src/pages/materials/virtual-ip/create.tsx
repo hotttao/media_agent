@@ -12,7 +12,7 @@ export function VirtualIpCreate({ onDone }: { onDone: () => void }) {
   });
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex h-full flex-col gap-4 overflow-auto p-4">
       <h2 className="text-lg font-semibold">New Virtual IP</h2>
       <VirtualIpForm
         value={value}

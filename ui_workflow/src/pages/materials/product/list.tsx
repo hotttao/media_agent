@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
-import { LibraryImage } from "@/domains/materials/components/library-image";
 import { StatusBadge } from "@/domains/products/components/status-badge";
 import { useDeleteProduct } from "@/domains/products/hooks/use-product-mutations";
 import { useProductsList } from "@/domains/products/hooks/use-products-list";
 import type { Product } from "@/domains/products/types";
+import { LibraryImage } from "@/foundation/components/library-image";
 
 function recordOf(value: Product["metadata"]): Record<string, unknown> {
   if (!value) return {};

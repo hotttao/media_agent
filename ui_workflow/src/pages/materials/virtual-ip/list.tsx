@@ -4,17 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
-import { LibraryImage } from "@/domains/materials/components/library-image";
 import { VisibilityBadge } from "@/domains/materials/components/visibility-badge";
 import { useDeleteVirtualIp } from "@/domains/virtual-ips/hooks/use-virtual-ip-mutations";
 import { useVirtualIpsList } from "@/domains/virtual-ips/hooks/use-virtual-ips-list";
 import type { VirtualIp } from "@/domains/virtual-ips/types";
+import { LibraryImage } from "@/foundation/components/library-image";
 
 function profileOf(
   value: VirtualIp["persona_profile"],
 ): Record<string, unknown> {
   if (!value) return {};
-  if (typeof value !== "string") return value;
+  if (typeof value !== "string") return { ...value };
   try {
     return JSON.parse(value) as Record<string, unknown>;
   } catch {

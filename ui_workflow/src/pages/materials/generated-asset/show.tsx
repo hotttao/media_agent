@@ -59,8 +59,6 @@ export function GeneratedAssetShow({
         <dd className="col-span-2">{asset.owner_user_id}</dd>
         <dt className="text-muted-foreground">Created</dt>
         <dd className="col-span-2">{asset.created_at}</dd>
-        <dt className="text-muted-foreground">Updated</dt>
-        <dd className="col-span-2">{asset.updated_at}</dd>
       </dl>
       {/* Generation provenance (immutable; populated by workflow execution) */}
       <div className="rounded-md border border-foreground/[0.06] p-3">

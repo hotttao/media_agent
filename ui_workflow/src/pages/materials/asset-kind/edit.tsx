@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
+import { Spinner } from "@/components/ui/spinner";
+import { AssetKindForm } from "@/domains/asset-kinds/components/asset-kind-form";
 import { useAssetKind } from "@/domains/asset-kinds/hooks/use-asset-kind";
 import { useUpdateAssetKind } from "@/domains/asset-kinds/hooks/use-asset-kind-mutations";
-import { AssetKindForm } from "@/domains/asset-kinds/components/asset-kind-form";
-import { Spinner } from "@/components/ui/spinner";
 import type { AssetKindInput } from "@/domains/asset-kinds/types";
 
-export function AssetKindEdit({ name, onDone }: { name: string; onDone: () => void }) {
+export function AssetKindEdit({
+  name,
+  onDone,
+}: {
+  name: string;
+  onDone: () => void;
+}) {
   const { data: assetKind, isLoading } = useAssetKind(name);
   const updateAssetKind = useUpdateAssetKind();
   const [value, setValue] = useState<AssetKindInput | null>(null);
@@ -17,6 +23,7 @@ export function AssetKindEdit({ name, onDone }: { name: string; onDone: () => vo
         resource_type: assetKind.resource_type,
         media_type: assetKind.media_type,
         description: assetKind.description,
+        status: assetKind.status,
       });
     }
   }, [assetKind]);
@@ -36,7 +43,16 @@ export function AssetKindEdit({ name, onDone }: { name: string; onDone: () => vo
         value={value}
         onChange={setValue}
         onSubmit={() =>
-          updateAssetKind.mutate({ name, patch: value }, { onSuccess: onDone })
+          updateAssetKind.mutate(
+            {
+              name,
+              patch: {
+                description: value.description,
+                status: value.status ?? "ENABLED",
+              },
+            },
+            { onSuccess: onDone },
+          )
         }
         submitLabel="Save"
         isPending={updateAssetKind.isPending}

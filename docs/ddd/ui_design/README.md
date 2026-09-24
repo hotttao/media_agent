@@ -19,6 +19,7 @@
 
 Agent Request 交互见 [agent-request-flow.md](agent-request-flow.md)。
 浏览器认证、恢复与登出见 [authentication-flow.md](authentication-flow.md)。
+企业素材创建、图片上传与详情维护见 [material-library-flow.md](material-library-flow.md)。
 
 ## 设计与验证
 

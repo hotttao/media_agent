@@ -33,7 +33,9 @@ export function MaterialsEdit({
         scope: material.scope,
         asset_kind: material.asset_kind,
         name: material.name,
-        url: material.url ?? material.object_path ?? "",
+        object_path: material.object_path ?? "",
+        description: material.description,
+        prompt: material.prompt,
         content: material.content,
         visibility: material.visibility,
         team_id: material.team_id,
@@ -51,7 +53,7 @@ export function MaterialsEdit({
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex h-full flex-col gap-4 overflow-auto p-4">
       <h2 className="text-lg font-semibold">Edit Material</h2>
       <MaterialForm
         value={value}
@@ -62,6 +64,7 @@ export function MaterialsEdit({
         submitLabel="Save"
         isPending={updateMaterial.isPending}
         onCancel={onDone}
+        isEdit
       />
     </div>
   );

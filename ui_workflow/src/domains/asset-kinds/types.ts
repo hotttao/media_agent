@@ -37,6 +37,17 @@ export interface AssetKindInput {
   resource_type: AssetKindResourceType;
   media_type: AssetKindMediaType;
   description?: string;
+  status?: AssetKindStatus;
+}
+
+export interface AssetKindUpdateInput {
+  description?: string;
+  status: AssetKindStatus;
+}
+
+export interface AssetKindsPage {
+  items: AssetKind[];
+  total: number;
 }
 
 /** ListAssetKindsReq query params. */

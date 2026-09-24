@@ -28,7 +28,6 @@ export interface Material {
   scope: string;
   asset_kind: string;
   name: string;
-  url?: string;
   object_path?: string;
   description?: string;
   prompt?: string;
@@ -45,7 +44,9 @@ export interface MaterialInput {
   scope: string;
   asset_kind: string;
   name: string;
-  url: string;
+  description?: string;
+  prompt?: string;
+  object_path?: string;
   content?: string;
   visibility?: Visibility;
   team_id?: string;
@@ -55,7 +56,7 @@ export interface MaterialInput {
 export interface MaterialListParams {
   scope?: string;
   asset_kind?: string;
-  owner_user_id?: string;
+  only_mine?: boolean;
   visibility?: Visibility;
   page?: number;
   page_size?: number;
