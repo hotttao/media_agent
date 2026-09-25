@@ -125,7 +125,7 @@ import "media_workflow/template.proto";  // ResourceType / TemplateStatus 复用
 enum WorkflowStatus { WORKFLOW_STATUS_UNSPECIFIED = 0; DRAFT = 1; PUBLISHED = 2; ARCHIVED = 3; }
 enum WorkflowInputSource { WIS_UNSPECIFIED = 0; WORKFLOW_INPUT = 1; STEP_OUTPUT = 2; CONST = 3; }
 
-message WorkflowInputBinding {
+message WorkflowSlotBinding {
   WorkflowInputSource source = 1;
   string ref = 2;          // STEP_OUTPUT → step.key；其余空
   string const_value = 3;  // CONST 时字面值
@@ -136,7 +136,7 @@ message WorkflowStep {
   int32 step_order = 3;
   string template_id = 4;
   int32 template_version = 5;
-  map<string, WorkflowInputBinding> input_bindings = 6;  // key = slot.name
+  map<string, WorkflowSlotBinding> slot_bindings = 6;  // key = slot.name
 }
 message InputSchemaEntry {
   string name = 1;
@@ -462,7 +462,7 @@ CREATE TABLE template_grants (
 CREATE INDEX idx_template_grants_team ON template_grants (team_id);
 ```
 
-### 3.2 workflows / workflow_steps / step_bindings / workflow_grants
+### 3.2 workflows / workflow_steps / slot_bindings / workflow_grants
 
 ```sql
 CREATE TABLE workflows (
@@ -499,7 +499,7 @@ CREATE UNIQUE INDEX uk_workflow_steps_key ON workflow_steps (workflow_id, versio
 CREATE UNIQUE INDEX uk_workflow_steps_order ON workflow_steps (workflow_id, version, step_order);
 CREATE INDEX idx_workflow_steps_template ON workflow_steps (template_id, template_version);
 
-CREATE TABLE step_bindings (
+CREATE TABLE slot_bindings (
   id text PRIMARY KEY,
   step_id text NOT NULL REFERENCES workflow_steps(id) ON DELETE CASCADE,
   to_input text NOT NULL,                      -- slot.name
@@ -514,7 +514,7 @@ CREATE TABLE step_bindings (
     (source = 'CONST'          AND const_value IS NOT NULL AND ref IS NULL)
   )
 );
-CREATE UNIQUE INDEX uk_step_bindings ON step_bindings (step_id, to_input);
+CREATE UNIQUE INDEX uk_slot_bindings ON slot_bindings (step_id, to_input);
 
 CREATE TABLE workflow_grants (
   workflow_id text NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,

@@ -5,7 +5,7 @@
   - 旧版 `step.inputBindings` 的三选一语义沿用。
   - 旧版 `team_id` 字段**移除**：归属 / 创建者改为 `created_by` + 强制 `scope`；team 概念在本服务**不建模**，权限由 `media_auth` 决定。
   - `workflow_inputs` / `output_step_key` / `status` / `version` 沿用；`step_order` 由提交顺序推导为持久列。
-  - `StepBinding` 三选一互斥用 CHECK 表达。
+  - `SlotBinding` 三选一互斥用 CHECK 表达。
 
 ## 修改记录
 
@@ -55,3 +55,10 @@
 
 - Step 新增 `approval_policy = when_multiple_candidates | always`。
 - 多 Candidate 始终需要用户审批；always 进一步要求单 Candidate 也审批，不提供跳过多候选审批的策略。
+
+## 2026-09-25：显式 Executable Workflow IR
+
+- Workflow 发布采用 Semantic Compiler → `ExecutableWorkflowIR` → Conductor Backend Compiler 两阶段编译。
+- IR 中节点统一称为 `ExecutableStepIR`；不再使用 `CompiledStepPlan`。
+- Conductor Definition 内嵌每个 Step IR 降低后的执行语义，运行时不从 `workflow_compilations` 查询转换计划。
+- 原 `StepBinding`/`input_bindings` 统一更名为 `SlotBinding`/`slot_bindings`，明确其目标是 Template Slot；Semantic Compiler 将其消解为 IR `context`。

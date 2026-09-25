@@ -169,7 +169,7 @@ func ChangeWorkflowVisibility(ctx context.Context, c *app.RequestContext) {
 
 // —— 映射 ——
 
-func sourceFromPB(s pb.WorkflowInputSource) domain.BindingSource {
+func sourceFromPB(s pb.WorkflowInputSource) domain.SlotBindingSource {
 	switch s {
 	case pb.WorkflowInputSource_WORKFLOW_INPUT:
 		return domain.SourceWorkflowInput
@@ -181,7 +181,7 @@ func sourceFromPB(s pb.WorkflowInputSource) domain.BindingSource {
 	return ""
 }
 
-func sourceToPB(s domain.BindingSource) pb.WorkflowInputSource {
+func sourceToPB(s domain.SlotBindingSource) pb.WorkflowInputSource {
 	switch s {
 	case domain.SourceWorkflowInput:
 		return pb.WorkflowInputSource_WORKFLOW_INPUT
@@ -206,14 +206,14 @@ func stepsFromPB(in []*pb.WorkflowStep) []domain.Step {
 			st.ReusePolicy = domain.ReuseIfAvailable
 		}
 		// map 不保证顺序，按 key 排序保证 display_order 稳定
-		keys := make([]string, 0, len(s.GetInputBindings()))
-		for k := range s.GetInputBindings() {
+		keys := make([]string, 0, len(s.GetSlotBindings()))
+		for k := range s.GetSlotBindings() {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
 		for i, k := range keys {
-			b := s.GetInputBindings()[k]
-			st.Bindings = append(st.Bindings, domain.Binding{
+			b := s.GetSlotBindings()[k]
+			st.SlotBindings = append(st.SlotBindings, domain.SlotBinding{
 				ToInput: k, Source: sourceFromPB(b.GetSource()),
 				Ref: b.GetRef(), ConstValue: b.GetConstValue(), DisplayOrder: i,
 			})
@@ -226,16 +226,16 @@ func stepsFromPB(in []*pb.WorkflowStep) []domain.Step {
 func stepsToPB(in []domain.Step) []*pb.WorkflowStep {
 	out := make([]*pb.WorkflowStep, len(in))
 	for i, s := range in {
-		bindings := make(map[string]*pb.WorkflowInputBinding, len(s.Bindings))
-		for _, b := range s.Bindings {
-			bindings[b.ToInput] = &pb.WorkflowInputBinding{
+		bindings := make(map[string]*pb.WorkflowSlotBinding, len(s.SlotBindings))
+		for _, b := range s.SlotBindings {
+			bindings[b.ToInput] = &pb.WorkflowSlotBinding{
 				Source: sourceToPB(b.Source), Ref: b.Ref, ConstValue: b.ConstValue,
 			}
 		}
 		out[i] = &pb.WorkflowStep{
 			Key: s.Key, Name: s.Name, StepOrder: int32(s.Order),
 			TemplateId: s.TemplateID, TemplateVersion: int32(s.TemplateVersion),
-			InputBindings:  bindings,
+			SlotBindings:   bindings,
 			ApprovalPolicy: string(s.ApprovalPolicy), ReusePolicy: string(s.ReusePolicy),
 		}
 	}

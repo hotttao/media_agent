@@ -98,7 +98,7 @@ func TestWorkflowE2E(t *testing.T) {
 				"step_order":       1,
 				"template_id":      tpl.ID,
 				"template_version": tpl.Version,
-				"input_bindings": map[string]any{
+				"slot_bindings": map[string]any{
 					"scene": map[string]any{"source": "WORKFLOW_INPUT"},
 				},
 			},
@@ -126,7 +126,7 @@ func TestWorkflowE2E(t *testing.T) {
 				"step_order":       1,
 				"template_id":      tpl.ID,
 				"template_version": tpl.Version,
-				"input_bindings": map[string]any{
+				"slot_bindings": map[string]any{
 					"scene": map[string]any{"source": "WORKFLOW_INPUT"},
 				},
 			},

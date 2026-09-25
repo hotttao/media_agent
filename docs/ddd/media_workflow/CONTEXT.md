@@ -1,6 +1,6 @@
 # media_workflow 模板 / 工作流 / 执行上下文
 
-基于 Scope 与 Template 的工作流定义、校验与执行微服务：负责管理 Template、Workflow、Step、StepBinding 的存储与版本，提供 workflow 结构校验（无环 / 单 sink / 引用合法性），以及把 Workflow 转为可调度的 Execution（Job + StepRun）。通过 `media_materials` 客户端校验 asset 引用与可达性；对内被发布计划（见 `media_materials` 后续规划）触发。归 [media_auth/CONTEXT.md](../media_auth/CONTEXT.md) 全局鉴权。对外以 Hertz + Protobuf IDL 暴露，自治数据库。
+基于 Scope 与 Template 的工作流定义、校验与执行微服务：负责管理 Template、Workflow、Step、SlotBinding 的存储与版本，提供 workflow 结构校验（无环 / 单 sink / 引用合法性），以及把 Workflow 转为可调度的 Execution（Job + StepRun）。通过 `media_materials` 客户端校验 asset 引用与可达性；对内被发布计划（见 `media_materials` 后续规划）触发。归 [media_auth/CONTEXT.md](../media_auth/CONTEXT.md) 全局鉴权。对外以 Hertz + Protobuf IDL 暴露，自治数据库。
 
 ## 业务术语词典
 
@@ -46,10 +46,14 @@ Template 的不可变快照，通过单调递增 version 区分，update 时新�
 可被生成 Worker 实现的、带版本的执行契约；声明输入 schema、唯一输出类别、Provider 路由和 Conductor Task Definition。Template 只引用已发布的 `(capability_key, capability_version)`，不直接绑定临时队列名或 Provider API。
 _禁用替代词_：Conductor Task、Worker、Template
 
+**Invocation Mapping（调用映射）**:
+Template Version 中把业务 Template Slot 转换为 Execution Capability 固定输入参数的声明式规则；例如把渲染结果映射到 `prompt`，把 `person`、`garment` 的资源引用按确定顺序组成 `images[]`。映射必须在 Workflow 发布时完成类型检查，禁止 Worker 根据 Slot 名猜测参数。
+_禁用替代词_：Worker 参数拼装、动态入参、prepare plan
+
 ### 工作流
 
 **Workflow（工作流）**:
-一组有序 Step + WorkflowInput + output_step_key；通过每个 Step 的 StepBinding 形成 DAG；归 1 个 scope；含 visibility/grants/status + version。归 `workflow` domain。
+一组有序 Step + WorkflowInput + output_step_key；通过每个 Step 的 SlotBinding 形成 DAG；归 1 个 scope；含 visibility/grants/status + version。归 `workflow` domain。
 _禁用替代词_：flow、pipeline、dag。
 
 **Workflow Input（工作流入口参数）**:
@@ -61,10 +65,10 @@ Workflow Input 的 `type` 字段，枚举 `{material, asset, product, virtual_ip
 _禁用替代词_：input_kind、carrier、source_type。
 
 **Step（步骤）**:
-Workflow 中一个节点，引用一个 Template；通过 StepBinding 声明 inputs 来源。归 `workflow` domain。
+Workflow 中一个节点，引用一个 Template；通过 SlotBinding 声明 Template Slot 的来源。归 `workflow` domain。
 
-**Step Binding（步骤绑定）**:
-Step 输入到其来源的映射，`source ∈ {workflow_input, step_output, const}`；每条 `(to_input, source, ref?, value?)`。归 `workflow` domain。
+**Slot Binding（槽位绑定）**:
+Step 的 Template Slot 到其来源的映射，`source ∈ {workflow_input, step_output, const}`；每条 `(to_slot, source, ref?, value?)`。归 `workflow` domain。
 _禁用替代词_：edge、link、wire。
 
 **Step Approval Policy（步骤审批策略）**:
@@ -77,6 +81,22 @@ Workflow 中产出最终结果的 Step 的 `step.key`；同时是 DAG 的唯一 
 **Workflow Compilation（工作流编译）**:
 把已发布 Workflow 的不可变版本转换为 Conductor Workflow Definition，并保存源版本、目标 name/version 与 definition_hash 的映射；编译结果是执行适配物，不是新的业务 Workflow。
 _禁用替代词_：Workflow Execution、DAG Save
+
+**Semantic Compiler（语义编译器）**:
+把 Workflow、Template Version、Invocation Mapping 与 Execution Capability Version 解析并校验为 Executable Workflow IR；负责业务引用解析、类型检查和版本冻结，不生成 Conductor 专有结构。
+_禁用替代词_：DAG Compiler、Conductor Compiler
+
+**Executable Workflow IR（可执行工作流中间表示）**:
+Semantic Compiler 的不可变输出，也是 Conductor Backend Compiler 的唯一输入；由 `ExecutableWorkflowIR` 与其中的 `ExecutableStepIR` 组成，描述依赖、模板渲染上下文、Capability 调用映射、唯一输出和执行策略。它是编译产物，不是编辑源或新的业务聚合。
+_禁用替代词_：CompiledStepPlan、Workflow DTO、Conductor Definition
+
+**Conductor Backend Compiler（Conductor 后端编译器）**:
+把 Executable Workflow IR 降低为 Conductor Workflow Definition。它自动插入 `media_render_template_v1`、Capability Task、候选确认与结果收口等技术任务，但不重新解释业务 Workflow。
+_禁用替代词_：Semantic Compiler
+
+**Template Rendering Task（模板渲染任务）**:
+编译器自动插入的内部通用任务 `media_render_template_v1`；固定契约为 `template:string + context:map<string,json> -> prompt:string`。它不是 Execution Capability，不选择 Provider，也不猜测图片数组顺序。
+_禁用替代词_：prepare_step、Execution Capability
 
 **Topological Wave（拓扑波次）**:
 由 Workflow DAG 按依赖关系计算的一组可并行 Step。编译器在相邻波次之间设置屏障；单 Step 波次编译为一个 Step 子工作流，多 Step 波次编译为动态并行分支后 JOIN。

@@ -39,20 +39,20 @@ const (
 	ForceNew         ReusePolicy = "force_new"
 )
 
-// BindingSource step 输入来源。
-type BindingSource string
+// SlotBindingSource step 输入来源。
+type SlotBindingSource string
 
 const (
-	SourceWorkflowInput BindingSource = "WORKFLOW_INPUT"
-	SourceStepOutput    BindingSource = "STEP_OUTPUT"
-	SourceConst         BindingSource = "CONST"
+	SourceWorkflowInput SlotBindingSource = "WORKFLOW_INPUT"
+	SourceStepOutput    SlotBindingSource = "STEP_OUTPUT"
+	SourceConst         SlotBindingSource = "CONST"
 )
 
-// Binding step 输入绑定（source 三选一，CHECK 互斥）。
-type Binding struct {
+// SlotBinding step 输入绑定（source 三选一，CHECK 互斥）。
+type SlotBinding struct {
 	ToInput      string // slot.name
-	Source       BindingSource
-	Ref          string // STEP_OUTPUT → step.key
+	Source       SlotBindingSource
+	Ref          string // WORKFLOW_INPUT → input name; STEP_OUTPUT → step.key
 	ConstValue   string // CONST 字面值
 	DisplayOrder int
 }
@@ -66,7 +66,7 @@ type Step struct {
 	TemplateVersion int
 	ApprovalPolicy  ApprovalPolicy
 	ReusePolicy     ReusePolicy
-	Bindings        []Binding
+	SlotBindings    []SlotBinding
 }
 
 // InputSchemaEntry 派生的 workflow 输入契约项。

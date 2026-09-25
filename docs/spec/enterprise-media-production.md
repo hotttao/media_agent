@@ -103,11 +103,15 @@ Template 是一次语义转换的不可变版本，定义输入槽、prompt、Ca
   ],
   "prompt_body": "在 {{.scene}} 中使用角色 {{.character}}",
   "capability": {"key": "jimeng.image.first_frame_prompt", "version": 1},
+  "invocation_mapping": {
+    "prompt": {"op": "render_template"},
+    "images": {"op": "list", "items": [{"op": "asset_ref", "slot": "character"}]}
+  },
   "output_asset_kind": "image"
 }
 ```
 
-旧 `platform/gen_way/gen_type` 只用于迁移映射；新建和更新必须引用 Capability。
+旧 `platform/gen_way/gen_type` 只用于迁移映射；新建和更新必须引用 Capability。Invocation Mapping 属于 Template Version，在发布时检查其覆盖 Capability required inputs 且表达式类型兼容。
 
 ### 4.3 Step
 
@@ -118,7 +122,7 @@ Step 只表达业务节点，不暴露 Conductor 类型：
   "key": "make_cover",
   "order": 20,
   "template": {"id": "tpl_storyboard", "version": 4},
-  "bindings": [
+  "slot_bindings": [
     {"to_input": "character", "source": "workflow_input", "ref": "hero"},
     {"to_input": "scene", "source": "step_output", "ref": "write_scene"}
   ],
@@ -148,20 +152,25 @@ Capability Worker 可以返回多张图，但它们先保存为当前 `step_run_
 
 ## 5. 编译到 Conductor
 
-### 5.1 为什么不是 Step = SIMPLE Task
+### 5.1 两阶段编译
 
-一个业务 Step 内包含缓存命中、Provider 执行、Candidate 持久化、用户确认和重新生成循环。若直接映射成 SIMPLE Task，会让业务节点受技术重试状态污染，也无法稳定表达人工等待。因此固定映射为：
+发布时先由 Semantic Compiler 把冻结的 Workflow、Template Version、Invocation Mapping 和 Capability Version 编译为显式 `ExecutableWorkflowIR`。IR 由 `ExecutableStepIR` 组成，是与 FlowGram、Conductor 都无关的稳定边界。随后 Conductor Backend Compiler 才把 IR 降低为 Definition。
+
+每个 Step IR 的模板渲染降低为内部 `media_render_template_v1` SIMPLE Task，固定输入为 `template:string + context:map<string,json>`，固定输出为 `prompt:string + prompt_digest:string`。该 Task 由 `media_workflow` 代码库中的独立 Worker 进程实现，不是 Capability，也不查询素材服务。Capability 的 `images[]` 等参数由 Backend Compiler 按 Invocation Mapping 直接生成。
+
+Definition 内嵌降低后的 Step 执行语义；`workflow_compilations` 只保存注册映射、状态和 Definition Hash，运行时不从其读取转换计划。
+
+### 5.2 为什么不是 Step = SIMPLE Task
+
+一个业务 Step 内包含模板渲染、缓存命中、Provider 执行、Candidate 持久化、用户确认和重新生成循环。若直接映射成一个 SIMPLE Task，会让业务节点受技术重试状态污染，也无法稳定表达人工等待。因此每个 `ExecutableStepIR` 降低为一个内嵌 Step Fragment：
 
 ```text
-Business Step
-└── SUB_WORKFLOW media_step_execution_v1
-    └── DO_WHILE attempt_loop
-        ├── resolve_inputs_and_reuse_v1 (SIMPLE)
-        ├── if cache miss: capability task (DYNAMIC，解析到已注册 SIMPLE Task)
-        ├── persist_candidates_v1 (SIMPLE)
-        ├── if multiple or approval=always: review_wait (WAIT, externally completed)
-        ├── accept -> finalize_candidate_v1 + loop complete
-        └── regenerate -> persist feedback + attempt++ + force_new + next loop
+Executable Step Fragment
+├── media_render_template_v1 (SIMPLE, template + context -> prompt)
+├── resolve_reuse_v1 (SIMPLE)
+├── if cache miss: 已冻结的 Capability SIMPLE Task
+└── media_finalize_step_v1 (SUB_WORKFLOW)
+    └── persist candidates -> WAIT/accept/regenerate -> unique output_resource_id
 ```
 
 Conductor 片段只返回：
@@ -170,22 +179,22 @@ Conductor 片段只返回：
 {"step_run_id": "sr_01...", "output_resource_id": "asset_01..."}
 ```
 
-### 5.2 主 DAG 编译算法
+### 5.3 主 DAG 编译算法
 
 P0 使用拓扑波次：
 
 1. 以 `step_output` binding 构边并进行 Kahn 拓扑排序。
 2. `wave(step) = 0`（无前驱），否则为 `1 + max(wave(predecessor))`。
 3. 每个 wave 的节点可并行；波次之间设置完整屏障。
-4. wave 只有一个 Step 时生成 SUB_WORKFLOW；多个 Step 时生成 `FORK_JOIN_DYNAMIC`，通过 `forkTaskWorkflow` 让每个输入分支调用 `media_step_execution_v1`，随后 JOIN。
+4. wave 只有一个 Step 时直接附加其内嵌 Fragment；多个 Step 时生成静态 `FORK_JOIN`，每个 `forkTasks` 分支包含对应 Step Fragment，随后 JOIN。
 5. 最后一波必须只含 `output_step_key`；其 `output_resource_id` 成为 Job 最终输出。
 
 例：`A -> C`、`B -> D`、`C,D -> E` 编译为：
 
 ```text
-Wave 0: dynamic fork [A, B] -> join_0
-Wave 1: dynamic fork [C, D] -> join_1
-Wave 2: subworkflow E
+Wave 0: static fork [fragment(A), fragment(B)] -> join_0
+Wave 1: static fork [fragment(C), fragment(D)] -> join_1
+Wave 2: fragment(E)
 ```
 
 其中多节点波次的 Definition 形状固定为（省略通用字段）：
@@ -195,12 +204,11 @@ Wave 2: subworkflow E
   {
     "name": "wave_0_fork",
     "taskReferenceName": "wave_0_fork",
-    "type": "FORK_JOIN_DYNAMIC",
-    "inputParameters": {
-      "forkTaskWorkflow": "media_step_execution_v1",
-      "forkTaskWorkflowVersion": 1,
-      "forkTaskInputs": "${workflow.input.wave_0_step_inputs}"
-    }
+    "type": "FORK_JOIN",
+    "forkTasks": [
+      ["render_A", "capability_A", "finalize_A"],
+      ["render_B", "capability_B", "finalize_B"]
+    ]
   },
   {
     "name": "wave_0_join",
@@ -211,15 +219,15 @@ Wave 2: subworkflow E
 ]
 ```
 
-SubmitJob 先创建 StepRun，再按编译产物生成每个 `wave_n_step_inputs`，因此 runtime input 中已有稳定 `step_run_id`；Definition 本身不包含某次 Job 的 ID。
+SubmitJob 先创建 StepRun，并提供自闭环 `workflow.input.inputs` 资源快照。Definition 本身不包含某次 Job 的 ID；每个 Slot Binding 已被降低为 Workflow Input 或前驱 Finalize Output 的表达式。
 
 该结果语义正确，但 C 会等待 B，即使 C 不依赖 B。P0 明确接受这点；后续编译器可优化成依赖感知调度，业务 Workflow 无需迁移。
 
-跨 Step 不依赖 Conductor fork 输出的 JSON 形状：每个 Step Fragment 以 `step_run_id` 从 media_workflow 读取 binding，`step_output` 解析为前驱 StepRun 已提交的唯一 `output_resource_id`。JOIN 只提供调度屏障，业务数据始终从事实源读取。
+跨 Step 不依赖 fork 聚合输出的 JSON 形状：`step_output` 直接引用前驱 Finalize Fragment 的唯一 `output_resource`；JOIN 只提供调度屏障。Job/StepRun 和最终资源 ID 仍由 `media_workflow` 作为业务事实源持久化。
 
-### 5.3 Step 子工作流输入
+### 5.4 Executable Step 运行输入
 
-每个分支输入至少包含：
+每个 Step Fragment 从 Definition 和运行输入获得：
 
 ```json
 {
@@ -229,18 +237,19 @@ SubmitJob 先创建 StepRun，再按编译产物生成每个 `wave_n_step_inputs
   "workspace_id": "ws_01...",
   "scope": "ai_clothing",
   "principal_ref": "user_01...",
-  "template": {"id": "tpl_storyboard", "version": 4},
-  "capability": {"key": "jimeng.image.first_frame_prompt", "version": 1},
-  "bindings": [],
+  "template": {"id": "tpl_storyboard", "version": 4, "body": "..."},
+  "capability": {"key": "jimeng.image.first_frame_prompt", "version": 1, "task_def": "..."},
+  "context": {"character": "${workflow.input.inputs.hero}"},
+  "invocation": {"prompt": "${render.output.prompt}", "images": ["${workflow.input.inputs.hero.asset_ref}"]},
   "reuse_policy": "reuse_if_available",
   "approval_policy": "when_multiple_candidates",
   "attempt": 1
 }
 ```
 
-`taskReferenceName = step__<sanitized_step_key>`；原始 key 始终保留在 input。payload 只传稳定 ID、内容 digest、Object Path 和非敏感参数，不传二进制、Provider secret、浏览器 cookie 或临时 URL。
+技术任务使用 `step__<sanitized_step_key>__render|invoke|finalize`；原始 key 始终保留。payload 只传稳定 ID、内容 digest、Object Path 和非敏感参数，不传二进制、Provider secret、浏览器 cookie 或临时 URL。
 
-### 5.4 发布与版本
+### 5.5 发布与版本
 
 Workflow 的保存不调用 Conductor；发布才编译：
 
@@ -258,7 +267,7 @@ draft -> publishing -> published
 
 `conductor_name = media_workflow_<workflow_id>`，`conductor_version` 使用业务 Workflow version；若远端同 name/version 已存在，只有 canonical definition hash 相同才视为幂等成功，不同则失败且禁止覆盖。
 
-### 5.5 Job 启动、状态与恢复
+### 5.6 Job 启动、状态与恢复
 
 - SubmitJob 事务内创建 Job、全部 StepRun 和 Start Outbox。
 - Adapter 使用 `correlationId=job_id` 启动映射的 Definition；启动超时先按 correlationId 查询。
@@ -268,7 +277,7 @@ draft -> publishing -> published
 - Step Fragment 的 DO_WHILE 以持久化决定 `regenerate` 为继续条件；Conductor iteration 只用于技术循环，业务 attempt 从 StepRun 读取。设置部署级 `max_regenerations_per_step` 防止无限循环，达到上限后仍保留候选但拒绝继续生成。
 - Job cancel 先提交本地 cancelled，再尽力 terminate Conductor；晚到完成只审计。
 
-### 5.6 复用指纹
+### 5.7 复用指纹
 
 复用由 `media_gen`/生成领域负责，不使用 Conductor cache。指纹为 canonical JSON 的 SHA-256，至少含：
 
@@ -372,3 +381,5 @@ RouteIntent 至少包含 `openWorkspace`、`openMaterials`、`openWorkflow`、`o
 1. **DAG P0 使用拓扑波次屏障**：支持任意合法 DAG，接受部分过度等待；不把 P0 限制为线性/严格结构化 DAG。
 2. **多 Candidate 强制审批，节点可要求单 Candidate 审批**：`approval=when_multiple_candidates` 时单 Candidate 自动确认；`approval=always` 时单 Candidate 也必须由用户选择接受或带反馈重新生成。
 3. **重生成发生在同一 StepRun 的新 attempt**：保留旧 Candidate/反馈审计，不新建 Job，也不把它记作失败 Retry。
+4. **显式 Executable Workflow IR**：Semantic Compiler 输出 `ExecutableWorkflowIR`，Conductor Backend Compiler 消费 IR；每个节点为 `ExecutableStepIR`，不使用 `CompiledStepPlan`。
+5. **Definition 内嵌执行语义**：运行时不从 Compilation 表读取转换计划；通用模板渲染由 `media_workflow` 的独立 `media_render_template_v1` Worker 执行。

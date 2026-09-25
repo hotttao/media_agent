@@ -65,9 +65,9 @@ enum WorkflowInputSource {
   CONST = 3;
 }
 
-message WorkflowInputBinding {
+message WorkflowSlotBinding {
   WorkflowInputSource source = 1;
-  string ref = 2;           // STEP_OUTPUT → step.key；其余空
+  string ref = 2;           // WORKFLOW_INPUT → workflow input name；STEP_OUTPUT → step.key
   string const_value = 3;   // CONST 字面值
 }
 
@@ -77,7 +77,7 @@ message WorkflowStep {
   int32 step_order = 3;
   string template_id = 4;
   int32 template_version = 5;
-  map<string, WorkflowInputBinding> input_bindings = 6;  // key = slot.name
+  map<string, WorkflowSlotBinding> slot_bindings = 6;  // key = template slot.name
   // Candidate review and source reuse policy are part of the executable step contract.
   string approval_policy = 7; // when_multiple_candidates (default) | always
   string reuse_policy = 8;    // reuse_if_available (default) | force_new

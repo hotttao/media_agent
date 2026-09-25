@@ -2,10 +2,10 @@
 
 export type WorkflowStatus = "draft" | "published" | "archived";
 export type Visibility = "private" | "team" | "public";
-export type StepBindingSource = "workflow_input" | "step_output" | "const";
+export type SlotBindingSource = "workflow_input" | "step_output" | "const";
 
-export interface StepBinding {
-  source: StepBindingSource;
+export interface SlotBinding {
+  source: SlotBindingSource;
   to_input: string;
   ref?: string;
   const_value?: unknown;
@@ -15,7 +15,7 @@ export interface WorkflowStep {
   key: string;
   template_id: string;
   template_version?: number;
-  bindings: StepBinding[];
+  slot_bindings: SlotBinding[];
   approval_policy?: "when_multiple_candidates" | "always";
   reuse_policy?: "reuse_if_available" | "force_new";
 }

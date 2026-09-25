@@ -155,12 +155,12 @@ CREATE TABLE IF NOT EXISTS media_workflow.step_bindings (
     step_id      text NOT NULL REFERENCES media_workflow.workflow_steps(id) ON DELETE CASCADE,
     to_input     text NOT NULL,                      -- slot.name
     source       text NOT NULL CHECK (source IN ('WORKFLOW_INPUT','STEP_OUTPUT','CONST')),
-    ref          text,                                -- STEP_OUTPUT → step.key
+    ref          text,                                -- WORKFLOW_INPUT → input name; STEP_OUTPUT → step.key
     const_value  text,                                -- CONST 字面值
     display_order int NOT NULL,
     created_at   timestamptz NOT NULL DEFAULT now(),
     CHECK (
-        (source = 'WORKFLOW_INPUT' AND ref IS NULL      AND const_value IS NULL) OR
+        (source = 'WORKFLOW_INPUT' AND ref IS NOT NULL  AND const_value IS NULL) OR
         (source = 'STEP_OUTPUT'    AND ref IS NOT NULL  AND const_value IS NULL) OR
         (source = 'CONST'          AND const_value IS NOT NULL AND ref IS NULL)
     )

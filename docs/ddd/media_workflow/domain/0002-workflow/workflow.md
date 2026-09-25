@@ -9,7 +9,7 @@ related_workflow:
 ---
 
 ## 一句话职责
-Workflow 域负责存储「一组有序 Step 通过 StepBinding 串联而成的 DAG」+ WorkflowInput 入口参数 + output_step_key；版本化；提供只读校验（无环、单 sink、覆盖所有 step、引用前向、binding 类型合法）。归 1 个 scope。
+Workflow 域负责存储「一组有序 Step 通过 SlotBinding 串联而成的 DAG」+ WorkflowInput 入口参数 + output_step_key；版本化；提供只读校验（无环、单 sink、覆盖所有 step、引用前向、binding 类型合法）。归 1 个 scope。
 
 ### 不做什么
 - 不持久化执行状态（归 [execution](../0003-execution/execution.md)）。
@@ -22,7 +22,7 @@ Workflow 域负责存储「一组有序 Step 通过 StepBinding 串联而成的 
 - Create / Update / SoftDelete Workflow，强制 1:1 scope（与 Template 一致，不可改）。
 - 维护 WorkflowInput[] 入口参数（`(name, type, required)`），`type ∈ {material, asset, product, virtual_ip}`——调用方在 SubmitJob 时传对应 id（material_id / generated_asset_id / product_id / virtual_ip_id）；具体 asset_kind 约束与解析选择由所绑定的 template slot 的 `kind` 承担。
 - 维护有序 Step 列表（用户提交顺序即 step_order），每个 Step 引用一个 Template。
-- 维护每个 Step 的 StepBinding 列表，`source ∈ {workflow_input, step_output, const}`。
+- 维护每个 Step 的 SlotBinding 列表，`source ∈ {workflow_input, step_output, const}`。
 - 维护每个 Step 的 `approval_policy ∈ {when_multiple_candidates, always}`；多 Candidate 始终审批，always 还覆盖单 Candidate。
 - 维护 output_step_key，校验时强制它是 DAG 的唯一 sink。
 - 版本化：update 时 version + 1。
@@ -148,50 +148,48 @@ Workflow 顶部声明的入口参数。每个 workflow_input 是一个**资源�
 
 约束：UNIQUE `(workflow_id, version, step_key)`；UNIQUE `(workflow_id, version, step_order)`；INDEX `(template_id, template_version)`。
 
-### Tables — `step_bindings`
+### Tables — `slot_bindings`
 
-`StepBinding` 与 step 同生命周期。一个 step 可有多条 binding（多输入）。
+`SlotBinding` 与 step 同生命周期。一个 step 可有多条 binding（多输入）。
 
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
-| id | bigserial | 主键 |
-| step_id | bigint not null | FK；ON DELETE CASCADE |
+| id | text | 主键 |
+| step_id | text not null | FK；ON DELETE CASCADE |
 | to_input | text not null | 消费侧槽名；引用对应 Template 的 inputs[].name |
 | source | text not null | workflow_input / step_output / const；CHECK in 三选一 |
-| ref_workflow_input_id | bigint nullable | 当 source=workflow_input；FK → workflow_inputs.id |
-| ref_step_key | text nullable | 当 source=step_output；引用同 workflow 内更靠前的 step.step_key；该 step 产出单一 asset，无需指定 output 槽位 |
-| const_value | jsonb nullable | 当 source=const；字面值；类型与 target slot.resource_type 对齐由 Render 层校验 |
+| ref | text nullable | workflow_input 时为显式 Workflow Input 名；step_output 时为前驱 step.key |
+| const_value | text nullable | 当 source=const；字面值；类型与目标 Slot 对齐由 Semantic Compiler 校验 |
 | display_order | int not null | 排序 |
 
-约束：CHECK `(source, ref_* , const_value)` 三选一互斥；UNIQUE `(step_id, to_input)`。
+约束：CHECK `(source, ref, const_value)` 三选一互斥；UNIQUE `(step_id, to_input)`。
 
 > 三选一约束用 CHECK 表达：
 > ```sql
 > CHECK (
->   (source = 'workflow_input' AND ref_workflow_input_id IS NOT NULL AND ref_step_key IS NULL AND const_value IS NULL) OR
->   (source = 'step_output'    AND ref_step_key IS NOT NULL         AND ref_workflow_input_id IS NULL AND const_value IS NULL) OR
->   (source = 'const'          AND const_value IS NOT NULL          AND ref_workflow_input_id IS NULL AND ref_step_key IS NULL)
+>   (source = 'workflow_input' AND ref IS NOT NULL AND const_value IS NULL) OR
+>   (source = 'step_output'    AND ref IS NOT NULL AND const_value IS NULL) OR
+>   (source = 'const'          AND ref IS NULL     AND const_value IS NOT NULL)
 > )
 > ```
 
-## StepBinding 值对象
+## SlotBinding 值对象
 
 ```go
-type BindingSource string
+type SlotBindingSource string
 
 const (
-    BindingSourceWorkflowInput BindingSource = "workflow_input"
-    BindingSourceStepOutput    BindingSource = "step_output"
-    BindingSourceConst         BindingSource = "const"
+    SlotBindingSourceWorkflowInput SlotBindingSource = "workflow_input"
+    SlotBindingSourceStepOutput    SlotBindingSource = "step_output"
+    SlotBindingSourceConst         SlotBindingSource = "const"
 )
 
-type StepBinding struct {
-    ToInput            string
-    Source             BindingSource
-    RefWorkflowInputID int64  // 仅 source=workflow_input
-    RefStepKey         string // 仅 source=step_output
-    ConstValue         any    // 仅 source=const
-    DisplayOrder       int
+type SlotBinding struct {
+    ToInput      string
+    Source       SlotBindingSource
+    Ref          string // workflow input name 或 predecessor step key
+    ConstValue   string // 仅 source=const
+    DisplayOrder int
 }
 ```
 
@@ -237,7 +235,7 @@ type Step struct {
     TemplateVersion int
     ApprovalPolicy  StepApprovalPolicy
     ReusePolicy     StepReusePolicy
-    Bindings        []StepBinding
+    SlotBindings    []SlotBinding
 }
 
 type StepApprovalPolicy string
@@ -317,4 +315,4 @@ type DerivedEdge struct {
 - [workflow_execution](../../workflow/0002-workflow_execution/workflow_execution.md) — 实际执行时按 step 顺序、binding 解析、调用 Template.Render
 
 ### 关联术语
-[Workflow Input](../../CONTEXT.md)、[Step](../../CONTEXT.md)、[Step Binding](../../CONTEXT.md)、[Output Step Key](../../CONTEXT.md)。
+[Workflow Input](../../CONTEXT.md)、[Step](../../CONTEXT.md)、[Slot Binding](../../CONTEXT.md)、[Output Step Key](../../CONTEXT.md)。

@@ -38,7 +38,8 @@ type WorkflowStep struct {
 
 func (WorkflowStep) TableName() string { return "media_workflow.workflow_steps" }
 
-// StepBinding 对应 step_bindings 表。
+// StepBinding is the persistence row for the slot_bindings table. The legacy
+// Go name remains until the next database-driven GORM generation.
 type StepBinding struct {
 	ID           string    `gorm:"column:id;primaryKey"`
 	StepID       string    `gorm:"column:step_id;not null"`
@@ -50,7 +51,7 @@ type StepBinding struct {
 	CreatedAt    time.Time `gorm:"column:created_at;not null"`
 }
 
-func (StepBinding) TableName() string { return "media_workflow.step_bindings" }
+func (StepBinding) TableName() string { return "media_workflow.slot_bindings" }
 
 // WorkflowGrant 对应 workflow_grants 表。
 type WorkflowGrant struct {

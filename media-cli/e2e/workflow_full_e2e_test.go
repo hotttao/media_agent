@@ -107,7 +107,7 @@ func TestWorkflowFull(t *testing.T) {
 			{
 				"key": "gen", "name": "gen", "step_order": 1,
 				"template_id": tpl.ID, "template_version": tpl.Version,
-				"input_bindings": map[string]any{
+				"slot_bindings": map[string]any{
 					"scene": map[string]any{"source": 1}, // WORKFLOW_INPUT=1
 				},
 			},

@@ -40,6 +40,7 @@ type Task struct {
 	InputParameters   map[string]any    `json:"inputParameters,omitempty"`
 	SubWorkflowParam  *SubWorkflowParam `json:"subWorkflowParam,omitempty"`
 	JoinOn            []string          `json:"joinOn,omitempty"`
+	ForkTasks         [][]Task          `json:"forkTasks,omitempty"`
 }
 
 type SubWorkflowParam struct {
@@ -82,7 +83,7 @@ func Compile(wf domain.Workflow) (Definition, error) {
 	}
 	for _, step := range byKey {
 		seen := make(map[string]struct{})
-		for _, binding := range step.Bindings {
+		for _, binding := range step.SlotBindings {
 			if binding.Source != domain.SourceStepOutput {
 				continue
 			}

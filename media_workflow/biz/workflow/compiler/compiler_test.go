@@ -14,9 +14,9 @@ func TestCompileDiamondUsesWaveBarriers(t *testing.T) {
 		Steps: []domain.Step{
 			{Key: "a", Order: 1},
 			{Key: "b", Order: 2},
-			{Key: "c", Order: 3, Bindings: []domain.Binding{{Source: domain.SourceStepOutput, Ref: "a"}}},
-			{Key: "d", Order: 4, Bindings: []domain.Binding{{Source: domain.SourceStepOutput, Ref: "b"}}},
-			{Key: "e", Order: 5, Bindings: []domain.Binding{{Source: domain.SourceStepOutput, Ref: "c"}, {Source: domain.SourceStepOutput, Ref: "d"}}},
+			{Key: "c", Order: 3, SlotBindings: []domain.SlotBinding{{Source: domain.SourceStepOutput, Ref: "a"}}},
+			{Key: "d", Order: 4, SlotBindings: []domain.SlotBinding{{Source: domain.SourceStepOutput, Ref: "b"}}},
+			{Key: "e", Order: 5, SlotBindings: []domain.SlotBinding{{Source: domain.SourceStepOutput, Ref: "c"}, {Source: domain.SourceStepOutput, Ref: "d"}}},
 		},
 	}
 	def, err := Compile(wf)
@@ -33,14 +33,14 @@ func TestCompileDiamondUsesWaveBarriers(t *testing.T) {
 
 func TestCompileRejectsCycleAndNonSinkOutput(t *testing.T) {
 	_, err := Compile(domain.Workflow{ID: "wf", Version: 1, OutputStepKey: "a", Steps: []domain.Step{
-		{Key: "a", Bindings: []domain.Binding{{Source: domain.SourceStepOutput, Ref: "b"}}},
-		{Key: "b", Bindings: []domain.Binding{{Source: domain.SourceStepOutput, Ref: "a"}}},
+		{Key: "a", SlotBindings: []domain.SlotBinding{{Source: domain.SourceStepOutput, Ref: "b"}}},
+		{Key: "b", SlotBindings: []domain.SlotBinding{{Source: domain.SourceStepOutput, Ref: "a"}}},
 	}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cycle")
 
 	_, err = Compile(domain.Workflow{ID: "wf", Version: 1, OutputStepKey: "a", Steps: []domain.Step{
-		{Key: "a"}, {Key: "b", Bindings: []domain.Binding{{Source: domain.SourceStepOutput, Ref: "a"}}},
+		{Key: "a"}, {Key: "b", SlotBindings: []domain.SlotBinding{{Source: domain.SourceStepOutput, Ref: "a"}}},
 	}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not a sink")

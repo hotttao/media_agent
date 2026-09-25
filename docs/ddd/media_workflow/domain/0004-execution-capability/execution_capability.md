@@ -17,6 +17,7 @@ Execution Capability 把 Template 的业务意图绑定到稳定、可版本化�
 
 - 主键为 `(capability_key, version)`；published 版本不可修改，只能发布新版本或归档。
 - `input_schema` 中每个逻辑输入都必须能由 Template Slot 映射；`output_asset_kind` 必须与 Template 一致。
+- Capability 只声明目标参数 schema，不拥有业务 Slot 到参数的规则；该规则属于 Template Version 的 Invocation Mapping。
 - `conductor_task_def` 指向已注册 SIMPLE Task Definition；Task 输入只传稳定 ID、Object Path 与参数，不传二进制、密钥或临时下载 URL。
 - Capability 可返回一个或多个 Candidate，但确认后的业务输出恒为一个 Generated Asset。
 
@@ -39,4 +40,4 @@ Execution Capability 把 Template 的业务意图绑定到稳定、可版本化�
 
 ## 与 Template 的关系
 
-Template 版本必须引用已发布的 `(capability_key, capability_version)`。现存 `platform/gen_way/gen_type` 在迁移期只读保留，由数据迁移映射到 Capability；新写接口不得再以这三个自由字符串决定队列。
+Template 版本必须引用已发布的 `(capability_key, capability_version)`，并提供通过类型检查的 Invocation Mapping。现存 `platform/gen_way/gen_type` 在迁移期只读保留，由数据迁移映射到 Capability；新写接口不得再以这三个自由字符串决定队列。

@@ -9,6 +9,12 @@
 
 ## 修改记录
 
+### 2026-09-25 · Invocation Mapping 与通用模板渲染任务
+
+- Template Version 新增不可变 `invocation_mapping`，显式把业务 Slot 转换为 Capability 固定参数。
+- 初始表达式限定为 `render_template`、`asset_ref(slot)` 与有序 `list(...)`，不允许任意脚本。
+- 模板渲染使用 `media_workflow` 拥有的内部通用任务 `media_render_template_v1`，固定契约为 `template + context map -> prompt`；它不是 Execution Capability。
+
 ### 2026-07-21 · 补 Publish 能力 + archive 边界 + 依赖修正
 - 新增 `PublishTemplate`（`POST /api/v1/templates/{id}/publish`，draft -> published，owner），补全状态机 `draft ↔ published -> archived` 中 published 的产生路径（原状态机有 published 态但无操作可达）。
 - 校验细则第 7 条补 `PublishTemplate` / `ArchiveTemplate` 在状态流转中的角色；新增第 9 条 archive 边界：archive 被运行中 Job 引用的 template 不中断 Job（Job 持 `template_version` 快照），新 workflow 拒绝引用（workflow_validation 闸2），offline scan 待后续。
@@ -27,7 +33,7 @@
 ### 2026-07-03 · Review 反馈：output 改回单一（反转第一轮多输出决策）
 - 第一轮 Q&A 曾定 `outputs[]` 为多输出列表；用户 review 时纠正"Template outputs 是单一输出，不会有多个输出"，本节反转该决策。
 - 改动：`outputs []Slot` → 单一 `output_resource_type` 字段（提升到 `templates` 表）；`template_slots` 表去掉 `kind` 列并更名为 `template_inputs`（只存输入槽位）；Render 返回 `OutputType string`（原 `OutputTypes []string`）；StepRun 产物 `output_asset_ids` → `output_asset_id`（单值）。
-- 连带：`source=step_output` 的 StepBinding **不需要**指定前驱 step 的哪个 output（曾因此考虑加 `ref_step_output_name`，现已废弃）——前驱 step 恒定产出单一 asset，`ref_step_key` 足够。
+- 连带：`source=step_output` 的 SlotBinding **不需要**指定前驱 step 的哪个 output（曾因此考虑加 `ref_step_output_name`，现已废弃）——前驱 step 恒定产出单一 asset，`ref_step_key` 足够。
 
 ### 2026-07-03 · Review 反馈：全面对齐 media_ai 的 asset_kind 模型
 - input slot 改为单一 `kind` 字段（asset_kind name），去掉 `resource_type` + `asset_kind` 两字段；media_type / resource_type / 落表均由 kind 推导。

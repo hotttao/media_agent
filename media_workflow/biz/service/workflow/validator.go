@@ -77,7 +77,7 @@ func (v *validator) validateDAG(res *domain.ValidationResult) error {
 		deps[s.Key] = nil
 	}
 	for i, s := range v.steps {
-		for _, b := range s.Bindings {
+		for _, b := range s.SlotBindings {
 			if b.Source == domain.SourceStepOutput {
 				refIdx, ok := keySet[b.Ref]
 				if !ok {
@@ -168,7 +168,7 @@ func (v *validator) validateBindings(res *domain.ValidationResult) error {
 		for _, in := range snap.Inputs {
 			slotNames[in.Name] = true
 		}
-		for _, b := range s.Bindings {
+		for _, b := range s.SlotBindings {
 			// to_input 必须在 template inputs 里
 			if !slotNames[b.ToInput] {
 				res.RejectReasons = append(res.RejectReasons, domain.RejectReason{
@@ -179,9 +179,9 @@ func (v *validator) validateBindings(res *domain.ValidationResult) error {
 			}
 			switch b.Source {
 			case domain.SourceWorkflowInput:
-				if b.Ref != "" {
-					res.RejectReasons = append(res.RejectReasons, domain.RejectReason{Code: "BINDING_INVALID", Message: "WORKFLOW_INPUT binding ref must be empty", Subject: s.Key})
-					return fmt.Errorf("workflow_input ref non-empty")
+				if b.Ref == "" {
+					res.RejectReasons = append(res.RejectReasons, domain.RejectReason{Code: "BINDING_INVALID", Message: "WORKFLOW_INPUT binding ref is required", Subject: s.Key})
+					return fmt.Errorf("workflow_input ref empty")
 				}
 			case domain.SourceStepOutput:
 				if b.Ref == "" {
@@ -216,14 +216,14 @@ func (v *validator) deriveInputSchema() []domain.InputSchemaEntry {
 		for _, in := range snap.Inputs {
 			slotInfo[in.Name] = in
 		}
-		for _, b := range s.Bindings {
+		for _, b := range s.SlotBindings {
 			if b.Source != domain.SourceWorkflowInput {
 				continue
 			}
-			e, ok := seen[b.ToInput]
+			e, ok := seen[b.Ref]
 			if !ok {
-				e = &domain.InputSchemaEntry{Name: b.ToInput, Required: true}
-				seen[b.ToInput] = e
+				e = &domain.InputSchemaEntry{Name: b.Ref, Required: true}
+				seen[b.Ref] = e
 			}
 			// 从 template slot 填 resource_type
 			if info, found := slotInfo[b.ToInput]; found {

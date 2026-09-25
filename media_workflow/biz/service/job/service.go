@@ -73,7 +73,7 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 	for _, step := range wf.Steps {
 		// 判断 root（无 STEP_OUTPUT 依赖）→ PENDING；否则 BLOCKED
 		isRoot := true
-		for _, b := range step.Bindings {
+		for _, b := range step.SlotBindings {
 			if b.Source == wfdomain.SourceStepOutput {
 				isRoot = false
 				break
@@ -262,10 +262,10 @@ func (s *Service) resolveAndRender(ctx context.Context, sr *domain.StepRun, tpl 
 	if err != nil {
 		return resolved, renderTemplateSafe(tpl.PromptBody, data), assets
 	}
-	var bindings []wfdomain.Binding
+	var bindings []wfdomain.SlotBinding
 	for _, step := range wf.Steps {
 		if step.Key == sr.StepKey {
-			bindings = step.Bindings
+			bindings = step.SlotBindings
 			break
 		}
 	}
@@ -279,7 +279,7 @@ func (s *Service) resolveAndRender(ctx context.Context, sr *domain.StepRun, tpl 
 	for _, b := range bindings {
 		switch b.Source {
 		case wfdomain.SourceWorkflowInput:
-			if slotData, ok := data[b.ToInput].(map[string]any); ok {
+			if slotData, ok := data[b.Ref].(map[string]any); ok {
 				resolved[b.ToInput] = slotData
 				url, _ := slotData["url"].(string)
 				content, _ := slotData["content"].(string)
@@ -529,7 +529,7 @@ func (s *Service) resetDownstream(ctx context.Context, jobID, completedStepKey s
 	}
 	downstreamKeys := make(map[string]bool)
 	for _, step := range wf.Steps {
-		for _, b := range step.Bindings {
+		for _, b := range step.SlotBindings {
 			if b.Source == wfdomain.SourceStepOutput && b.Ref == completedStepKey {
 				downstreamKeys[step.Key] = true
 			}
@@ -638,7 +638,7 @@ func (s *Service) advanceDAG(ctx context.Context, jobID string, completedStepKey
 			// 收集该 step 的 STEP_OUTPUT 依赖
 			allDepsSucceeded := true
 			anyDepFailed := false
-			for _, b := range step.Bindings {
+			for _, b := range step.SlotBindings {
 				if b.Source != wfdomain.SourceStepOutput {
 					continue
 				}

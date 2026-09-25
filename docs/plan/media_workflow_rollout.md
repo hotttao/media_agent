@@ -53,7 +53,7 @@ P1 media_materials 基础  ──→ P2 media_workflow Template+Workflow（闸1�
 
 ### Checklist
 
-- [ ] DB 迁移 `media_workflow/migrations/000001_init.up.sql`：templates / template_inputs / template_versions / template_grants / workflows / workflow_steps / step_bindings / workflow_grants（按 spec §3.1–3.2）。
+- [ ] DB 迁移最终态：templates / template_inputs / template_versions / template_grants / workflows / workflow_steps / slot_bindings / workflow_grants（按 spec §3.1–3.2；旧库通过后续迁移将 `step_bindings` 重命名）。
 - [ ] IDL：`idl/media_workflow/{template,workflow}.proto`；hz 生成。
 - [ ] domain：template / workflow 实体 + repository；template 版本化（update 追加 template_versions）。
 - [ ] service：Template CRUD + grants + visibility + Archive；Workflow CRUD + grants + visibility + Archive。

@@ -10,7 +10,7 @@ related_workflow:
 ---
 
 ## 一句话职责
-Template 域负责存储「声明型」提示词模板：每个 Template 用 inputs[] 显式描述所需的输入资源槽位（每槽位引用一个 [asset_kind](../../../media_materials/domain/0005-asset_kind/asset_kind.md)），用单一 `output_asset_kind` 声明产出的资源类别，并把 prompt_body 作为可渲染正文；引用一个不可变 [Execution Capability](../0004-execution-capability/execution_capability.md) 版本作为执行契约；维护 status/version 生命周期；提供渲染入口（resolve inputs → prompt + output）。
+Template 域负责存储「声明型」提示词模板：每个 Template 用 inputs[] 显式描述所需的输入资源槽位（每槽位引用一个 [asset_kind](../../../media_materials/domain/0005-asset_kind/asset_kind.md)），用单一 `output_asset_kind` 声明产出的资源类别，并把 prompt_body 作为可渲染正文；引用一个不可变 [Execution Capability](../0004-execution-capability/execution_capability.md) 版本，并以 Invocation Mapping 声明业务 Slot 如何转换为 Capability 固定参数；维护 status/version 生命周期；提供渲染入口（template + context → prompt）。
 _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 域）、管理 asset 实体（归 `media_materials`）、校验 workflow 结构（归 [workflow_validation](../../workflow/0001-workflow_validation/workflow_validation.md)）。
 
 ## 边界
@@ -21,6 +21,7 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 - 维护单一 `output_asset_kind`：一次模板执行产出**一个** asset，其类别由此字段声明（引用 asset_kind name）；media_type 由 `asset_kind.media_type` 推导，不另存。
 - 维护 prompt_body：声明式正文，使用 `{{.name}}` 形式的占位符引用 inputs 的 name。
 - 维护 `capability_key` / `capability_version`：引用已发布执行能力；`platform` / `gen_way` / `gen_type` 仅在旧数据迁移期保留只读映射。
+- 维护 `invocation_mapping`：不可变、声明式地生成 Capability 参数。初始表达式只允许 `render_template`、`asset_ref(slot)` 与 `list(...)`，禁止任意脚本和运行时反射。
 - 版本化：update 时 `version + 1`，旧版本只读保留可查。
 - 提供 `Render(slot_values []ResolvedSlot)` 接口，输入每个 input slot 的解析结果，产出渲染后的 prompt_body + output_asset_kind（及其 media_type）。
 - 校验 input slot.kind 与 output_asset_kind 在 asset_kind 注册表中已注册且未停用（调 `media_materials.BatchGetAssetKind`）。
@@ -61,6 +62,7 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 | output_asset_kind | text not null | 产出资源类别；引用 `asset_kinds.name`，且 resource_type=ASSET；必填 |
 | capability_key | text not null | 引用已发布 Execution Capability |
 | capability_version | int not null | 不可变能力版本 |
+| invocation_mapping | jsonb not null | Slot 到 Capability 参数的声明式映射；随 Template Version 冻结 |
 | platform / gen_way / gen_type | text nullable | 旧数据迁移字段；新写接口忽略，迁移完成后删除 |
 | status | text not null | 草稿/已发布/归档；draft / published / archived |
 | visibility | text not null | 可见性档位；private / team / public；默认 private |
@@ -127,6 +129,7 @@ type Template struct {
     OutputAssetKind  string  // 产出的 asset_kind name（resource_type=ASSET）
     CapabilityKey     string
     CapabilityVersion int
+    InvocationMapping map[string]InvocationExpression
     Status           TemplateStatus
     Visibility       ResourceVisibility
     Version          int
@@ -180,9 +183,10 @@ const (
 4. 每个 input slot 的 `Kind` 必填，且必须指向 `asset_kinds` 注册表中已注册、status∈{SYSTEM, ENABLED} 的 kind（调 `media_materials.BatchGetAssetKind` 校验）。
 5. `OutputAssetKind` 必填，且所引 asset_kind 的 `resource_type=ASSET`（产物落 generated_assets 表）；其 `media_type` 即产出的媒体形态。
 6. `(CapabilityKey, CapabilityVersion)` 必须指向 published Capability，且其 output_asset_kind 与 Template 一致；新模板禁止以 legacy route 字段分发。
-7. `Status` 流转：`draft ↔ published`（`PublishTemplate` / 回退）`-> archived`（`ArchiveTemplate`，终态不可逆）；不允许 archived 恢复到 draft 或 published。
-8. update 时不允许直接改 `Scope`；改 `Scope` 必须新建 Template（避免版本历史跨 scope）。
-9. Archive 边界：archive 一个被运行中 Job 引用的 template 不会中断 Job（Job 持 `template_version` 不可变快照）；但新 workflow 不再能引用 archived template（workflow_validation 闸2 拒绝 `TEMPLATE_ARCHIVED`）。对已活跃 binding 的 offline scan 见 [workflow_validation](../../workflow/0001-workflow_validation/workflow_validation.md) §2（本期未实现）。
+7. `InvocationMapping` 必须覆盖 Capability input schema 的全部 required 字段；表达式引用的 Slot 必须存在，推导类型必须兼容目标字段。`render_template` 只能生成 string，`asset_ref` 只能接受资源 Slot，`list` 生成有序数组。
+8. `Status` 流转：`draft ↔ published`（`PublishTemplate` / 回退）`-> archived`（`ArchiveTemplate`，终态不可逆）；不允许 archived 恢复到 draft 或 published。
+9. update 时不允许直接改 `Scope`；改 `Scope` 必须新建 Template（避免版本历史跨 scope）。
+10. Archive 边界：archive 一个被运行中 Job 引用的 template 不会中断 Job（Job 持 `template_version` 不可变快照）；但新 workflow 不再能引用 archived template（workflow_validation 闸2 拒绝 `TEMPLATE_ARCHIVED`）。对已活跃 binding 的 offline scan 见 [workflow_validation](../../workflow/0001-workflow_validation/workflow_validation.md) §2（本期未实现）。
 
 ### Render 接口
 

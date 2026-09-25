@@ -193,7 +193,7 @@ func newTestService(needsConfirm bool) (*Service, *mockJobRepo, *mockStepRunRepo
 	wfLookup := &mockWorkflowLookup{wf: &wfdomain.Workflow{
 		ID: "wf1", Scope: "ai_clothing", OutputStepKey: "s1",
 		Steps: []wfdomain.Step{{Key: "s1", Order: 1, TemplateID: "tpl1", TemplateVersion: 1,
-			Bindings: []wfdomain.Binding{{ToInput: "scene", Source: wfdomain.SourceWorkflowInput}}}},
+			SlotBindings: []wfdomain.SlotBinding{{ToInput: "scene", Source: wfdomain.SourceWorkflowInput, Ref: "scene"}}}},
 		InputSchema: []wfdomain.InputSchemaEntry{{Name: "scene", ResourceType: "MATERIAL", Required: true}},
 	}}
 	tplLookup := &mockTplConfirm{needsConfirm: needsConfirm}
@@ -638,9 +638,9 @@ func newTestServiceWithDAG() (*Service, *mockJobRepo, *mockStepRunRepo) {
 	wfLookup := &mockWorkflowLookup{wf: &wfdomain.Workflow{
 		ID: "wf1", Scope: "ai_clothing", OutputStepKey: "step_c",
 		Steps: []wfdomain.Step{
-			{Key: "step_a", Order: 1, TemplateID: "tpl1", TemplateVersion: 1, Bindings: []wfdomain.Binding{}},
-			{Key: "step_b", Order: 2, TemplateID: "tpl1", TemplateVersion: 1, Bindings: []wfdomain.Binding{{ToInput: "in", Source: wfdomain.SourceStepOutput, Ref: "step_a"}}},
-			{Key: "step_c", Order: 3, TemplateID: "tpl1", TemplateVersion: 1, Bindings: []wfdomain.Binding{{ToInput: "in", Source: wfdomain.SourceStepOutput, Ref: "step_b"}}},
+			{Key: "step_a", Order: 1, TemplateID: "tpl1", TemplateVersion: 1, SlotBindings: []wfdomain.SlotBinding{}},
+			{Key: "step_b", Order: 2, TemplateID: "tpl1", TemplateVersion: 1, SlotBindings: []wfdomain.SlotBinding{{ToInput: "in", Source: wfdomain.SourceStepOutput, Ref: "step_a"}}},
+			{Key: "step_c", Order: 3, TemplateID: "tpl1", TemplateVersion: 1, SlotBindings: []wfdomain.SlotBinding{{ToInput: "in", Source: wfdomain.SourceStepOutput, Ref: "step_b"}}},
 		},
 		InputSchema: []wfdomain.InputSchemaEntry{},
 	}}

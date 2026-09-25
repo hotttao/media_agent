@@ -165,8 +165,8 @@ func (r *Repo) saveSteps(ctx context.Context, Q *query.Query, w *domain.Workflow
 		if err := Q.WorkflowStep.WithContext(ctx).Create(stepRow); err != nil {
 			return err
 		}
-		for j := range s.Bindings {
-			b := &s.Bindings[j]
+		for j := range s.SlotBindings {
+			b := &s.SlotBindings[j]
 			bindRow := &model.StepBinding{
 				ID:     "sbd_" + stepRow.ID + "_" + pad(j),
 				StepID: stepRow.ID, ToInput: b.ToInput,
@@ -212,8 +212,8 @@ func stepToDomain(s *model.WorkflowStep, bindings []*model.StepBinding) domain.S
 		ApprovalPolicy: domain.ApprovalPolicy(s.ApprovalPolicy), ReusePolicy: domain.ReusePolicy(s.ReusePolicy),
 	}
 	for _, b := range bindings {
-		st.Bindings = append(st.Bindings, domain.Binding{
-			ToInput: b.ToInput, Source: domain.BindingSource(b.Source),
+		st.SlotBindings = append(st.SlotBindings, domain.SlotBinding{
+			ToInput: b.ToInput, Source: domain.SlotBindingSource(b.Source),
 			Ref: strVal(b.Ref), ConstValue: strVal(b.ConstValue), DisplayOrder: b.DisplayOrder,
 		})
 	}

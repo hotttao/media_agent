@@ -33,7 +33,7 @@ func newMockLookup() *mockTemplateLookup {
 func TestValidateDAG_SingleStep(t *testing.T) {
 	v := newValidator("ai_clothing", []domain.Step{
 		{Key: "s1", Order: 1, TemplateID: "tpl_a", TemplateVersion: 1,
-			Bindings: []domain.Binding{{ToInput: "scene", Source: domain.SourceWorkflowInput}}},
+			SlotBindings: []domain.SlotBinding{{ToInput: "scene", Source: domain.SourceWorkflowInput, Ref: "scene"}}},
 	}, "s1", newMockLookup())
 	res, _ := v.validate(context.Background())
 	if !res.Valid {
@@ -47,9 +47,9 @@ func TestValidateDAG_SingleStep(t *testing.T) {
 func TestValidateDAG_MultiStep(t *testing.T) {
 	v := newValidator("ai_clothing", []domain.Step{
 		{Key: "a", Order: 1, TemplateID: "tpl_a", TemplateVersion: 1,
-			Bindings: []domain.Binding{{ToInput: "scene", Source: domain.SourceWorkflowInput}}},
+			SlotBindings: []domain.SlotBinding{{ToInput: "scene", Source: domain.SourceWorkflowInput, Ref: "scene"}}},
 		{Key: "b", Order: 2, TemplateID: "tpl_b", TemplateVersion: 1,
-			Bindings: []domain.Binding{{ToInput: "first_frame", Source: domain.SourceStepOutput, Ref: "a"}}},
+			SlotBindings: []domain.SlotBinding{{ToInput: "first_frame", Source: domain.SourceStepOutput, Ref: "a"}}},
 	}, "b", newMockLookup())
 	res, _ := v.validate(context.Background())
 	if !res.Valid {
@@ -91,7 +91,7 @@ func TestValidateDAG_MultipleSinks(t *testing.T) {
 func TestValidateDAG_BackRef(t *testing.T) {
 	v := newValidator("ai_clothing", []domain.Step{
 		{Key: "a", Order: 1, TemplateID: "tpl_a", TemplateVersion: 1,
-			Bindings: []domain.Binding{{ToInput: "x", Source: domain.SourceStepOutput, Ref: "b"}}},
+			SlotBindings: []domain.SlotBinding{{ToInput: "x", Source: domain.SourceStepOutput, Ref: "b"}}},
 		{Key: "b", Order: 2, TemplateID: "tpl_b", TemplateVersion: 1},
 	}, "b", newMockLookup())
 	res, _ := v.validate(context.Background())
@@ -150,8 +150,8 @@ func TestValidateDAG_ArchivedTemplate(t *testing.T) {
 func TestValidateDAG_ConstBinding(t *testing.T) {
 	v := newValidator("ai_clothing", []domain.Step{
 		{Key: "s1", Order: 1, TemplateID: "tpl_a", TemplateVersion: 1,
-			Bindings: []domain.Binding{
-				{ToInput: "scene", Source: domain.SourceWorkflowInput},
+			SlotBindings: []domain.SlotBinding{
+				{ToInput: "scene", Source: domain.SourceWorkflowInput, Ref: "scene"},
 				{ToInput: "style", Source: domain.SourceConst, ConstValue: "cinematic"},
 			}},
 	}, "s1", newMockLookup())
@@ -164,7 +164,7 @@ func TestValidateDAG_ConstBinding(t *testing.T) {
 func TestValidateDAG_ConstEmptyValue(t *testing.T) {
 	v := newValidator("ai_clothing", []domain.Step{
 		{Key: "s1", Order: 1, TemplateID: "tpl_a", TemplateVersion: 1,
-			Bindings: []domain.Binding{
+			SlotBindings: []domain.SlotBinding{
 				{ToInput: "style", Source: domain.SourceConst, ConstValue: ""},
 			}},
 	}, "s1", newMockLookup())
@@ -177,13 +177,13 @@ func TestValidateDAG_ConstEmptyValue(t *testing.T) {
 func TestDeriveInputSchema(t *testing.T) {
 	v := newValidator("ai_clothing", []domain.Step{
 		{Key: "a", Order: 1, TemplateID: "tpl_a", TemplateVersion: 1,
-			Bindings: []domain.Binding{
-				{ToInput: "scene", Source: domain.SourceWorkflowInput},
+			SlotBindings: []domain.SlotBinding{
+				{ToInput: "scene", Source: domain.SourceWorkflowInput, Ref: "scene_input"},
 				{ToInput: "style", Source: domain.SourceConst, ConstValue: "x"},
 			}},
 		{Key: "b", Order: 2, TemplateID: "tpl_b", TemplateVersion: 1,
-			Bindings: []domain.Binding{
-				{ToInput: "scene", Source: domain.SourceWorkflowInput}, // 同名 input，去重
+			SlotBindings: []domain.SlotBinding{
+				{ToInput: "scene", Source: domain.SourceWorkflowInput, Ref: "scene_input"}, // 同一个 workflow input，去重
 				{ToInput: "first_frame", Source: domain.SourceStepOutput, Ref: "a"},
 			}},
 	}, "b", newMockLookup())
@@ -191,13 +191,13 @@ func TestDeriveInputSchema(t *testing.T) {
 	if !res.Valid {
 		t.Fatalf("expected valid, got: %v", res.RejectReasons)
 	}
-	// input_schema 应只有 "scene"（WORKFLOW_INPUT 的 to_input，去重）
+	// input_schema 应只有显式入口名 "scene_input"（按 ref 去重）
 	names := make(map[string]bool)
 	for _, e := range res.InputSchema {
 		names[e.Name] = true
 	}
-	if !names["scene"] {
-		t.Errorf("input_schema missing 'scene': %v", res.InputSchema)
+	if !names["scene_input"] {
+		t.Errorf("input_schema missing 'scene_input': %v", res.InputSchema)
 	}
 	if names["ff"] {
 		t.Errorf("input_schema should not contain 'ff' (step_output): %v", res.InputSchema)
