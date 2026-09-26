@@ -5,7 +5,7 @@ setup("authenticate", async ({ page }) => {
   if (process.env.E2E_DEV_AUTH === "true") {
     await page.goto("/");
     await expect(
-      page.getByRole("heading", { name: "Media Workflow" }),
+      page.getByRole("heading", { name: /Media (Agent|Workflow)/ }),
     ).toBeVisible();
     await page.context().storageState({ path: "e2e/auth/storage-state.json" });
     return;
@@ -21,16 +21,16 @@ setup("authenticate", async ({ page }) => {
 
   await page.goto("/login");
 
-  await page
-    .getByRole("textbox", { name: /email|邮箱|用户名/i })
-    .fill(email);
+  await page.getByRole("textbox", { name: /email|邮箱|用户名/i }).fill(email);
   await page.getByRole("textbox", { name: /password|密码/i }).fill(password);
-  await page.getByRole("button", { name: /sign in with password|登录/i }).click();
+  await page
+    .getByRole("button", { name: /sign in with password|登录/i })
+    .click();
 
   // Kratos returns to the requested application path with its session cookie.
   await page.waitForURL(/\/$/);
   await expect(
-    page.getByRole("heading", { name: "Media Workflow" }),
+    page.getByRole("heading", { name: /Media (Agent|Workflow)/ }),
   ).toBeVisible({
     timeout: 15_000,
   });

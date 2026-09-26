@@ -9,6 +9,7 @@
 
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { Boxes, GitBranch, LogOut, Sparkles } from "lucide-react";
 import {
   ONE_COLUMN_SLOTS,
   OneColumnLayout,
@@ -62,7 +63,7 @@ export function Desktop() {
       apps={apps}
       fallbackSlotId="slot-a"
     >
-      <div className="flex h-screen flex-col bg-background text-foreground">
+      <div className="flex h-screen flex-col bg-transparent text-foreground">
         <ShellHeader shell={shell} />
         <div className="min-h-0 flex-1">
           <OneColumnLayout />
@@ -86,10 +87,20 @@ function ShellHeader({
     slots.activate(target.slotId, target.instanceId);
   };
   return (
-    <header className="border-b border-foreground/[0.06] px-4 py-2 text-sm font-medium">
-      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
+    <header className="relative z-20 border-b border-foreground/[0.06] bg-background/85 px-4 py-3 text-sm font-medium shadow-sm backdrop-blur-xl sm:px-6">
+      <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-3 sm:gap-5">
         <div className="flex min-w-0 items-center gap-3">
-          <h1 className="font-semibold">Media Workflow</h1>
+          <div className="flex items-center gap-2.5 border-r pr-4">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-primary to-violet-500 text-white shadow-lg shadow-primary/20">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <div className="hidden sm:block">
+              <h1 className="font-semibold tracking-tight">Media Agent</h1>
+              <p className="text-[10px] font-normal text-muted-foreground">
+                Creative workspace
+              </p>
+            </div>
+          </div>
           <nav
             aria-label={t("shell.applications")}
             className="flex items-center gap-1"
@@ -98,22 +109,24 @@ function ShellHeader({
               type="button"
               className={
                 active === "materials"
-                  ? "rounded bg-foreground/10 px-2 py-1"
-                  : "rounded px-2 py-1 text-muted-foreground hover:bg-foreground/10"
+                  ? "inline-flex items-center gap-2 rounded-xl bg-primary/10 px-3 py-2 text-primary"
+                  : "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
               }
               onClick={() => openApp("materials")}
             >
+              <Boxes className="h-4 w-4" />
               {t("nav.materials")}
             </button>
             <button
               type="button"
               className={
                 active === "workflow"
-                  ? "rounded bg-foreground/10 px-2 py-1"
-                  : "rounded px-2 py-1 text-muted-foreground hover:bg-foreground/10"
+                  ? "inline-flex items-center gap-2 rounded-xl bg-primary/10 px-3 py-2 text-primary"
+                  : "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
               }
               onClick={() => openApp("workflow")}
             >
+              <GitBranch className="h-4 w-4" />
               {t("nav.workflow")}
             </button>
           </nav>
@@ -124,7 +137,7 @@ function ShellHeader({
             {shell.organization.name} / {shell.team.name} /{" "}
             {shell.workspace.name}
           </span>
-          <span className="text-xs text-muted-foreground">
+          <span className="hidden rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground sm:inline">
             {user?.username}
           </span>
           <Button
@@ -133,6 +146,7 @@ function ShellHeader({
             size="sm"
             onClick={() => void logout()}
           >
+            <LogOut className="mr-1.5 h-3.5 w-3.5" />
             {t("shell.signOut")}
           </Button>
         </div>

@@ -5,12 +5,24 @@ test.describe("Materials and Workflow shell", () => {
     tag: "@C900001",
   }, async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Media Workflow" })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "Applications" })).toContainText("Materials");
-    await expect(page.getByRole("navigation", { name: "Applications" })).toContainText("Workflow");
-    await expect(page.getByText("Local Organization / Default Team / Standalone Workspace")).toBeVisible();
     await expect(
-      page.getByText("No materials yet.").or(page.getByRole("columnheader", { name: "Name" })),
+      page.getByRole("heading", { name: /Media (Agent|Workflow)/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Applications" }),
+    ).toContainText("Materials");
+    await expect(
+      page.getByRole("navigation", { name: "Applications" }),
+    ).toContainText("Workflow");
+    await expect(
+      page.getByText(
+        "Local Organization / Default Team / Standalone Workspace",
+      ),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByText("No materials yet.")
+        .or(page.getByRole("columnheader", { name: "Name" })),
     ).toBeVisible();
     await expect(page.getByText(/Unable to load materials:/)).toHaveCount(0);
   });

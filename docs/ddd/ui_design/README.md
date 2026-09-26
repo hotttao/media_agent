@@ -21,6 +21,7 @@ Agent Request 交互见 [agent-request-flow.md](agent-request-flow.md)。
 浏览器认证、恢复与登出见 [authentication-flow.md](authentication-flow.md)。
 企业素材创建、图片上传与详情维护见 [material-library-flow.md](material-library-flow.md)。
 Workflow 选择输入并创建执行见 [workflow-execution-flow.md](workflow-execution-flow.md)。
+Workflow 可视化定义与编辑见 [workflow-authoring-flow.md](workflow-authoring-flow.md)。
 
 ## 设计与验证
 

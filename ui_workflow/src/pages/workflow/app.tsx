@@ -81,13 +81,13 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
           />,
           headerSlot,
         )}
-      <div className="flex h-full flex-col">
-        <div className="border-b border-foreground/[0.06] px-3 py-2">
+      <div className="flex h-full flex-col bg-background">
+        <div className="border-b border-foreground/[0.06] bg-card/80 px-4 py-3 backdrop-blur">
           <Tabs
             value={resource}
             onValueChange={(v) => changeResource(v as Resource)}
           >
-            <TabsList>
+            <TabsList className="rounded-xl bg-muted/70 p-1">
               {RESOURCES.map((r) => (
                 <TabsTrigger key={r.id} value={r.id}>
                   {t(r.labelKey)}
@@ -115,7 +115,10 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
           )}
 
           {resource === "workflow" && view === "list" && (
-            <WorkflowList onSelect={select} />
+            <WorkflowList
+              onSelect={select}
+              onCreate={() => setView("create")}
+            />
           )}
           {resource === "workflow" && view === "show" && selectedId && (
             <WorkflowShow

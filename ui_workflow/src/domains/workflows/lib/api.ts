@@ -50,19 +50,21 @@ function toWire(input: Partial<WorkflowInput>): Record<string, unknown> {
 
 function fromWire(workflow: Workflow): Workflow {
   const wireStatus = String(workflow.status ?? "").toLowerCase();
+  const numericStatus = Number(workflow.status);
   return {
     ...workflow,
-    status: wireStatus.includes("published")
-      ? "published"
-      : wireStatus.includes("archived")
-        ? "archived"
-        : "draft",
+    status:
+      numericStatus === 2 || wireStatus.includes("published")
+        ? "published"
+        : numericStatus === 3 || wireStatus.includes("archived")
+          ? "archived"
+          : "draft",
     steps: (workflow.steps ?? []).map((step: WorkflowStep) => {
       const rawBindings = step.slot_bindings as unknown as
         | SlotBinding[]
         | Record<
             string,
-            { source?: string; ref?: string; const_value?: unknown }
+            { source?: unknown; ref?: string; const_value?: unknown }
           >;
       return {
         ...step,
@@ -71,14 +73,20 @@ function fromWire(workflow: Workflow): Workflow {
           : (
               Object.entries(rawBindings ?? {}) as [
                 string,
-                { source?: string; ref?: string; const_value?: unknown },
+                { source?: unknown; ref?: string; const_value?: unknown },
               ][]
             ).map(([to_input, binding]) => ({
               to_input,
               source:
-                binding.source === "STEP_OUTPUT"
+                binding.source === "STEP_OUTPUT" ||
+                binding.source === "SOURCE_STEP_OUTPUT" ||
+                binding.source === "2" ||
+                binding.source === 2
                   ? "step_output"
-                  : binding.source === "CONST"
+                  : binding.source === "CONST" ||
+                      binding.source === "SOURCE_CONST" ||
+                      binding.source === "3" ||
+                      binding.source === 3
                     ? "const"
                     : "workflow_input",
               ref: binding.ref,
