@@ -101,6 +101,12 @@ export async function regenerateStepRun(stepRunId: string): Promise<StepRun> {
 // ── Workflow list (minimal projection for JobCreate selector) ───────────
 
 export async function listWorkflows(): Promise<WorkflowOption[]> {
-  const page = await api.request<WorkflowsListResponse>("/workflows");
-  return page.items;
+  const page = await api.request<WorkflowsListResponse>(
+    "/workflows?status=published&page_size=200",
+  );
+  return page.items.filter(
+    (workflow) =>
+      workflow.status === 2 ||
+      String(workflow.status).toLowerCase().includes("published"),
+  );
 }

@@ -20,7 +20,7 @@ Workflow 域负责存储「一组有序 Step 通过 SlotBinding 串联而成的 
 
 ### 做什么
 - Create / Update / SoftDelete Workflow，强制 1:1 scope（与 Template 一致，不可改）。
-- 维护 WorkflowInput[] 入口参数（`(name, type, required)`），`type ∈ {material, asset, product, virtual_ip}`——调用方在 SubmitJob 时传对应 id（material_id / generated_asset_id / product_id / virtual_ip_id）；具体 asset_kind 约束与解析选择由所绑定的 template slot 的 `kind` 承担。
+- 维护 WorkflowInput[] 入口参数（`(name, type, asset_kind?, required)`），`type ∈ {material, asset, product, virtual_ip}`——调用方在 SubmitJob 时传对应 id（material_id / generated_asset_id / product_id / virtual_ip_id）。material / asset 输入从所绑定 Template Slot 冻结唯一 asset_kind；product / virtual_ip 的解析选择仍由各消费 Slot 的 kind 承担。
 - 维护有序 Step 列表（用户提交顺序即 step_order），每个 Step 引用一个 Template。
 - 维护每个 Step 的 SlotBinding 列表，`source ∈ {workflow_input, step_output, const}`。
 - 维护每个 Step 的 `approval_policy ∈ {when_multiple_candidates, always}`；多 Candidate 始终审批，always 还覆盖单 Candidate。
@@ -127,6 +127,7 @@ Workflow 顶部声明的入口参数。每个 workflow_input 是一个**资源�
 | version | int not null | 版本号 |
 | name | text not null | 入口参数名；同 workflow+version 内唯一 |
 | type | text not null | 引用类型；CHECK in ('material','asset','product','virtual_ip')；asset=generated_asset |
+| asset_kind | text nullable | material / asset 必填且同名输入唯一；product / virtual_ip 留空，由消费 Slot 解析 |
 | required | bool not null | 是否必填 |
 | display_order | int not null | 排序 |
 
@@ -215,6 +216,7 @@ type Workflow struct {
 type WorkflowInputDef struct {
     Name         string
     Type         WorkflowInputType  // asset / product / virtual_ip
+    AssetKind    string             // material / asset 必填
     Required     bool
     DisplayOrder int
 }
@@ -277,6 +279,7 @@ const (
      - `type=asset` → slot.kind.resource_type = ASSET
      - `type ∈ {product, virtual_ip}` → slot.kind.resource_type ∈ {MATERIAL, ASSET}（从 product / virtual_ip 解析一个 material 或 generated_asset）；slot.kind 充当解析选择器（见 [workflow_execution](../../workflow/0002-workflow_execution/workflow_execution.md)）
      - slot.kind 必填，否则 reject `ErrSlotKindRequired`
+     - 同名 material / asset Workflow Input 的全部绑定必须具有相同 slot.kind，否则 reject `INPUT_ASSET_KIND_CONFLICT`
    - `source=step_output`：`RefStepKey` 必须存在，且 ref step 的 `StepOrder < 当前 StepOrder`；消费侧 `to_input` 槽的 kind.media_type 必须 == ref step 所引 Template 的 `OutputAssetKind.media_type`（类型安全的边）。
    - `source=const`：`ConstValue` 非 nil；类型校验在 Render 层与 slot.kind.media_type 对齐（见 [template §Render 接口](../0001-template/template.md#render-接口)）。
    - `to_input` 必须是所引 Template 的 `Inputs[].Name` 之一。

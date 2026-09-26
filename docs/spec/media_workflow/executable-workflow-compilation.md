@@ -83,3 +83,10 @@ Template 与 Template Version 增加 `capability_key`、`capability_version` 和
 - Backend Compiler：Renderer 自动插入、Capability 参数引用正确、images 顺序、拓扑波次、hash 稳定、无敏感字段。
 - 集成：注册 Definition 后，Renderer Worker 输出 prompt，Capability Worker 收到固定 `prompt + images[]`。
 - E2E：迁移 `media_ai/scripts/workflow-cli` 的七阶段视频流程；只导入一个 fixture execution，启动真实 Conductor、internal worker 与 `media_worker --profile media_ai_fixture`，从 UI/API SubmitJob 并验证最终视频结果。用户确认前不迁移其余旧数据。
+
+## Job 输入表单契约
+
+- `InputSchemaEntry` 返回 `name/resource_type/asset_kind/required`；`asset_kind` 对 MATERIAL、ASSET 必填，对 PRODUCT、VIRTUAL_IP 可空。
+- Workflow Validator 拒绝同名 MATERIAL/ASSET input 绑定不同 asset kind。
+- 独立前端读取已发布 Workflow 的 scope、version 与 Input Schema，按 Organization/Scope/Asset Kind 查询候选并组装 JobInput；不向业务用户暴露 JSON 编辑器。
+- MATERIAL 使用 object path 的可访问 URL 与文本内容形成 bundle；Product、Virtual IP 使用稳定业务字段形成快照。提交显式携带当前 Workflow version。

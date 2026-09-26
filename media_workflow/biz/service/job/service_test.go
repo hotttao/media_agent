@@ -548,6 +548,19 @@ func TestValidateBundle_ResourceTypeMismatch(t *testing.T) {
 	}
 }
 
+func TestValidateBundle_AssetKindMismatch(t *testing.T) {
+	svc := &Service{}
+	schema := []wfdomain.InputSchemaEntry{
+		{Name: "scene", ResourceType: "MATERIAL", AssetKind: "scene", Required: true},
+	}
+	input := domain.JobInput{Materials: []domain.MaterialData{
+		{Name: "scene", AssetKind: "pose", URL: "https://a.png"},
+	}}
+	if err := svc.validateBundle(schema, input); err == nil {
+		t.Fatal("expected error for asset_kind mismatch")
+	}
+}
+
 // FailStepRun cascade skip 下游：A failed -> B (BLOCKED 依赖 A) -> SKIPPED
 func TestFail_CascadeSkipDownstream(t *testing.T) {
 	svc, jobRepo, srRepo := newTestServiceWithDAG()

@@ -157,10 +157,10 @@ func (s *Service) validateBundle(schema []wfdomain.InputSchemaEntry, input domai
 		}
 		assetSeen[a.Name] = true
 	}
-	// 2. input_schema 索引：name -> resource_type（用于 required 校验 + 无多余类型校验）
-	schemaByName := make(map[string]string, len(schema))
+	// 2. input_schema 索引（用于 required、类型和 asset_kind 校验）。
+	schemaByName := make(map[string]wfdomain.InputSchemaEntry, len(schema))
 	for _, e := range schema {
-		schemaByName[e.Name] = e.ResourceType
+		schemaByName[e.Name] = e
 	}
 	// 3. required 覆盖校验
 	for _, e := range schema {
@@ -188,21 +188,31 @@ func (s *Service) validateBundle(schema []wfdomain.InputSchemaEntry, input domai
 	}
 	// 4. 无多余类型校验：bundle 中每个 material/asset name 必须在 input_schema 中存在且 resource_type 匹配
 	for name := range matSeen {
-		rt, ok := schemaByName[name]
+		entry, ok := schemaByName[name]
 		if !ok {
 			return fmt.Errorf("material %q not declared in workflow input_schema (extra type)", name)
 		}
-		if rt != "MATERIAL" {
-			return fmt.Errorf("material %q resource_type mismatch: schema=%s, bundle=MATERIAL", name, rt)
+		if entry.ResourceType != "MATERIAL" {
+			return fmt.Errorf("material %q resource_type mismatch: schema=%s, bundle=MATERIAL", name, entry.ResourceType)
+		}
+		for _, material := range input.Materials {
+			if material.Name == name && entry.AssetKind != "" && material.AssetKind != entry.AssetKind {
+				return fmt.Errorf("material %q asset_kind mismatch: schema=%s, bundle=%s", name, entry.AssetKind, material.AssetKind)
+			}
 		}
 	}
 	for name := range assetSeen {
-		rt, ok := schemaByName[name]
+		entry, ok := schemaByName[name]
 		if !ok {
 			return fmt.Errorf("asset %q not declared in workflow input_schema (extra type)", name)
 		}
-		if rt != "ASSET" {
-			return fmt.Errorf("asset %q resource_type mismatch: schema=%s, bundle=ASSET", name, rt)
+		if entry.ResourceType != "ASSET" {
+			return fmt.Errorf("asset %q resource_type mismatch: schema=%s, bundle=ASSET", name, entry.ResourceType)
+		}
+		for _, asset := range input.Assets {
+			if asset.Name == name && entry.AssetKind != "" && asset.AssetKind != entry.AssetKind {
+				return fmt.Errorf("asset %q asset_kind mismatch: schema=%s, bundle=%s", name, entry.AssetKind, asset.AssetKind)
+			}
 		}
 	}
 	return nil
@@ -761,10 +771,10 @@ func conductorInputs(input domain.JobInput) map[string]any {
 		result["virtual_ip"] = map[string]any{"value": input.VirtualIP, "asset_ref": input.VirtualIP.FullBodyURL}
 	}
 	for _, asset := range input.Assets {
-		result[asset.Name] = map[string]any{"asset_ref": asset.URL, "url": asset.URL, "content": asset.Content}
+		result[asset.Name] = map[string]any{"asset_ref": asset.URL, "url": asset.URL, "content": asset.Content, "asset_kind": asset.AssetKind}
 	}
 	for _, material := range input.Materials {
-		result[material.Name] = map[string]any{"asset_ref": material.URL, "url": material.URL, "content": material.Content}
+		result[material.Name] = map[string]any{"asset_ref": material.URL, "url": material.URL, "content": material.Content, "asset_kind": material.AssetKind}
 	}
 	return result
 }

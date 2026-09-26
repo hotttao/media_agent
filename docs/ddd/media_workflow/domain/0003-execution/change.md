@@ -51,3 +51,8 @@
 - Job/StepRun 继续作为业务事实源，Conductor 只负责持久调度、等待和技术重试。
 - SubmitJob 通过 Outbox 以 job_id correlationId 启动编译后的 Definition。
 - Capability Worker 必须先幂等提交业务结果，再完成 Conductor Task。
+
+## 2026-09-26：Job 输入按 Asset Kind 选择
+
+- SubmitJob 的 material / asset bundle 必须与冻结 Input Schema 的 `asset_kind` 对齐。
+- Job 创建界面消费服务端 Input Schema 生成资源选择器，不再要求业务用户手写 bundle JSON。

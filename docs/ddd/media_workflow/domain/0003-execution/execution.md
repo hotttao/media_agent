@@ -126,7 +126,7 @@ Job 和 StepRun 使用 ULID；下游幂等键由 `step_run_id + attempt` 派生�
 
 ### SubmitJob
 
-1. 校验 Workflow published、Workspace/Scope 一致且输入可达。
+1. 校验 Workflow published、Workspace/Scope 一致、material/asset 与 Input Schema 的 `asset_kind` 匹配且输入可达。
 2. 事务内保存 Job、全部 StepRun 和 `StartConductorWorkflow` Outbox。
 3. Adapter 事务外按 Compilation mapping 启动 Conductor，以 `job_id` 为 correlationId；超时不确定时先按 correlationId 查询，不盲目重启。
 

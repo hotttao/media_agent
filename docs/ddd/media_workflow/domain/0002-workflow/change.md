@@ -62,3 +62,8 @@
 - IR 中节点统一称为 `ExecutableStepIR`；不再使用 `CompiledStepPlan`。
 - Conductor Definition 内嵌每个 Step IR 降低后的执行语义，运行时不从 `workflow_compilations` 查询转换计划。
 - 原 `StepBinding`/`input_bindings` 统一更名为 `SlotBinding`/`slot_bindings`，明确其目标是 Template Slot；Semantic Compiler 将其消解为 IR `context`。
+
+## 2026-09-26：Input Schema 暴露资源类别
+
+- material / asset Workflow Input 的派生快照增加 `asset_kind`，作为创建 Job 时的兼容资源选择与校验契约。
+- 同名输入不得跨不同 material/asset kind 复用；product / virtual_ip 保持由各消费 Slot 解析。

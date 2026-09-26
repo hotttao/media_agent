@@ -21,9 +21,11 @@ setup("authenticate", async ({ page }) => {
 
   await page.goto("/login");
 
-  await page.getByRole("textbox", { name: /email/i }).fill(email);
-  await page.getByRole("textbox", { name: /^password \*$/i }).fill(password);
-  await page.getByRole("button", { name: /sign in with password/i }).click();
+  await page
+    .getByRole("textbox", { name: /email|邮箱|用户名/i })
+    .fill(email);
+  await page.getByRole("textbox", { name: /password|密码/i }).fill(password);
+  await page.getByRole("button", { name: /sign in with password|登录/i }).click();
 
   // Kratos returns to the requested application path with its session cookie.
   await page.waitForURL(/\/$/);

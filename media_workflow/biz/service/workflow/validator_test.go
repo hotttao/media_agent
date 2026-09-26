@@ -24,8 +24,8 @@ func (m *mockTemplateLookup) GetVersion(_ context.Context, id string, version in
 func newMockLookup() *mockTemplateLookup {
 	return &mockTemplateLookup{
 		templates: map[string]*domain.TemplateSnapshot{
-			"tpl_a": {ID: "tpl_a", Scope: "ai_clothing", Status: "draft", OutputAssetKind: "first_frame", Platform: "gpt", GenWay: "i2i", Inputs: []domain.SlotSnapshot{{Name: "scene", ResourceType: "MATERIAL", Required: true}, {Name: "style", ResourceType: "TEXT", Required: false}}},
-			"tpl_b": {ID: "tpl_b", Scope: "ai_clothing", Status: "draft", OutputAssetKind: "ai_video", Platform: "jimeng", GenWay: "i2v", Inputs: []domain.SlotSnapshot{{Name: "first_frame", ResourceType: "ASSET", Required: true}, {Name: "scene", ResourceType: "MATERIAL", Required: true}}},
+			"tpl_a": {ID: "tpl_a", Scope: "ai_clothing", Status: "draft", OutputAssetKind: "first_frame", Platform: "gpt", GenWay: "i2i", Inputs: []domain.SlotSnapshot{{Name: "scene", AssetKind: "scene", ResourceType: "MATERIAL", Required: true}, {Name: "style", ResourceType: "TEXT", Required: false}}},
+			"tpl_b": {ID: "tpl_b", Scope: "ai_clothing", Status: "draft", OutputAssetKind: "ai_video", Platform: "jimeng", GenWay: "i2v", Inputs: []domain.SlotSnapshot{{Name: "first_frame", AssetKind: "first_frame", ResourceType: "ASSET", Required: true}, {Name: "scene", AssetKind: "scene", ResourceType: "MATERIAL", Required: true}}},
 		},
 	}
 }
@@ -199,10 +199,35 @@ func TestDeriveInputSchema(t *testing.T) {
 	if !names["scene_input"] {
 		t.Errorf("input_schema missing 'scene_input': %v", res.InputSchema)
 	}
+	if len(res.InputSchema) != 1 || res.InputSchema[0].AssetKind != "scene" {
+		t.Errorf("input_schema asset_kind = %v, want scene", res.InputSchema)
+	}
 	if names["ff"] {
 		t.Errorf("input_schema should not contain 'ff' (step_output): %v", res.InputSchema)
 	}
 	if names["style"] {
 		t.Errorf("input_schema should not contain 'style' (const): %v", res.InputSchema)
+	}
+}
+
+func TestDeriveInputSchemaRejectsAssetKindConflict(t *testing.T) {
+	lookup := newMockLookup()
+	lookup.templates["tpl_b"].Inputs[1].AssetKind = "background"
+	v := newValidator("ai_clothing", []domain.Step{
+		{Key: "a", Order: 1, TemplateID: "tpl_a", TemplateVersion: 1,
+			SlotBindings: []domain.SlotBinding{{ToInput: "scene", Source: domain.SourceWorkflowInput, Ref: "shared"}}},
+		{Key: "b", Order: 2, TemplateID: "tpl_b", TemplateVersion: 1,
+			SlotBindings: []domain.SlotBinding{
+				{ToInput: "scene", Source: domain.SourceWorkflowInput, Ref: "shared"},
+				{ToInput: "first_frame", Source: domain.SourceStepOutput, Ref: "a"},
+			}},
+	}, "b", lookup)
+
+	res, _ := v.validate(context.Background())
+	if res.Valid {
+		t.Fatal("expected asset kind conflict")
+	}
+	if got := res.RejectReasons[len(res.RejectReasons)-1].Code; got != "INPUT_ASSET_KIND_CONFLICT" {
+		t.Fatalf("reject code = %s, want INPUT_ASSET_KIND_CONFLICT", got)
 	}
 }

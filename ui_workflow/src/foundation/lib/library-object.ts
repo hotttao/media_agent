@@ -1,4 +1,4 @@
-import { ApiClientError } from "@/foundation/lib/api-client";
+import { ApiClientError, api } from "@/foundation/lib/api-client";
 
 export type LibraryObjectPurpose =
   | "material"
@@ -13,6 +13,17 @@ export interface UploadedLibraryObject {
   size_bytes: number;
   content_type: string;
   checksum: string;
+}
+
+export async function resolveLibraryObject(
+  objectPath?: string,
+): Promise<string> {
+  if (!objectPath) return "";
+  const query = new URLSearchParams({ object_path: objectPath });
+  const result = await api.request<{ url: string }>(
+    `/library-objects:resolve?${query.toString()}`,
+  );
+  return result.url;
 }
 
 export async function uploadLibraryObject(input: {

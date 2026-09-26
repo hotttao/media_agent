@@ -39,8 +39,10 @@ func (v *validator) validate(ctx context.Context) (*domain.ValidationResult, err
 		return res, nil
 	}
 
-	// C. input_schema 派生
-	res.InputSchema = v.deriveInputSchema()
+	// C. input_schema 派生与同名入口契约一致性
+	if err := v.deriveInputSchema(res); err != nil {
+		return res, nil
+	}
 
 	res.Valid = len(res.RejectReasons) == 0
 	return res, nil
@@ -202,16 +204,17 @@ func (v *validator) validateBindings(res *domain.ValidationResult) error {
 	return nil
 }
 
-// C. input_schema 派生：从所有 WORKFLOW_INPUT bindings 取 slot.name + resource_type + required。
-// resource_type 从 template snapshot 的 inputs 里按 slot.name 查。
-func (v *validator) deriveInputSchema() []domain.InputSchemaEntry {
+// C. input_schema 派生：从所有 WORKFLOW_INPUT bindings 取 ref +
+// resource_type + asset_kind + required。material/asset 的同名入口必须冻结
+// 唯一 asset_kind；product/virtual_ip 仍由每个消费 slot 独立解析。
+func (v *validator) deriveInputSchema(res *domain.ValidationResult) error {
 	seen := make(map[string]*domain.InputSchemaEntry)
 	for _, s := range v.steps {
 		snap := v.tplSnapshots[s.TemplateID]
 		if snap == nil {
 			continue
 		}
-		// 构 slot name → resource_type + required 映射
+		// 构 slot name → resource_type + asset_kind + required 映射
 		slotInfo := make(map[string]domain.SlotSnapshot, len(snap.Inputs))
 		for _, in := range snap.Inputs {
 			slotInfo[in.Name] = in
@@ -225,9 +228,30 @@ func (v *validator) deriveInputSchema() []domain.InputSchemaEntry {
 				e = &domain.InputSchemaEntry{Name: b.Ref, Required: true}
 				seen[b.Ref] = e
 			}
-			// 从 template slot 填 resource_type
+			// 从 template slot 填 resource_type 与 material/asset kind。
 			if info, found := slotInfo[b.ToInput]; found {
+				if e.ResourceType != "" && e.ResourceType != info.ResourceType {
+					res.RejectReasons = append(res.RejectReasons, domain.RejectReason{
+						Code: "BINDING_INVALID", Message: "workflow input is bound to multiple resource types", Subject: b.Ref,
+					})
+					return fmt.Errorf("workflow input %s resource type conflict", b.Ref)
+				}
 				e.ResourceType = info.ResourceType
+				if info.ResourceType == "MATERIAL" || info.ResourceType == "ASSET" {
+					if info.AssetKind == "" {
+						res.RejectReasons = append(res.RejectReasons, domain.RejectReason{
+							Code: "SLOT_KIND_REQUIRED", Message: "material/asset workflow input requires asset_kind", Subject: b.Ref,
+						})
+						return fmt.Errorf("workflow input %s asset kind is empty", b.Ref)
+					}
+					if e.AssetKind != "" && e.AssetKind != info.AssetKind {
+						res.RejectReasons = append(res.RejectReasons, domain.RejectReason{
+							Code: "INPUT_ASSET_KIND_CONFLICT", Message: "workflow input is bound to multiple asset kinds", Subject: b.Ref,
+						})
+						return fmt.Errorf("workflow input %s asset kind conflict", b.Ref)
+					}
+					e.AssetKind = info.AssetKind
+				}
 				if !info.Required {
 					e.Required = false
 				}
@@ -239,5 +263,6 @@ func (v *validator) deriveInputSchema() []domain.InputSchemaEntry {
 		out = append(out, *e)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
+	res.InputSchema = out
+	return nil
 }

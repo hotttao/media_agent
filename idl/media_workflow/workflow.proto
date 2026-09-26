@@ -87,6 +87,7 @@ message InputSchemaEntry {
   string name = 1;
   string resource_type = 2;
   bool required = 3;
+  string asset_kind = 4; // required for MATERIAL/ASSET; empty for PRODUCT/VIRTUAL_IP
 }
 message WorkflowInputSchema { repeated InputSchemaEntry entries = 1; }
 

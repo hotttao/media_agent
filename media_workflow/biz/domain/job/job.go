@@ -59,14 +59,16 @@ type JobInput struct {
 }
 
 type MaterialData struct {
-	Name    string `json:"name"`
-	URL     string `json:"url"`
-	Content string `json:"content"`
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	Content   string `json:"content"`
+	AssetKind string `json:"asset_kind"`
 }
 type AssetData struct {
-	Name    string `json:"name"`
-	URL     string `json:"url"`
-	Content string `json:"content"`
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	Content   string `json:"content"`
+	AssetKind string `json:"asset_kind"`
 }
 type ProductData struct {
 	ID             string `json:"id"`

@@ -56,7 +56,9 @@ sequenceDiagram
 SubmitJob 由 media_workflow 调用 [media_materials reachability workflow](../../../media_materials/workflow/0001-reachability/reachability.md)，校验输入属于同一 Workspace/Scope 并解析为资源 ID 与 Object Path；调用方不负责组装可信 bundle。
 
 - **workflow 保存时（闸 1）**：只校验 slot.kind 注册（`BatchGetAssetKind`），不校验 asset 可达性（workflow 是定义，无 asset 实例）。
-- **SubmitJob 时（闸 2）**：校验 bundle ↔ input_schema（required 覆盖、material/asset name 唯一、无多余类型、product/virtual_ip 非空如 required）；不调 reachability（caller 已校验可达性）。
+- **SubmitJob 时（闸 2）**：校验 bundle ↔ input_schema（required 覆盖、material/asset name 唯一、资源类别与 `asset_kind` 一致、无多余类型、product/virtual_ip 非空如 required）；不调 reachability（caller 已校验可达性）。
+
+Workflow 保存时从每条 `WORKFLOW_INPUT` SlotBinding 及其 Template Slot 派生 Input Schema。material / asset 类型的同名 Workflow Input 如果被绑定到不同 `asset_kind`，拒绝 `INPUT_ASSET_KIND_CONFLICT`；前端和调用方不得根据 input name 猜测类别。product / virtual_ip 可以在不同 Step 中按各 Slot 的 kind 解析，因此其 Input Schema 不要求单一 `asset_kind`。
 
 可达性规则（scope ∧ visibility ∧ 容器可达）定义在 [reachability workflow](../../../media_materials/workflow/0001-reachability/reachability.md)，由 caller 调用。原 §3 的 AssetReachability / Check*Accessible 调用迁至 caller。
 
@@ -88,6 +90,7 @@ type RejectReason struct {
 | `ASSET_UNREACHABLE` | asset_id 不在调用方可达集合 | 403 |
 | `VIP_UNREACHABLE` | virtual_ip 输入 scope 不匹配或 user 无 viewer+ | 403 |
 | `ASSET_KIND_MISMATCH` | input slot.kind 与所传 asset 的 asset_kind 不一致 | 400 |
+| `INPUT_ASSET_KIND_CONFLICT` | 同一 material/asset Workflow Input 被绑定到多个 asset_kind | 400 |
 | `SLOT_KIND_REQUIRED` | slot 未声明 kind，或 kind.resource_type 与 workflow_input.type 不自洽 | 400 |
 | `ASSET_KIND_INVALID` | slot.kind / output_asset_kind 未注册或已 DISABLED | 400 |
 | `BINDING_INVALID` | to_input 不在 template.inputs.name 内 / required slot 未 binding | 400 |

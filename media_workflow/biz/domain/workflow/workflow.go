@@ -74,6 +74,7 @@ type InputSchemaEntry struct {
 	Name         string `json:"name"`
 	ResourceType string `json:"resource_type"`
 	Required     bool   `json:"required"`
+	AssetKind    string `json:"asset_kind,omitempty"`
 }
 
 // Workflow 工作流（DAG）。input_schema 从 WORKFLOW_INPUT bindings 派生快照。

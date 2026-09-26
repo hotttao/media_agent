@@ -65,7 +65,7 @@ _禁用替代词_：Worker 参数拼装、动态入参、prepare plan
 _禁用替代词_：flow、pipeline、dag。
 
 **Workflow Input（工作流入口参数）**:
-Workflow 顶部声明的外部输入 entry，每条形如 `(name, type, required)`，`type ∈ {material, asset, product, virtual_ip}`——运行时由调用方在 SubmitJob 时提供对应 id（material_id / generated_asset_id / product_id / virtual_ip_id），被 Step 的 `workflow_input` 引用。product / virtual_ip 输入在执行时按所绑 template slot 的 `kind` 解析为具体 material/generated_asset。归 `workflow` domain。
+Workflow 顶部声明的外部输入 entry，每条形如 `(name, type, asset_kind?, required)`，`type ∈ {material, asset, product, virtual_ip}`——运行时由调用方在 SubmitJob 时提供对应 id（material_id / generated_asset_id / product_id / virtual_ip_id），被 Step 的 `workflow_input` 引用。material / asset 输入必须冻结唯一 `asset_kind`，供调用方选择兼容资源并由服务端校验；product / virtual_ip 输入在执行时按所绑 Template Slot 的 `kind` 解析为具体 material/generated_asset。归 `workflow` domain。
 _禁用替代词_：argument、variable、param。
 
 **Workflow Input Type（工作流入口参数类型）**:

@@ -218,10 +218,10 @@ func jobInputFromPB(in *pb.JobInput) domain.JobInput {
 		ji.VirtualIP = &domain.VirtualIpData{ID: v.GetId(), Name: v.GetName(), AvatarURL: v.GetAvatarUrl(), FullBodyURL: v.GetFullBodyUrl(), ThreeViewURL: v.GetThreeViewUrl(), NineViewURL: v.GetNineViewUrl()}
 	}
 	for _, a := range in.GetAsset() {
-		ji.Assets = append(ji.Assets, domain.AssetData{Name: a.GetName(), URL: a.GetUrl(), Content: a.GetContent()})
+		ji.Assets = append(ji.Assets, domain.AssetData{Name: a.GetName(), URL: a.GetUrl(), Content: a.GetContent(), AssetKind: a.GetAssetKind()})
 	}
 	for _, m := range in.GetMaterial() {
-		ji.Materials = append(ji.Materials, domain.MaterialData{Name: m.GetName(), URL: m.GetUrl(), Content: m.GetContent()})
+		ji.Materials = append(ji.Materials, domain.MaterialData{Name: m.GetName(), URL: m.GetUrl(), Content: m.GetContent(), AssetKind: m.GetAssetKind()})
 	}
 	return ji
 }
@@ -235,10 +235,10 @@ func jobInputToPB(ji domain.JobInput) *pb.JobInput {
 		out.VirtualIp = &pb.VirtualIpData{Id: ji.VirtualIP.ID, Name: ji.VirtualIP.Name, AvatarUrl: ji.VirtualIP.AvatarURL, FullBodyUrl: ji.VirtualIP.FullBodyURL, ThreeViewUrl: ji.VirtualIP.ThreeViewURL, NineViewUrl: ji.VirtualIP.NineViewURL}
 	}
 	for _, a := range ji.Assets {
-		out.Asset = append(out.Asset, &pb.AssetData{Name: a.Name, Url: a.URL, Content: a.Content})
+		out.Asset = append(out.Asset, &pb.AssetData{Name: a.Name, Url: a.URL, Content: a.Content, AssetKind: a.AssetKind})
 	}
 	for _, m := range ji.Materials {
-		out.Material = append(out.Material, &pb.MaterialData{Name: m.Name, Url: m.URL, Content: m.Content})
+		out.Material = append(out.Material, &pb.MaterialData{Name: m.Name, Url: m.URL, Content: m.Content, AssetKind: m.AssetKind})
 	}
 	return out
 }

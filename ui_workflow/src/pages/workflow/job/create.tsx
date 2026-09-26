@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { useSubmitJob } from "@/domains/jobs/hooks/use-job-mutations";
-import { useWorkflowsList } from "@/domains/jobs/hooks/use-workflows-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -10,16 +8,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
-import type { JobInput } from "@/domains/jobs/types";
+import { useSubmitJob } from "@/domains/jobs/hooks/use-job-mutations";
+import { useWorkflowsList } from "@/domains/jobs/hooks/use-workflows-list";
+import type { WorkflowInputSchemaEntry } from "@/domains/jobs/types";
+import { hostShim } from "@/foundation/lib/host-shim";
+import { resolveLibraryObject } from "@/foundation/lib/library-object";
+import { buildJobInput, missingRequiredInputs } from "./job-input";
+import { useJobInputOptions } from "./use-job-input-options";
 
-const EMPTY_INPUT_JSON = `{
-  "product": { "id": "", "name": "" },
-  "virtual_ip": { "id": "", "name": "" },
-  "asset": [],
-  "material": []
-}`;
+const RESOURCE_LABELS: Record<string, string> = {
+  PRODUCT: "商品",
+  VIRTUAL_IP: "虚拟 IP",
+  MATERIAL: "素材",
+  ASSET: "生成资产",
+};
+
+function inputLabel(entry: WorkflowInputSchemaEntry) {
+  const resource = RESOURCE_LABELS[entry.resource_type] ?? entry.resource_type;
+  return `${entry.name} · ${entry.asset_kind || resource}`;
+}
 
 export function JobCreate({
   onDone,
@@ -28,85 +36,147 @@ export function JobCreate({
   onDone: () => void;
   onSubmitted: (jobId: string) => void;
 }) {
+  const shell = hostShim.useShellContext();
   const submitJob = useSubmitJob();
   const { data: workflows, isLoading: workflowsLoading } = useWorkflowsList();
-  const [workflowId, setWorkflowId] = useState<string>("");
-  const [inputJson, setInputJson] = useState<string>(EMPTY_INPUT_JSON);
-  const [parseError, setParseError] = useState<string | null>(null);
+  const [workflowId, setWorkflowId] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Record<string, string>>({});
+  const selectedWorkflow = workflows?.find((item) => item.id === workflowId);
+  const optionsQuery = useJobInputOptions(
+    selectedWorkflow,
+    !shell.isLoading && Boolean(shell.organization.id),
+  );
+  const missing = missingRequiredInputs(selectedWorkflow, selectedIds);
 
-  // scope is intentionally not a form field - the server copies it from the
-  // workflow (docs/ddd/media_workflow/domain/0003-execution: scope "沿用
-  // workflow.scope"). submitted_by is inferred from auth.
-
-  function handleSubmit() {
-    let parsed: JobInput;
-    try {
-      parsed = JSON.parse(inputJson) as JobInput;
-    } catch (e) {
-      setParseError(e instanceof Error ? e.message : "Invalid JSON");
-      return;
-    }
-    setParseError(null);
+  async function handleSubmit() {
+    if (!selectedWorkflow || missing.length > 0) return;
+    const input = await buildJobInput(
+      selectedWorkflow,
+      selectedIds,
+      optionsQuery.data ?? {},
+      resolveLibraryObject,
+    );
     submitJob.mutate(
-      { workflow_id: workflowId, input: parsed },
       {
-        onSuccess: (job) => {
-          onSubmitted(job.id);
-        },
+        workflow_id: selectedWorkflow.id,
+        workflow_version: selectedWorkflow.version,
+        input,
       },
+      { onSuccess: (job) => onSubmitted(job.id) },
     );
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h2 className="text-lg font-semibold">New Job</h2>
+    <div className="flex flex-col gap-5 p-4">
+      <div>
+        <h2 className="text-lg font-semibold">创建生成任务</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          选择工作流后，系统会按它的输入契约加载可用素材。
+        </p>
+      </div>
       <div className="grid gap-2">
-        <Label>Workflow</Label>
+        <Label>工作流</Label>
         {workflowsLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="h-4 w-4" /> Loading workflows…
+            <Spinner className="h-4 w-4" /> 正在加载工作流…
           </div>
         ) : (
-          <Select value={workflowId} onValueChange={setWorkflowId}>
+          <Select
+            value={workflowId}
+            onValueChange={(value) => {
+              setWorkflowId(value);
+              setSelectedIds({});
+            }}
+          >
             <SelectTrigger>
-              <SelectValue placeholder="Select workflow" />
+              <SelectValue placeholder="选择已发布的工作流" />
             </SelectTrigger>
             <SelectContent>
-              {(workflows ?? []).map((w) => (
-                <SelectItem key={w.id} value={w.id}>
-                  {w.name}{" "}
-                  <span className="text-muted-foreground">(v{w.version})</span>
+              {(workflows ?? []).map((workflow) => (
+                <SelectItem key={workflow.id} value={workflow.id}>
+                  {workflow.name}（v{workflow.version}）
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         )}
       </div>
-      <div className="grid gap-2">
-        <Label>Input (JSON)</Label>
-        <Textarea
-          className="min-h-[200px] font-mono text-xs"
-          value={inputJson}
-          onChange={(e) => setInputJson(e.target.value)}
-        />
-        {parseError ? (
-          <p className="text-xs text-destructive">{parseError}</p>
-        ) : null}
-        <p className="text-xs text-muted-foreground">
-          Paste a JobInput JSON bundle (product / virtual_ip / asset[] /
-          material[]). Matches the JobInput message in idl/media_workflow/job.proto.
+
+      {selectedWorkflow ? (
+        <div className="grid gap-4 rounded-lg border bg-muted/20 p-4 md:grid-cols-2">
+          {optionsQuery.isLoading || shell.isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground md:col-span-2">
+              <Spinner className="h-4 w-4" /> 正在加载商品与素材…
+            </div>
+          ) : null}
+          {optionsQuery.isError ? (
+            <p className="text-sm text-destructive md:col-span-2">
+              无法加载工作流所需素材：{optionsQuery.error.message}
+            </p>
+          ) : null}
+          {!optionsQuery.isLoading &&
+            !optionsQuery.isError &&
+            (selectedWorkflow.input_schema?.entries ?? []).map((entry) => {
+              const options = optionsQuery.data?.[entry.name] ?? [];
+              return (
+                <div className="grid gap-2" key={entry.name}>
+                  <Label>
+                    {inputLabel(entry)}
+                    {entry.required ? (
+                      <span className="ml-1 text-destructive">*</span>
+                    ) : null}
+                  </Label>
+                  <Select
+                    value={selectedIds[entry.name] ?? ""}
+                    onValueChange={(value) =>
+                      setSelectedIds((current) => ({
+                        ...current,
+                        [entry.name]: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={`选择${inputLabel(entry)}`} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {options.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      当前组织内没有可用的{inputLabel(entry)}。
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
+        </div>
+      ) : null}
+
+      {submitJob.isError ? (
+        <p className="text-sm text-destructive">
+          提交失败：{submitJob.error.message}
         </p>
-      </div>
+      ) : null}
       <div className="flex gap-2">
         <Button
-          onClick={handleSubmit}
-          disabled={submitJob.isPending || !workflowId}
+          onClick={() => void handleSubmit()}
+          disabled={
+            submitJob.isPending ||
+            optionsQuery.isLoading ||
+            optionsQuery.isError ||
+            !selectedWorkflow ||
+            missing.length > 0
+          }
         >
-          {submitJob.isPending ? <Spinner className="h-4 w-4" /> : null}
-          Submit
+          {submitJob.isPending ? <Spinner className="h-4 w-4" /> : null}提交任务
         </Button>
         <Button variant="ghost" onClick={onDone}>
-          Cancel
+          取消
         </Button>
       </div>
     </div>

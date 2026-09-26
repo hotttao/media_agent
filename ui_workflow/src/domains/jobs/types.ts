@@ -36,12 +36,14 @@ export interface AssetData {
   name?: string;
   url?: string;
   content?: string;
+  asset_kind?: string;
 }
 
 export interface MaterialData {
   name?: string;
   url?: string;
   content?: string;
+  asset_kind?: string;
 }
 
 export interface JobInput {
@@ -184,10 +186,20 @@ export interface RetryJobInput {
 // rather than importing from a (not-yet-existing) workflows domain. Only the
 // fields needed to label a <Select> option are fetched.
 
+export interface WorkflowInputSchemaEntry {
+  name: string;
+  resource_type: "MATERIAL" | "ASSET" | "PRODUCT" | "VIRTUAL_IP";
+  asset_kind?: string;
+  required: boolean;
+}
+
 export interface WorkflowOption {
   id: string;
   name: string;
+  scope: string;
   version: number;
+  status: number | string;
+  input_schema?: { entries?: WorkflowInputSchemaEntry[] };
 }
 
 export interface WorkflowsListResponse {

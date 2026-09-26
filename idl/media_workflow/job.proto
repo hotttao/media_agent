@@ -63,8 +63,8 @@ service JobService {
 }
 
 // —— JobInput bundle（自包含）——
-message MaterialData { string name = 1; string url = 2; string content = 3; }
-message AssetData { string name = 1; string url = 2; string content = 3; }
+message MaterialData { string name = 1; string url = 2; string content = 3; string asset_kind = 4; }
+message AssetData { string name = 1; string url = 2; string content = 3; string asset_kind = 4; }
 message ProductData {
   string id = 1; string name = 2; string target_audience = 3;
   string product_details = 4; string display_actions = 5;

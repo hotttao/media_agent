@@ -16,3 +16,9 @@
 # 2026-08-06
 
 - 输入可达性校验由 media_workflow 在 SubmitJob 内编排，不再信任 BFF 预先组装的 bundle。
+
+## 2026-09-26 · Input Schema 冻结 Asset Kind
+
+- Input Schema 为 material / asset 类型增加 `asset_kind`，使调用方能选择兼容资源而无需猜测 input name。
+- 同名 Workflow Input 绑定到多个不同 material/asset kind 时拒绝 `INPUT_ASSET_KIND_CONFLICT`。
+- product / virtual_ip 仍由每个消费 Slot 自己的 kind 解析，不强制单一 Input Schema asset_kind。

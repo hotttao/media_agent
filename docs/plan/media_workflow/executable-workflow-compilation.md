@@ -42,3 +42,12 @@
 - [ ] 迁移七阶段 `model-image -> style-image -> first-frame -> video -> clip -> ai-fill -> publish` Workflow、Templates 和 Capability 引用。
 - [ ] 只通过 API 导入并执行一个完整样本；验证 Job、Conductor tasks 与最终视频结果。
 - [ ] 等用户确认后再迁移全部旧数据。
+
+## P7 · 可直接使用的 Job 输入表单
+
+- [x] Input Schema 增加 asset_kind，并校验同名 material/asset input 的类别一致性。
+- [x] 回填既有 Workflow 的 Input Schema asset_kind。
+- [x] 前端按 Workflow Input Schema 查询 Product、Virtual IP、Material 与 Generated Asset 候选。
+- [x] 用资源选择表单组装 JobInput，移除业务用户可见的 JSON 编辑器。
+- [x] 覆盖加载、空态、失败、必填校验、Workflow 切换和窄屏布局。
+- [x] 通过组件/单元测试和实际账号 API 联调验证，不执行第二条旧 Workflow 样本。

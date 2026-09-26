@@ -257,7 +257,7 @@ func statusToPB(s domain.Status) pb.WorkflowStatus {
 func schemaToPB(in []domain.InputSchemaEntry) *pb.WorkflowInputSchema {
 	entries := make([]*pb.InputSchemaEntry, len(in))
 	for i, e := range in {
-		entries[i] = &pb.InputSchemaEntry{Name: e.Name, ResourceType: e.ResourceType, Required: e.Required}
+		entries[i] = &pb.InputSchemaEntry{Name: e.Name, ResourceType: e.ResourceType, Required: e.Required, AssetKind: e.AssetKind}
 	}
 	return &pb.WorkflowInputSchema{Entries: entries}
 }
