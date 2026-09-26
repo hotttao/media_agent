@@ -13,11 +13,22 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type {
+	InvocationExpression,
   TemplateInput,
   TemplateSlotInput,
   TemplateSlotResourceType,
   Visibility,
 } from "@/domains/templates/types";
+
+const CAPABILITIES = [
+  { key: "media.image.model", label: "生成人物图", output: "model_image" },
+  { key: "media.image.style", label: "生成定妆图", output: "style_image" },
+  { key: "media.image.first_frame", label: "生成首帧图", output: "first_frame" },
+  { key: "media.video.generate", label: "生成视频", output: "ai_video" },
+  { key: "media.video.clip", label: "视频剪辑", output: "final_video" },
+  { key: "media.content.ai_fill", label: "生成发布文案", output: "final_video" },
+  { key: "media.publish.feishu", label: "发布到飞书", output: "final_video" },
+] as const;
 
 const SLOT_RESOURCE_TYPES: TemplateSlotResourceType[] = [
   "MATERIAL",
@@ -30,7 +41,22 @@ const SLOT_RESOURCE_TYPES: TemplateSlotResourceType[] = [
 const VISIBILITY_OPTIONS: Visibility[] = ["private", "team", "public"];
 
 function emptySlot(): TemplateSlotInput {
-  return { name: "", resource_type: "MATERIAL", required: false };
+  return { name: "", asset_kind: "", resource_type: "ASSET", required: false };
+}
+
+function invocationForSlots(
+  slots: TemplateSlotInput[],
+): Record<string, InvocationExpression> {
+  const mapping: Record<string, InvocationExpression> = {
+    prompt: { op: "render_template" },
+  };
+  const resources = slots
+    .filter((slot) => slot.resource_type !== "TEXT" && slot.name)
+    .map((slot) => ({ op: "asset_ref" as const, slot: slot.name }));
+  if (resources.length > 0) {
+    mapping.resources = { op: "list", items: resources };
+  }
+  return mapping;
 }
 
 /**
@@ -65,15 +91,17 @@ export function TemplateForm({
 
   function updateSlot(index: number, patch: Partial<TemplateSlotInput>) {
     const next = value.inputs.map((s, i) => (i === index ? { ...s, ...patch } : s));
-    onChange({ ...value, inputs: next });
+    onChange({ ...value, inputs: next, invocation_mapping: invocationForSlots(next) });
   }
 
   function addSlot() {
-    onChange({ ...value, inputs: [...value.inputs, emptySlot()] });
+    const next = [...value.inputs, emptySlot()];
+    onChange({ ...value, inputs: next, invocation_mapping: invocationForSlots(next) });
   }
 
   function removeSlot(index: number) {
-    onChange({ ...value, inputs: value.inputs.filter((_, i) => i !== index) });
+    const next = value.inputs.filter((_, i) => i !== index);
+    onChange({ ...value, inputs: next, invocation_mapping: invocationForSlots(next) });
   }
 
   return (
@@ -148,6 +176,26 @@ export function TemplateForm({
                   </SelectContent>
                 </Select>
               </div>
+              {slot.resource_type === "ASSET" || slot.resource_type === "MATERIAL" ? (
+                <div className="grid w-44 gap-1">
+                  <Label className="text-xs">Asset Kind</Label>
+                  <Select
+                    value={slot.asset_kind}
+                    onValueChange={(assetKind) => updateSlot(i, { asset_kind: assetKind })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select kind" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(assetKinds ?? []).map((kind) => (
+                        <SelectItem key={kind.name} value={kind.name}>
+                          {kind.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
               <div className="flex items-center gap-2 pb-2">
                 <Checkbox
                   id={`slot-required-${i}`}
@@ -170,6 +218,36 @@ export function TemplateForm({
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="grid gap-2">
+        <Label>Execution Capability</Label>
+        <Select
+          value={value.capability_key}
+          onValueChange={(key) => {
+            const capability = CAPABILITIES.find((item) => item.key === key);
+            onChange({
+              ...value,
+              capability_key: key,
+              capability_version: 1,
+              output_asset_kind: capability?.output ?? value.output_asset_kind,
+              platform: "client",
+              gen_way: key,
+              invocation_mapping: invocationForSlots(value.inputs),
+            });
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select capability" />
+          </SelectTrigger>
+          <SelectContent>
+            {CAPABILITIES.map((capability) => (
+              <SelectItem key={capability.key} value={capability.key}>
+                {capability.label} · {capability.key}@1
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="grid gap-2">

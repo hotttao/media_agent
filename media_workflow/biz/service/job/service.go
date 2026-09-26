@@ -27,17 +27,19 @@ type GeneratedAssetSaver interface {
 
 // Service job 用例编排（pull 模式 + NEED_CONFIRM）。
 type Service struct {
-	jobRepo     domain.JobRepo
-	stepRunRepo domain.StepRunRepo
-	tx          dal.TxRunner
-	wfRepo      domain.WorkflowLookup
-	tplLookup   wfdomain.TemplateLookup
-	materials   GeneratedAssetSaver
-	jobCfg      *configpb.JobConfig
+	jobRepo      domain.JobRepo
+	stepRunRepo  domain.StepRunRepo
+	tx           dal.TxRunner
+	wfRepo       domain.WorkflowLookup
+	tplLookup    wfdomain.TemplateLookup
+	materials    GeneratedAssetSaver
+	jobCfg       *configpb.JobConfig
+	compilations wfdomain.CompilationRepo
+	engine       domain.WorkflowEngine
 }
 
-func NewService(jr domain.JobRepo, sr domain.StepRunRepo, tx dal.TxRunner, wfRepo domain.WorkflowLookup, tl wfdomain.TemplateLookup, mc GeneratedAssetSaver, jobCfg *configpb.JobConfig) *Service {
-	return &Service{jobRepo: jr, stepRunRepo: sr, tx: tx, wfRepo: wfRepo, tplLookup: tl, materials: mc, jobCfg: jobCfg}
+func NewService(jr domain.JobRepo, sr domain.StepRunRepo, tx dal.TxRunner, wfRepo domain.WorkflowLookup, tl wfdomain.TemplateLookup, mc GeneratedAssetSaver, jobCfg *configpb.JobConfig, compilations wfdomain.CompilationRepo, engine domain.WorkflowEngine) *Service {
+	return &Service{jobRepo: jr, stepRunRepo: sr, tx: tx, wfRepo: wfRepo, tplLookup: tl, materials: mc, jobCfg: jobCfg, compilations: compilations, engine: engine}
 }
 
 // —— SubmitJob ——
@@ -54,8 +56,21 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 	if err != nil {
 		return nil, fmt.Errorf("workflow %s: %w", cmd.WorkflowID, err)
 	}
-	if wf.Version != cmd.WorkflowVersion {
+	// workflow_version is optional at the HTTP boundary. Zero means "use the
+	// current published version"; a non-zero value remains an optimistic lock.
+	if cmd.WorkflowVersion != 0 && wf.Version != cmd.WorkflowVersion {
 		return nil, fmt.Errorf("workflow version mismatch: want %d, got %d", wf.Version, cmd.WorkflowVersion)
+	}
+	conductorMode := s.compilations != nil && s.engine != nil
+	var compilation *wfdomain.Compilation
+	if conductorMode {
+		if wf.Status != wfdomain.StatusPublished {
+			return nil, fmt.Errorf("workflow %s is not published", wf.ID)
+		}
+		compilation, err = s.compilations.GetRegistered(ctx, wf.ID, wf.Version)
+		if err != nil {
+			return nil, fmt.Errorf("registered workflow compilation %s@%d: %w", wf.ID, wf.Version, err)
+		}
 	}
 	// 闸2: bundle vs input_schema
 	if err := s.validateBundle(wf.InputSchema, cmd.Input); err != nil {
@@ -80,7 +95,7 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 			}
 		}
 		status := domain.SRBlocked
-		if isRoot {
+		if isRoot && !conductorMode {
 			status = domain.SRPending
 		}
 		// 加载 template 快照（反范式化 platform/gen_way/asset_kind 等）
@@ -102,7 +117,21 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 	if err := s.jobRepo.Save(ctx, job, stepRuns); err != nil {
 		return nil, fmt.Errorf("save job: %w", err)
 	}
-	// Job → RUNNING
+	if !conductorMode {
+		_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobRunning, "")
+		return s.jobRepo.Get(ctx, jobID)
+	}
+	executionID, err := s.engine.Start(ctx, compilation.ConductorName, compilation.ConductorVersion, map[string]any{
+		"job_id": jobID,
+		"inputs": conductorInputs(cmd.Input),
+	})
+	if err != nil {
+		_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobFailed, err.Error())
+		return nil, fmt.Errorf("start conductor workflow: %w", err)
+	}
+	if err := s.jobRepo.UpdateConductorExecution(ctx, jobID, executionID, compilation.DefinitionHash); err != nil {
+		return nil, fmt.Errorf("save conductor workflow id: %w", err)
+	}
 	_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobRunning, "")
 	return s.jobRepo.Get(ctx, jobID)
 }
@@ -555,6 +584,13 @@ func (s *Service) GetStepRun(ctx context.Context, stepRunID string) (*domain.Ste
 }
 
 func (s *Service) Get(ctx context.Context, id string) (*domain.Job, []*domain.StepRun, error) {
+	job, _, err := s.jobRepo.GetWithStepRuns(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if job.ConductorWorkflowID != "" && !job.Status.IsTerminal() {
+		_ = s.reconcileConductor(ctx, job)
+	}
 	return s.jobRepo.GetWithStepRuns(ctx, id)
 }
 
@@ -714,6 +750,97 @@ func (s *Service) StartClaimTimeoutScanner(ctx context.Context) {
 			s.scanStaleClaimed(ctx)
 		}
 	}
+}
+
+func conductorInputs(input domain.JobInput) map[string]any {
+	result := make(map[string]any)
+	if input.Product != nil {
+		result["product"] = map[string]any{"value": input.Product, "asset_ref": input.Product.ID}
+	}
+	if input.VirtualIP != nil {
+		result["virtual_ip"] = map[string]any{"value": input.VirtualIP, "asset_ref": input.VirtualIP.FullBodyURL}
+	}
+	for _, asset := range input.Assets {
+		result[asset.Name] = map[string]any{"asset_ref": asset.URL, "url": asset.URL, "content": asset.Content}
+	}
+	for _, material := range input.Materials {
+		result[material.Name] = map[string]any{"asset_ref": material.URL, "url": material.URL, "content": material.Content}
+	}
+	return result
+}
+
+func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error {
+	execution, err := s.engine.Get(ctx, job.ConductorWorkflowID)
+	if err != nil {
+		return err
+	}
+	stepRuns, err := s.stepRunRepo.ListByJob(ctx, job.ID)
+	if err != nil {
+		return err
+	}
+	stepRunByKey := make(map[string]*domain.StepRun, len(stepRuns))
+	for _, stepRun := range stepRuns {
+		stepRunByKey[stepRun.StepKey] = stepRun
+	}
+	for _, task := range execution.Tasks {
+		stepKey, phase, ok := parseTaskReference(task.ReferenceTaskName)
+		if !ok {
+			continue
+		}
+		stepRun := stepRunByKey[stepKey]
+		if stepRun == nil {
+			continue
+		}
+		switch phase {
+		case "render":
+			if prompt, ok := task.Output["prompt"].(string); ok && prompt != "" {
+				_ = s.stepRunRepo.UpdateResolvedInputs(ctx, stepRun.ID, task.Input, prompt)
+			}
+		case "invoke":
+			if rawCandidates, ok := task.Output["candidates"]; ok {
+				var candidates []domain.Candidate
+				encoded, _ := json.Marshal(rawCandidates)
+				_ = json.Unmarshal(encoded, &candidates)
+				_ = s.stepRunRepo.UpdateCandidates(ctx, stepRun.ID, candidates)
+			}
+			if task.Status == "FAILED" || task.Status == "FAILED_WITH_TERMINAL_ERROR" || task.Status == "TIMED_OUT" {
+				_ = s.stepRunRepo.UpdateStatus(ctx, stepRun.ID, domain.SRFailed, nil)
+			}
+		case "finalize":
+			if task.Status == "COMPLETED" {
+				outputID, _ := task.Output["output_resource_id"].(string)
+				_ = s.stepRunRepo.UpdateOutput(ctx, stepRun.ID, outputID)
+				_ = s.stepRunRepo.UpdateStatus(ctx, stepRun.ID, domain.SRSucceeded, nil)
+			} else if task.Status == "FAILED" || task.Status == "FAILED_WITH_TERMINAL_ERROR" || task.Status == "TIMED_OUT" {
+				_ = s.stepRunRepo.UpdateStatus(ctx, stepRun.ID, domain.SRFailed, nil)
+			}
+		}
+	}
+	switch execution.Status {
+	case "COMPLETED":
+		return s.jobRepo.UpdateStatus(ctx, job.ID, domain.JobSucceeded, "")
+	case "FAILED", "FAILED_WITH_TERMINAL_ERROR", "TIMED_OUT", "TERMINATED":
+		return s.jobRepo.UpdateStatus(ctx, job.ID, domain.JobFailed, "conductor workflow "+execution.Status)
+	case "PAUSED":
+		return s.jobRepo.UpdateStatus(ctx, job.ID, domain.JobNeedConfirm, "")
+	default:
+		return nil
+	}
+}
+
+func parseTaskReference(reference string) (string, string, bool) {
+	const prefix = "step__"
+	if !strings.HasPrefix(reference, prefix) {
+		return "", "", false
+	}
+	remainder := strings.TrimPrefix(reference, prefix)
+	for _, phase := range []string{"render", "invoke", "finalize"} {
+		suffix := "__" + phase
+		if strings.HasSuffix(remainder, suffix) {
+			return strings.TrimSuffix(remainder, suffix), phase, true
+		}
+	}
+	return "", "", false
 }
 
 func (s *Service) scanStaleClaimed(ctx context.Context) {

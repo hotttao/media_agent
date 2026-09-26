@@ -23,6 +23,7 @@ export function TemplateEdit({ id, onDone }: { id: string; onDone: () => void })
         prompt_body: template.prompt_body,
         inputs: template.inputs.map((s) => ({
           name: s.name,
+          asset_kind: s.asset_kind,
           resource_type: s.resource_type,
           required: s.required,
           display_order: s.display_order,
@@ -33,6 +34,9 @@ export function TemplateEdit({ id, onDone }: { id: string; onDone: () => void })
         gen_type: template.gen_type,
         needs_confirm: template.needs_confirm,
         candidate_count: template.candidate_count,
+        capability_key: template.capability_key,
+        capability_version: template.capability_version,
+        invocation_mapping: template.invocation_mapping,
         visibility: template.visibility,
       });
     }

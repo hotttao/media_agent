@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"media_agent/media_workflow/biz/dal"
 	"media_agent/media_workflow/biz/dal/model"
@@ -37,6 +38,7 @@ func (r *Repo) Save(ctx context.Context, t *domain.Template) error {
 			TemplateID:   row.ID,
 			Version:      row.Version,
 			Name:         t.Inputs[i].Name,
+			AssetKind:    t.Inputs[i].AssetKind,
 			ResourceType: t.Inputs[i].ResourceType,
 			Required:     t.Inputs[i].Required,
 			DisplayOrder: t.Inputs[i].DisplayOrder,
@@ -48,16 +50,19 @@ func (r *Repo) Save(ctx context.Context, t *domain.Template) error {
 	}
 	// version=1 快照入 template_versions（供 workflow validate GetVersion 查询）
 	inputsJSON, _ := json.Marshal(t.Inputs)
+	invocationJSON, _ := json.Marshal(t.InvocationMapping)
 	tv := &model.TemplateVersion{
-		ID:             "tv_" + row.ID + "_" + pad(t.Version),
-		TemplateID:     row.ID, Version: t.Version,
-		PromptBody:     t.PromptBody, OutputAssetKind: t.OutputAssetKind,
-		Platform:       t.Platform, GenWay: t.GenWay, GenType: t.GenType,
-		NeedsConfirm:   t.NeedsConfirm, CandidateCount: t.CandidateCount,
-		InputsSnapshot: inputsJSON, CreatedBy: t.CreatedBy, CreatedAt: time.Now(),
+		ID:         "tv_" + row.ID + "_" + pad(t.Version),
+		TemplateID: row.ID, Version: t.Version,
+		PromptBody: t.PromptBody, OutputAssetKind: t.OutputAssetKind,
+		Platform: t.Platform, GenWay: t.GenWay, GenType: t.GenType,
+		NeedsConfirm: t.NeedsConfirm, CandidateCount: t.CandidateCount,
+		CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion,
+		InvocationMapping: invocationJSON,
+		InputsSnapshot:    inputsJSON, CreatedBy: t.CreatedBy, CreatedAt: time.Now(),
 	}
-	_ = Q.TemplateVersion.WithContext(ctx).Create(tv)
-	return nil
+	return dal.FromContext(ctx, r.db).WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).Create(tv).Error
 }
 
 func (r *Repo) Get(ctx context.Context, id string) (*domain.Template, error) {
@@ -87,12 +92,18 @@ func (r *Repo) GetVersion(ctx context.Context, id string, version int) (*domain.
 	if err := json.Unmarshal(row.InputsSnapshot, &inputs); err != nil {
 		return nil, err
 	}
+	var invocation domain.InvocationMapping
+	if err := json.Unmarshal(row.InvocationMapping, &invocation); err != nil {
+		return nil, err
+	}
 	return &domain.TemplateVersion{
 		TemplateID: row.TemplateID, Version: row.Version,
 		PromptBody: row.PromptBody, OutputAssetKind: row.OutputAssetKind,
 		Platform: row.Platform, GenWay: row.GenWay, GenType: row.GenType,
 		NeedsConfirm: row.NeedsConfirm, CandidateCount: row.CandidateCount,
-		Inputs: inputs, CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt,
+		CapabilityKey: row.CapabilityKey, CapabilityVersion: row.CapabilityVersion,
+		InvocationMapping: invocation,
+		Inputs:            inputs, CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt,
 	}, nil
 }
 
@@ -139,15 +150,22 @@ func (r *Repo) Update(ctx context.Context, t *domain.Template, snapshot *domain.
 		if err != nil {
 			return err
 		}
+		invocationJSON, err := json.Marshal(snapshot.InvocationMapping)
+		if err != nil {
+			return err
+		}
 		tv := &model.TemplateVersion{
 			ID:         "tv_" + snapshot.TemplateID + "_" + pad(snapshot.Version),
 			TemplateID: snapshot.TemplateID, Version: snapshot.Version,
 			PromptBody: snapshot.PromptBody, OutputAssetKind: snapshot.OutputAssetKind,
 			Platform: snapshot.Platform, GenWay: snapshot.GenWay, GenType: snapshot.GenType,
 			NeedsConfirm: snapshot.NeedsConfirm, CandidateCount: snapshot.CandidateCount,
-			InputsSnapshot: inputsJSON, CreatedBy: snapshot.CreatedBy, CreatedAt: time.Now(),
+			CapabilityKey: snapshot.CapabilityKey, CapabilityVersion: snapshot.CapabilityVersion,
+			InvocationMapping: invocationJSON,
+			InputsSnapshot:    inputsJSON, CreatedBy: snapshot.CreatedBy, CreatedAt: time.Now(),
 		}
-		if err := Q.TemplateVersion.WithContext(ctx).Create(tv); err != nil {
+		if err := dal.FromContext(ctx, r.db).WithContext(ctx).
+			Clauses(clause.OnConflict{DoNothing: true}).Create(tv).Error; err != nil {
 			return err
 		}
 	}
@@ -161,7 +179,9 @@ func (r *Repo) Update(ctx context.Context, t *domain.Template, snapshot *domain.
 			"output_asset_kind": row.OutputAssetKind, "platform": row.Platform,
 			"gen_way": row.GenWay, "gen_type": row.GenType,
 			"needs_confirm": row.NeedsConfirm, "candidate_count": row.CandidateCount,
-			"version": row.Version, "updated_at": row.UpdatedAt,
+			"capability_key": row.CapabilityKey, "capability_version": row.CapabilityVersion,
+			"invocation_mapping": row.InvocationMapping,
+			"version":            row.Version, "updated_at": row.UpdatedAt,
 		}); err != nil {
 		return err
 	}
@@ -174,7 +194,7 @@ func (r *Repo) Update(ctx context.Context, t *domain.Template, snapshot *domain.
 		in := &model.TemplateInput{
 			ID:         "tin_" + t.ID + "_" + pad(i),
 			TemplateID: t.ID, Version: t.Version,
-			Name: t.Inputs[i].Name, ResourceType: t.Inputs[i].ResourceType,
+			Name: t.Inputs[i].Name, AssetKind: t.Inputs[i].AssetKind, ResourceType: t.Inputs[i].ResourceType,
 			Required: t.Inputs[i].Required, DisplayOrder: t.Inputs[i].DisplayOrder,
 			CreatedAt: time.Now(),
 		}
@@ -218,30 +238,37 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 // —— 转换 ——
 
 func toModel(t *domain.Template) *model.Template {
+	invocationJSON, _ := json.Marshal(t.InvocationMapping)
 	return &model.Template{
 		ID: t.ID, Scope: t.Scope, Name: t.Name, Description: t.Description,
 		PromptBody: t.PromptBody, OutputAssetKind: t.OutputAssetKind,
 		Platform: t.Platform, GenWay: t.GenWay, GenType: t.GenType,
 		NeedsConfirm: t.NeedsConfirm, CandidateCount: t.CandidateCount,
-		Status: string(t.Status), Visibility: string(t.Visibility),
+		CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion,
+		InvocationMapping: invocationJSON,
+		Status:            string(t.Status), Visibility: string(t.Visibility),
 		Version: t.Version, CreatedBy: t.CreatedBy,
 		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}
 }
 
 func toDomain(row *model.Template, inputs []*model.TemplateInput) *domain.Template {
+	var invocation domain.InvocationMapping
+	_ = json.Unmarshal(row.InvocationMapping, &invocation)
 	t := &domain.Template{
 		ID: row.ID, Scope: row.Scope, Name: row.Name, Description: row.Description,
 		PromptBody: row.PromptBody, OutputAssetKind: row.OutputAssetKind,
 		Platform: row.Platform, GenWay: row.GenWay, GenType: row.GenType,
 		NeedsConfirm: row.NeedsConfirm, CandidateCount: row.CandidateCount,
-		Status: domain.Status(row.Status), Visibility: domain.Visibility(row.Visibility),
+		CapabilityKey: row.CapabilityKey, CapabilityVersion: row.CapabilityVersion,
+		InvocationMapping: invocation,
+		Status:            domain.Status(row.Status), Visibility: domain.Visibility(row.Visibility),
 		Version: row.Version, CreatedBy: row.CreatedBy,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 	for _, in := range inputs {
 		t.Inputs = append(t.Inputs, domain.Slot{
-			Name: in.Name, ResourceType: in.ResourceType,
+			Name: in.Name, AssetKind: in.AssetKind, ResourceType: in.ResourceType,
 			Required: in.Required, DisplayOrder: in.DisplayOrder,
 		})
 	}

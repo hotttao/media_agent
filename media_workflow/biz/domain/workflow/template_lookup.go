@@ -4,24 +4,34 @@ import "context"
 
 // TemplateSnapshot workflow 闸1 校验期需要的 template 版本快照（原语类型）。
 type TemplateSnapshot struct {
-	ID              string
-	Scope           string
-	Status          string
-	PromptBody      string
-	OutputAssetKind string
-	Platform        string
-	GenWay          string
-	GenType         string
-	NeedsConfirm    bool
-	CandidateCount  int
-	Inputs          []SlotSnapshot
+	ID                string
+	Scope             string
+	Status            string
+	PromptBody        string
+	OutputAssetKind   string
+	Platform          string
+	GenWay            string
+	GenType           string
+	NeedsConfirm      bool
+	CandidateCount    int
+	CapabilityKey     string
+	CapabilityVersion int
+	InvocationMapping map[string]InvocationExpressionSnapshot
+	Inputs            []SlotSnapshot
 }
 
 // SlotSnapshot template input slot 快照。
 type SlotSnapshot struct {
 	Name         string
+	AssetKind    string
 	ResourceType string
 	Required     bool
+}
+
+type InvocationExpressionSnapshot struct {
+	Op    string
+	Slot  string
+	Items []InvocationExpressionSnapshot
 }
 
 // TemplateLookup template 版本查询端口（由 template repo/service 实现，main.go 注入）。

@@ -72,6 +72,13 @@ func (m *mockJobRepo) AppendRetryHistory(_ context.Context, id string, record do
 	return nil
 }
 
+func (m *mockJobRepo) UpdateConductorExecution(_ context.Context, id, workflowID, hash string) error {
+	job := m.jobs[id]
+	job.ConductorWorkflowID = workflowID
+	job.CompilationHash = hash
+	return nil
+}
+
 type mockStepRunRepo struct {
 	items map[string]*domain.StepRun
 }
@@ -191,13 +198,13 @@ func newTestService(needsConfirm bool) (*Service, *mockJobRepo, *mockStepRunRepo
 	jobRepo := &mockJobRepo{jobs: map[string]*domain.Job{}, stepRuns: map[string][]*domain.StepRun{}}
 	srRepo := &mockStepRunRepo{items: map[string]*domain.StepRun{}}
 	wfLookup := &mockWorkflowLookup{wf: &wfdomain.Workflow{
-		ID: "wf1", Scope: "ai_clothing", OutputStepKey: "s1",
+		ID: "wf1", Scope: "ai_clothing", Version: 1, OutputStepKey: "s1",
 		Steps: []wfdomain.Step{{Key: "s1", Order: 1, TemplateID: "tpl1", TemplateVersion: 1,
 			SlotBindings: []wfdomain.SlotBinding{{ToInput: "scene", Source: wfdomain.SourceWorkflowInput, Ref: "scene"}}}},
 		InputSchema: []wfdomain.InputSchemaEntry{{Name: "scene", ResourceType: "MATERIAL", Required: true}},
 	}}
 	tplLookup := &mockTplConfirm{needsConfirm: needsConfirm}
-	svc := NewService(jobRepo, srRepo, nil, wfLookup, tplLookup, &mockMaterialsClient{}, nil)
+	svc := NewService(jobRepo, srRepo, nil, wfLookup, tplLookup, &mockMaterialsClient{}, nil, nil, nil)
 	return svc, jobRepo, srRepo
 }
 
@@ -227,6 +234,35 @@ func makeClaimedStepRun(repo *mockStepRunRepo, needsConfirm bool) *domain.StepRu
 }
 
 // —— tests ——
+
+func TestSubmit_OmittedWorkflowVersionUsesCurrent(t *testing.T) {
+	svc, _, _ := newTestService(false)
+
+	job, err := svc.Submit(context.Background(), SubmitCommand{
+		WorkflowID: "wf1",
+		Input: domain.JobInput{Materials: []domain.MaterialData{{
+			Name: "scene", URL: "https://example.test/scene.png",
+		}}},
+		SubmittedBy: "u1",
+	})
+	if err != nil {
+		t.Fatalf("submit without workflow_version: %v", err)
+	}
+	if job.WorkflowVersion != 1 {
+		t.Fatalf("workflow version = %d, want 1", job.WorkflowVersion)
+	}
+}
+
+func TestSubmit_ExplicitStaleWorkflowVersionRejected(t *testing.T) {
+	svc, _, _ := newTestService(false)
+
+	_, err := svc.Submit(context.Background(), SubmitCommand{
+		WorkflowID: "wf1", WorkflowVersion: 2,
+	})
+	if err == nil {
+		t.Fatal("expected stale workflow version to be rejected")
+	}
+}
 
 func TestComplete_NoConfirm_DirectSucceeded(t *testing.T) {
 	svc, jobRepo, srRepo := newTestService(false)
@@ -645,7 +681,7 @@ func newTestServiceWithDAG() (*Service, *mockJobRepo, *mockStepRunRepo) {
 		InputSchema: []wfdomain.InputSchemaEntry{},
 	}}
 	tplLookup := &mockTplConfirm{needsConfirm: false}
-	svc := NewService(jobRepo, srRepo, nil, wfLookup, tplLookup, &mockMaterialsClient{}, nil)
+	svc := NewService(jobRepo, srRepo, nil, wfLookup, tplLookup, &mockMaterialsClient{}, nil, nil, nil)
 	return svc, jobRepo, srRepo
 }
 

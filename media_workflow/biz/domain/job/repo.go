@@ -10,6 +10,26 @@ type JobRepo interface {
 	UpdateStatus(ctx context.Context, id string, status JobStatus, failureReason string) error
 	UpdateInput(ctx context.Context, id string, input JobInput) error
 	AppendRetryHistory(ctx context.Context, id string, record RetryRecord, retryCount int) error
+	UpdateConductorExecution(ctx context.Context, id, conductorWorkflowID, compilationHash string) error
+}
+
+type WorkflowEngine interface {
+	Start(ctx context.Context, workflowName string, workflowVersion int, input map[string]any) (string, error)
+	Get(ctx context.Context, workflowID string) (*EngineExecution, error)
+}
+
+type EngineExecution struct {
+	Status string
+	Output map[string]any
+	Tasks  []EngineTask
+}
+
+type EngineTask struct {
+	TaskType          string
+	ReferenceTaskName string
+	Status            string
+	Input             map[string]any
+	Output            map[string]any
 }
 
 type StepRunRepo interface {

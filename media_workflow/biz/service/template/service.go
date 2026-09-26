@@ -9,55 +9,67 @@ import (
 	"github.com/google/uuid"
 
 	"media_agent/media_workflow/biz/dal"
+	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
 	domain "media_agent/media_workflow/biz/domain/template"
 	"media_agent/media_workflow/biz/shared"
 )
 
 type Service struct {
-	repo       domain.Repo
-	grants     domain.GrantRepo
-	tx         dal.TxRunner
-	kindLookup shared.AssetKindLookup
+	repo         domain.Repo
+	grants       domain.GrantRepo
+	tx           dal.TxRunner
+	kindLookup   shared.AssetKindLookup
+	capabilities capabilitydomain.Repo
 }
 
-func NewService(repo domain.Repo, grants domain.GrantRepo, tx dal.TxRunner, lookup shared.AssetKindLookup) *Service {
-	return &Service{repo: repo, grants: grants, tx: tx, kindLookup: lookup}
+func NewService(repo domain.Repo, grants domain.GrantRepo, tx dal.TxRunner, lookup shared.AssetKindLookup, capabilities capabilitydomain.Repo) *Service {
+	return &Service{repo: repo, grants: grants, tx: tx, kindLookup: lookup, capabilities: capabilities}
 }
 
 type CreateCommand struct {
-	Scope           string
-	Name            string
-	Description     string
-	PromptBody      string
-	Inputs          []domain.Slot
-	OutputAssetKind string
-	Platform        string
-	GenWay          string
-	GenType         string
-	NeedsConfirm    bool
-	CandidateCount  int
-	CreatedBy       string
+	Scope             string
+	Name              string
+	Description       string
+	PromptBody        string
+	Inputs            []domain.Slot
+	OutputAssetKind   string
+	Platform          string
+	GenWay            string
+	GenType           string
+	NeedsConfirm      bool
+	CandidateCount    int
+	CapabilityKey     string
+	CapabilityVersion int
+	InvocationMapping domain.InvocationMapping
+	CreatedBy         string
 }
 
 type UpdateCommand struct {
-	ID              string
-	Name            string
-	Description     string
-	PromptBody      string
-	Inputs          []domain.Slot
-	OutputAssetKind string
-	Platform        string
-	GenWay          string
-	GenType         string
-	NeedsConfirm    bool
-	CandidateCount  int
+	ID                string
+	Name              string
+	Description       string
+	PromptBody        string
+	Inputs            []domain.Slot
+	OutputAssetKind   string
+	Platform          string
+	GenWay            string
+	GenType           string
+	NeedsConfirm      bool
+	CandidateCount    int
+	CapabilityKey     string
+	CapabilityVersion int
+	InvocationMapping domain.InvocationMapping
 }
 
 func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Template, error) {
+	cmd.Inputs = normalizeSlots(cmd.Inputs)
 	if err := s.validateSlots(ctx, cmd.Inputs, cmd.OutputAssetKind); err != nil {
 		return nil, err
 	}
 	if err := validateBase(cmd.Name, cmd.PromptBody, cmd.Platform, cmd.GenWay); err != nil {
+		return nil, err
+	}
+	if err := s.validateCapability(ctx, cmd.CapabilityKey, cmd.CapabilityVersion, cmd.OutputAssetKind); err != nil {
 		return nil, err
 	}
 	t := &domain.Template{
@@ -65,7 +77,9 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Templa
 		Description: cmd.Description, PromptBody: cmd.PromptBody, Inputs: cmd.Inputs,
 		OutputAssetKind: cmd.OutputAssetKind, Platform: cmd.Platform, GenWay: cmd.GenWay, GenType: cmd.GenType,
 		NeedsConfirm: cmd.NeedsConfirm, CandidateCount: defaultCount(cmd.NeedsConfirm, cmd.CandidateCount),
-		Status: domain.StatusDraft, Visibility: domain.VisibilityPrivate, Version: 1, CreatedBy: cmd.CreatedBy,
+		CapabilityKey: cmd.CapabilityKey, CapabilityVersion: cmd.CapabilityVersion,
+		InvocationMapping: cmd.InvocationMapping,
+		Status:            domain.StatusDraft, Visibility: domain.VisibilityPrivate, Version: 1, CreatedBy: cmd.CreatedBy,
 	}
 	if err := s.repo.Save(ctx, t); err != nil {
 		return nil, fmt.Errorf("save template: %w", err)
@@ -106,10 +120,14 @@ func (s *Service) List(ctx context.Context, q domain.ListQuery, callerID string)
 }
 
 func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Template, error) {
+	cmd.Inputs = normalizeSlots(cmd.Inputs)
 	if err := validateBase(cmd.Name, cmd.PromptBody, cmd.Platform, cmd.GenWay); err != nil {
 		return nil, err
 	}
 	if err := s.validateSlots(ctx, cmd.Inputs, cmd.OutputAssetKind); err != nil {
+		return nil, err
+	}
+	if err := s.validateCapability(ctx, cmd.CapabilityKey, cmd.CapabilityVersion, cmd.OutputAssetKind); err != nil {
 		return nil, err
 	}
 	var result *domain.Template
@@ -124,7 +142,9 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Templa
 			PromptBody: old.PromptBody, OutputAssetKind: old.OutputAssetKind,
 			Platform: old.Platform, GenWay: old.GenWay, GenType: old.GenType,
 			NeedsConfirm: old.NeedsConfirm, CandidateCount: old.CandidateCount,
-			Inputs: old.Inputs, CreatedBy: old.CreatedBy,
+			CapabilityKey: old.CapabilityKey, CapabilityVersion: old.CapabilityVersion,
+			InvocationMapping: old.InvocationMapping,
+			Inputs:            old.Inputs, CreatedBy: old.CreatedBy,
 		}
 		// 更新字段
 		old.Name = cmd.Name
@@ -137,6 +157,9 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Templa
 		old.GenType = cmd.GenType
 		old.NeedsConfirm = cmd.NeedsConfirm
 		old.CandidateCount = defaultCount(cmd.NeedsConfirm, cmd.CandidateCount)
+		old.CapabilityKey = cmd.CapabilityKey
+		old.CapabilityVersion = cmd.CapabilityVersion
+		old.InvocationMapping = cmd.InvocationMapping
 		old.Version++
 		if err := s.repo.Update(txCtx, old, snapshot); err != nil {
 			return fmt.Errorf("update template: %w", err)
@@ -165,6 +188,15 @@ func (s *Service) Publish(ctx context.Context, id string) (*domain.Template, err
 	}
 	if t.Status != domain.StatusDraft {
 		return nil, fmt.Errorf("template %q status %s, expected draft", id, t.Status)
+	}
+	if strings.TrimSpace(t.CapabilityKey) == "" || t.CapabilityVersion <= 0 {
+		return nil, errors.New("template capability_key and positive capability_version are required")
+	}
+	if len(t.InvocationMapping) == 0 {
+		return nil, errors.New("template invocation_mapping is required")
+	}
+	if err := s.validateCapability(ctx, t.CapabilityKey, t.CapabilityVersion, t.OutputAssetKind); err != nil {
+		return nil, err
 	}
 	if err := s.repo.UpdateStatus(ctx, id, domain.StatusPublished); err != nil {
 		return nil, err
@@ -262,10 +294,10 @@ func (s *Service) validateSlots(ctx context.Context, inputs []domain.Slot, outpu
 	}
 	for _, in := range inputs {
 		if in.ResourceType == "MATERIAL" || in.ResourceType == "ASSET" {
-			if in.Name == "" {
-				return fmt.Errorf("slot resource_type=%s name is required (asset_kind)", in.ResourceType)
+			if in.AssetKind == "" {
+				return fmt.Errorf("slot %q resource_type=%s requires asset_kind", in.Name, in.ResourceType)
 			}
-			names[in.Name] = struct{}{}
+			names[in.AssetKind] = struct{}{}
 		}
 	}
 	if len(names) == 0 {
@@ -296,12 +328,12 @@ func (s *Service) validateSlots(ctx context.Context, inputs []domain.Slot, outpu
 		if in.ResourceType != "MATERIAL" && in.ResourceType != "ASSET" {
 			continue
 		}
-		ak, ok := kindMap[in.Name]
+		ak, ok := kindMap[in.AssetKind]
 		if !ok {
 			continue
 		}
 		if ak.ResourceType != in.ResourceType {
-			return fmt.Errorf("slot %q kind %q resource_type=%s, want %s", in.Name, in.Name, ak.ResourceType, in.ResourceType)
+			return fmt.Errorf("slot %q kind %q resource_type=%s, want %s", in.Name, in.AssetKind, ak.ResourceType, in.ResourceType)
 		}
 	}
 	return nil
@@ -331,4 +363,31 @@ func defaultCount(needsConfirm bool, count int) int {
 		return 4 // 默认 4 候选
 	}
 	return 1
+}
+
+func (s *Service) validateCapability(ctx context.Context, key string, version int, outputAssetKind string) error {
+	if strings.TrimSpace(key) == "" {
+		return nil // legacy drafts remain readable; Publish enforces the new contract.
+	}
+	if version <= 0 {
+		return errors.New("capability_version must be positive")
+	}
+	capability, err := s.capabilities.Get(ctx, key, version)
+	if err != nil {
+		return fmt.Errorf("capability %s@%d is not published: %w", key, version, err)
+	}
+	if capability.OutputAssetKind != outputAssetKind {
+		return fmt.Errorf("capability %s@%d output_asset_kind=%q, template uses %q", key, version, capability.OutputAssetKind, outputAssetKind)
+	}
+	return nil
+}
+
+func normalizeSlots(inputs []domain.Slot) []domain.Slot {
+	result := append([]domain.Slot(nil), inputs...)
+	for i := range result {
+		if (result[i].ResourceType == "MATERIAL" || result[i].ResourceType == "ASSET") && result[i].AssetKind == "" {
+			result[i].AssetKind = result[i].Name
+		}
+	}
+	return result
 }

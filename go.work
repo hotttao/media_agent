@@ -12,4 +12,5 @@ use (
 	./media_gen
 	./media_materials
 	./media_workflow
+	./media_worker
 )

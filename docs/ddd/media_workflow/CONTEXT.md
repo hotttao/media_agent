@@ -46,6 +46,14 @@ Template 的不可变快照，通过单调递增 version 区分，update 时新�
 可被生成 Worker 实现的、带版本的执行契约；声明输入 schema、唯一输出类别、Provider 路由和 Conductor Task Definition。Template 只引用已发布的 `(capability_key, capability_version)`，不直接绑定临时队列名或 Provider API。
 _禁用替代词_：Conductor Task、Worker、Template
 
+**Capability Worker（能力执行器）**:
+运行在用户客户端环境、轮询 Conductor Capability Task 并实现 Execution Capability 的执行进程。它可以访问客户端本地模型、CLI、GPU 与 Provider 凭证；服务端只持有能力契约和调度状态，不持有客户端凭证。Capability Worker 不承担模板渲染、Workflow 编译或业务资源授权。
+_禁用替代词_：Server Worker、Template Renderer、Conductor
+
+**Media Worker（媒体执行客户端）**:
+承载一个或多个 Capability Worker 的客户端工具或常驻服务；通过稳定的 Conductor Task API 拉取任务、回报结果，并以 `worker_id` 标识实例。联调时可以启用显式 Mock Profile，但生产 Profile 必须调用真实本地能力。
+_禁用替代词_：media_workflow、Provider 服务、Mock Server
+
 **Invocation Mapping（调用映射）**:
 Template Version 中把业务 Template Slot 转换为 Execution Capability 固定输入参数的声明式规则；例如把渲染结果映射到 `prompt`，把 `person`、`garment` 的资源引用按确定顺序组成 `images[]`。映射必须在 Workflow 发布时完成类型检查，禁止 Worker 根据 Slot 名猜测参数。
 _禁用替代词_：Worker 参数拼装、动态入参、prepare plan
@@ -97,6 +105,10 @@ _禁用替代词_：Semantic Compiler
 **Template Rendering Task（模板渲染任务）**:
 编译器自动插入的内部通用任务 `media_render_template_v1`；固定契约为 `template:string + context:map<string,json> -> prompt:string`。它不是 Execution Capability，不选择 Provider，也不猜测图片数组顺序。
 _禁用替代词_：prepare_step、Execution Capability
+
+**Internal Execution Task（内部执行任务）**:
+由 `media_workflow` 自己拥有并执行的 Conductor 技术任务，例如模板渲染与单输出收口。它不属于 Execution Capability，也不得被下发给客户端 Media Worker。
+_禁用替代词_：Capability Worker
 
 **Topological Wave（拓扑波次）**:
 由 Workflow DAG 按依赖关系计算的一组可并行 Step。编译器在相邻波次之间设置屏障；单 Step 波次编译为一个 Step 子工作流，多 Step 波次编译为动态并行分支后 JOIN。

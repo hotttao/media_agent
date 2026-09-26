@@ -66,6 +66,12 @@ Worker 属于 `media_workflow`，与 API 共用代码库但以独立进程部署
 
 纯 Renderer 位于 Template Domain；Conductor poll/ack 位于基础设施适配层，Worker workflow 负责二者编排。Renderer 不查询 `media_materials`、不调用 Provider、不决定 Capability 参数顺序。同一输入必须确定性输出；缺少字段、模板语法错误或不允许的字段访问返回稳定错误码。
 
+## 客户端 Media Worker
+
+新增独立 `media_worker` 可执行程序。它接受 Conductor URL、worker ID、启用的 Capability Task 列表和 profile；逐个长轮询 Capability Task，调用对应 Handler，并通过 `POST /api/tasks` 回报 `COMPLETED | FAILED`。生产 profile 调本地 Provider/CLI，`media_ai_fixture` profile 按 task type 返回冻结样本并附带 provenance。它不得轮询 `media_render_template_v1` 或 `media_finalize_step_v1`。
+
+`media_workflow` 提供独立 internal-worker 入口执行 Renderer/finalizer。API 进程负责发布、注册与启动 Workflow，不在 HTTP goroutine 中执行 task polling。
+
 ## 持久化与版本
 
 Template 与 Template Version 增加 `capability_key`、`capability_version` 和 `invocation_mapping jsonb`。新增版本化 `execution_capabilities`。`workflow_compilations` 保存源版本、Conductor name/version、definition_hash、状态与错误；运行时不从该表加载 IR。
@@ -76,3 +82,4 @@ Template 与 Template Version 增加 `capability_key`、`capability_version` 和
 - Renderer：动态 context、嵌套字段、缺失字段、非法模板、确定性 digest。
 - Backend Compiler：Renderer 自动插入、Capability 参数引用正确、images 顺序、拓扑波次、hash 稳定、无敏感字段。
 - 集成：注册 Definition 后，Renderer Worker 输出 prompt，Capability Worker 收到固定 `prompt + images[]`。
+- E2E：迁移 `media_ai/scripts/workflow-cli` 的七阶段视频流程；只导入一个 fixture execution，启动真实 Conductor、internal worker 与 `media_worker --profile media_ai_fixture`，从 UI/API SubmitJob 并验证最终视频结果。用户确认前不迁移其余旧数据。

@@ -34,3 +34,11 @@
 - [ ] 接入纯 Renderer，完成 ack/fail、trace_id 和指标。
 - [ ] 注册内部 Task Definition。
 - [ ] 使用真实 Conductor 验证 `业务 Slot -> prompt/images[] -> Capability`。
+
+## P6 · 客户端 Media Worker 与旧流程样本
+
+- [ ] 新建客户端 `media_worker`，实现 Conductor poll/update、worker_id、幂等与优雅退出。
+- [ ] 实现 `media_ai_fixture` Mock Profile，冻结一个已完成视频流程的结果与 provenance。
+- [ ] 迁移七阶段 `model-image -> style-image -> first-frame -> video -> clip -> ai-fill -> publish` Workflow、Templates 和 Capability 引用。
+- [ ] 只通过 API 导入并执行一个完整样本；验证 Job、Conductor tasks 与最终视频结果。
+- [ ] 等用户确认后再迁移全部旧数据。

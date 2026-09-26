@@ -12,6 +12,7 @@ import (
 	pb "media_agent/hertz_gen/model/media_workflow/job"
 	domain "media_agent/media_workflow/biz/domain/job"
 	jobsvc "media_agent/media_workflow/biz/service/job"
+	"media_agent/media_workflow/biz/shared/auth"
 )
 
 var Svc *jobsvc.Service
@@ -26,7 +27,7 @@ func SubmitJob(ctx context.Context, c *app.RequestContext) {
 	}
 	j, err := Svc.Submit(ctx, jobsvc.SubmitCommand{
 		WorkflowID: req.GetWorkflowId(), WorkflowVersion: int(req.GetWorkflowVersion()),
-		Input: jobInputFromPB(req.GetInput()), SubmittedBy: req.GetSubmittedBy(),
+		Input: jobInputFromPB(req.GetInput()), SubmittedBy: auth.CallerID(ctx),
 	})
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())

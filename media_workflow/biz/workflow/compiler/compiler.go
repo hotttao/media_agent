@@ -28,7 +28,7 @@ type Definition struct {
 	Description      string         `json:"description,omitempty"`
 	Version          int            `json:"version"`
 	Tasks            []Task         `json:"tasks"`
-	InputParameters  map[string]any `json:"inputParameters,omitempty"`
+	InputParameters  []string       `json:"inputParameters,omitempty"`
 	OutputParameters map[string]any `json:"outputParameters,omitempty"`
 	SchemaVersion    int            `json:"schemaVersion"`
 }
@@ -124,7 +124,7 @@ func Compile(wf domain.Workflow) (Definition, error) {
 		Name:             "media_workflow_" + sanitize(wf.ID),
 		Description:      wf.Description,
 		Version:          wf.Version,
-		InputParameters:  map[string]any{},
+		InputParameters:  []string{"inputs"},
 		OutputParameters: map[string]any{},
 		SchemaVersion:    2,
 	}

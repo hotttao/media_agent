@@ -8,19 +8,21 @@ import (
 
 // Job 对应 PG media_workflow.jobs 表。
 type Job struct {
-	ID              string         `gorm:"column:id;primaryKey"`
-	Scope           string         `gorm:"column:scope;not null"`
-	WorkflowID      string         `gorm:"column:workflow_id;not null"`
-	WorkflowVersion int            `gorm:"column:workflow_version;not null"`
-	Input           datatypes.JSON `gorm:"column:input;type:jsonb;not null"`
-	Status          string         `gorm:"column:status;not null;default:pending"`
-	RetryCount      int            `gorm:"column:retry_count;not null;default:0"`
-	RetryHistory    datatypes.JSON `gorm:"column:retry_history;type:jsonb;not null;default:[]"`
-	SubmittedBy     string         `gorm:"column:submitted_by;not null"`
-	SubmittedAt     time.Time      `gorm:"column:submitted_at;not null"`
-	StartedAt       *time.Time     `gorm:"column:started_at"`
-	FinishedAt      *time.Time     `gorm:"column:finished_at"`
-	FailureReason   string         `gorm:"column:failure_reason"`
+	ID                  string         `gorm:"column:id;primaryKey"`
+	Scope               string         `gorm:"column:scope;not null"`
+	WorkflowID          string         `gorm:"column:workflow_id;not null"`
+	WorkflowVersion     int            `gorm:"column:workflow_version;not null"`
+	Input               datatypes.JSON `gorm:"column:input;type:jsonb;not null"`
+	Status              string         `gorm:"column:status;not null;default:pending"`
+	RetryCount          int            `gorm:"column:retry_count;not null;default:0"`
+	RetryHistory        datatypes.JSON `gorm:"column:retry_history;type:jsonb;not null;default:[]"`
+	SubmittedBy         string         `gorm:"column:submitted_by;not null"`
+	SubmittedAt         time.Time      `gorm:"column:submitted_at;not null"`
+	StartedAt           *time.Time     `gorm:"column:started_at"`
+	FinishedAt          *time.Time     `gorm:"column:finished_at"`
+	FailureReason       string         `gorm:"column:failure_reason"`
+	ConductorWorkflowID string         `gorm:"column:conductor_workflow_id"`
+	CompilationHash     string         `gorm:"column:compilation_hash"`
 }
 
 func (Job) TableName() string { return "media_workflow.jobs" }

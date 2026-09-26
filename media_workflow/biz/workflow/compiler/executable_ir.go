@@ -9,9 +9,8 @@ import (
 )
 
 const (
-	RenderTemplateTaskName      = "media_render_template_v1"
-	FinalizeStepWorkflowName    = "media_finalize_step_v1"
-	FinalizeStepWorkflowVersion = 1
+	RenderTemplateTaskName = "media_render_template_v1"
+	FinalizeStepTaskName   = "media_finalize_step_v1"
 )
 
 // CompileExecutableIR lowers the engine-neutral IR into a deterministic
@@ -44,7 +43,7 @@ func CompileExecutableIR(ir executable.ExecutableWorkflowIR) (Definition, error)
 
 	definition := Definition{
 		Name: "media_workflow_" + sanitize(ir.WorkflowID), Version: ir.WorkflowVersion,
-		InputParameters: map[string]any{}, OutputParameters: map[string]any{}, SchemaVersion: 2,
+		InputParameters: []string{"inputs", "job_id"}, OutputParameters: map[string]any{}, SchemaVersion: 2,
 	}
 	for waveIndex, steps := range waves {
 		if len(steps) == 1 {
@@ -99,12 +98,12 @@ func lowerExecutableStep(step executable.ExecutableStepIR) ([]Task, error) {
 		},
 		{Name: step.Capability.ConductorTaskDef, TaskReferenceName: invokeRef, Type: "SIMPLE", InputParameters: capabilityInput},
 		{
-			Name: "finalize_" + sanitize(step.Key), TaskReferenceName: finalizeRef(step.Key), Type: "SUB_WORKFLOW",
+			Name: FinalizeStepTaskName, TaskReferenceName: finalizeRef(step.Key), Type: "SIMPLE",
 			InputParameters: map[string]any{
 				"step_key": step.Key, "candidates": fmt.Sprintf("${%s.output.candidates}", invokeRef),
 				"output_asset_kind": step.OutputAssetKind, "approval_policy": step.ApprovalPolicy, "reuse_policy": step.ReusePolicy,
+				"job_id": "${workflow.input.job_id}",
 			},
-			SubWorkflowParam: &SubWorkflowParam{Name: FinalizeStepWorkflowName, Version: FinalizeStepWorkflowVersion},
 		},
 	}, nil
 }

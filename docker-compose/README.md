@@ -7,6 +7,7 @@
 - `docker-compose.yml`：基础设施，仅 PostgreSQL。
 - `docker-compose.auth.yml`：当前仓库维护的 Ory 认证鉴权栈（Kratos、Hydra、Keto、Oathkeeper、Login UI）。
 - `docker-compose.gateway.yml`：Traefik 统一入口，配置集中在 `traefik/`。
+- `docker-compose.workflow.yml`：Conductor 工作流编排服务；只执行编排，不包含客户端 capability worker。
 - `docker-compose.observability.yml`：OTel、Jaeger、Prometheus、Loki、Grafana、Promtail、Consul；全部使用 `observability` profile。
 
 ## 明确启动时
@@ -21,9 +22,27 @@ docker compose -f docker-compose.auth.yml up -d
 # 统一网关
 docker compose -f docker-compose.gateway.yml up -d
 
+# 工作流联调（Conductor API 仅绑定本机 127.0.0.1:8080）
+docker compose -f docker-compose.workflow.yml up -d
+
 # 可观测性（只有明确需要联调/观测时才启动）
 docker compose -f docker-compose.yml -f docker-compose.observability.yml --profile observability up -d
 ```
+
+工作流执行时还需要启动两个不同信任边界的进程：
+
+```bash
+# media_workflow 内部任务：模板渲染与结果收敛
+CONDUCTOR_URL=http://127.0.0.1:8080 go run ./media_workflow/cmd/internal_worker
+
+# 客户端 capability worker；fixture profile 仅用于迁移联调
+go run ./media_worker/cmd/media_worker \
+  -conductor-url http://127.0.0.1:8080 \
+  -profile media_ai_fixture
+```
+
+`media_worker` 不允许注册或执行 `media_render_template_v1`、
+`media_finalize_step_v1`；这两个内部任务始终由 `media_workflow` 维护。
 
 网关地址：`http://192.168.2.41:18080/`。
 

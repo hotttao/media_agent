@@ -36,3 +36,31 @@ Compilation 状态为 `pending -> registering -> registered | failed`。幂等�
 ## 内部 Renderer Worker
 
 `media_render_template_v1` 由 `media_workflow` 限界上下文拥有，使用同一代码库中的纯 Template Renderer，但以独立 Worker 进程轮询 Conductor；它不是独立微服务。Worker 输入中的 `template` 与 `context` 已由 Backend Compiler 和运行时引用组装完成，执行期间不查询 `media_materials`。同一输入必须产生相同 `prompt` 与 `prompt_digest`，以便 Conductor 重投安全重放。API 进程不承载轮询循环，避免 HTTP 生命周期、扩缩容与 Task 并发互相绑定。
+
+## Capability Worker 交互
+
+```mermaid
+sequenceDiagram
+    participant User as 用户/UI
+    participant MW as media_workflow
+    participant C as Conductor
+    participant IW as Internal Worker
+    participant CW as 客户端 media_worker
+
+    User->>MW: SubmitJob(workflow_version, inputs)
+    MW->>C: StartWorkflow(compiled_name/version, inputs)
+    C-->>IW: poll media_render_template_v1
+    IW->>C: COMPLETED(prompt, digest)
+    C-->>CW: poll capability task
+    CW->>CW: 调本地能力或显式 Mock Profile
+    CW->>C: COMPLETED(candidates, provenance)
+    C-->>IW: poll media_finalize_step_v1
+    IW->>C: COMPLETED(unique output_resource)
+    C-->>MW: execution state（查询/同步）
+    MW-->>User: Job/StepRun 投影
+```
+
+- Capability Task 的幂等键为 Conductor `taskId`；客户端重投同一结果不得重复产生外部副作用。
+- 客户端离线时 Task 保持可重试状态，不改变 Workflow 或 Job 定义；恢复后继续轮询。
+- Mock Profile 只用于联调，按 capability key 返回冻结样本，并在 provenance 中标记 `media_ai_fixture`。
+- Internal Worker 与 Capability Worker 生命周期独立；任一方重启不得要求重新发布 Workflow。

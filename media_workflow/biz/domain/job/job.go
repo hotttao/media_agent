@@ -92,19 +92,21 @@ type Candidate struct {
 }
 
 type Job struct {
-	ID              string
-	Scope           string
-	WorkflowID      string
-	WorkflowVersion int
-	Input           JobInput
-	Status          JobStatus
-	RetryCount      int
-	RetryHistory    []RetryRecord
-	SubmittedBy     string
-	SubmittedAt     time.Time
-	StartedAt       *time.Time
-	FinishedAt      *time.Time
-	FailureReason   string
+	ID                  string
+	Scope               string
+	WorkflowID          string
+	WorkflowVersion     int
+	Input               JobInput
+	Status              JobStatus
+	RetryCount          int
+	RetryHistory        []RetryRecord
+	SubmittedBy         string
+	SubmittedAt         time.Time
+	StartedAt           *time.Time
+	FinishedAt          *time.Time
+	FailureReason       string
+	ConductorWorkflowID string
+	CompilationHash     string
 }
 
 type RetryRecord struct {

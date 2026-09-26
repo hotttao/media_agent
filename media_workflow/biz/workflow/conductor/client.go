@@ -1,0 +1,195 @@
+package conductor
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"media_agent/media_workflow/biz/workflow/compiler"
+)
+
+type Client struct {
+	baseURL string
+	http    *http.Client
+}
+
+func NewClient(baseURL string) *Client {
+	return &Client{baseURL: strings.TrimRight(baseURL, "/"), http: &http.Client{Timeout: 35 * time.Second}}
+}
+
+func (c *Client) Enabled() bool { return c != nil && c.baseURL != "" }
+
+type TaskDefinition struct {
+	Name                   string `json:"name"`
+	Description            string `json:"description,omitempty"`
+	RetryCount             int    `json:"retryCount"`
+	RetryLogic             string `json:"retryLogic,omitempty"`
+	RetryDelaySeconds      int    `json:"retryDelaySeconds,omitempty"`
+	TimeoutSeconds         int    `json:"timeoutSeconds,omitempty"`
+	ResponseTimeoutSeconds int    `json:"responseTimeoutSeconds,omitempty"`
+	TimeoutPolicy          string `json:"timeoutPolicy,omitempty"`
+}
+
+func (c *Client) RegisterTaskDefinitions(ctx context.Context, definitions []TaskDefinition) error {
+	if len(definitions) == 0 {
+		return nil
+	}
+	if err := c.doJSON(ctx, http.MethodPost, "/api/metadata/taskdefs", definitions, nil); err == nil {
+		return nil
+	}
+	for _, definition := range definitions {
+		if err := c.doJSON(ctx, http.MethodPut, "/api/metadata/taskdefs", definition, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) RegisterWorkflow(ctx context.Context, definition compiler.Definition) error {
+	var response struct {
+		Errors map[string]string `json:"bulkErrorResults"`
+	}
+	if err := c.doJSON(ctx, http.MethodPut, "/api/metadata/workflow", []compiler.Definition{definition}, &response); err != nil {
+		return err
+	}
+	if len(response.Errors) > 0 {
+		return fmt.Errorf("conductor workflow registration failed: %v", response.Errors)
+	}
+	return nil
+}
+
+func (c *Client) StartWorkflow(ctx context.Context, name string, version int, input map[string]any) (string, error) {
+	path := fmt.Sprintf("/api/workflow/%s?version=%d", url.PathEscape(name), version)
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return "", err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(encoded))
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := c.http.Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 8192))
+	if err != nil {
+		return "", err
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return "", fmt.Errorf("conductor start workflow: status=%d body=%s", response.StatusCode, body)
+	}
+	id := strings.Trim(string(body), "\" \n\r\t")
+	if id == "" {
+		return "", errorsNew("conductor returned an empty workflow id")
+	}
+	return id, nil
+}
+
+type Task struct {
+	TaskType           string         `json:"taskType"`
+	ReferenceTaskName  string         `json:"referenceTaskName"`
+	TaskID             string         `json:"taskId"`
+	WorkflowInstanceID string         `json:"workflowInstanceId"`
+	Status             string         `json:"status"`
+	InputData          map[string]any `json:"inputData"`
+	OutputData         map[string]any `json:"outputData"`
+}
+
+func (c *Client) Poll(ctx context.Context, taskType, workerID string) (*Task, error) {
+	path := fmt.Sprintf("/api/tasks/poll/%s?workerid=%s", url.PathEscape(taskType), url.QueryEscape(workerID))
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := c.http.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNoContent {
+		return nil, nil
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+		return nil, fmt.Errorf("conductor poll %s: status=%d body=%s", taskType, response.StatusCode, body)
+	}
+	var task Task
+	if err := json.NewDecoder(response.Body).Decode(&task); err != nil {
+		return nil, err
+	}
+	if task.TaskID == "" {
+		return nil, nil
+	}
+	return &task, nil
+}
+
+type TaskResult struct {
+	WorkflowInstanceID    string         `json:"workflowInstanceId"`
+	TaskID                string         `json:"taskId"`
+	WorkerID              string         `json:"workerId,omitempty"`
+	Status                string         `json:"status"`
+	OutputData            map[string]any `json:"outputData,omitempty"`
+	ReasonForIncompletion string         `json:"reasonForIncompletion,omitempty"`
+}
+
+func (c *Client) UpdateTask(ctx context.Context, result TaskResult) error {
+	return c.doJSON(ctx, http.MethodPost, "/api/tasks", result, nil)
+}
+
+type WorkflowExecution struct {
+	WorkflowID string         `json:"workflowId"`
+	Status     string         `json:"status"`
+	Output     map[string]any `json:"output"`
+	Tasks      []Task         `json:"tasks"`
+}
+
+func (c *Client) GetWorkflow(ctx context.Context, id string) (*WorkflowExecution, error) {
+	var execution WorkflowExecution
+	if err := c.doJSON(ctx, http.MethodGet, "/api/workflow/"+url.PathEscape(id)+"?includeTasks=true", nil, &execution); err != nil {
+		return nil, err
+	}
+	return &execution, nil
+}
+
+func (c *Client) doJSON(ctx context.Context, method, path string, input any, output any) error {
+	if !c.Enabled() {
+		return errorsNew("conductor is not configured")
+	}
+	var body io.Reader
+	if input != nil {
+		encoded, err := json.Marshal(input)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(encoded)
+	}
+	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := c.http.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		responseBody, _ := io.ReadAll(io.LimitReader(response.Body, 8192))
+		return fmt.Errorf("conductor %s %s: status=%d body=%s", method, path, response.StatusCode, responseBody)
+	}
+	if output == nil || response.StatusCode == http.StatusNoContent {
+		return nil
+	}
+	return json.NewDecoder(response.Body).Decode(output)
+}
+
+func errorsNew(message string) error { return fmt.Errorf("%s", message) }

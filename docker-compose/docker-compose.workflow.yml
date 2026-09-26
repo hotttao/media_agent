@@ -1,0 +1,28 @@
+# Workflow orchestration for local integration tests.
+# Capability workers are intentionally not containers: media_worker runs on the client.
+
+services:
+  conductor:
+    image: conductoross/conductor:3.32.4
+    container_name: media-agent-conductor
+    environment:
+      JAVA_OPTS: >-
+        -Dpolyglot.engine.WarnInterpreterOnly=false
+        -Dconductor.app.ownerEmailMandatory=false
+      SPRING_DATASOURCE_URL: jdbc:sqlite:/data/conductor.db?busy_timeout=15000&journal_mode=WAL
+    ports:
+      - "127.0.0.1:${CONDUCTOR_PORT:-8080}:8080"
+    volumes:
+      - ${DATA_ROOT:-/data}/conductor:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    networks: [media-net]
+
+networks:
+  media-net:
+    name: media-net
+    external: true

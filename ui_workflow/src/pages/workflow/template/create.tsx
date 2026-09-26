@@ -20,6 +20,9 @@ export function TemplateCreate({ onDone }: { onDone: () => void }) {
     gen_type: "",
     needs_confirm: false,
     candidate_count: 0,
+    capability_key: "media.image.model",
+    capability_version: 1,
+    invocation_mapping: { prompt: { op: "render_template" } },
     visibility: "private",
   });
 

@@ -10,7 +10,6 @@ import (
 
 	"media_agent/media_workflow/biz/dal"
 	domain "media_agent/media_workflow/biz/domain/workflow"
-	"media_agent/media_workflow/biz/workflow/compiler"
 )
 
 type Service struct {
@@ -18,10 +17,11 @@ type Service struct {
 	grants         domain.GrantRepo
 	tx             dal.TxRunner
 	templateLookup domain.TemplateLookup
+	publisher      domain.Publisher
 }
 
-func NewService(repo domain.Repo, grants domain.GrantRepo, tx dal.TxRunner, tl domain.TemplateLookup) *Service {
-	return &Service{repo: repo, grants: grants, tx: tx, templateLookup: tl}
+func NewService(repo domain.Repo, grants domain.GrantRepo, tx dal.TxRunner, tl domain.TemplateLookup, publisher domain.Publisher) *Service {
+	return &Service{repo: repo, grants: grants, tx: tx, templateLookup: tl, publisher: publisher}
 }
 
 type CreateCommand struct {
@@ -198,12 +198,11 @@ func (s *Service) Publish(ctx context.Context, id, callerID string) (*domain.Wor
 	if w.CreatedBy != callerID {
 		return nil, errors.New("only owner can publish workflow")
 	}
-	// Publishing is the business boundary at which the immutable DAG is
-	// compiled to the Conductor definition shape. Registration is performed by
-	// the execution adapter; rejecting an invalid definition here prevents a
-	// published workflow that cannot be scheduled.
-	if _, err := compiler.Compile(*w); err != nil {
-		return nil, fmt.Errorf("compile workflow for publish: %w", err)
+	if s.publisher == nil {
+		return nil, errors.New("workflow publisher is not configured")
+	}
+	if err := s.publisher.CompileAndRegister(ctx, w); err != nil {
+		return nil, fmt.Errorf("compile and register workflow: %w", err)
 	}
 	if err := s.repo.UpdateStatus(ctx, id, domain.StatusPublished); err != nil {
 		return nil, err

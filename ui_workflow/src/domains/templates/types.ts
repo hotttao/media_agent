@@ -37,6 +37,7 @@ export type TemplateSlotResourceType =
 
 export interface TemplateSlot {
   name: string;
+  asset_kind: string;
   resource_type: string;
   required: boolean;
   display_order?: number;
@@ -44,9 +45,18 @@ export interface TemplateSlot {
 
 export interface TemplateSlotInput {
   name: string;
+  asset_kind: string;
   resource_type: string;
   required: boolean;
   display_order?: number;
+}
+
+export type InvocationOperation = "render_template" | "asset_ref" | "list";
+
+export interface InvocationExpression {
+  op: InvocationOperation;
+  slot?: string;
+  items?: InvocationExpression[];
 }
 
 // ── Template ────────────────────────────────────────────────────────────
@@ -70,6 +80,9 @@ export interface Template {
   updated_at: string;
   needs_confirm: boolean;
   candidate_count: number;
+  capability_key: string;
+  capability_version: number;
+  invocation_mapping: Record<string, InvocationExpression>;
 }
 
 /** Create/update payload. scope is required on create and immutable on update
@@ -90,6 +103,9 @@ export interface TemplateInput {
   gen_type?: string;
   needs_confirm?: boolean;
   candidate_count?: number;
+  capability_key: string;
+  capability_version: number;
+  invocation_mapping: Record<string, InvocationExpression>;
   visibility?: Visibility;
 }
 

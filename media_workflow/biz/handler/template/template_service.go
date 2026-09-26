@@ -28,7 +28,9 @@ func CreateTemplate(ctx context.Context, c *app.RequestContext) {
 		OutputAssetKind: req.GetOutputAssetKind(), Platform: req.GetPlatform(),
 		GenWay: req.GetGenWay(), GenType: req.GetGenType(),
 		NeedsConfirm: req.GetNeedsConfirm(), CandidateCount: int(req.GetCandidateCount()),
-		CreatedBy: req.GetCreatedBy(),
+		CapabilityKey: req.GetCapabilityKey(), CapabilityVersion: int(req.GetCapabilityVersion()),
+		InvocationMapping: invocationFromPB(req.GetInvocationMapping()),
+		CreatedBy:         auth.CallerID(ctx),
 	})
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
@@ -49,6 +51,8 @@ func UpdateTemplate(ctx context.Context, c *app.RequestContext) {
 		OutputAssetKind: req.GetOutputAssetKind(), Platform: req.GetPlatform(),
 		GenWay: req.GetGenWay(), GenType: req.GetGenType(),
 		NeedsConfirm: req.GetNeedsConfirm(), CandidateCount: int(req.GetCandidateCount()),
+		CapabilityKey: req.GetCapabilityKey(), CapabilityVersion: int(req.GetCapabilityVersion()),
+		InvocationMapping: invocationFromPB(req.GetInvocationMapping()),
 	})
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
@@ -175,7 +179,7 @@ func ChangeTemplateVisibility(ctx context.Context, c *app.RequestContext) {
 func slotsFromPB(in []*pb.TemplateInputSlot) []domain.Slot {
 	out := make([]domain.Slot, len(in))
 	for i, s := range in {
-		out[i] = domain.Slot{Name: s.GetName(), ResourceType: s.GetResourceType(), Required: s.GetRequired(), DisplayOrder: int(s.GetDisplayOrder())}
+		out[i] = domain.Slot{Name: s.GetName(), AssetKind: s.GetAssetKind(), ResourceType: s.GetResourceType(), Required: s.GetRequired(), DisplayOrder: int(s.GetDisplayOrder())}
 	}
 	return out
 }
@@ -183,7 +187,7 @@ func slotsFromPB(in []*pb.TemplateInputSlot) []domain.Slot {
 func slotsToPB(in []domain.Slot) []*pb.TemplateInputSlot {
 	out := make([]*pb.TemplateInputSlot, len(in))
 	for i, s := range in {
-		out[i] = &pb.TemplateInputSlot{Name: s.Name, ResourceType: s.ResourceType, Required: s.Required, DisplayOrder: int32(s.DisplayOrder)}
+		out[i] = &pb.TemplateInputSlot{Name: s.Name, AssetKind: s.AssetKind, ResourceType: s.ResourceType, Required: s.Required, DisplayOrder: int32(s.DisplayOrder)}
 	}
 	return out
 }
@@ -206,7 +210,9 @@ func toView(t *domain.Template) *pb.Template {
 		PromptBody: t.PromptBody, Inputs: slotsToPB(t.Inputs),
 		OutputAssetKind: t.OutputAssetKind, Platform: t.Platform, GenWay: t.GenWay, GenType: t.GenType,
 		NeedsConfirm: t.NeedsConfirm, CandidateCount: int32(t.CandidateCount),
-		Status: statusToPB(t.Status), Visibility: string(t.Visibility), Version: int32(t.Version),
+		CapabilityKey: t.CapabilityKey, CapabilityVersion: int32(t.CapabilityVersion),
+		InvocationMapping: invocationToPB(t.InvocationMapping),
+		Status:            statusToPB(t.Status), Visibility: string(t.Visibility), Version: int32(t.Version),
 		CreatedBy: t.CreatedBy, CreatedAt: t.CreatedAt.UnixNano(), UpdatedAt: t.UpdatedAt.UnixNano(),
 	}
 }
@@ -216,9 +222,46 @@ func versionToView(tv *domain.TemplateVersion) *pb.Template {
 		Id: tv.TemplateID, PromptBody: tv.PromptBody, Inputs: slotsToPB(tv.Inputs),
 		OutputAssetKind: tv.OutputAssetKind, Platform: tv.Platform, GenWay: tv.GenWay, GenType: tv.GenType,
 		NeedsConfirm: tv.NeedsConfirm, CandidateCount: int32(tv.CandidateCount),
-		Status: statusToPB(domain.StatusPublished), Version: int32(tv.Version),
+		CapabilityKey: tv.CapabilityKey, CapabilityVersion: int32(tv.CapabilityVersion),
+		InvocationMapping: invocationToPB(tv.InvocationMapping),
+		Status:            statusToPB(domain.StatusPublished), Version: int32(tv.Version),
 		CreatedBy: tv.CreatedBy, CreatedAt: tv.CreatedAt.UnixNano(),
 	}
+}
+
+func invocationFromPB(in map[string]*pb.InvocationExpression) domain.InvocationMapping {
+	out := make(domain.InvocationMapping, len(in))
+	for name, expression := range in {
+		out[name] = expressionFromPB(expression)
+	}
+	return out
+}
+
+func expressionFromPB(in *pb.InvocationExpression) domain.InvocationExpression {
+	if in == nil {
+		return domain.InvocationExpression{}
+	}
+	out := domain.InvocationExpression{Op: domain.InvocationOp(in.GetOp()), Slot: in.GetSlot()}
+	for _, item := range in.GetItems() {
+		out.Items = append(out.Items, expressionFromPB(item))
+	}
+	return out
+}
+
+func invocationToPB(in domain.InvocationMapping) map[string]*pb.InvocationExpression {
+	out := make(map[string]*pb.InvocationExpression, len(in))
+	for name, expression := range in {
+		out[name] = expressionToPB(expression)
+	}
+	return out
+}
+
+func expressionToPB(in domain.InvocationExpression) *pb.InvocationExpression {
+	out := &pb.InvocationExpression{Op: string(in.Op), Slot: in.Slot}
+	for _, item := range in.Items {
+		out.Items = append(out.Items, expressionToPB(item))
+	}
+	return out
 }
 
 // PublishTemplate .

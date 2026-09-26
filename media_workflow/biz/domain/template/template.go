@@ -30,6 +30,7 @@ const (
 // ResourceType: MATERIAL/ASSET/PRODUCT/VIRTUAL_IP/TEXT。
 type Slot struct {
 	Name         string
+	AssetKind    string
 	ResourceType string
 	Required     bool
 	DisplayOrder int

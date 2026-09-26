@@ -132,6 +132,11 @@ func (r *JobRepo) UpdateInput(ctx context.Context, id string, input domain.JobIn
 	return err
 }
 
+func (r *JobRepo) UpdateConductorExecution(ctx context.Context, id, conductorWorkflowID, compilationHash string) error {
+	return dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.Job{}).Where("id = ?", id).
+		Updates(map[string]any{"conductor_workflow_id": conductorWorkflowID, "compilation_hash": compilationHash}).Error
+}
+
 func (r *JobRepo) AppendRetryHistory(ctx context.Context, id string, record domain.RetryRecord, retryCount int) error {
 	Q := query.Use(dal.FromContext(ctx, r.db))
 	j, err := Q.Job.WithContext(ctx).Where(Q.Job.ID.Eq(id)).First()
@@ -275,6 +280,7 @@ func jobToDomain(row *model.Job) *domain.Job {
 		Status: domain.JobStatus(row.Status), RetryCount: row.RetryCount,
 		SubmittedBy: row.SubmittedBy, SubmittedAt: row.SubmittedAt,
 		StartedAt: row.StartedAt, FinishedAt: row.FinishedAt, FailureReason: row.FailureReason,
+		ConductorWorkflowID: row.ConductorWorkflowID, CompilationHash: row.CompilationHash,
 	}
 	_ = json.Unmarshal(row.Input, &j.Input)
 	_ = json.Unmarshal(row.RetryHistory, &j.RetryHistory)
@@ -311,7 +317,7 @@ func (r *StepRunRepo) ReclaimStale(ctx context.Context, timeoutSeconds int) (int
 	res := db.Exec(`
 		UPDATE media_workflow.step_runs
 		SET status = 'pending', claimed_by = '', claimed_at = NULL, started_at = NULL
-		WHERE status = 'claimed' AND claimed_at < now() - (? || ' seconds')::interval`,
+		WHERE status = 'claimed' AND claimed_at < now() - make_interval(secs => ?)`,
 		timeoutSeconds)
 	return res.RowsAffected, res.Error
 }

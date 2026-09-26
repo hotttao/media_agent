@@ -12,9 +12,11 @@ import (
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_workflow/biz/dal"
+	capabilityrepo "media_agent/media_workflow/biz/dal/repo/capability"
 	jobrepo "media_agent/media_workflow/biz/dal/repo/job"
 	tplrepo "media_agent/media_workflow/biz/dal/repo/template"
 	wfrepo "media_agent/media_workflow/biz/dal/repo/workflow"
+	templatedomain "media_agent/media_workflow/biz/domain/template"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
 	jobhandler "media_agent/media_workflow/biz/handler/job"
 	tplhandler "media_agent/media_workflow/biz/handler/template"
@@ -25,6 +27,8 @@ import (
 	"media_agent/media_workflow/biz/shared"
 	"media_agent/media_workflow/biz/shared/auth"
 	"media_agent/media_workflow/biz/shared/client"
+	"media_agent/media_workflow/biz/workflow/conductor"
+	"media_agent/media_workflow/biz/workflow/publication"
 )
 
 // templateLookupAdapter 把 template.Service 适配为 workflow.TemplateLookup 端口。
@@ -37,7 +41,7 @@ func (a *templateLookupAdapter) GetVersion(ctx context.Context, id string, versi
 	}
 	slots := make([]wfdomain.SlotSnapshot, len(tv.Inputs))
 	for i, in := range tv.Inputs {
-		slots[i] = wfdomain.SlotSnapshot{Name: in.Name, ResourceType: in.ResourceType, Required: in.Required}
+		slots[i] = wfdomain.SlotSnapshot{Name: in.Name, AssetKind: in.AssetKind, ResourceType: in.ResourceType, Required: in.Required}
 	}
 	// status 需从当前 template 取（version 快照无 status；查当前）
 	t, err := a.svc.Get(ctx, id, auth.CallerID(ctx)) // 传 callerID 供 canRead 校验
@@ -49,7 +53,25 @@ func (a *templateLookupAdapter) GetVersion(ctx context.Context, id string, versi
 		OutputAssetKind: tv.OutputAssetKind, PromptBody: tv.PromptBody, Platform: tv.Platform,
 		GenWay: tv.GenWay, GenType: tv.GenType,
 		NeedsConfirm: tv.NeedsConfirm, CandidateCount: tv.CandidateCount, Inputs: slots,
+		CapabilityKey: tv.CapabilityKey, CapabilityVersion: tv.CapabilityVersion,
+		InvocationMapping: invocationSnapshot(tv.InvocationMapping),
 	}, nil
+}
+
+func invocationSnapshot(in map[string]templatedomain.InvocationExpression) map[string]wfdomain.InvocationExpressionSnapshot {
+	out := make(map[string]wfdomain.InvocationExpressionSnapshot, len(in))
+	for name, expression := range in {
+		out[name] = invocationExpressionSnapshot(expression)
+	}
+	return out
+}
+
+func invocationExpressionSnapshot(in templatedomain.InvocationExpression) wfdomain.InvocationExpressionSnapshot {
+	out := wfdomain.InvocationExpressionSnapshot{Op: string(in.Op), Slot: in.Slot}
+	for _, item := range in.Items {
+		out.Items = append(out.Items, invocationExpressionSnapshot(item))
+	}
+	return out
 }
 
 func main() {
@@ -98,22 +120,28 @@ func main() {
 	materialsClient := client.NewMaterialsClient(materialsBaseURL)
 
 	// template 装配
+	capabilityRepo := capabilityrepo.NewRepo(db)
 	tplRepo := tplrepo.NewRepo(db)
 	tplGrantRepo := tplrepo.NewGrantRepo(db)
-	tplSvc := tplsvc.NewService(tplRepo, tplGrantRepo, txRunner, materialsClient)
+	tplSvc := tplsvc.NewService(tplRepo, tplGrantRepo, txRunner, materialsClient, capabilityRepo)
 	tplhandler.Svc = tplSvc
 
 	// workflow 装配（TemplateLookup 由 templateSvc 适配）
 	tplLookup := &templateLookupAdapter{svc: tplSvc}
 	wfRepo := wfrepo.NewRepo(db)
 	wfGrantRepo := wfrepo.NewGrantRepo(db)
-	wfSvc := wfsvc.NewService(wfRepo, wfGrantRepo, txRunner, tplLookup)
+	compilationRepo := wfrepo.NewCompilationRepo(db)
+	conductorClient := conductor.NewClient(os.Getenv("CONDUCTOR_URL"))
+	publishFlow := &publication.Flow{
+		Templates: tplLookup, Capabilities: capabilityRepo, Compilations: compilationRepo, Conductor: conductorClient,
+	}
+	wfSvc := wfsvc.NewService(wfRepo, wfGrantRepo, txRunner, tplLookup, publishFlow)
 	wfhandler.Svc = wfSvc
 
 	// job 装配（P3）
 	jobRepo := jobrepo.NewJobRepo(db)
 	stepRunRepo := jobrepo.NewStepRunRepo(db)
-	jobSvc := jobsvc.NewService(jobRepo, stepRunRepo, txRunner, wfRepo, tplLookup, materialsClient, cfg.GetJob())
+	jobSvc := jobsvc.NewService(jobRepo, stepRunRepo, txRunner, wfRepo, tplLookup, materialsClient, cfg.GetJob(), compilationRepo, &conductor.ExecutionEngine{Client: conductorClient})
 	jobhandler.Svc = jobSvc
 
 	// claim 超时扫描（后台 goroutine）
