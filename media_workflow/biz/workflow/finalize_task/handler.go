@@ -17,12 +17,13 @@ type Candidate struct {
 }
 
 type Input struct {
-	StepKey         string      `json:"step_key"`
-	Candidates      []Candidate `json:"candidates"`
-	OutputAssetKind string      `json:"output_asset_kind"`
-	ApprovalPolicy  string      `json:"approval_policy"`
-	ReusePolicy     string      `json:"reuse_policy"`
-	JobID           string      `json:"job_id"`
+	StepKey           string      `json:"step_key"`
+	Candidates        []Candidate `json:"candidates"`
+	OutputAssetKind   string      `json:"output_asset_kind"`
+	ApprovalPolicy    string      `json:"approval_policy"`
+	ReusePolicy       string      `json:"reuse_policy"`
+	JobID             string      `json:"job_id"`
+	SelectedCandidate *Candidate  `json:"selected_candidate,omitempty"`
 }
 
 type Resource struct {
@@ -44,10 +45,16 @@ func (Handler) Execute(input Input) (Output, error) {
 	if len(input.Candidates) == 0 {
 		return Output{}, errors.New("capability returned no candidates")
 	}
+	if input.SelectedCandidate != nil {
+		return finalize(input, *input.SelectedCandidate)
+	}
 	if len(input.Candidates) > 1 || input.ApprovalPolicy == "always" {
 		return Output{}, ErrApprovalRequired
 	}
-	candidate := input.Candidates[0]
+	return finalize(input, input.Candidates[0])
+}
+
+func finalize(input Input, candidate Candidate) (Output, error) {
 	if candidate.URL == "" && candidate.Content == "" {
 		return Output{}, errors.New("candidate url and content are both empty")
 	}

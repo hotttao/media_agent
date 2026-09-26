@@ -26,7 +26,8 @@ Compilation 状态为 `pending -> registering -> registered | failed`。幂等�
 
 - task reference name 为 `step__<sanitized_step_key>`，原始 step_key 保留在 input。
 - `ExecutableWorkflowIR` 是 Semantic Compiler 与 Backend Compiler 的稳定边界；Conductor Definition 和 FlowGram 文档均不得充当 IR。
-- `ExecutableStepIR` 固定 Template/Capability 版本、context bindings、Invocation Mapping、唯一输出和 reuse/approval policy。
+- `ExecutableStepIR` 固定 Template/Capability 版本、context bindings、Invocation Mapping、候选数量、唯一输出和 reuse/approval policy。
+- 当 Template 配置多候选、`needs_confirm`，或 Step 使用 `approval_policy=always` 时，Backend Compiler 在 Capability 与 Finalize 之间插入 Conductor `HUMAN` task。候选保存在该 task input；确认接口以 `selected_candidate` 完成 task 后才运行 Finalize。重新生成从同一 Step 的 Capability task 原位 rerun，不由客户端 Worker 承担审批。
 - `media_render_template_v1` 固定接收 `template:string` 与 `context:map<string,json>` 并返回 `prompt:string`；Slot 数量和名称只改变 context 内容，不改变 Task Definition。
 - Capability 的 `images[]` 等参数由 Backend Compiler 按 Invocation Mapping 生成；Renderer 和 Worker 均不得按 Slot 名猜测。
 - Definition 只含稳定 ID、不可变模板内容、Object Path 表达式与非敏感参数；不含二进制、Provider 密钥、cookie、Token 或临时 URL。

@@ -34,6 +34,7 @@ func TestCompileBuildsTypedExecutableWorkflowIR(t *testing.T) {
 				ID: "tpl_model", Version: 3, Body: "{{.person.description}} wears {{.garment.name}}",
 				Inputs:          []TemplateSlot{{Name: "person", Resource: true, Required: true}, {Name: "garment", Resource: true, Required: true}},
 				OutputAssetKind: "model_image", CapabilityKey: "jimeng.image.multi", CapabilityVersion: 1, Invocation: mapping,
+				CandidateCount: 2,
 			},
 		},
 		Capabilities: map[CapabilityRef]CapabilitySnapshot{
@@ -53,6 +54,8 @@ func TestCompileBuildsTypedExecutableWorkflowIR(t *testing.T) {
 	require.Equal(t, "jimeng_image_multi_v1", ir.Steps[0].Capability.ConductorTaskDef)
 	require.Equal(t, "person", ir.Steps[0].Invocation["images"].Items[0].Slot)
 	require.Equal(t, "garment", ir.Steps[0].Invocation["images"].Items[1].Slot)
+	require.True(t, ir.Steps[0].ApprovalRequired)
+	require.Equal(t, 2, ir.Steps[0].CandidateCount)
 }
 
 func TestCompileRejectsMissingAndMistypedCapabilityInputs(t *testing.T) {

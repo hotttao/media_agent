@@ -90,3 +90,10 @@ Template 与 Template Version 增加 `capability_key`、`capability_version` 和
 - Workflow Validator 拒绝同名 MATERIAL/ASSET input 绑定不同 asset kind。
 - 独立前端读取已发布 Workflow 的 scope、version 与 Input Schema，按 Organization/Scope/Asset Kind 查询候选并组装 JobInput；不向业务用户暴露 JSON 编辑器。
 - MATERIAL 使用 object path 的可访问 URL 与文本内容形成 bundle；Product、Virtual IP 使用稳定业务字段形成快照。提交显式携带当前 Workflow version。
+
+## 人工审批运行时契约
+
+- Semantic Compiler 在 IR 中冻结 `candidate_count` 与 `approval_required`；Template 多候选/`needs_confirm` 或 Step `approval_policy=always` 均要求审批。
+- Backend Compiler 在 Capability task 后插入 Conductor `HUMAN` task。`media_worker` 只返回 candidates，不消费 HUMAN、render_template 或 finalize 内部任务。
+- media_workflow 对账 HUMAN task input，投影 `StepRun=need_confirm`；用户确认后以 `selected_candidate` 完成 HUMAN task，Finalize 形成唯一输出并登记 Generated Asset。
+- 用户选择重新生成时，从当前 Step 的 Capability task rerun，清空本次候选并返回 running；不把重新生成误当失败重试。

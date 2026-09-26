@@ -190,6 +190,39 @@ func (m *mockMaterialsClient) UpsertGeneratedAsset(_ context.Context, req *clien
 	return "gen_fake_id", nil
 }
 
+type mockWorkflowEngine struct {
+	execution       *domain.EngineExecution
+	completedRef    string
+	completedOutput map[string]any
+	rerunTaskID     string
+	rerunInput      map[string]any
+	terminated      bool
+}
+
+func (m *mockWorkflowEngine) Start(context.Context, string, int, map[string]any) (string, error) {
+	return "execution-1", nil
+}
+func (m *mockWorkflowEngine) Get(context.Context, string) (*domain.EngineExecution, error) {
+	return m.execution, nil
+}
+func (m *mockWorkflowEngine) CompleteTask(_ context.Context, _ string, reference string, output map[string]any) error {
+	m.completedRef = reference
+	m.completedOutput = output
+	return nil
+}
+func (m *mockWorkflowEngine) RerunFromTask(_ context.Context, _ string, taskID string) error {
+	m.rerunTaskID = taskID
+	return nil
+}
+func (m *mockWorkflowEngine) RerunWorkflow(_ context.Context, _ string, input map[string]any) error {
+	m.rerunInput = input
+	return nil
+}
+func (m *mockWorkflowEngine) Terminate(context.Context, string, string) error {
+	m.terminated = true
+	return nil
+}
+
 // sharedAssetKindInfo alias（避免 import shared）
 
 // —— helpers ——
@@ -677,6 +710,101 @@ func TestComplete_MultipleCandidatesRequiresApproval(t *testing.T) {
 	}
 	if updated.SelectedIndex == nil || *updated.SelectedIndex != 1 {
 		t.Errorf("selected_index = %v, want 1 after approval", updated.SelectedIndex)
+	}
+}
+
+func TestConductorApprovalConfirmAndFinalize(t *testing.T) {
+	svc, jobRepo, srRepo := newTestService(false)
+	engine := &mockWorkflowEngine{execution: &domain.EngineExecution{
+		Status: "RUNNING",
+		Tasks: []domain.EngineTask{
+			{TaskID: "invoke-1", ReferenceTaskName: "step__s1__invoke", Status: "COMPLETED", Output: map[string]any{
+				"candidates": []any{
+					map[string]any{"index": float64(0), "url": "a.png"},
+					map[string]any{"index": float64(1), "url": "b.png"},
+				},
+			}},
+			{TaskID: "approval-1", ReferenceTaskName: "step__s1__approval", Status: "IN_PROGRESS", Input: map[string]any{
+				"candidates": []any{
+					map[string]any{"index": float64(0), "url": "a.png"},
+					map[string]any{"index": float64(1), "url": "b.png"},
+				},
+			}},
+		},
+	}}
+	svc.engine = engine
+	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", Scope: "ai_clothing", WorkflowID: "wf1", Status: domain.JobRunning, SubmittedBy: "u1", ConductorWorkflowID: "execution-1"}
+	sr := makeClaimedStepRun(srRepo, false)
+	sr.Status = domain.SRBlocked
+	jobRepo.stepRuns["job1"] = []*domain.StepRun{sr}
+
+	job, steps, err := svc.Get(context.Background(), "job1")
+	if err != nil || job.Status != domain.JobNeedConfirm || steps[0].Status != domain.SRNeedConfirm || len(steps[0].Candidates) != 2 {
+		t.Fatalf("approval was not reconciled: job=%#v steps=%#v err=%v", job, steps, err)
+	}
+	if _, err := svc.Confirm(context.Background(), "sr1", 1); err != nil {
+		t.Fatalf("confirm: %v", err)
+	}
+	if engine.completedRef != "step__s1__approval" {
+		t.Fatalf("completed ref = %q", engine.completedRef)
+	}
+	selected := engine.completedOutput["selected_candidate"].(domain.Candidate)
+	if selected.URL != "b.png" {
+		t.Fatalf("selected candidate = %#v", selected)
+	}
+
+	engine.execution = &domain.EngineExecution{Status: "COMPLETED", Tasks: []domain.EngineTask{{
+		ReferenceTaskName: "step__s1__finalize", Status: "COMPLETED", Output: map[string]any{
+			"output_resource": map[string]any{"url": "b.png", "content": "approved"},
+		},
+	}}}
+	job, steps, err = svc.Get(context.Background(), "job1")
+	if err != nil || job.Status != domain.JobSucceeded || steps[0].Status != domain.SRSucceeded || steps[0].OutputAssetID != "gen_fake_id" {
+		t.Fatalf("approved step was not finalized: job=%#v steps=%#v err=%v", job, steps, err)
+	}
+}
+
+func TestConductorRegenerateRerunsCapabilityTask(t *testing.T) {
+	svc, jobRepo, srRepo := newTestService(false)
+	engine := &mockWorkflowEngine{execution: &domain.EngineExecution{Status: "RUNNING", Tasks: []domain.EngineTask{{
+		TaskID: "invoke-1", ReferenceTaskName: "step__s1__invoke", Status: "COMPLETED",
+	}}}}
+	svc.engine = engine
+	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", WorkflowID: "wf1", Status: domain.JobNeedConfirm, ConductorWorkflowID: "execution-1"}
+	sr := makeClaimedStepRun(srRepo, false)
+	sr.Status = domain.SRNeedConfirm
+	sr.Candidates = []domain.Candidate{{Index: 0, URL: "a.png"}}
+
+	updated, err := svc.Regenerate(context.Background(), "sr1")
+	if err != nil || engine.rerunTaskID != "invoke-1" || updated.Status != domain.SRBlocked || len(updated.Candidates) != 0 {
+		t.Fatalf("regenerate failed: updated=%#v task=%q err=%v", updated, engine.rerunTaskID, err)
+	}
+}
+
+func TestConductorCancelTerminatesExecution(t *testing.T) {
+	svc, jobRepo, _ := newTestService(false)
+	engine := &mockWorkflowEngine{}
+	svc.engine = engine
+	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", Status: domain.JobRunning, ConductorWorkflowID: "execution-1"}
+
+	job, err := svc.Cancel(context.Background(), "job1")
+	if err != nil || !engine.terminated || job.Status != domain.JobCancelled {
+		t.Fatalf("cancel failed: job=%#v terminated=%v err=%v", job, engine.terminated, err)
+	}
+}
+
+func TestConductorRetryRerunsWholeExecution(t *testing.T) {
+	svc, jobRepo, srRepo := newTestService(false)
+	engine := &mockWorkflowEngine{}
+	svc.engine = engine
+	input := domain.JobInput{Materials: []domain.MaterialData{{Name: "scene", URL: "scene.png"}}}
+	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", WorkflowID: "wf1", Status: domain.JobFailed, ConductorWorkflowID: "execution-1", Input: input}
+	sr := makeClaimedStepRun(srRepo, false)
+	sr.Status = domain.SRFailed
+
+	job, err := svc.Retry(context.Background(), "job1", "retry", nil)
+	if err != nil || engine.rerunInput == nil || job.Status != domain.JobRunning || sr.Status != domain.SRBlocked {
+		t.Fatalf("retry failed: job=%#v step=%#v input=%#v err=%v", job, sr, engine.rerunInput, err)
 	}
 }
 

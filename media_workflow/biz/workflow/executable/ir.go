@@ -4,7 +4,7 @@ package executable
 
 import template "media_agent/media_workflow/biz/domain/template"
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 type ValueSource string
 
@@ -35,16 +35,18 @@ type CapabilityIR struct {
 }
 
 type ExecutableStepIR struct {
-	Key             string                     `json:"key"`
-	Order           int                        `json:"order"`
-	DependsOn       []string                   `json:"depends_on,omitempty"`
-	Template        TemplateIR                 `json:"template"`
-	Context         map[string]ValueRef        `json:"context"`
-	Capability      CapabilityIR               `json:"capability"`
-	Invocation      template.InvocationMapping `json:"invocation"`
-	OutputAssetKind string                     `json:"output_asset_kind"`
-	ApprovalPolicy  string                     `json:"approval_policy"`
-	ReusePolicy     string                     `json:"reuse_policy"`
+	Key              string                     `json:"key"`
+	Order            int                        `json:"order"`
+	DependsOn        []string                   `json:"depends_on,omitempty"`
+	Template         TemplateIR                 `json:"template"`
+	Context          map[string]ValueRef        `json:"context"`
+	Capability       CapabilityIR               `json:"capability"`
+	Invocation       template.InvocationMapping `json:"invocation"`
+	OutputAssetKind  string                     `json:"output_asset_kind"`
+	ApprovalPolicy   string                     `json:"approval_policy"`
+	ApprovalRequired bool                       `json:"approval_required"`
+	CandidateCount   int                        `json:"candidate_count"`
+	ReusePolicy      string                     `json:"reuse_policy"`
 }
 
 type ExecutableWorkflowIR struct {

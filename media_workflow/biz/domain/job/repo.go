@@ -16,6 +16,10 @@ type JobRepo interface {
 type WorkflowEngine interface {
 	Start(ctx context.Context, workflowName string, workflowVersion int, input map[string]any) (string, error)
 	Get(ctx context.Context, workflowID string) (*EngineExecution, error)
+	CompleteTask(ctx context.Context, workflowID, taskReferenceName string, output map[string]any) error
+	RerunFromTask(ctx context.Context, workflowID, taskID string) error
+	RerunWorkflow(ctx context.Context, workflowID string, input map[string]any) error
+	Terminate(ctx context.Context, workflowID, reason string) error
 }
 
 type EngineExecution struct {
@@ -25,6 +29,7 @@ type EngineExecution struct {
 }
 
 type EngineTask struct {
+	TaskID            string
 	TaskType          string
 	ReferenceTaskName string
 	Status            string

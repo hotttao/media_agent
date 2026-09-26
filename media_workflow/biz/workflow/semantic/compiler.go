@@ -49,6 +49,8 @@ type TemplateSnapshot struct {
 	CapabilityKey     string
 	CapabilityVersion int
 	Invocation        templatedomain.InvocationMapping
+	NeedsConfirm      bool
+	CandidateCount    int
 }
 
 type TemplateRef struct {
@@ -124,7 +126,9 @@ func Compile(wf workflowdomain.Workflow, snapshots Snapshots) (executable.Execut
 			Context:    context,
 			Capability: executable.CapabilityIR{Key: capability.Key, Version: capability.Version, ConductorTaskDef: capability.ConductorTaskDef},
 			Invocation: cloneMapping(tpl.Invocation), OutputAssetKind: tpl.OutputAssetKind,
-			ApprovalPolicy: string(step.ApprovalPolicy), ReusePolicy: string(step.ReusePolicy),
+			ApprovalPolicy:   string(step.ApprovalPolicy),
+			ApprovalRequired: tpl.NeedsConfirm || tpl.CandidateCount > 1 || step.ApprovalPolicy == workflowdomain.ApprovalAlways,
+			CandidateCount:   tpl.CandidateCount, ReusePolicy: string(step.ReusePolicy),
 		})
 	}
 	if _, ok := seen[wf.OutputStepKey]; !ok {

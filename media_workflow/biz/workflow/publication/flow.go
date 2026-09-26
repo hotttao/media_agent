@@ -51,7 +51,7 @@ func (f *Flow) CompileAndRegister(ctx context.Context, workflow *workflowdomain.
 			ID: step.TemplateID, Version: step.TemplateVersion, Body: template.PromptBody,
 			Inputs: templateInputs, OutputAssetKind: template.OutputAssetKind,
 			CapabilityKey: template.CapabilityKey, CapabilityVersion: template.CapabilityVersion,
-			Invocation: invocation,
+			Invocation: invocation, NeedsConfirm: template.NeedsConfirm, CandidateCount: template.CandidateCount,
 		}
 		capability, err := f.Capabilities.Get(ctx, template.CapabilityKey, template.CapabilityVersion)
 		if err != nil {

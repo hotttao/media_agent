@@ -60,6 +60,24 @@ func TestCompileExecutableIRUsesStaticForkForParallelSteps(t *testing.T) {
 	require.Equal(t, RenderTemplateTaskName, definition.Tasks[2].Name)
 }
 
+func TestCompileExecutableIRInsertsHumanApprovalBeforeFinalize(t *testing.T) {
+	step := minimalIRStep("image", 1, nil)
+	step.ApprovalPolicy = "always"
+	step.ApprovalRequired = true
+	step.CandidateCount = 1
+	ir := executable.ExecutableWorkflowIR{
+		SchemaVersion: executable.SchemaVersion, WorkflowID: "approval", WorkflowVersion: 1,
+		OutputStepKey: "image", Steps: []executable.ExecutableStepIR{step},
+	}
+
+	definition, err := CompileExecutableIR(ir)
+	require.NoError(t, err)
+	require.Len(t, definition.Tasks, 4)
+	require.Equal(t, "HUMAN", definition.Tasks[2].Type)
+	require.Equal(t, "step__image__approval", definition.Tasks[2].TaskReferenceName)
+	require.Equal(t, "${step__image__approval.output.selected_candidate}", definition.Tasks[3].InputParameters["selected_candidate"])
+}
+
 func minimalIRStep(key string, order int, dependencies []string) executable.ExecutableStepIR {
 	return executable.ExecutableStepIR{
 		Key: key, Order: order, DependsOn: dependencies,

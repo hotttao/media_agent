@@ -2,13 +2,17 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/foundation/lib/utils";
 import { StepRunStatusBadge } from "@/domains/jobs/components/status-badge";
 import {
   useConfirmStepRun,
   useRegenerateStepRun,
 } from "@/domains/jobs/hooks/use-job-mutations";
 import type { StepRun } from "@/domains/jobs/types";
+import { cn } from "@/foundation/lib/utils";
+
+function isVideoURL(url: string) {
+  return /\.(mp4|webm|mov|m4v)(?:$|[?#])/i.test(url);
+}
 
 /**
  * One StepRun rendered as a card. When status === need_confirm, shows the
@@ -31,11 +35,7 @@ export function StepRunCard({
   );
 
   const needsConfirm = stepRun.status === "need_confirm";
-  const canRegenerate =
-    stepRun.status === "succeeded" ||
-    stepRun.status === "failed" ||
-    stepRun.status === "skipped" ||
-    stepRun.status === "need_confirm";
+  const canRegenerate = stepRun.status === "need_confirm";
 
   return (
     <div className="flex flex-col gap-2 rounded-md border border-foreground/[0.06] p-3">
@@ -70,7 +70,7 @@ export function StepRunCard({
               }
             >
               {confirm.isPending ? <Spinner className="h-4 w-4" /> : null}
-              Confirm
+              确认使用
             </Button>
           ) : null}
           {canRegenerate ? (
@@ -83,7 +83,7 @@ export function StepRunCard({
               }
             >
               {regenerate.isPending ? <Spinner className="h-4 w-4" /> : null}
-              Regenerate
+              重新生成
             </Button>
           ) : null}
         </div>
@@ -105,9 +105,7 @@ export function StepRunCard({
         {stepRun.output_asset_id ? (
           <>
             <dt className="text-muted-foreground">Output Asset</dt>
-            <dd className="col-span-2 break-all">
-              {stepRun.output_asset_id}
-            </dd>
+            <dd className="col-span-2 break-all">{stepRun.output_asset_id}</dd>
           </>
         ) : null}
         {stepRun.failure_reason ? (
@@ -145,10 +143,10 @@ export function StepRunCard({
                   key={c.index}
                   className={cn(
                     "flex items-start gap-2 rounded border p-2 text-xs",
-                  isPicked
-                    ? "border-info bg-info/10"
-                    : "border-border bg-card",
-                )}
+                    isPicked
+                      ? "border-info bg-info/10"
+                      : "border-border bg-card",
+                  )}
                 >
                   <input
                     type="radio"
@@ -169,14 +167,32 @@ export function StepRunCard({
                       ) : null}
                     </div>
                     {c.url ? (
-                      <a
-                        href={c.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="break-all text-info hover:underline"
-                      >
-                        {c.url}
-                      </a>
+                      <>
+                        {isVideoURL(c.url) ? (
+                          // biome-ignore lint/a11y/useMediaCaption: generated preview videos do not have caption tracks.
+                          <video
+                            src={c.url}
+                            controls
+                            preload="metadata"
+                            className="max-h-56 w-full rounded-md bg-muted object-contain"
+                          />
+                        ) : (
+                          <img
+                            src={c.url}
+                            alt={`候选结果 ${c.index + 1}`}
+                            className="max-h-56 w-full rounded-md bg-muted object-contain"
+                            loading="lazy"
+                          />
+                        )}
+                        <a
+                          href={c.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="break-all text-info hover:underline"
+                        >
+                          打开原图
+                        </a>
+                      </>
                     ) : null}
                     {c.content ? (
                       <pre className="max-h-40 overflow-auto rounded bg-muted p-1 text-xs whitespace-pre-wrap">

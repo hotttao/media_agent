@@ -424,6 +424,20 @@ func (s *Service) Confirm(ctx context.Context, stepRunID string, selectedIndex i
 		return nil, fmt.Errorf("selected_index %d out of range [0, %d)", selectedIndex, len(sr.Candidates))
 	}
 	selected := sr.Candidates[selectedIndex]
+	job, err := s.jobRepo.Get(ctx, sr.JobID)
+	if err != nil {
+		return nil, err
+	}
+	if job.ConductorWorkflowID != "" && s.engine != nil {
+		if err := s.engine.CompleteTask(ctx, job.ConductorWorkflowID, approvalTaskReference(sr.StepKey), map[string]any{
+			"selected_index": selectedIndex, "selected_candidate": selected,
+		}); err != nil {
+			return nil, fmt.Errorf("complete conductor approval task: %w", err)
+		}
+		_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRClaimed, map[string]any{"selected_index": selectedIndex})
+		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobRunning, "")
+		return s.stepRunRepo.Get(ctx, stepRunID)
+	}
 	if err := s.finalizeStepRun(ctx, sr, selected, &selectedIndex); err != nil {
 		return nil, err
 	}
@@ -438,6 +452,34 @@ func (s *Service) Regenerate(ctx context.Context, stepRunID string) (*domain.Ste
 	}
 	if sr.Status != domain.SRNeedConfirm {
 		return nil, fmt.Errorf("step_run %s status %s, expected need_confirm", stepRunID, sr.Status)
+	}
+	job, err := s.jobRepo.Get(ctx, sr.JobID)
+	if err != nil {
+		return nil, err
+	}
+	if job.ConductorWorkflowID != "" && s.engine != nil {
+		execution, err := s.engine.Get(ctx, job.ConductorWorkflowID)
+		if err != nil {
+			return nil, fmt.Errorf("load conductor execution: %w", err)
+		}
+		var invokeTaskID string
+		for _, task := range execution.Tasks {
+			stepKey, phase, ok := parseTaskReference(task.ReferenceTaskName)
+			if ok && stepKey == sr.StepKey && phase == "invoke" {
+				invokeTaskID = task.TaskID
+				break
+			}
+		}
+		if invokeTaskID == "" {
+			return nil, fmt.Errorf("conductor invoke task for step %s not found", sr.StepKey)
+		}
+		if err := s.engine.RerunFromTask(ctx, job.ConductorWorkflowID, invokeTaskID); err != nil {
+			return nil, fmt.Errorf("rerun conductor capability task: %w", err)
+		}
+		_ = s.stepRunRepo.UpdateCandidates(ctx, stepRunID, []domain.Candidate{})
+		_ = s.stepRunRepo.UpdateStatus(ctx, stepRunID, domain.SRBlocked, map[string]any{"selected_index": nil})
+		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobRunning, "")
+		return s.stepRunRepo.Get(ctx, stepRunID)
 	}
 	_ = s.stepRunRepo.UpdateStatus(ctx, stepRunID, domain.SRPending, map[string]any{"candidates": "[]"})
 	_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobRunning, "")
@@ -476,6 +518,11 @@ func (s *Service) Cancel(ctx context.Context, jobID string) (*domain.Job, error)
 	if job.Status.IsTerminal() {
 		return nil, fmt.Errorf("job %s status %s is terminal, cannot cancel", jobID, job.Status)
 	}
+	if job.ConductorWorkflowID != "" && s.engine != nil {
+		if err := s.engine.Terminate(ctx, job.ConductorWorkflowID, "cancelled by user"); err != nil {
+			return nil, fmt.Errorf("terminate conductor workflow: %w", err)
+		}
+	}
 	_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobCancelled, "cancelled by user")
 	return s.jobRepo.Get(ctx, jobID)
 }
@@ -495,6 +542,40 @@ func (s *Service) Retry(ctx context.Context, jobID string, reason string, inputO
 	}
 	if job.RetryCount >= maxRetries {
 		return nil, errors.New("max retries exceeded")
+	}
+	if job.ConductorWorkflowID != "" && s.engine != nil {
+		retryInput := job.Input
+		if inputOverride != nil {
+			retryInput = *inputOverride
+			workflow, err := s.wfRepo.Get(ctx, job.WorkflowID)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.validateBundle(workflow.InputSchema, retryInput); err != nil {
+				return nil, err
+			}
+		}
+		if err := s.engine.RerunWorkflow(ctx, job.ConductorWorkflowID, map[string]any{
+			"job_id": job.ID, "inputs": conductorInputs(retryInput),
+		}); err != nil {
+			return nil, fmt.Errorf("rerun conductor workflow: %w", err)
+		}
+		if inputOverride != nil {
+			_ = s.jobRepo.UpdateInput(ctx, jobID, retryInput)
+		}
+		stepRuns, err := s.stepRunRepo.ListByJob(ctx, jobID)
+		if err != nil {
+			return nil, err
+		}
+		for _, sr := range stepRuns {
+			_ = s.stepRunRepo.UpdateCandidates(ctx, sr.ID, []domain.Candidate{})
+			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRBlocked, map[string]any{
+				"selected_index": nil, "failure_reason": "", "output_asset_id": "",
+			})
+		}
+		record := domain.RetryRecord{RetryAt: time.Now(), Reason: reason, InputOverride: inputOverride}
+		_ = s.jobRepo.AppendRetryHistory(ctx, jobID, record, job.RetryCount+1)
+		return s.jobRepo.Get(ctx, jobID)
 	}
 	// 重置 failed/skipped/need_confirm step_runs → pending（仅重置非 succeeded 的）
 	// succeeded 的保留；failed → pending；skipped/need_confirm → pending（重新评估依赖）
@@ -537,6 +618,42 @@ func (s *Service) RetryStepRun(ctx context.Context, stepRunID, reason string, in
 	if sr.Status != domain.SRFailed && sr.Status != domain.SRSkipped {
 		return nil, fmt.Errorf("step_run %s status %s, expected failed/skipped", stepRunID, sr.Status)
 	}
+	job, err := s.jobRepo.Get(ctx, sr.JobID)
+	if err != nil {
+		return nil, err
+	}
+	if job.ConductorWorkflowID != "" && s.engine != nil {
+		execution, err := s.engine.Get(ctx, job.ConductorWorkflowID)
+		if err != nil {
+			return nil, fmt.Errorf("load conductor execution: %w", err)
+		}
+		var renderTaskID string
+		for _, task := range execution.Tasks {
+			stepKey, phase, ok := parseTaskReference(task.ReferenceTaskName)
+			if ok && stepKey == sr.StepKey && phase == "render" {
+				renderTaskID = task.TaskID
+				break
+			}
+		}
+		if renderTaskID == "" {
+			return nil, fmt.Errorf("conductor render task for step %s not found", sr.StepKey)
+		}
+		if inputOverride != nil {
+			return nil, errors.New("conductor step retry does not support input_override; retry the whole job instead")
+		}
+		if err := s.engine.RerunFromTask(ctx, job.ConductorWorkflowID, renderTaskID); err != nil {
+			return nil, fmt.Errorf("rerun conductor step: %w", err)
+		}
+		_ = s.stepRunRepo.UpdateCandidates(ctx, sr.ID, []domain.Candidate{})
+		_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRBlocked, map[string]any{
+			"retry_count": sr.RetryCount + 1, "selected_index": nil, "failure_reason": "", "output_asset_id": "",
+		})
+		s.resetDownstream(ctx, sr.JobID, sr.StepKey)
+		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobRunning, "")
+		record := domain.RetryRecord{RetryAt: time.Now(), Reason: reason}
+		_ = s.jobRepo.AppendRetryHistory(ctx, sr.JobID, record, job.RetryCount+1)
+		return s.stepRunRepo.Get(ctx, sr.ID)
+	}
 	updates := map[string]any{
 		"retry_count": sr.RetryCount + 1,
 		"candidates":  "[]", "failure_reason": "", "claimed_by": "", "output_asset_id": "",
@@ -546,7 +663,7 @@ func (s *Service) RetryStepRun(ctx context.Context, stepRunID, reason string, in
 	if inputOverride != nil {
 		_ = s.jobRepo.UpdateInput(ctx, sr.JobID, *inputOverride)
 	}
-	job, err := s.jobRepo.Get(ctx, sr.JobID)
+	job, err = s.jobRepo.Get(ctx, sr.JobID)
 	if err == nil {
 		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobRunning, "")
 		record := domain.RetryRecord{RetryAt: time.Now(), Reason: reason, InputOverride: inputOverride}
@@ -599,7 +716,9 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Job, []*domain.St
 		return nil, nil, err
 	}
 	if job.ConductorWorkflowID != "" && !job.Status.IsTerminal() {
-		_ = s.reconcileConductor(ctx, job)
+		if err := s.reconcileConductor(ctx, job); err != nil {
+			return nil, nil, fmt.Errorf("reconcile conductor execution: %w", err)
+		}
 	}
 	return s.jobRepo.GetWithStepRuns(ctx, id)
 }
@@ -608,7 +727,22 @@ func (s *Service) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, 
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}
-	return s.jobRepo.List(ctx, q)
+	items, total, err := s.jobRepo.List(ctx, q)
+	if err != nil {
+		return nil, 0, err
+	}
+	for index, job := range items {
+		if job.ConductorWorkflowID == "" || job.Status.IsTerminal() || s.engine == nil {
+			continue
+		}
+		if err := s.reconcileConductor(ctx, job); err != nil {
+			continue
+		}
+		if updated, err := s.jobRepo.Get(ctx, job.ID); err == nil {
+			items[index] = updated
+		}
+	}
+	return items, total, nil
 }
 
 // —— finalizeStepRun: 落产物 + SUCCEEDED + 推进 DAG ——
@@ -816,11 +950,29 @@ func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error
 			if task.Status == "FAILED" || task.Status == "FAILED_WITH_TERMINAL_ERROR" || task.Status == "TIMED_OUT" {
 				_ = s.stepRunRepo.UpdateStatus(ctx, stepRun.ID, domain.SRFailed, nil)
 			}
+		case "approval":
+			if rawCandidates, ok := task.Input["candidates"]; ok {
+				var candidates []domain.Candidate
+				encoded, _ := json.Marshal(rawCandidates)
+				_ = json.Unmarshal(encoded, &candidates)
+				_ = s.stepRunRepo.UpdateCandidates(ctx, stepRun.ID, candidates)
+			}
+			if task.Status == "IN_PROGRESS" || task.Status == "SCHEDULED" {
+				_ = s.stepRunRepo.UpdateStatus(ctx, stepRun.ID, domain.SRNeedConfirm, nil)
+				_ = s.jobRepo.UpdateStatus(ctx, job.ID, domain.JobNeedConfirm, "")
+			}
 		case "finalize":
-			if task.Status == "COMPLETED" {
-				outputID, _ := task.Output["output_resource_id"].(string)
-				_ = s.stepRunRepo.UpdateOutput(ctx, stepRun.ID, outputID)
-				_ = s.stepRunRepo.UpdateStatus(ctx, stepRun.ID, domain.SRSucceeded, nil)
+			if task.Status == "COMPLETED" && stepRun.Status != domain.SRSucceeded {
+				resource, _ := task.Output["output_resource"].(map[string]any)
+				candidate := domain.Candidate{}
+				candidate.URL, _ = resource["url"].(string)
+				candidate.Content, _ = resource["content"].(string)
+				if candidate.URL == "" && candidate.Content == "" {
+					return fmt.Errorf("conductor finalize task %s returned no resource", task.ReferenceTaskName)
+				}
+				if err := s.finalizeStepRun(ctx, stepRun, candidate, stepRun.SelectedIndex); err != nil {
+					return err
+				}
 			} else if task.Status == "FAILED" || task.Status == "FAILED_WITH_TERMINAL_ERROR" || task.Status == "TIMED_OUT" {
 				_ = s.stepRunRepo.UpdateStatus(ctx, stepRun.ID, domain.SRFailed, nil)
 			}
@@ -844,13 +996,29 @@ func parseTaskReference(reference string) (string, string, bool) {
 		return "", "", false
 	}
 	remainder := strings.TrimPrefix(reference, prefix)
-	for _, phase := range []string{"render", "invoke", "finalize"} {
+	for _, phase := range []string{"render", "invoke", "approval", "finalize"} {
 		suffix := "__" + phase
 		if strings.HasSuffix(remainder, suffix) {
 			return strings.TrimSuffix(remainder, suffix), phase, true
 		}
 	}
 	return "", "", false
+}
+
+func approvalTaskReference(stepKey string) string {
+	return "step__" + sanitizeTaskReference(stepKey) + "__approval"
+}
+
+func sanitizeTaskReference(value string) string {
+	var builder strings.Builder
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_' {
+			builder.WriteRune(char)
+		} else {
+			builder.WriteByte('_')
+		}
+	}
+	return builder.String()
 }
 
 func (s *Service) scanStaleClaimed(ctx context.Context) {

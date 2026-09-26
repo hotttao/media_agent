@@ -18,3 +18,14 @@ func TestFinalizeRequiresApproval(t *testing.T) {
 		t.Fatalf("expected approval required, got %v", err)
 	}
 }
+
+func TestFinalizeUsesApprovedCandidate(t *testing.T) {
+	selected := Candidate{URL: "approved.png"}
+	out, err := (Handler{}).Execute(Input{
+		JobID: "job-1", StepKey: "image", OutputAssetKind: "image", ApprovalPolicy: "always",
+		Candidates: []Candidate{{URL: "first.png"}, selected}, SelectedCandidate: &selected,
+	})
+	if err != nil || out.OutputResource.URL != "approved.png" {
+		t.Fatalf("unexpected approved result: %#v err=%v", out, err)
+	}
+}

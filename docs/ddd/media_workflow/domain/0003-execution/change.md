@@ -1,5 +1,11 @@
 # execution domain 变更记录
 
+## 2026-09-26 · Conductor HUMAN 审批闭环
+
+- 编译结果冻结 `candidate_count/approval_required`，需要审批的 Step 在 Capability 与 Finalize 之间插入 HUMAN task。
+- media_workflow 从 HUMAN input 投影候选与 `needs_confirm`；确认完成 HUMAN task，重新生成从 Capability task 原位 rerun。
+- Finalize 完成后由 media_workflow 幂等登记 Generated Asset；客户端 media_worker 不执行审批、Renderer 或 Finalize。
+
 ## 2026-07-03 · 初始建模（media_agent v1）
 - 由 `media_ai` 的 `job` / `videoTask` 等迁移并合并：
   - 旧版 job 字段 `"job input"` / `"job output"`（JSON）拆成 `jobs.inputs` 入参快照 + `step_runs.resolved_inputs / output_asset_id` 单步快照；不再冗余"整个 workflow 一份 JSON"，理由是 step 粒度快照便于排查与重跑。

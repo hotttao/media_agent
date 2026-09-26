@@ -145,6 +145,29 @@ func (c *Client) UpdateTask(ctx context.Context, result TaskResult) error {
 	return c.doJSON(ctx, http.MethodPost, "/api/tasks", result, nil)
 }
 
+func (c *Client) CompleteTaskByReference(ctx context.Context, workflowID, taskReferenceName string, output map[string]any) error {
+	path := fmt.Sprintf("/api/tasks/%s/%s/COMPLETED?workerid=media-workflow-api", url.PathEscape(workflowID), url.PathEscape(taskReferenceName))
+	return c.doJSON(ctx, http.MethodPost, path, output, nil)
+}
+
+func (c *Client) RerunFromTask(ctx context.Context, workflowID, taskID string) error {
+	request := map[string]any{"reRunFromWorkflowId": workflowID, "reRunFromTaskId": taskID}
+	return c.doJSON(ctx, http.MethodPost, "/api/workflow/"+url.PathEscape(workflowID)+"/rerun", request, nil)
+}
+
+func (c *Client) RerunWorkflow(ctx context.Context, workflowID string, input map[string]any) error {
+	request := map[string]any{"reRunFromWorkflowId": workflowID, "workflowInput": input}
+	return c.doJSON(ctx, http.MethodPost, "/api/workflow/"+url.PathEscape(workflowID)+"/rerun", request, nil)
+}
+
+func (c *Client) TerminateWorkflow(ctx context.Context, workflowID, reason string) error {
+	path := "/api/workflow/" + url.PathEscape(workflowID)
+	if reason != "" {
+		path += "?reason=" + url.QueryEscape(reason)
+	}
+	return c.doJSON(ctx, http.MethodDelete, path, nil, nil)
+}
+
 type WorkflowExecution struct {
 	WorkflowID string         `json:"workflowId"`
 	Status     string         `json:"status"`

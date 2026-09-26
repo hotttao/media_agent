@@ -88,7 +88,7 @@ func lowerExecutableStep(step executable.ExecutableStepIR) ([]Task, error) {
 		}
 		capabilityInput[name] = value
 	}
-	return []Task{
+	tasks := []Task{
 		{
 			Name: RenderTemplateTaskName, TaskReferenceName: renderRef, Type: "SIMPLE",
 			InputParameters: map[string]any{
@@ -97,15 +97,24 @@ func lowerExecutableStep(step executable.ExecutableStepIR) ([]Task, error) {
 			},
 		},
 		{Name: step.Capability.ConductorTaskDef, TaskReferenceName: invokeRef, Type: "SIMPLE", InputParameters: capabilityInput},
-		{
-			Name: FinalizeStepTaskName, TaskReferenceName: finalizeRef(step.Key), Type: "SIMPLE",
+	}
+	finalizeInput := map[string]any{
+		"step_key": step.Key, "candidates": fmt.Sprintf("${%s.output.candidates}", invokeRef),
+		"output_asset_kind": step.OutputAssetKind, "approval_policy": step.ApprovalPolicy, "reuse_policy": step.ReusePolicy,
+		"job_id": "${workflow.input.job_id}",
+	}
+	if step.ApprovalRequired {
+		tasks = append(tasks, Task{
+			Name: "human_approval_" + sanitize(step.Key), TaskReferenceName: approvalRef(step.Key), Type: "HUMAN",
 			InputParameters: map[string]any{
 				"step_key": step.Key, "candidates": fmt.Sprintf("${%s.output.candidates}", invokeRef),
-				"output_asset_kind": step.OutputAssetKind, "approval_policy": step.ApprovalPolicy, "reuse_policy": step.ReusePolicy,
-				"job_id": "${workflow.input.job_id}",
+				"approval_policy": step.ApprovalPolicy, "job_id": "${workflow.input.job_id}",
 			},
-		},
-	}, nil
+		})
+		finalizeInput["selected_candidate"] = fmt.Sprintf("${%s.output.selected_candidate}", approvalRef(step.Key))
+	}
+	tasks = append(tasks, Task{Name: FinalizeStepTaskName, TaskReferenceName: finalizeRef(step.Key), Type: "SIMPLE", InputParameters: finalizeInput})
+	return tasks, nil
 }
 
 func lowerInvocation(expression template.InvocationExpression, context map[string]executable.ValueRef, renderRef string) (any, error) {
@@ -156,6 +165,7 @@ func lowerAssetRef(ref executable.ValueRef) any {
 }
 
 func finalizeRef(stepKey string) string { return "step__" + sanitize(stepKey) + "__finalize" }
+func approvalRef(stepKey string) string { return "step__" + sanitize(stepKey) + "__approval" }
 
 func executableWaves(byKey map[string]executable.ExecutableStepIR) ([][]executable.ExecutableStepIR, error) {
 	indegree := make(map[string]int, len(byKey))

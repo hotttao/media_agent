@@ -1,5 +1,10 @@
 # workflow_execution 变更记录
 
+## 2026-09-26 · Executable IR 审批实现
+
+- `ExecutableStepIR` schema v2 增加候选数量与是否审批的冻结结论。
+- Conductor 以 HUMAN task 表达可长时间等待的用户决定；接受候选完成 HUMAN，重新生成 rerun 对应 Capability task。
+
 ## 2026-07-21 · 改为外部 worker pull 模型 + 补全执行协议
 
 - 触发点从"内部 worker 拉起"改为**外部 worker pull**：下游平台 worker 主动调 `ClaimStepRun` 拉取 step_run，调 `CompleteStepRun` / `FailStepRun` 回写。解耦调度与执行，避免服务内嵌执行器（对齐当前实现）。
