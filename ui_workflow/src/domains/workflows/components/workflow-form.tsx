@@ -321,7 +321,17 @@ export function WorkflowForm({
       <section className="grid min-h-[560px] flex-1 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm xl:grid-cols-[minmax(0,1fr)_390px]">
         <div className="relative min-h-[420px] overflow-hidden border-b border-border/70 bg-slate-50/70 dark:bg-slate-950/70 xl:border-b-0 xl:border-r">
           {value.steps.length > 0 ? (
-            <WorkflowGraph model={graphModel} className="absolute inset-0" />
+            <WorkflowGraph
+              model={graphModel}
+              className="absolute inset-0"
+              selectedNodeId={activeStep?.key}
+              onNodeSelect={(nodeId) => {
+                const index = value.steps.findIndex(
+                  (step) => step.key === nodeId,
+                );
+                if (index >= 0) setSelectedStep(index);
+              }}
+            />
           ) : (
             <div className="flex h-full min-h-[420px] flex-col items-center justify-center px-6 text-center">
               <div className="rounded-2xl bg-primary/10 p-4 text-primary">
@@ -358,23 +368,9 @@ export function WorkflowForm({
             </Button>
           </div>
           {value.steps.length > 0 ? (
-            <div className="flex gap-1 overflow-x-auto border-b p-2">
-              {value.steps.map((step, index) => (
-                <button
-                  key={`${step.key}-${index}`}
-                  type="button"
-                  className={cn(
-                    "shrink-0 rounded-lg px-3 py-2 text-xs transition",
-                    selectedStep === index
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted",
-                  )}
-                  onClick={() => setSelectedStep(index)}
-                >
-                  {step.key || `节点 ${index + 1}`}
-                </button>
-              ))}
-            </div>
+            <p className="border-b px-4 py-3 text-xs text-muted-foreground">
+              点击画布节点查看和编辑配置；拖动节点可调整画布布局。
+            </p>
           ) : null}
           {activeStep ? (
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">

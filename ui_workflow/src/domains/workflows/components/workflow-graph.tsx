@@ -16,7 +16,7 @@ import {
   Play,
   ShieldCheck,
 } from "lucide-react";
-import { useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { cn } from "@/foundation/lib/utils";
 import type { WorkflowStep } from "@/domains/workflows/types";
 
@@ -28,6 +28,14 @@ type GraphNodeData = {
   output?: boolean;
   input?: boolean;
 };
+
+type WorkflowGraphContextValue = {
+  onNodeSelect?: (nodeId: string) => void;
+  selectedNodeId?: string;
+};
+
+const WorkflowGraphContext = createContext<WorkflowGraphContextValue>({});
+const WorkflowNodeIdContext = createContext<string | undefined>(undefined);
 
 export type WorkflowGraphModel = {
   steps: WorkflowStep[];
@@ -137,9 +145,20 @@ const nodeRegistries: FreeLayoutProps["nodeRegistries"] = [
 ];
 
 function WorkflowNodeCard({ data }: { data: GraphNodeData }) {
+  const { onNodeSelect, selectedNodeId } = useContext(WorkflowGraphContext);
+  const renderedNodeId = useContext(WorkflowNodeIdContext);
   const Icon = data.input ? Play : data.output ? CheckCircle2 : Layers3;
   return (
-    <div className={cn("workflow-node-card", data.output && "is-output")}>
+    <button
+      type="button"
+      className={cn(
+        "workflow-node-card",
+        data.output && "is-output",
+        selectedNodeId === renderedNodeId && "is-selected",
+      )}
+      onClick={() => renderedNodeId && onNodeSelect?.(renderedNodeId)}
+      aria-label={`选择节点 ${data.title}`}
+    >
       <div className="workflow-node-icon">
         <Icon className="h-4 w-4" />
       </div>
@@ -164,7 +183,7 @@ function WorkflowNodeCard({ data }: { data: GraphNodeData }) {
           ) : null}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -177,7 +196,9 @@ function WorkflowGraphNode(props: WorkflowNodeProps) {
       style={meta.wrapperStyle}
       className="workflow-graph-node"
     >
-      {form?.render()}
+      <WorkflowNodeIdContext.Provider value={node.id}>
+        {form?.render()}
+      </WorkflowNodeIdContext.Provider>
     </WorkflowNodeRenderer>
   );
 }
@@ -185,16 +206,24 @@ function WorkflowGraphNode(props: WorkflowNodeProps) {
 export function WorkflowGraph({
   model,
   className,
+  onNodeSelect,
+  selectedNodeId,
 }: {
   model: WorkflowGraphModel;
   className?: string;
+  onNodeSelect?: (nodeId: string) => void;
+  selectedNodeId?: string;
 }) {
-  const document = useMemo(() => workflowToFlowDocument(model), [model]);
+  const documentKey = JSON.stringify(model);
+  const document = useMemo(
+    () => workflowToFlowDocument(JSON.parse(documentKey) as WorkflowGraphModel),
+    [documentKey],
+  );
   const props = useMemo<FreeLayoutProps>(
     () => ({
       background: false,
       readonly: true,
-      enableReadonlyNodeDragging: false,
+      enableReadonlyNodeDragging: true,
       initialData: document,
       nodeRegistries,
       fromNodeJSON: (_node, json) => json,
@@ -217,10 +246,12 @@ export function WorkflowGraph({
   );
 
   return (
-    <div className={cn("workflow-graph", className)}>
-      <FreeLayoutEditorProvider key={JSON.stringify(document)} {...props}>
-        <EditorRenderer className="h-full w-full" />
-      </FreeLayoutEditorProvider>
-    </div>
+    <WorkflowGraphContext.Provider value={{ onNodeSelect, selectedNodeId }}>
+      <div className={cn("workflow-graph", className)}>
+        <FreeLayoutEditorProvider key={documentKey} {...props}>
+          <EditorRenderer className="h-full w-full" />
+        </FreeLayoutEditorProvider>
+      </div>
+    </WorkflowGraphContext.Provider>
   );
 }

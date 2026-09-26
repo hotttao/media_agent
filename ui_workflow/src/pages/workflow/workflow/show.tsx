@@ -1,9 +1,11 @@
+import { useState } from "react";
 import {
   ArrowLeft,
   Boxes,
   CalendarClock,
   Eye,
   GitBranch,
+  Layers3,
   Pencil,
   Play,
   Send,
@@ -18,6 +20,7 @@ import {
   usePublishWorkflow,
 } from "@/domains/workflows/hooks/use-workflow-mutations";
 import { cn } from "@/foundation/lib/utils";
+import type { WorkflowStep } from "@/domains/workflows/types";
 
 const statusLabel = {
   draft: "草稿",
@@ -42,6 +45,7 @@ export function WorkflowShow({
   const { data: workflow, isLoading } = useWorkflow(id);
   const archiveWorkflow = useArchiveWorkflow();
   const publishWorkflow = usePublishWorkflow();
+  const [selectedStepKey, setSelectedStepKey] = useState<string>();
 
   if (isLoading)
     return (
@@ -148,56 +152,21 @@ export function WorkflowShow({
               FlowGram
             </div>
           </div>
-          <WorkflowGraph
-            model={{
-              steps: workflow.steps,
-              outputStepKey: workflow.output_step_key,
-            }}
-            className="h-[540px]"
-          />
-        </section>
-
-        <section className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-          {workflow.steps.map((step, index) => (
-            <article
-              key={step.key}
-              className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
-                    Step {index + 1}
-                  </span>
-                  <h3 className="mt-1 font-semibold">{step.key}</h3>
-                </div>
-                {step.key === workflow.output_step_key ? (
-                  <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
-                    最终输出
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-3 truncate text-xs text-muted-foreground">
-                Template · {step.template_id} · v
-                {step.template_version ?? "latest"}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {step.slot_bindings.map((binding) => (
-                  <span
-                    key={`${binding.to_input}-${binding.ref}`}
-                    className="rounded-lg border bg-muted/40 px-2.5 py-1.5 text-[11px]"
-                  >
-                    <strong>{binding.to_input}</strong>
-                    <span className="mx-1.5 text-muted-foreground">←</span>
-                    <span className="text-muted-foreground">
-                      {binding.source === "const"
-                        ? String(binding.const_value ?? "固定值")
-                        : binding.ref}
-                    </span>
-                  </span>
-                ))}
-              </div>
-            </article>
-          ))}
+          <div className="grid min-h-[540px] xl:grid-cols-[minmax(0,1fr)_340px]">
+            <WorkflowGraph
+              model={{
+                steps: workflow.steps,
+                outputStepKey: workflow.output_step_key,
+              }}
+              className="h-[540px]"
+              selectedNodeId={selectedStepKey}
+              onNodeSelect={setSelectedStepKey}
+            />
+            <StepDetails
+              step={workflow.steps.find((item) => item.key === selectedStepKey)}
+              isOutput={selectedStepKey === workflow.output_step_key}
+            />
+          </div>
         </section>
 
         {workflow.status !== "archived" ? (
@@ -223,6 +192,83 @@ export function WorkflowShow({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function StepDetails({
+  step,
+  isOutput,
+}: {
+  step?: WorkflowStep;
+  isOutput: boolean;
+}) {
+  return (
+    <aside className="border-t bg-background/70 p-5 xl:border-l xl:border-t-0">
+      {!step ? (
+        <div className="flex h-full min-h-[180px] flex-col items-center justify-center text-center">
+          <Layers3 className="h-7 w-7 text-muted-foreground/50" />
+          <h3 className="mt-3 font-semibold">选择一个节点</h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            点击画布中的节点，在这里查看它的 Template、输入绑定和审批策略。
+          </p>
+        </div>
+      ) : (
+        <div>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
+                Step
+              </p>
+              <h3 className="mt-1 text-lg font-semibold">{step.key}</h3>
+            </div>
+            {isOutput ? (
+              <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
+                最终输出
+              </span>
+            ) : null}
+          </div>
+          <dl className="mt-6 space-y-4 text-sm">
+            <div>
+              <dt className="text-xs text-muted-foreground">Template</dt>
+              <dd className="mt-1 break-all font-medium">
+                {step.template_id} · v{step.template_version ?? "latest"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">审批策略</dt>
+              <dd className="mt-1 font-medium">
+                {step.approval_policy === "always"
+                  ? "始终审批"
+                  : "多候选时审批"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">输入绑定</dt>
+              <dd className="mt-2 space-y-2">
+                {step.slot_bindings.length === 0 ? (
+                  <span className="text-muted-foreground">暂无绑定</span>
+                ) : (
+                  step.slot_bindings.map((binding) => (
+                    <div
+                      key={`${binding.to_input}-${binding.ref}`}
+                      className="rounded-lg border bg-muted/40 px-3 py-2 text-xs"
+                    >
+                      <strong>{binding.to_input}</strong>
+                      <span className="mx-1.5 text-muted-foreground">←</span>
+                      <span className="text-muted-foreground">
+                        {binding.source === "const"
+                          ? String(binding.const_value ?? "固定值")
+                          : binding.ref}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
+    </aside>
   );
 }
 

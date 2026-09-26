@@ -18,6 +18,29 @@ test("renders the workflow as a FlowGram canvas instead of JSON", async ({
   await expect(page.locator(".workflow-graph")).toBeVisible();
   await expect(page.locator(".workflow-node-card")).toHaveCount(9);
   await expect(page.locator("pre")).toHaveCount(0);
+  await expect(page.getByText("选择一个节点")).toBeVisible();
+
+  const modelNode = page.getByRole("button", { name: "选择节点 model_image" });
+  await modelNode.click();
+  await expect(
+    page.getByRole("heading", { name: "model_image" }),
+  ).toBeVisible();
+
+  const nodeBox = await modelNode.boundingBox();
+  if (!nodeBox) throw new Error("workflow node is not visible");
+  await page.mouse.move(
+    nodeBox.x + nodeBox.width / 2,
+    nodeBox.y + nodeBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    nodeBox.x + nodeBox.width / 2 + 100,
+    nodeBox.y + nodeBox.height / 2 + 60,
+    { steps: 10 },
+  );
+  await page.mouse.up();
+  const movedBox = await modelNode.boundingBox();
+  expect(movedBox?.x).toBeGreaterThan(nodeBox.x + 20);
 
   await page.getByRole("button", { name: /^(Edit|编辑)$/ }).click();
   await expect(page.getByText(/FlowGram 画布/)).toBeVisible();
@@ -27,4 +50,6 @@ test("renders the workflow as a FlowGram canvas instead of JSON", async ({
   await expect(
     page.getByRole("heading", { name: /^(节点配置|Node configuration)$/ }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "选择节点 style_image" }).click();
+  await expect(page.getByLabel("节点标识")).toHaveValue("style_image");
 });

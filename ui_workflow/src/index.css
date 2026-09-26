@@ -200,6 +200,9 @@
 }
 
 .workflow-node-card {
+	width: 100%;
+	text-align: left;
+	cursor: pointer;
 	display: flex;
 	min-height: 104px;
 	gap: 12px;
@@ -210,6 +213,18 @@
 	color: #0f172a;
 	box-shadow: 0 14px 35px -22px rgb(15 23 42 / 0.42);
 	backdrop-filter: blur(10px);
+}
+
+.workflow-node-card:hover {
+	border-color: rgb(99 102 241 / 0.45);
+	transform: translateY(-1px);
+}
+
+.workflow-node-card.is-selected {
+	border-color: rgb(79 70 229 / 0.8);
+	box-shadow:
+		0 0 0 3px rgb(99 102 241 / 0.14),
+		0 16px 42px -22px rgb(79 70 229 / 0.5);
 }
 
 .workflow-node-card.is-output {
