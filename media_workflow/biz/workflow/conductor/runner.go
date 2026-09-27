@@ -50,7 +50,7 @@ func (r *Runner) runTaskType(ctx context.Context, taskType string, handler Handl
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		task, err := r.Client.Poll(ctx, taskType, r.WorkerID)
+		task, err := r.Client.Poll(ctx, taskType, r.WorkerID, "")
 		if err != nil {
 			log.Printf("internal worker poll %s: %v", taskType, err)
 			if !wait(ctx, interval) {

@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -11,58 +13,58 @@ import (
 	"syscall"
 	"time"
 
-	"media_agent/media_worker/internal/conductor"
 	"media_agent/media_worker/internal/fixture"
+	"media_agent/media_worker/internal/gateway"
 )
 
-var internalTasks = map[string]bool{
-	"media_render_template_v1": true,
-	"media_finalize_step_v1":   true,
-}
-
 func main() {
-	conductorURL := flag.String("conductor-url", envOr("CONDUCTOR_URL", "http://127.0.0.1:8080"), "Conductor API base URL")
+	gatewayURL := flag.String("gateway-url", envOr("MEDIA_GATEWAY_URL", ""), "public media gateway base URL")
+	serviceToken := flag.String("token", envOr("MEDIA_WORKER_TOKEN", ""), "opaque worker Service Token")
 	workerID := flag.String("worker-id", envOr("MEDIA_WORKER_ID", defaultWorkerID()), "stable client worker id")
 	profile := flag.String("profile", envOr("MEDIA_WORKER_PROFILE", ""), "execution profile; use media_ai_fixture only for integration testing")
-	taskList := flag.String("tasks", "", "comma-separated capability task allowlist")
+	capabilityList := flag.String("capabilities", envOr("MEDIA_WORKER_CAPABILITIES", ""), "comma-separated capability key@version allowlist")
 	flag.Parse()
+	if *gatewayURL == "" {
+		log.Fatal("MEDIA_GATEWAY_URL or -gateway-url is required")
+	}
+	if *serviceToken == "" {
+		log.Fatal("MEDIA_WORKER_TOKEN or -token is required")
+	}
 	if *profile != "media_ai_fixture" {
 		log.Fatalf("profile %q is not implemented; integration requires -profile media_ai_fixture", *profile)
 	}
-	tasks := fixture.Tasks()
-	if strings.TrimSpace(*taskList) != "" {
-		tasks = strings.Split(*taskList, ",")
-	}
-	for _, task := range tasks {
-		if internalTasks[strings.TrimSpace(task)] {
-			log.Fatalf("task %q is internal to media_workflow and cannot be executed by media_worker", task)
-		}
+	capabilities := fixture.Capabilities()
+	var err error
+	capabilities, err = selectCapabilities(capabilities, *capabilityList)
+	if err != nil {
+		log.Fatal(err)
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	client := conductor.New(*conductorURL)
-	var wg sync.WaitGroup
-	for _, rawTask := range tasks {
-		taskType := strings.TrimSpace(rawTask)
-		if taskType == "" {
-			continue
-		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			runTask(ctx, client, *workerID, taskType)
-		}()
+	client := gateway.New(*gatewayURL, *serviceToken)
+	if err := client.Register(ctx, *workerID, capabilities); err != nil {
+		log.Fatalf("register worker: %v", err)
 	}
-	log.Printf("media_worker started: worker_id=%s profile=%s tasks=%s", *workerID, *profile, strings.Join(tasks, ","))
+	var wg sync.WaitGroup
+	for _, capability := range capabilities {
+		for range capability.Concurrency {
+			wg.Add(1)
+			go func(capability gateway.Capability) {
+				defer wg.Done()
+				runCapability(ctx, client, *workerID, capability)
+			}(capability)
+		}
+	}
+	log.Printf("media_worker started: worker_id=%s profile=%s capabilities=%d", *workerID, *profile, len(capabilities))
 	<-ctx.Done()
 	wg.Wait()
 }
 
-func runTask(ctx context.Context, client *conductor.Client, workerID, taskType string) {
+func runCapability(ctx context.Context, client *gateway.Client, workerID string, capability gateway.Capability) {
 	for ctx.Err() == nil {
-		task, err := client.Poll(ctx, taskType, workerID)
+		task, err := client.Poll(ctx, workerID, capability)
 		if err != nil {
-			log.Printf("poll task=%s: %v", taskType, err)
+			log.Printf("poll capability=%s@%d: %v", capability.Key, capability.Version, err)
 			wait(ctx, time.Second)
 			continue
 		}
@@ -70,17 +72,84 @@ func runTask(ctx context.Context, client *conductor.Client, workerID, taskType s
 			wait(ctx, 300*time.Millisecond)
 			continue
 		}
+		taskCtx, cancelTask := context.WithCancel(ctx)
+		go heartbeat(taskCtx, client, workerID, *task)
 		output, executeErr := fixture.Execute(*task)
-		result := conductor.Result{WorkflowInstanceID: task.WorkflowInstanceID, TaskID: task.TaskID, WorkerID: workerID, Status: "COMPLETED", OutputData: output}
-		if executeErr != nil {
-			result.Status = "FAILED_WITH_TERMINAL_ERROR"
-			result.ReasonForIncompletion = executeErr.Error()
-		}
-		if err := client.Update(ctx, result); err != nil {
-			log.Printf("update task=%s id=%s: %v", taskType, task.TaskID, err)
+		idempotencyKey := task.DispatchID + ":" + fmt.Sprint(task.Attempt)
+		submitted := submitResult(ctx, client, workerID, *task, idempotencyKey, output, executeErr)
+		cancelTask()
+		if !submitted {
 			continue
 		}
-		log.Printf("completed task=%s ref=%s id=%s profile=media_ai_fixture", taskType, task.ReferenceTaskName, task.TaskID)
+		if executeErr != nil {
+			log.Printf("failed dispatch=%s capability=%s@%d profile=media_ai_fixture", task.DispatchID, capability.Key, capability.Version)
+			continue
+		}
+		log.Printf("completed dispatch=%s capability=%s@%d profile=media_ai_fixture", task.DispatchID, capability.Key, capability.Version)
+	}
+}
+
+func submitResult(ctx context.Context, client *gateway.Client, workerID string, task gateway.Task, idempotencyKey string, output map[string]any, executeErr error) bool {
+	for ctx.Err() == nil {
+		var err error
+		if executeErr != nil {
+			_, err = client.Fail(ctx, workerID, task, idempotencyKey+":fail", executeErr.Error())
+		} else {
+			_, err = client.Complete(ctx, workerID, task, idempotencyKey+":complete", output)
+		}
+		if err == nil {
+			return true
+		}
+		var httpErr *gateway.HTTPError
+		if errors.As(err, &httpErr) && (httpErr.StatusCode == 409 || httpErr.StatusCode == 410) {
+			log.Printf("result rejected dispatch=%s: %v", task.DispatchID, err)
+			return false
+		}
+		log.Printf("retry result dispatch=%s: %v", task.DispatchID, err)
+		wait(ctx, time.Second)
+	}
+	return false
+}
+
+func selectCapabilities(available []gateway.Capability, raw string) ([]gateway.Capability, error) {
+	if strings.TrimSpace(raw) == "" {
+		return available, nil
+	}
+	byRef := make(map[string]gateway.Capability, len(available))
+	for _, capability := range available {
+		byRef[fmt.Sprintf("%s@%d", capability.Key, capability.Version)] = capability
+	}
+	selected := make([]gateway.Capability, 0)
+	seen := map[string]bool{}
+	for _, item := range strings.Split(raw, ",") {
+		ref := strings.TrimSpace(item)
+		capability, ok := byRef[ref]
+		if !ok {
+			return nil, fmt.Errorf("unsupported capability %q", ref)
+		}
+		if !seen[ref] {
+			selected = append(selected, capability)
+			seen[ref] = true
+		}
+	}
+	if len(selected) == 0 {
+		return nil, errors.New("at least one capability is required")
+	}
+	return selected, nil
+}
+
+func heartbeat(ctx context.Context, client *gateway.Client, workerID string, task gateway.Task) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := client.Heartbeat(ctx, workerID, task); err != nil && ctx.Err() == nil {
+				log.Printf("heartbeat dispatch=%s: %v", task.DispatchID, err)
+			}
+		}
 	}
 }
 

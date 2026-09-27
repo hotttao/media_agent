@@ -10,6 +10,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -35,14 +36,23 @@ func (r *repo) q(ctx context.Context) *query.Query {
 }
 
 // Create 新建非 platform token 行。
-func (r *repo) Create(ctx context.Context, name, tokenHash, createdBy string) (domainst.Token, error) {
+func (r *repo) Create(ctx context.Context, name, tokenHash, createdBy string, access domainst.Access) (domainst.Token, error) {
 	q := r.q(ctx)
+	var organizationID *string
+	if access.OrganizationID != "" {
+		organizationID = &access.OrganizationID
+	}
+	scopes := pq.StringArray{}
+	scopes = append(scopes, access.Scopes...)
 	row := model.ServiceToken{
-		ID:         ids.New(),
-		Name:       name,
-		TokenHash:  tokenHash,
-		CreatedBy:  &createdBy,
-		IsPlatform: false,
+		ID:             ids.New(),
+		Name:           name,
+		TokenHash:      tokenHash,
+		CreatedBy:      &createdBy,
+		IsPlatform:     false,
+		OrganizationID: organizationID,
+		Scopes:         scopes,
+		ExpiresAt:      access.ExpiresAt,
 	}
 	if err := q.ServiceToken.WithContext(ctx).Omit(q.ServiceToken.RevokedAt).Create(&row); err != nil {
 		return domainst.Token{}, err
@@ -81,10 +91,10 @@ func (r *repo) ListByUser(ctx context.Context, userID string) ([]domainst.Token,
 }
 
 // Revoke 撤销：UPDATE revoked_at=now WHERE id AND revoked_at IS NULL AND is_platform=false。
-func (r *repo) Revoke(ctx context.Context, id string) error {
+func (r *repo) Revoke(ctx context.Context, id, userID string) error {
 	q := r.q(ctx)
 	res, err := q.ServiceToken.WithContext(ctx).
-		Where(q.ServiceToken.ID.Eq(id), q.ServiceToken.RevokedAt.IsNull(), q.ServiceToken.IsPlatform.Is(false)).
+		Where(q.ServiceToken.ID.Eq(id), q.ServiceToken.CreatedBy.Eq(userID), q.ServiceToken.RevokedAt.IsNull(), q.ServiceToken.IsPlatform.Is(false)).
 		UpdateColumn(q.ServiceToken.RevokedAt, time.Now())
 	if err != nil {
 		return err
@@ -138,6 +148,7 @@ func (r *repo) EnsurePlatformToken(ctx context.Context, userID string) (string, 
 		Token:      &plaintext,
 		CreatedBy:  &userID,
 		IsPlatform: true,
+		Scopes:     pq.StringArray{},
 	}
 	if err := q.ServiceToken.WithContext(ctx).
 		Omit(q.ServiceToken.RevokedAt).
@@ -164,6 +175,11 @@ func rowToDomain(row *model.ServiceToken) domainst.Token {
 		CreatedAt:  row.CreatedAt,
 		IsPlatform: row.IsPlatform,
 		RevokedAt:  row.RevokedAt,
+		Scopes:     append([]string(nil), row.Scopes...),
+		ExpiresAt:  row.ExpiresAt,
+	}
+	if row.OrganizationID != nil {
+		t.OrganizationID = *row.OrganizationID
 	}
 	if row.Token != nil {
 		t.Token = *row.Token

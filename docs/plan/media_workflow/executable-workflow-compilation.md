@@ -64,15 +64,15 @@
 
 ## P9 · Worker Gateway 与 Conductor 安全代理
 
-- [ ] 扩展 Service Token：Organization 绑定、Worker scopes、expiry、introspection Principal，并保持明文只返回一次。
-- [ ] 配置 Traefik + Oathkeeper/Edge Auth 的 Worker 路由，内省 Service Token 并签发短时 audience=`media-workflow` Internal Identity JWT。
-- [ ] 拆分浏览器与 Worker 认证中间件；Worker API 不再要求 Kratos Cookie，并统一 `sub=business_user_id`。
-- [ ] 新增 Worker registration/poll/heartbeat/complete/fail API；Worker 只声明 Capability Version。
-- [ ] 新增 `worker_dispatches`、`worker_result_inbox`、状态机、唯一约束与租约扫描器。
-- [ ] StartWorkflow 使用 `taskToDomain`；MVP 为每个 User 派生 Execution Domain，禁止客户端 domain 与 `NO_DOMAIN` fallback。
-- [ ] 实现 Capability 到 taskDef 的服务端映射与受控 long-poll；排除 Renderer/Finalizer。
-- [ ] 实现结果 Inbox + Outbox/Adapter，先返回稳定 receipt，再幂等更新 Conductor。
+- [x] 扩展 Service Token：Organization 绑定、Worker scopes、expiry、introspection Principal，并保持明文只返回一次。
+- [x] 配置 Traefik + Oathkeeper/Edge Auth 的 Worker 路由，内省 Service Token 并签发短时 audience=`media-workflow` Internal Identity JWT。
+- [x] 拆分浏览器与 Worker 认证中间件；Worker API 不再要求 Kratos Cookie，并统一 `sub=business_user_id`。
+- [x] 新增 Worker registration/poll/heartbeat/complete/fail API；Worker 只声明 Capability Version。
+- [x] 新增 `worker_dispatches`、`worker_result_inbox`、状态机、唯一约束与租约扫描器。
+- [x] StartWorkflow 使用 `taskToDomain`；MVP 为每个 User 派生 Execution Domain，禁止客户端 domain 与 `NO_DOMAIN` fallback。
+- [x] 实现 Capability 到 taskDef 的服务端映射与受控 long-poll；排除 Renderer/Finalizer。
+- [x] 实现结果 Inbox + Outbox/Adapter，先返回稳定 receipt，再幂等更新 Conductor。
 - [ ] 实现 Object Path 到即时 presigned GET/PUT URL，校验上传摘要，拒绝任意结果 URL。
-- [ ] 修改 `media_worker`：删除 Conductor URL/client，改用 Gateway URL、Service Token、dispatch/heartbeat/result receipt。
+- [x] 修改 `media_worker`：删除 Conductor URL/client，改用 Gateway URL、Service Token、dispatch/heartbeat/result receipt。
 - [ ] 覆盖 Token 撤销、断线恢复、重复完成、旧 attempt、租约过期、Job 取消、Conductor 暂时不可用和 trace_id 跨服务关联测试。
 - [ ] 用一个 `media_ai_fixture` 完整流程验证客户端无法访问 Conductor，确认后再开始全量旧数据迁移。

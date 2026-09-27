@@ -40,12 +40,24 @@ func VerifyToken(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	c.JSON(consts.StatusOK, &tokenpb.VerifyTokenResponse{
-		Active:    res.Active,
-		Sub:       res.Sub,
-		Username:  res.Username,
-		Name:      res.Name,
-		Role:      res.Role,
-		TokenType: res.TokenType,
+		Active:         res.Active,
+		Sub:            res.Sub,
+		Username:       res.Username,
+		Name:           res.Name,
+		Role:           res.Role,
+		TokenType:      res.TokenType,
+		CredentialId:   res.CredentialID,
+		OrganizationId: res.OrganizationID,
+		Scope:          res.Scope,
+		Exp:            res.ExpiresAt,
+		AuthSource:     res.AuthSource,
+		Ext: map[string]string{
+			"credential_id":   res.CredentialID,
+			"organization_id": res.OrganizationID,
+			"auth_source":     res.AuthSource,
+			"name":            res.Name,
+			"role":            res.Role,
+		},
 	})
 }
 

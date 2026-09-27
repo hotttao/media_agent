@@ -143,8 +143,12 @@ services:
     depends_on:
       kratos:
         condition: service_started
+    environment:
+      AUTHENTICATORS_OAUTH2_INTROSPECTION_CONFIG_INTROSPECTION_REQUEST_HEADERS: '{"X-Media-Auth-Internal-Token":"${MEDIA_AUTH_INTERNAL_TOKEN:-dev-media-auth-internal-token}"}'
     volumes:
       - ./auth/oathkeeper:/etc/oathkeeper:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [auth]
     restart: unless-stopped
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"media_agent/hertz_infra/authn/internaljwt"
 	"media_agent/hertz_infra/config"
@@ -20,6 +21,7 @@ import (
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
 	jobhandler "media_agent/media_workflow/biz/handler/job"
 	tplhandler "media_agent/media_workflow/biz/handler/template"
+	workerhandler "media_agent/media_workflow/biz/handler/worker"
 	wfhandler "media_agent/media_workflow/biz/handler/workflow"
 	jobsvc "media_agent/media_workflow/biz/service/job"
 	tplsvc "media_agent/media_workflow/biz/service/template"
@@ -29,6 +31,7 @@ import (
 	"media_agent/media_workflow/biz/shared/client"
 	"media_agent/media_workflow/biz/workflow/conductor"
 	"media_agent/media_workflow/biz/workflow/publication"
+	workergateway "media_agent/media_workflow/biz/workflow/worker_gateway"
 )
 
 // templateLookupAdapter 把 template.Service 适配为 workflow.TemplateLookup 端口。
@@ -141,8 +144,19 @@ func main() {
 	// job 装配（P3）
 	jobRepo := jobrepo.NewJobRepo(db)
 	stepRunRepo := jobrepo.NewStepRunRepo(db)
-	jobSvc := jobsvc.NewService(jobRepo, stepRunRepo, txRunner, wfRepo, tplLookup, materialsClient, cfg.GetJob(), compilationRepo, &conductor.ExecutionEngine{Client: conductorClient})
+	executionEngine := &conductor.ExecutionEngine{Client: conductorClient}
+	jobSvc := jobsvc.NewService(jobRepo, stepRunRepo, txRunner, wfRepo, tplLookup, materialsClient, cfg.GetJob(), compilationRepo, executionEngine)
 	jobhandler.Svc = jobSvc
+	dispatchRepo := jobrepo.NewDispatchRepo(db)
+	workerFlow := &workergateway.Flow{
+		Dispatches: dispatchRepo, Jobs: jobRepo, StepRuns: stepRunRepo,
+		Capabilities: capabilityRepo, Engine: executionEngine,
+	}
+	workerhandler.Flow = workerFlow
+	workerSubmitterCtx, workerSubmitterCancel := context.WithCancel(context.Background())
+	defer workerSubmitterCancel()
+	go workerFlow.RunResultSubmitter(workerSubmitterCtx, time.Second)
+	go workerFlow.RunLeaseReaper(workerSubmitterCtx, 15*time.Second)
 
 	// claim 超时扫描（后台 goroutine）
 	scannerCtx, scannerCancel := context.WithCancel(context.Background())
@@ -182,6 +196,7 @@ func main() {
 	}
 	if jwksURL := os.Getenv("INTERNAL_JWKS_URL"); jwksURL != "" {
 		authCfg.InternalJWTVerifier = internaljwt.NewVerifier(jwksURL, os.Getenv("INTERNAL_JWT_ISSUER"), "internal-api", nil)
+		authCfg.WorkerJWTVerifier = internaljwt.NewVerifier(jwksURL, os.Getenv("INTERNAL_JWT_ISSUER"), "media-workflow", nil)
 	}
 	authMw := auth.New(authCfg)
 

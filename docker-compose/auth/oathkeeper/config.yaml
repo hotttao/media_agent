@@ -22,6 +22,14 @@ authenticators:
         - ory_kratos_session
   noop:
     enabled: true
+  oauth2_introspection:
+    enabled: true
+    config:
+      introspection_url: http://host.docker.internal:8001/internal/token/verify
+      scope_strategy: exact
+      prefix: tos_
+      cache:
+        enabled: false
 
 authorizers:
   allow:

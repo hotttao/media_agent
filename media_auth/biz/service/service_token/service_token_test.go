@@ -31,10 +31,13 @@ func newFakeRepo() *fakeRepo {
 	}
 }
 
-func (r *fakeRepo) Create(_ context.Context, name, tokenHash, createdBy string) (domainst.Token, error) {
+func (r *fakeRepo) Create(_ context.Context, name, tokenHash, createdBy string, access domainst.Access) (domainst.Token, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	t := domainst.Token{ID: "id-" + name, Name: name, TokenHash: tokenHash, CreatedBy: createdBy, CreatedAt: time.Now()}
+	t := domainst.Token{
+		ID: "id-" + name, Name: name, TokenHash: tokenHash, CreatedBy: createdBy, CreatedAt: time.Now(),
+		OrganizationID: access.OrganizationID, Scopes: access.Scopes, ExpiresAt: access.ExpiresAt,
+	}
 	r.tokens[t.ID] = t
 	r.byHash[tokenHash] = t
 	return t, nil
@@ -59,11 +62,11 @@ func (r *fakeRepo) ListByUser(_ context.Context, userID string) ([]domainst.Toke
 	}
 	return out, nil
 }
-func (r *fakeRepo) Revoke(_ context.Context, id string) error {
+func (r *fakeRepo) Revoke(_ context.Context, id, userID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	t, ok := r.tokens[id]
-	if !ok || t.IsPlatform || t.IsRevoked() {
+	if !ok || t.CreatedBy != userID || t.IsPlatform || t.IsRevoked() {
 		return domainst.ErrNotFound
 	}
 	now := time.Now()
@@ -112,6 +115,36 @@ func TestCreateServiceToken_EmptyName(t *testing.T) {
 	}
 }
 
+func TestCreateServiceTokenWithAccessValidatesMembershipAndScopes(t *testing.T) {
+	repo := newFakeRepo()
+	svc := NewService(repo)
+	svc.SetMembershipValidator(func(_ context.Context, organizationID, userID string) bool {
+		return organizationID == "org-1" && userID == "u1"
+	})
+	expiresAt := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	result, err := svc.CreateServiceTokenWithAccess(context.Background(), "u1", "desktop worker", "org-1", []string{
+		"workflow.worker.poll", "workflow.worker.complete", "workflow.worker.poll",
+	}, expiresAt)
+	if err != nil {
+		t.Fatalf("CreateServiceTokenWithAccess() error = %v", err)
+	}
+	if result.OrganizationID != "org-1" || result.ExpiresAt != expiresAt.Format(time.RFC3339) {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Scopes) != 2 || result.Scopes[0] != "workflow.worker.complete" || result.Scopes[1] != "workflow.worker.poll" {
+		t.Fatalf("scopes = %#v", result.Scopes)
+	}
+}
+
+func TestCreateServiceTokenWithAccessRejectsNonMember(t *testing.T) {
+	svc := NewService(newFakeRepo())
+	svc.SetMembershipValidator(func(context.Context, string, string) bool { return false })
+	_, err := svc.CreateServiceTokenWithAccess(context.Background(), "u1", "worker", "org-1", []string{"workflow.worker.poll"}, time.Now().Add(time.Hour))
+	if err != ErrNotOrganizationMember {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestRevokeServiceToken(t *testing.T) {
 	repo := newFakeRepo()
 	svc := NewService(repo)
@@ -123,6 +156,15 @@ func TestRevokeServiceToken(t *testing.T) {
 	// 再撤销 → not found（已撤销）。
 	if err := svc.RevokeServiceToken(context.Background(), "u1", res.ID); err != ErrNotFound {
 		t.Errorf("re-revoke: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestRevokeServiceTokenRejectsDifferentOwner(t *testing.T) {
+	repo := newFakeRepo()
+	svc := NewService(repo)
+	result, _ := svc.CreateServiceToken(context.Background(), "u1", "tok")
+	if err := svc.RevokeServiceToken(context.Background(), "u2", result.ID); err != ErrNotFound {
+		t.Fatalf("RevokeServiceToken() error = %v", err)
 	}
 }
 

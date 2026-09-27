@@ -1,6 +1,10 @@
 package job
 
-import "time"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
+)
 
 type JobStatus string
 
@@ -48,6 +52,13 @@ func NeedsApproval(policy ApprovalPolicy, candidateCount int) bool {
 		return false
 	}
 	return candidateCount > 1 || policy == ApprovalAlways
+}
+
+// ExecutionDomainForUser returns the opaque Conductor Task Domain used to
+// isolate client capability tasks before they are polled.
+func ExecutionDomainForUser(userID string) string {
+	digest := sha256.Sum256([]byte(userID))
+	return "worker_user_" + hex.EncodeToString(digest[:12])
 }
 
 // JobInput bundle（自包含，存 jobs.input jsonb）。

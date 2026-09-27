@@ -53,6 +53,7 @@ type Config struct {
 	KratosPublicURL        string // Ory Kratos public URL；配置后浏览器会话优先使用 Kratos
 	MediaAuthInternalToken string // internal identity/team lookup credential
 	InternalJWTVerifier    *internaljwt.Verifier
+	WorkerJWTVerifier      *internaljwt.Verifier
 	// DevUserID enables a local-only authenticated session when explicitly set.
 	// It is intentionally empty by default and must never be configured in prod.
 	DevUserID    string
@@ -62,6 +63,28 @@ type Config struct {
 
 type callerKey struct{}
 type teamsKey struct{}
+type workerPrincipalKey struct{}
+
+type WorkerPrincipal struct {
+	UserID           string
+	OrganizationID   string
+	CredentialID     string
+	WorkerInstanceID string
+	Scopes           map[string]struct{}
+}
+
+func WorkerPrincipalFromContext(ctx context.Context) *WorkerPrincipal {
+	principal, _ := ctx.Value(workerPrincipalKey{}).(*WorkerPrincipal)
+	return principal
+}
+
+func (p *WorkerPrincipal) HasScope(scope string) bool {
+	if p == nil {
+		return false
+	}
+	_, ok := p.Scopes[scope]
+	return ok
+}
 
 // CallerFromContext 从 ctx 取 User（middleware 注入）。
 func CallerFromContext(ctx context.Context) *User {
@@ -225,7 +248,8 @@ func New(cfg *Config) *Middleware {
 func (m *Middleware) Handler() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		path := string(c.Request.Path())
-		if m.cfg.DevUserID != "" && path != "/api/auth/login" && path != "/api/auth/callback" && path != "/api/auth/logout" {
+		workerRoute := strings.HasPrefix(path, "/api/worker/v1/")
+		if m.cfg.DevUserID != "" && !workerRoute && path != "/api/auth/login" && path != "/api/auth/callback" && path != "/api/auth/logout" {
 			ctx = context.WithValue(ctx, callerKey{}, &User{Sub: m.cfg.DevUserID, Username: m.cfg.DevUserID, Name: "Local Developer", Role: "admin"})
 			c.Next(ctx)
 			return
@@ -245,6 +269,18 @@ func (m *Middleware) Handler() app.HandlerFunc {
 		authHeader := string(c.Request.Header.Peek("Authorization"))
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			bearer := strings.TrimPrefix(authHeader, "Bearer ")
+			if workerRoute {
+				principal, user, err := m.verifyWorkerIdentity(ctx, bearer)
+				if err != nil {
+					c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid worker identity"})
+					c.Abort()
+					return
+				}
+				ctx = context.WithValue(ctx, callerKey{}, user)
+				ctx = context.WithValue(ctx, workerPrincipalKey{}, principal)
+				c.Next(ctx)
+				return
+			}
 			if m.cfg.InternalJWTVerifier != nil {
 				if claims, verifyErr := m.cfg.InternalJWTVerifier.Verify(ctx, bearer); verifyErr == nil {
 					user, resolveErr := m.verifyKratosSessionForIdentity(ctx, string(c.Request.Header.Peek("Cookie")), claims.Subject)
@@ -272,6 +308,11 @@ func (m *Middleware) Handler() app.HandlerFunc {
 			// 异步取 teams（不阻塞请求；teams 为空时 service 跳过 team 校验）
 			go m.prefetchTeams(user.Sub)
 			c.Next(ctx)
+			return
+		}
+		if workerRoute {
+			c.JSON(consts.StatusUnauthorized, map[string]string{"error": "missing worker identity"})
+			c.Abort()
 			return
 		}
 
@@ -306,6 +347,40 @@ func (m *Middleware) Handler() app.HandlerFunc {
 		}
 		c.Next(ctx)
 	}
+}
+
+func (m *Middleware) verifyWorkerIdentity(ctx context.Context, raw string) (*WorkerPrincipal, *User, error) {
+	if m.cfg.WorkerJWTVerifier == nil {
+		return nil, nil, errors.New("worker JWT verifier is unavailable")
+	}
+	claims, err := m.cfg.WorkerJWTVerifier.Verify(ctx, raw)
+	if err != nil {
+		return nil, nil, err
+	}
+	if claims.AuthSource != "service_token" || claims.OrganizationID == "" || claims.CredentialID == "" {
+		return nil, nil, errors.New("worker JWT is missing credential or organization claims")
+	}
+	scopes := make(map[string]struct{})
+	for _, scope := range strings.Fields(claims.Scope) {
+		scopes[scope] = struct{}{}
+	}
+	principal := &WorkerPrincipal{
+		UserID: claims.Subject, OrganizationID: claims.OrganizationID,
+		CredentialID: claims.CredentialID, Scopes: scopes,
+	}
+	role := claims.Role
+	if role == "" {
+		role = "user"
+	}
+	username := claims.Username
+	if username == "" {
+		username = "worker:" + claims.Subject
+	}
+	name := claims.Name
+	if name == "" {
+		name = username
+	}
+	return principal, &User{Sub: claims.Subject, Username: username, Name: name, Role: role}, nil
 }
 
 // verifyKratosSession asks Kratos to validate the browser's httpOnly session

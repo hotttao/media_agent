@@ -27,10 +27,15 @@ http:
       priority: 140
       service: oathkeeper-api
     oauth:
-      rule: "PathPrefix(`/api/oauth`) || PathPrefix(`/api/users`) || PathPrefix(`/api/teams`) || PathPrefix(`/api/organizations`)"
+      rule: "PathPrefix(`/api/oauth`) || PathPrefix(`/api/users`) || PathPrefix(`/api/teams`) || PathPrefix(`/api/organizations`) || PathPrefix(`/api/service-tokens`)"
       priority: 100
       middlewares: [oathkeeper-forward-auth]
       service: auth
+    workflow-worker:
+      rule: "PathPrefix(`/api/worker/v1`)"
+      priority: 115
+      middlewares: [oathkeeper-worker-forward-auth]
+      service: workflow
     materials:
       rule: "PathPrefix(`/api/v1/materials`) || PathPrefix(`/api/v1/products`) || PathPrefix(`/api/v1/asset-kinds`) || PathPrefix(`/api/v1/generated-assets`) || PathPrefix(`/api/v1/virtual-ips`) || PathPrefix(`/api/v1/library-objects`)"
       priority: 50
@@ -53,6 +58,11 @@ http:
 
   middlewares:
     oathkeeper-forward-auth:
+      forwardAuth:
+        address: "http://oathkeeper:4456/decisions"
+        trustForwardHeader: false
+        authResponseHeaders: [Authorization]
+    oathkeeper-worker-forward-auth:
       forwardAuth:
         address: "http://oathkeeper:4456/decisions"
         trustForwardHeader: false

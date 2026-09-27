@@ -8,8 +8,11 @@ import (
 
 type ExecutionEngine struct{ Client *Client }
 
-func (e *ExecutionEngine) Start(ctx context.Context, workflowName string, workflowVersion int, input map[string]any) (string, error) {
-	return e.Client.StartWorkflow(ctx, workflowName, workflowVersion, input)
+func (e *ExecutionEngine) Start(ctx context.Context, workflowName string, workflowVersion int, correlationID string, input map[string]any, taskToDomain map[string]string) (string, error) {
+	return e.Client.StartWorkflow(ctx, StartWorkflowRequest{
+		Name: workflowName, Version: workflowVersion, CorrelationID: correlationID,
+		Input: input, TaskToDomain: taskToDomain,
+	})
 }
 
 func (e *ExecutionEngine) Get(ctx context.Context, workflowID string) (*jobdomain.EngineExecution, error) {
@@ -43,4 +46,25 @@ func (e *ExecutionEngine) Terminate(ctx context.Context, workflowID, reason stri
 	return e.Client.TerminateWorkflow(ctx, workflowID, reason)
 }
 
+func (e *ExecutionEngine) PollCapabilityTask(ctx context.Context, taskType, workerID, executionDomain string) (*jobdomain.CapabilityTask, error) {
+	task, err := e.Client.Poll(ctx, taskType, workerID, executionDomain)
+	if err != nil || task == nil {
+		return nil, err
+	}
+	return &jobdomain.CapabilityTask{
+		TaskType: task.TaskType, ReferenceTaskName: task.ReferenceTaskName,
+		TaskID: task.TaskID, WorkflowInstanceID: task.WorkflowInstanceID,
+		RetryCount: task.RetryCount, Input: task.InputData,
+	}, nil
+}
+
+func (e *ExecutionEngine) UpdateCapabilityTask(ctx context.Context, result jobdomain.CapabilityTaskResult) error {
+	return e.Client.UpdateTask(ctx, TaskResult{
+		WorkflowInstanceID: result.WorkflowInstanceID, TaskID: result.TaskID,
+		WorkerID: result.WorkerID, Status: result.Status, OutputData: result.Output,
+		ReasonForIncompletion: result.Reason, CallbackAfterSeconds: result.CallbackAfterSeconds,
+	})
+}
+
 var _ jobdomain.WorkflowEngine = (*ExecutionEngine)(nil)
+var _ jobdomain.CapabilityTaskEngine = (*ExecutionEngine)(nil)

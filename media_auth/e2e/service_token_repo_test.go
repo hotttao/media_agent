@@ -26,7 +26,7 @@ func newSTRepo(t *testing.T) domainst.TokenRepo {
 func TestSTRepo_CreateAndGetByHash(t *testing.T) {
 	repo := newSTRepo(t)
 	hash := token.HashToken("tos_xxx")
-	tok, err := repo.Create(context.Background(), "my token", hash, "u1")
+	tok, err := repo.Create(context.Background(), "my token", hash, "u1", domainst.Access{})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -73,8 +73,8 @@ func TestSTRepo_GetPlatformToken(t *testing.T) {
 func TestSTRepo_Revoke_OnlyNonPlatform(t *testing.T) {
 	repo := newSTRepo(t)
 	hash := token.HashToken("tos_1")
-	tok, _ := repo.Create(context.Background(), "t1", hash, "u1")
-	if err := repo.Revoke(context.Background(), tok.ID); err != nil {
+	tok, _ := repo.Create(context.Background(), "t1", hash, "u1", domainst.Access{})
+	if err := repo.Revoke(context.Background(), tok.ID, "u1"); err != nil {
 		t.Errorf("Revoke non-platform: %v", err)
 	}
 	// 撤销后 GetByHash → not found（revoked_at IS NULL 过滤）。
@@ -83,7 +83,7 @@ func TestSTRepo_Revoke_OnlyNonPlatform(t *testing.T) {
 		t.Errorf("after revoke: want ErrNotFound, got %v", err)
 	}
 	// 再撤销同一 → not found（已撤销）。
-	if err := repo.Revoke(context.Background(), tok.ID); !errors.Is(err, domainst.ErrNotFound) {
+	if err := repo.Revoke(context.Background(), tok.ID, "u1"); !errors.Is(err, domainst.ErrNotFound) {
 		t.Errorf("re-revoke: want ErrNotFound, got %v", err)
 	}
 }
@@ -103,7 +103,7 @@ func TestSTRepo_Revoke_PlatformRejected(t *testing.T) {
 	if platformID == "" {
 		t.Fatalf("no platform token found")
 	}
-	if err := repo.Revoke(context.Background(), platformID); !errors.Is(err, domainst.ErrNotFound) {
+	if err := repo.Revoke(context.Background(), platformID, "u1"); !errors.Is(err, domainst.ErrNotFound) {
 		t.Errorf("revoke platform: want ErrNotFound, got %v", err)
 	}
 	_ = pt
@@ -111,8 +111,8 @@ func TestSTRepo_Revoke_PlatformRejected(t *testing.T) {
 
 func TestSTRepo_ListByUser(t *testing.T) {
 	repo := newSTRepo(t)
-	repo.Create(context.Background(), "t1", token.HashToken("a"), "u1")
-	repo.Create(context.Background(), "t2", token.HashToken("b"), "u1")
+	repo.Create(context.Background(), "t1", token.HashToken("a"), "u1", domainst.Access{})
+	repo.Create(context.Background(), "t2", token.HashToken("b"), "u1", domainst.Access{})
 	repo.EnsurePlatformToken(context.Background(), "u1")
 	toks, err := repo.ListByUser(context.Background(), "u1")
 	if err != nil {

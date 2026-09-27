@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package media_workflow.worker;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_workflow/worker";
+
+service WorkerService {
+  rpc RegisterWorker(RegisterWorkerReq) returns (RegisterWorkerResp) {
+    option (google.api.http) = { post: "/api/worker/v1/registrations" body: "*" };
+    option (api.post) = "/api/worker/v1/registrations";
+  }
+  rpc PollWorkerTask(PollWorkerTaskReq) returns (PollWorkerTaskResp) {
+    option (google.api.http) = { post: "/api/worker/v1/tasks:poll" body: "*" };
+    option (api.post) = "/api/worker/v1/tasks:poll";
+  }
+  rpc HeartbeatWorkerTask(HeartbeatWorkerTaskReq) returns (HeartbeatWorkerTaskResp) {
+    option (google.api.http) = { post: "/api/worker/v1/tasks/{dispatch_id}:heartbeat" body: "*" };
+    option (api.post) = "/api/worker/v1/tasks/:dispatch_id/heartbeat";
+  }
+  rpc CompleteWorkerTask(CompleteWorkerTaskReq) returns (WorkerResultReceipt) {
+    option (google.api.http) = { post: "/api/worker/v1/tasks/{dispatch_id}:complete" body: "*" };
+    option (api.post) = "/api/worker/v1/tasks/:dispatch_id/complete";
+  }
+  rpc FailWorkerTask(FailWorkerTaskReq) returns (WorkerResultReceipt) {
+    option (google.api.http) = { post: "/api/worker/v1/tasks/{dispatch_id}:fail" body: "*" };
+    option (api.post) = "/api/worker/v1/tasks/:dispatch_id/fail";
+  }
+}
+
+message CapabilityVersion {
+  string capability_key = 1;
+  int32 capability_version = 2;
+  int32 concurrency = 3;
+}
+
+message RegisterWorkerReq {
+  string worker_instance_id = 1;
+  repeated CapabilityVersion capabilities = 2;
+}
+
+message RegisterWorkerResp {
+  string worker_instance_id = 1;
+  int64 registered_at = 2;
+}
+
+message PollWorkerTaskReq {
+  string worker_instance_id = 1;
+  string capability_key = 2;
+  int32 capability_version = 3;
+}
+
+message WorkerTask {
+  string dispatch_id = 1;
+  int32 attempt = 2;
+  string capability_key = 3;
+  int32 capability_version = 4;
+  string input_json = 5;
+  int64 lease_expires_at = 6;
+}
+
+message PollWorkerTaskResp { WorkerTask task = 1; }
+
+message HeartbeatWorkerTaskReq {
+  string dispatch_id = 1 [(api.path) = "dispatch_id"];
+  string worker_instance_id = 2;
+  int32 attempt = 3;
+}
+
+message HeartbeatWorkerTaskResp { int64 lease_expires_at = 1; }
+
+message CompleteWorkerTaskReq {
+  string dispatch_id = 1 [(api.path) = "dispatch_id"];
+  string worker_instance_id = 2;
+  int32 attempt = 3;
+  string idempotency_key = 4;
+  string output_json = 5;
+}
+
+message FailWorkerTaskReq {
+  string dispatch_id = 1 [(api.path) = "dispatch_id"];
+  string worker_instance_id = 2;
+  int32 attempt = 3;
+  string idempotency_key = 4;
+  string reason = 5;
+}
+
+message WorkerResultReceipt {
+  string receipt_id = 1;
+  string dispatch_id = 2;
+  string status = 3;
+}

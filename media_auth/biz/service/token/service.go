@@ -10,6 +10,8 @@ package token
 import (
 	"context"
 	"errors"
+	"strings"
+	"time"
 
 	domainauth "media_agent/media_auth/biz/domain/auth"
 	domainst "media_agent/media_auth/biz/domain/service_token"
@@ -18,8 +20,13 @@ import (
 
 // Service 是 internal token 用例服务。
 type Service struct {
-	tokenRepo domainst.TokenRepo
-	userRepo  domainauth.UserRepo
+	tokenRepo           domainst.TokenRepo
+	userRepo            domainauth.UserRepo
+	membershipValidator func(context.Context, string, string) bool
+}
+
+func (s *Service) SetMembershipValidator(validator func(context.Context, string, string) bool) {
+	s.membershipValidator = validator
 }
 
 // NewService 构造 internal token 服务。
@@ -30,12 +37,17 @@ func NewService(tokenRepo domainst.TokenRepo, userRepo domainauth.UserRepo) *Ser
 
 // VerifyResult 是 VerifyToken 返回（与 token.proto VerifyTokenResponse 对齐）。
 type VerifyResult struct {
-	Active    bool
-	Sub       string // = service_tokens.created_by
-	Username  string // svc:{name}
-	Name      string // user.display_name
-	Role      string // user
-	TokenType string // service_token
+	Active         bool
+	Sub            string // = service_tokens.created_by
+	Username       string // svc:{name}
+	Name           string // user.display_name
+	Role           string // user
+	TokenType      string // service_token
+	CredentialID   string
+	OrganizationID string
+	Scope          string
+	ExpiresAt      int64
+	AuthSource     string
 }
 
 // VerifyToken 把明文 service token 解析为 Subject。
@@ -54,6 +66,14 @@ func (s *Service) VerifyToken(ctx context.Context, plaintext string) (VerifyResu
 		}
 		return VerifyResult{}, err
 	}
+	if !t.IsActiveAt(time.Now()) {
+		return VerifyResult{Active: false}, nil
+	}
+	if len(t.Scopes) > 0 {
+		if t.OrganizationID == "" || s.membershipValidator == nil || !s.membershipValidator(ctx, t.OrganizationID, t.CreatedBy) {
+			return VerifyResult{Active: false}, nil
+		}
+	}
 	// 取 user display_name 作 name 字段（缺失则空）。
 	name := ""
 	u, userErr := s.userRepo.FindByID(ctx, t.CreatedBy)
@@ -63,14 +83,22 @@ func (s *Service) VerifyToken(ctx context.Context, plaintext string) (VerifyResu
 	if userErr == nil {
 		name = u.DisplayName
 	}
-	return VerifyResult{
-		Active:    true,
-		Sub:       t.CreatedBy,
-		Username:  "svc:" + t.Name,
-		Name:      name,
-		Role:      "user",
-		TokenType: "service_token",
-	}, nil
+	result := VerifyResult{
+		Active:         true,
+		Sub:            t.CreatedBy,
+		Username:       "svc:" + t.Name,
+		Name:           name,
+		Role:           "user",
+		TokenType:      "service_token",
+		CredentialID:   t.ID,
+		OrganizationID: t.OrganizationID,
+		Scope:          strings.Join(t.Scopes, " "),
+		AuthSource:     "service_token",
+	}
+	if t.ExpiresAt != nil {
+		result.ExpiresAt = t.ExpiresAt.Unix()
+	}
+	return result, nil
 }
 
 // ValidateSession 让旧 JWT 在用户软删除或 auth_version 递增后立即失效。

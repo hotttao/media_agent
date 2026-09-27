@@ -58,3 +58,57 @@ func TestApprovalAndExecutionControlEndpoints(t *testing.T) {
 		t.Fatalf("terminate request = %#v", terminate)
 	}
 }
+
+func TestStartWorkflowUsesRequestBodyAndTaskDomain(t *testing.T) {
+	var got StartWorkflowRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/workflow" {
+			t.Fatalf("request=%s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = w.Write([]byte(`"workflow-1"`))
+	}))
+	defer server.Close()
+
+	id, err := NewClient(server.URL).StartWorkflow(t.Context(), StartWorkflowRequest{
+		Name: "compiled", Version: 3, CorrelationID: "job-1",
+		Input:        map[string]any{"job_id": "job-1"},
+		TaskToDomain: map[string]string{"media_image_model_v1": "worker_user_abc"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "workflow-1" || got.CorrelationID != "job-1" || got.TaskToDomain["media_image_model_v1"] != "worker_user_abc" {
+		t.Fatalf("id=%q request=%+v", id, got)
+	}
+}
+
+func TestPollIncludesExactDomainWithoutFallback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("domain"); got != "worker_user_abc" {
+			t.Fatalf("domain=%q", got)
+		}
+		if r.URL.Path != "/api/tasks/poll/batch/media_image_model_v1" || r.URL.Query().Get("timeout") != "20000" || r.URL.Query().Get("count") != "1" {
+			t.Fatalf("request=%s?%s", r.URL.Path, r.URL.RawQuery)
+		}
+		_, _ = w.Write([]byte("[]"))
+	}))
+	defer server.Close()
+	task, err := NewClient(server.URL).Poll(t.Context(), "media_image_model_v1", "proxy", "worker_user_abc")
+	if err != nil || task != nil {
+		t.Fatalf("task=%v err=%v", task, err)
+	}
+}
+
+func TestPollReturnsFirstBatchTask(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]Task{{TaskID: "task-1", WorkflowInstanceID: "workflow-1", RetryCount: 2}})
+	}))
+	defer server.Close()
+	task, err := NewClient(server.URL).Poll(t.Context(), "media_image_model_v1", "proxy", "worker_user_abc")
+	if err != nil || task == nil || task.TaskID != "task-1" || task.RetryCount != 2 {
+		t.Fatalf("task=%#v err=%v", task, err)
+	}
+}

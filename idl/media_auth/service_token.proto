@@ -45,6 +45,9 @@ service ServiceTokenService {
 
 message CreateServiceTokenRequest {
   string name = 1;
+  string organization_id = 2;
+  repeated string scopes = 3;
+  string expires_at = 4;
 }
 
 message CreateServiceTokenResponse {
@@ -53,6 +56,9 @@ message CreateServiceTokenResponse {
   // tos_xxx 明文,仅本次响应可见
   string token = 3;
   string created_at = 4;
+  string organization_id = 5;
+  repeated string scopes = 6;
+  string expires_at = 7;
 }
 
 message ListServiceTokensRequest {}
@@ -69,6 +75,9 @@ message ServiceTokenRecord {
   string created_at = 4;
   string revoked_at = 5;
   bool is_platform = 6;
+  string organization_id = 7;
+  repeated string scopes = 8;
+  string expires_at = 9;
 }
 
 message RevokeServiceTokenRequest {

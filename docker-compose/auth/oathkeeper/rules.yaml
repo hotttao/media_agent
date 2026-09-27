@@ -1,8 +1,35 @@
+- id: media-worker-service-token
+  upstream:
+    url: http://host.docker.internal:8002
+  match:
+    url: http://192.168.2.41:18080/api/worker/v1/<.*>
+    methods: [GET, POST, PUT, PATCH, DELETE]
+  authenticators:
+    - handler: oauth2_introspection
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: id_token
+      config:
+        ttl: 2m
+        claims: |
+          {
+            "aud": ["media-workflow"],
+            "principal_type": "user",
+            "organization_id": "{{ print .Extra.organization_id }}",
+            "credential_id": "{{ print .Extra.credential_id }}",
+            "scope": "{{ print .Extra.scope }}",
+            "auth_source": "{{ print .Extra.auth_source }}",
+            "username": "{{ print .Extra.username }}",
+            "name": "{{ print .Extra.name }}",
+            "role": "{{ print .Extra.role }}"
+          }
+
 - id: media-agent-authenticated-api
   upstream:
     url: http://host.docker.internal:8002
   match:
-    url: http://192.168.2.41:18080/api/<.*>
+    url: http://192.168.2.41:18080/api/<(auth/me|oauth.*|users.*|teams.*|organizations.*|service-tokens.*|v1.*)>
     methods: [GET, POST, PUT, PATCH, DELETE]
   authenticators:
     - handler: cookie_session

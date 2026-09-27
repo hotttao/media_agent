@@ -36,6 +36,8 @@ func TestCompileExecutableIRInlinesRendererAndCapabilityMapping(t *testing.T) {
 	require.Equal(t, RenderTemplateTaskName, definition.Tasks[0].Name)
 	require.Equal(t, "jimeng_image_multi_v1", definition.Tasks[1].Name)
 	require.Equal(t, "${step__model_image__render.output.prompt}", definition.Tasks[1].InputParameters["prompt"])
+	require.Equal(t, "${workflow.input.job_id}", definition.Tasks[1].InputParameters["job_id"])
+	require.Equal(t, "model_image", definition.Tasks[1].InputParameters["step_key"])
 	require.Equal(t, []any{
 		"${workflow.input.inputs.full_body.asset_ref}",
 		"${workflow.input.inputs.clothing.asset_ref}",

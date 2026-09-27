@@ -77,6 +77,16 @@ func (r *JobRepo) GetWithStepRuns(ctx context.Context, id string) (*domain.Job, 
 	return j, srs, nil
 }
 
+func (r *JobRepo) GetByConductorWorkflowID(ctx context.Context, conductorWorkflowID string) (*domain.Job, error) {
+	var row model.Job
+	err := dal.FromContext(ctx, r.db).WithContext(ctx).
+		Where("conductor_workflow_id = ?", conductorWorkflowID).First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return jobToDomain(&row), nil
+}
+
 func (r *JobRepo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, int, error) {
 	Q := query.Use(dal.FromContext(ctx, r.db))
 	tx := Q.Job.WithContext(ctx)
@@ -180,6 +190,16 @@ func (r *StepRunRepo) ListByJob(ctx context.Context, jobID string) ([]*domain.St
 		out[i] = stepRunToDomain(rows[i])
 	}
 	return out, nil
+}
+
+func (r *StepRunRepo) GetByJobAndStepKey(ctx context.Context, jobID, stepKey string) (*domain.StepRun, error) {
+	var row model.StepRun
+	err := dal.FromContext(ctx, r.db).WithContext(ctx).
+		Where("job_id = ? AND step_key = ?", jobID, stepKey).First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return stepRunToDomain(&row), nil
 }
 
 func (r *StepRunRepo) ListByJobAndStatus(ctx context.Context, jobID string, status domain.StepRunStatus) ([]*domain.StepRun, error) {

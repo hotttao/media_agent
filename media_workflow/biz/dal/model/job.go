@@ -58,3 +58,42 @@ type StepRun struct {
 }
 
 func (StepRun) TableName() string { return "media_workflow.step_runs" }
+
+type WorkerDispatch struct {
+	ID                  string         `gorm:"column:id;primaryKey"`
+	ConductorTaskID     string         `gorm:"column:conductor_task_id;not null"`
+	ConductorWorkflowID string         `gorm:"column:conductor_workflow_id;not null"`
+	JobID               string         `gorm:"column:job_id;not null"`
+	StepRunID           string         `gorm:"column:step_run_id;not null"`
+	Attempt             int            `gorm:"column:attempt;not null"`
+	CapabilityKey       string         `gorm:"column:capability_key;not null"`
+	CapabilityVersion   int            `gorm:"column:capability_version;not null"`
+	UserID              string         `gorm:"column:user_id;not null"`
+	OrganizationID      string         `gorm:"column:organization_id;not null"`
+	CredentialID        string         `gorm:"column:credential_id;not null"`
+	WorkerInstanceID    string         `gorm:"column:worker_instance_id;not null"`
+	Status              string         `gorm:"column:status;not null"`
+	InputJSON           datatypes.JSON `gorm:"column:input_json;type:jsonb;not null"`
+	LeaseExpiresAt      time.Time      `gorm:"column:lease_expires_at;not null"`
+	CreatedAt           time.Time      `gorm:"column:created_at;not null"`
+	DeliveredAt         *time.Time     `gorm:"column:delivered_at"`
+	CompletedAt         *time.Time     `gorm:"column:completed_at"`
+}
+
+func (WorkerDispatch) TableName() string { return "media_workflow.worker_dispatches" }
+
+type WorkerResultInbox struct {
+	ID              string         `gorm:"column:id;primaryKey"`
+	DispatchID      string         `gorm:"column:dispatch_id;not null"`
+	Attempt         int            `gorm:"column:attempt;not null"`
+	Operation       string         `gorm:"column:operation;not null"`
+	IdempotencyKey  string         `gorm:"column:idempotency_key;not null"`
+	ResultJSON      datatypes.JSON `gorm:"column:result_json;type:jsonb;not null"`
+	ResultDigest    string         `gorm:"column:result_digest;not null"`
+	ConductorStatus string         `gorm:"column:conductor_status;not null"`
+	LastError       string         `gorm:"column:last_error"`
+	CreatedAt       time.Time      `gorm:"column:created_at;not null"`
+	SubmittedAt     *time.Time     `gorm:"column:submitted_at"`
+}
+
+func (WorkerResultInbox) TableName() string { return "media_workflow.worker_result_inbox" }

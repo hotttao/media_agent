@@ -56,4 +56,10 @@ message VerifyTokenResponse {
   string role = 5;
   // service_token
   string token_type = 6;
+  string credential_id = 7;
+  string organization_id = 8;
+  string scope = 9;
+  int64 exp = 10;
+  string auth_source = 11;
+  map<string, string> ext = 12;
 }

@@ -18,6 +18,7 @@ import (
 	domain "media_agent/media_workflow/biz/domain/job"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
 	"media_agent/media_workflow/biz/shared/client"
+	"media_agent/media_workflow/biz/workflow/executable"
 )
 
 // GeneratedAssetSaver 落产物端口（由 client.MaterialsClient 实现，main.go 注入）。
@@ -121,10 +122,22 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 		_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobRunning, "")
 		return s.jobRepo.Get(ctx, jobID)
 	}
-	executionID, err := s.engine.Start(ctx, compilation.ConductorName, compilation.ConductorVersion, map[string]any{
+	var ir executable.ExecutableWorkflowIR
+	if err := json.Unmarshal(compilation.IRJSON, &ir); err != nil {
+		_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobFailed, err.Error())
+		return nil, fmt.Errorf("decode executable workflow IR: %w", err)
+	}
+	taskToDomain := make(map[string]string, len(ir.Steps))
+	executionDomain := domain.ExecutionDomainForUser(cmd.SubmittedBy)
+	for _, step := range ir.Steps {
+		if step.Capability.ConductorTaskDef != "" {
+			taskToDomain[step.Capability.ConductorTaskDef] = executionDomain
+		}
+	}
+	executionID, err := s.engine.Start(ctx, compilation.ConductorName, compilation.ConductorVersion, jobID, map[string]any{
 		"job_id": jobID,
 		"inputs": conductorInputs(cmd.Input),
-	})
+	}, taskToDomain)
 	if err != nil {
 		_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobFailed, err.Error())
 		return nil, fmt.Errorf("start conductor workflow: %w", err)

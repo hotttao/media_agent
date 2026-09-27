@@ -113,6 +113,15 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	authSvc.SetPlatformTokenEnsurer(stSvc)
 
 	organizationRepo := dalorganization.NewRepo(db)
+	membershipValidator := func(ctx context.Context, organizationID, userID string) bool {
+		organization, err := organizationRepo.Get(ctx, organizationID)
+		if err != nil || organization.Status != "active" {
+			return false
+		}
+		_, err = organizationRepo.GetMembership(ctx, organizationID, userID)
+		return err == nil
+	}
+	stSvc.SetMembershipValidator(membershipValidator)
 	organizationSvc := organizationservice.NewService(organizationRepo)
 	organizationhandler.Svc = organizationSvc
 	teaminternalhandler.OrganizationSvc = organizationSvc
@@ -134,6 +143,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 
 	// internal token service：复用 service_token TokenRepo + auth UserRepo（不新建 domain）。
 	tokenSvc := tokenservice.NewService(stRepo, userRepo)
+	tokenSvc.SetMembershipValidator(membershipValidator)
 	tokenhandler.TokenSvc = tokenSvc
 
 	// 重新装配 session middleware（支持 cookie JWT + Bearer service token）。

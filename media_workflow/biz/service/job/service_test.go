@@ -53,6 +53,14 @@ func (m *mockJobRepo) GetWithStepRuns(_ context.Context, id string) (*domain.Job
 	}
 	return j, m.stepRuns[id], nil
 }
+func (m *mockJobRepo) GetByConductorWorkflowID(_ context.Context, workflowID string) (*domain.Job, error) {
+	for _, item := range m.jobs {
+		if item.ConductorWorkflowID == workflowID {
+			return item, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
 func (m *mockJobRepo) List(_ context.Context, q domain.ListQuery) ([]*domain.Job, int, error) {
 	var out []*domain.Job
 	for _, j := range m.jobs {
@@ -111,6 +119,14 @@ func (m *mockStepRunRepo) ListByJob(_ context.Context, jobID string) ([]*domain.
 		}
 	}
 	return out, nil
+}
+func (m *mockStepRunRepo) GetByJobAndStepKey(_ context.Context, jobID, stepKey string) (*domain.StepRun, error) {
+	for _, item := range m.items {
+		if item.JobID == jobID && item.StepKey == stepKey {
+			return item, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
 }
 func (m *mockStepRunRepo) ListByJobAndStatus(_ context.Context, jobID string, status domain.StepRunStatus) ([]*domain.StepRun, error) {
 	var out []*domain.StepRun
@@ -210,9 +226,13 @@ type mockWorkflowEngine struct {
 	rerunTaskID     string
 	rerunInput      map[string]any
 	terminated      bool
+	correlationID   string
+	taskToDomain    map[string]string
 }
 
-func (m *mockWorkflowEngine) Start(context.Context, string, int, map[string]any) (string, error) {
+func (m *mockWorkflowEngine) Start(_ context.Context, _ string, _ int, correlationID string, _ map[string]any, taskToDomain map[string]string) (string, error) {
+	m.correlationID = correlationID
+	m.taskToDomain = taskToDomain
 	return "execution-1", nil
 }
 func (m *mockWorkflowEngine) Get(context.Context, string) (*domain.EngineExecution, error) {

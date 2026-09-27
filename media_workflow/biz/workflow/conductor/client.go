@@ -64,30 +64,20 @@ func (c *Client) RegisterWorkflow(ctx context.Context, definition compiler.Defin
 	return nil
 }
 
-func (c *Client) StartWorkflow(ctx context.Context, name string, version int, input map[string]any) (string, error) {
-	path := fmt.Sprintf("/api/workflow/%s?version=%d", url.PathEscape(name), version)
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return "", err
+type StartWorkflowRequest struct {
+	Name          string            `json:"name"`
+	Version       int               `json:"version"`
+	CorrelationID string            `json:"correlationId,omitempty"`
+	Input         map[string]any    `json:"input"`
+	TaskToDomain  map[string]string `json:"taskToDomain,omitempty"`
+}
+
+func (c *Client) StartWorkflow(ctx context.Context, request StartWorkflowRequest) (string, error) {
+	var id string
+	if err := c.doJSON(ctx, http.MethodPost, "/api/workflow", request, &id); err != nil {
+		return "", fmt.Errorf("conductor start workflow: %w", err)
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(encoded))
-	if err != nil {
-		return "", err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := c.http.Do(request)
-	if err != nil {
-		return "", err
-	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(response.Body, 8192))
-	if err != nil {
-		return "", err
-	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", fmt.Errorf("conductor start workflow: status=%d body=%s", response.StatusCode, body)
-	}
-	id := strings.Trim(string(body), "\" \n\r\t")
+	id = strings.TrimSpace(id)
 	if id == "" {
 		return "", errorsNew("conductor returned an empty workflow id")
 	}
@@ -102,10 +92,15 @@ type Task struct {
 	Status             string         `json:"status"`
 	InputData          map[string]any `json:"inputData"`
 	OutputData         map[string]any `json:"outputData"`
+	RetryCount         int            `json:"retryCount"`
 }
 
-func (c *Client) Poll(ctx context.Context, taskType, workerID string) (*Task, error) {
-	path := fmt.Sprintf("/api/tasks/poll/%s?workerid=%s", url.PathEscape(taskType), url.QueryEscape(workerID))
+func (c *Client) Poll(ctx context.Context, taskType, workerID, domain string) (*Task, error) {
+	values := url.Values{"workerid": []string{workerID}, "count": []string{"1"}, "timeout": []string{"20000"}}
+	if domain != "" {
+		values.Set("domain", domain)
+	}
+	path := fmt.Sprintf("/api/tasks/poll/batch/%s?%s", url.PathEscape(taskType), values.Encode())
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
 		return nil, err
@@ -115,21 +110,18 @@ func (c *Client) Poll(ctx context.Context, taskType, workerID string) (*Task, er
 		return nil, err
 	}
 	defer response.Body.Close()
-	if response.StatusCode == http.StatusNoContent {
-		return nil, nil
-	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
 		return nil, fmt.Errorf("conductor poll %s: status=%d body=%s", taskType, response.StatusCode, body)
 	}
-	var task Task
-	if err := json.NewDecoder(response.Body).Decode(&task); err != nil {
+	var tasks []Task
+	if err := json.NewDecoder(response.Body).Decode(&tasks); err != nil {
 		return nil, err
 	}
-	if task.TaskID == "" {
+	if len(tasks) == 0 || tasks[0].TaskID == "" {
 		return nil, nil
 	}
-	return &task, nil
+	return &tasks[0], nil
 }
 
 type TaskResult struct {
@@ -139,6 +131,7 @@ type TaskResult struct {
 	Status                string         `json:"status"`
 	OutputData            map[string]any `json:"outputData,omitempty"`
 	ReasonForIncompletion string         `json:"reasonForIncompletion,omitempty"`
+	CallbackAfterSeconds  int            `json:"callbackAfterSeconds,omitempty"`
 }
 
 func (c *Client) UpdateTask(ctx context.Context, result TaskResult) error {

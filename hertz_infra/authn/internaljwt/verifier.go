@@ -1,5 +1,5 @@
-// Package internaljwt verifies the short-lived identity assertion issued by
-// Ory Oathkeeper after it has authenticated a Kratos browser session.
+// Package internaljwt verifies short-lived identity assertions issued by
+// Ory Oathkeeper for browser sessions and service-token principals.
 package internaljwt
 
 import (
@@ -19,7 +19,14 @@ import (
 )
 
 type Claims struct {
-	PrincipalType string `json:"principal_type"`
+	PrincipalType  string `json:"principal_type"`
+	OrganizationID string `json:"organization_id,omitempty"`
+	CredentialID   string `json:"credential_id,omitempty"`
+	Scope          string `json:"scope,omitempty"`
+	AuthSource     string `json:"auth_source,omitempty"`
+	Username       string `json:"username,omitempty"`
+	Name           string `json:"name,omitempty"`
+	Role           string `json:"role,omitempty"`
 	jwt.RegisteredClaims
 }
 

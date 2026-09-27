@@ -1830,6 +1830,14 @@ components:
             properties:
                 name:
                     type: string
+                organization_id:
+                    type: string
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                expires_at:
+                    type: string
         CreateServiceTokenResponse:
             type: object
             properties:
@@ -1841,6 +1849,14 @@ components:
                     type: string
                     description: tos_xxx 明文,仅本次响应可见
                 created_at:
+                    type: string
+                organization_id:
+                    type: string
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                expires_at:
                     type: string
         CreateTeamRequest:
             type: object
@@ -2135,6 +2151,14 @@ components:
                     type: string
                 is_platform:
                     type: boolean
+                organization_id:
+                    type: string
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                expires_at:
+                    type: string
             description: ServiceTokenRecord —— 不含 token_hash / token 明文
         SetDefaultPromptRequest:
             type: object

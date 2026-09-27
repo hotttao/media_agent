@@ -11,6 +11,7 @@ package service_token
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -43,20 +44,37 @@ func CreateServiceToken(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	res, err := ServiceTokenSvc.CreateServiceToken(ctx, userID, req.GetName())
+	var expiresAt time.Time
+	if req.GetExpiresAt() != "" {
+		parsed, parseErr := time.Parse(time.RFC3339, req.GetExpiresAt())
+		if parseErr != nil {
+			c.JSON(consts.StatusBadRequest, map[string]string{"error": "expires_at must be RFC3339"})
+			return
+		}
+		expiresAt = parsed
+	}
+	res, err := ServiceTokenSvc.CreateServiceTokenWithAccess(ctx, userID, req.GetName(), req.GetOrganizationId(), req.GetScopes(), expiresAt)
 	if err != nil {
-		if errors.Is(err, stservice.ErrNameRequired) {
+		if errors.Is(err, stservice.ErrNameRequired) || errors.Is(err, stservice.ErrOrganizationRequired) ||
+			errors.Is(err, stservice.ErrExpiryRequired) || errors.Is(err, stservice.ErrInvalidScope) {
 			c.JSON(consts.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, stservice.ErrNotOrganizationMember) {
+			c.JSON(consts.StatusForbidden, map[string]string{"error": err.Error()})
 			return
 		}
 		c.JSON(consts.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	c.JSON(consts.StatusCreated, &stpb.CreateServiceTokenResponse{
-		Id:        res.ID,
-		Name:      res.Name,
-		Token:     res.Token,
-		CreatedAt: res.CreatedAt,
+		Id:             res.ID,
+		Name:           res.Name,
+		Token:          res.Token,
+		CreatedAt:      res.CreatedAt,
+		OrganizationId: res.OrganizationID,
+		Scopes:         res.Scopes,
+		ExpiresAt:      res.ExpiresAt,
 	})
 }
 
@@ -74,12 +92,15 @@ func ListServiceTokens(ctx context.Context, c *app.RequestContext) {
 	out := make([]*stpb.ServiceTokenRecord, 0, len(records))
 	for _, r := range records {
 		out = append(out, &stpb.ServiceTokenRecord{
-			Id:         r.ID,
-			Name:       r.Name,
-			CreatedBy:  r.CreatedBy,
-			CreatedAt:  r.CreatedAt,
-			RevokedAt:  r.RevokedAt,
-			IsPlatform: r.IsPlatform,
+			Id:             r.ID,
+			Name:           r.Name,
+			CreatedBy:      r.CreatedBy,
+			CreatedAt:      r.CreatedAt,
+			RevokedAt:      r.RevokedAt,
+			IsPlatform:     r.IsPlatform,
+			OrganizationId: r.OrganizationID,
+			Scopes:         r.Scopes,
+			ExpiresAt:      r.ExpiresAt,
 		})
 	}
 	c.JSON(consts.StatusOK, &stpb.ListServiceTokensResponse{Tokens: out})

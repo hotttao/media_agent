@@ -36,7 +36,7 @@ func TestVerifierAcceptsExpectedIssuerAudienceAndSubject(t *testing.T) {
 	defer server.Close()
 
 	now := time.Now()
-	claims := Claims{PrincipalType: "user", RegisteredClaims: jwt.RegisteredClaims{
+	claims := Claims{PrincipalType: "user", OrganizationID: "org-1", CredentialID: "token-1", Scope: "workflow.worker.poll workflow.worker.complete", AuthSource: "service_token", RegisteredClaims: jwt.RegisteredClaims{
 		Issuer: "http://oathkeeper:4456/", Subject: "identity-1",
 		Audience: jwt.ClaimStrings{"internal-api"}, IssuedAt: jwt.NewNumericDate(now),
 		ExpiresAt: jwt.NewNumericDate(now.Add(time.Minute)),
@@ -53,5 +53,8 @@ func TestVerifierAcceptsExpectedIssuerAudienceAndSubject(t *testing.T) {
 	}
 	if got.Subject != "identity-1" {
 		t.Fatalf("subject=%q", got.Subject)
+	}
+	if got.OrganizationID != "org-1" || got.CredentialID != "token-1" || got.AuthSource != "service_token" {
+		t.Fatalf("worker claims=%+v", got)
 	}
 }
