@@ -86,6 +86,21 @@ func (r *Repo) GetVersion(ctx context.Context, id string, version int) (*domain.
 	row, err := Q.TemplateVersion.WithContext(ctx).
 		Where(Q.TemplateVersion.TemplateID.Eq(id), Q.TemplateVersion.Version.Eq(version)).First()
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// 兼容旧 Update 只保存前一个版本快照的记录；当前版本仍在主表中。
+			current, currentErr := r.Get(ctx, id)
+			if currentErr == nil && current.Version == version {
+				return &domain.TemplateVersion{
+					TemplateID: current.ID, Version: current.Version,
+					PromptBody: current.PromptBody, OutputAssetKind: current.OutputAssetKind,
+					Platform: current.Platform, GenWay: current.GenWay, GenType: current.GenType,
+					NeedsConfirm: current.NeedsConfirm, CandidateCount: current.CandidateCount,
+					CapabilityKey: current.CapabilityKey, CapabilityVersion: current.CapabilityVersion,
+					InvocationMapping: current.InvocationMapping,
+					Inputs: current.Inputs, CreatedBy: current.CreatedBy, CreatedAt: current.CreatedAt,
+				}, nil
+			}
+		}
 		return nil, err
 	}
 	var inputs []domain.Slot
@@ -202,7 +217,25 @@ func (r *Repo) Update(ctx context.Context, t *domain.Template, snapshot *domain.
 			return err
 		}
 	}
-	return nil
+	// 当前版本也须立即冻结；Workflow 发布会按该版本查询 template_versions。
+	inputsJSON, err := json.Marshal(t.Inputs)
+	if err != nil {
+		return err
+	}
+	invocationJSON, err := json.Marshal(t.InvocationMapping)
+	if err != nil {
+		return err
+	}
+	return dal.FromContext(ctx, r.db).WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).Create(&model.TemplateVersion{
+			ID: "tv_" + t.ID + "_" + pad(t.Version), TemplateID: t.ID, Version: t.Version,
+			PromptBody: t.PromptBody, OutputAssetKind: t.OutputAssetKind,
+			Platform: t.Platform, GenWay: t.GenWay, GenType: t.GenType,
+			NeedsConfirm: t.NeedsConfirm, CandidateCount: t.CandidateCount,
+			CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion,
+			InvocationMapping: invocationJSON, InputsSnapshot: inputsJSON,
+			CreatedBy: t.CreatedBy, CreatedAt: time.Now(),
+		}).Error
 }
 
 func (r *Repo) UpdateStatus(ctx context.Context, id string, status domain.Status) error {

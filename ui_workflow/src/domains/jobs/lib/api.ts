@@ -25,14 +25,54 @@ import { api } from "@/foundation/lib/api-client";
 import type {
   GetJobResponse,
   Job,
+  JobStatus,
   JobListParams,
   JobsPage,
   RetryJobInput,
   StepRun,
+  StepRunStatus,
   SubmitJobInput,
   WorkflowOption,
   WorkflowsListResponse,
 } from "../types";
+
+const JOB_STATUSES: JobStatus[] = [
+  "pending", "pending", "running", "need_confirm", "succeeded", "failed", "cancelled",
+];
+const STEP_STATUSES: StepRunStatus[] = [
+  "blocked", "blocked", "pending", "claimed", "need_confirm", "succeeded", "failed", "skipped",
+];
+
+type WireJob = Omit<Job, "status" | "retry_history"> & {
+  status: number | JobStatus;
+  retry_history?: string | Job["retry_history"];
+};
+type WireStepRun = Omit<StepRun, "status" | "resolved_inputs"> & {
+  status: number | StepRunStatus;
+  resolved_inputs?: string | StepRun["resolved_inputs"];
+};
+
+function parseJSON<T>(value: string | T | undefined, fallback: T): T {
+  if (typeof value !== "string") return value ?? fallback;
+  try { return JSON.parse(value) as T; } catch { return fallback; }
+}
+
+function normalizeJob(job: WireJob): Job {
+  return {
+    ...job,
+    status: typeof job.status === "number" ? JOB_STATUSES[job.status] ?? "pending" : job.status,
+    retry_history: parseJSON(job.retry_history, []),
+  };
+}
+
+function normalizeStepRun(stepRun: WireStepRun): StepRun {
+  return {
+    ...stepRun,
+    status: typeof stepRun.status === "number" ? STEP_STATUSES[stepRun.status] ?? "blocked" : stepRun.status,
+    resolved_inputs: parseJSON(stepRun.resolved_inputs, {}),
+    candidates: stepRun.candidates ?? [],
+  };
+}
 
 function buildQuery(params: object): string {
   const qs = new URLSearchParams();
@@ -46,34 +86,39 @@ function buildQuery(params: object): string {
 // ── Job ─────────────────────────────────────────────────────────────────
 
 export async function listJobs(params: JobListParams = {}): Promise<JobsPage> {
-  return api.request<JobsPage>(`/jobs${buildQuery(params)}`);
+  const result = await api.request<{ items?: WireJob[]; total: number }>(`/jobs${buildQuery(params)}`);
+  return { ...result, items: (result.items ?? []).map(normalizeJob) };
 }
 
 export async function getJob(id: string): Promise<GetJobResponse> {
-  return api.request<GetJobResponse>(`/jobs/${encodeURIComponent(id)}`);
+  const result = await api.request<{ job: WireJob; step_runs?: WireStepRun[] }>(`/jobs/${encodeURIComponent(id)}`);
+  return { job: normalizeJob(result.job), step_runs: (result.step_runs ?? []).map(normalizeStepRun) };
 }
 
-export async function submitJob(input: SubmitJobInput): Promise<Job> {
-  return api.request<Job>("/jobs", {
+export async function submitJob(input: SubmitJobInput): Promise<{ id: string }> {
+  const result = await api.request<{ job_id: string }>("/jobs", {
     method: "POST",
     body: JSON.stringify(input),
   });
+  return { id: result.job_id };
 }
 
 export async function cancelJob(id: string): Promise<Job> {
-  return api.request<Job>(`/jobs/${encodeURIComponent(id)}/cancel`, {
+  const result = await api.request<WireJob>(`/jobs/${encodeURIComponent(id)}/cancel`, {
     method: "POST",
   });
+  return normalizeJob(result);
 }
 
 export async function retryJob(
   id: string,
   body: RetryJobInput = {},
 ): Promise<Job> {
-  return api.request<Job>(`/jobs/${encodeURIComponent(id)}/retry`, {
+  const result = await api.request<WireJob>(`/jobs/${encodeURIComponent(id)}/retry`, {
     method: "POST",
     body: JSON.stringify(body),
   });
+  return normalizeJob(result);
 }
 
 // ── StepRun (user-facing) ───────────────────────────────────────────────
@@ -82,20 +127,22 @@ export async function confirmStepRun(
   stepRunId: string,
   selectedIndex: number,
 ): Promise<StepRun> {
-  return api.request<StepRun>(
+  const result = await api.request<WireStepRun>(
     `/step-runs/${encodeURIComponent(stepRunId)}/confirm`,
     {
       method: "POST",
       body: JSON.stringify({ selected_index: selectedIndex }),
     },
   );
+  return normalizeStepRun(result);
 }
 
 export async function regenerateStepRun(stepRunId: string): Promise<StepRun> {
-  return api.request<StepRun>(
+  const result = await api.request<WireStepRun>(
     `/step-runs/${encodeURIComponent(stepRunId)}/regenerate`,
     { method: "POST" },
   );
+  return normalizeStepRun(result);
 }
 
 // ── Workflow list (minimal projection for JobCreate selector) ───────────

@@ -7,7 +7,9 @@ test("renders the workflow as a FlowGram canvas instead of JSON", async ({
   await page.getByRole("button", { name: /^(Workflow|工作流)$/ }).click();
   await page.getByRole("tab", { name: /^(Workflows|工作流)$/ }).click();
 
-  const workflowCard = page.getByRole("article").first();
+  const workflowCard = page
+    .getByRole("article")
+    .filter({ hasText: "media_ai · 图片与动作视频生成（联调样本）" });
   await expect(workflowCard).toBeVisible();
   await workflowCard
     .getByRole("button")
@@ -16,7 +18,7 @@ test("renders the workflow as a FlowGram canvas instead of JSON", async ({
 
   await expect(page.getByText("FlowGram", { exact: true })).toBeVisible();
   await expect(page.locator(".workflow-graph")).toBeVisible();
-  await expect(page.locator(".workflow-node-card")).toHaveCount(9);
+  await expect(page.locator(".workflow-node-card")).toHaveCount(5);
   await expect(page.locator("pre")).toHaveCount(0);
   await expect(page.getByText("选择一个节点")).toBeVisible();
 

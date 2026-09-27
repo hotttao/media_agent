@@ -19,7 +19,7 @@ Workflow App 根据已发布 Workflow 的 Input Schema 生成 Job 输入表单�
 2. `PRODUCT`、`VIRTUAL_IP` 分别显示当前 Organization 与 Workflow Scope 下的资源选择器。
 3. `MATERIAL`、`ASSET` 使用 Input Schema 冻结的 `asset_kind` 查询兼容资源；同一 Workflow 可以出现两个相同 kind 的独立输入，例如 `movement_a`、`movement_b`。
 4. required 输入未选择时禁用提交，并在对应字段显示原因；可选输入允许留空。
-5. UI 把选中对象映射为自包含 JobInput bundle，并携带 Workflow 当前版本提交。成功后打开 Job 详情。
+5. UI 把选中对象映射为自包含 JobInput bundle；Product 输入包含业务 ID 与主图（无主图则首图）的可访问 URL。携带 Workflow 当前版本提交，成功后打开 Job 详情。
 6. Workflow 切换会清空旧选择并加载新候选，不能把前一个 Workflow 的资源静默带入。
 
 ## 状态与失败

@@ -46,12 +46,14 @@ export async function buildJobInput(
     switch (entry.resource_type) {
       case "PRODUCT": {
         const product = selected as Product;
+        const image = product.images?.find((item) => item.is_main) ?? product.images?.[0];
         input.product = {
           id: product.id,
           name: product.name,
           target_audience: product.target_audience,
           product_details: product.product_details,
           display_actions: asString(product.display_actions),
+          image_url: await resolveObject(image?.object_path),
         };
         break;
       }

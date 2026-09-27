@@ -21,6 +21,7 @@ export interface ProductData {
   target_audience?: string;
   product_details?: string;
   display_actions?: string;
+  image_url?: string;
 }
 
 export interface VirtualIpData {

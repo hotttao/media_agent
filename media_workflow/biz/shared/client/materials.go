@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -122,6 +123,7 @@ func (c *MaterialsClient) UpsertGeneratedAsset(ctx context.Context, req *UpsertG
 		return "", err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Media-Materials-Internal-Token", os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN"))
 	ctx, span := startDownstreamRequest(ctx, httpReq, "media_materials.UpsertGeneratedAsset")
 	defer span.End()
 	httpReq = httpReq.WithContext(ctx)

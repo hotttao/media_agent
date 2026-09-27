@@ -9,7 +9,9 @@ services:
     - ../docker-compose/.env.${INFRA:-unit}
     environment:
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-materials?sslmode=disable
-      MEDIA_AUTH_URL: http://host.docker.internal:8001
+      MEDIA_AUTH_URL: http://media_auth:8001
+      MEDIA_AUTH_INTERNAL_TOKEN: ${MEDIA_AUTH_INTERNAL_TOKEN:-dev-media-auth-internal-token}
+      MEDIA_MATERIALS_INTERNAL_TOKEN: ${MEDIA_MATERIALS_INTERNAL_TOKEN:-dev-media-materials-internal-token}
       INTERNAL_JWKS_URL: http://host.docker.internal:18080/.well-known/jwks.json
       ORY_KRATOS_PUBLIC_URL: http://host.docker.internal:18080
       MEDIA_STORAGE_PROVIDER: s3

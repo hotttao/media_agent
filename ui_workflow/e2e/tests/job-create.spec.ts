@@ -13,11 +13,10 @@ test("creates a typed job form from the published workflow contract", async ({
 
   await page.getByText("选择已发布的工作流").click();
   await page
-    .getByRole("option", { name: /media_ai · 完整带货视频生成/ })
+    .getByRole("option", { name: /media_ai · 图片与动作视频生成/ })
     .click();
 
-  await expect(page.getByText("movement_a · movement").first()).toBeVisible();
-  await expect(page.getByText("movement_b · movement").first()).toBeVisible();
+  await expect(page.getByText("movement · movement").first()).toBeVisible();
   await expect(page.getByText("pose · pose").first()).toBeVisible();
   await expect(page.getByText("scene · scene").first()).toBeVisible();
   await expect(page.getByText("product · 商品").first()).toBeVisible();
@@ -26,8 +25,7 @@ test("creates a typed job form from the published workflow contract", async ({
   await expect(submit).toBeDisabled();
 
   for (const label of [
-    "movement_a · movement",
-    "movement_b · movement",
+    "movement · movement",
     "pose · pose",
     "product · 商品",
     "scene · scene",
@@ -35,11 +33,16 @@ test("creates a typed job form from the published workflow contract", async ({
   ]) {
     await page.getByText(`选择${label}`, { exact: true }).click();
     await expect(page.getByRole("option").first()).toBeVisible();
-    await page.getByRole("option").first().click();
+    await page.getByRole("option").filter({ hasNotText: "孤儿" }).first().click();
   }
 
-  // Selecting every required typed input makes the form ready, but this E2E
-  // deliberately does not click submit: only one migrated execution is
-  // allowed until the user confirms its result.
   await expect(submit).toBeEnabled();
+  // Explicit one-shot integration mode; ordinary E2E runs never create jobs.
+  if (process.env.E2E_EXECUTE_SAMPLE === "true") {
+    await submit.click();
+    const jobId = page.locator("dd").first();
+    await expect(page.getByText("Job ID", { exact: true })).toBeVisible();
+    await expect(jobId).toHaveText(/^job_/);
+    console.log(`Created sample job: ${await jobId.textContent()}`);
+  }
 });

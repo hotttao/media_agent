@@ -752,13 +752,20 @@ func (s *Service) finalizeStepRun(ctx context.Context, sr *domain.StepRun, selec
 	if err != nil {
 		return err
 	}
-	assetID, err := s.materials.UpsertGeneratedAsset(ctx, &client.UpsertGenAssetReq{
+	request := &client.UpsertGenAssetReq{
 		Scope: job.Scope, AssetKind: sr.AssetKind,
 		Name: safeName(sr.StepKey, sr.ID),
 		URL:  selected.URL, Content: selected.Content,
 		OwnerUserID: job.SubmittedBy, Visibility: "private",
 		JobID: sr.JobID, StepRunID: sr.ID, TemplateID: sr.TemplateID, TemplateVersion: sr.TemplateVersion,
-	})
+	}
+	if job.Input.Product != nil {
+		request.SourceProductID = job.Input.Product.ID
+	}
+	if job.Input.VirtualIP != nil {
+		request.SourceVirtualIPID = job.Input.VirtualIP.ID
+	}
+	assetID, err := s.materials.UpsertGeneratedAsset(ctx, request)
 	if err != nil {
 		return fmt.Errorf("upsert generated_asset: %w", err)
 	}
@@ -899,7 +906,7 @@ func (s *Service) StartClaimTimeoutScanner(ctx context.Context) {
 func conductorInputs(input domain.JobInput) map[string]any {
 	result := make(map[string]any)
 	if input.Product != nil {
-		result["product"] = map[string]any{"value": input.Product, "asset_ref": input.Product.ID}
+		result["product"] = map[string]any{"value": input.Product, "asset_ref": input.Product.ImageURL}
 	}
 	if input.VirtualIP != nil {
 		result["virtual_ip"] = map[string]any{"value": input.VirtualIP, "asset_ref": input.VirtualIP.FullBodyURL}

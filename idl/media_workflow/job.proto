@@ -68,6 +68,7 @@ message AssetData { string name = 1; string url = 2; string content = 3; string 
 message ProductData {
   string id = 1; string name = 2; string target_audience = 3;
   string product_details = 4; string display_actions = 5;
+  string image_url = 6;
 }
 message VirtualIpData {
   string id = 1; string name = 2; string avatar_url = 3;

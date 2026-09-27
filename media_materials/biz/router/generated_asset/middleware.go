@@ -4,18 +4,32 @@ package generated_asset
 
 import (
 	"context"
+	"crypto/subtle"
+	"os"
+	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
 
 func rootMw() []app.HandlerFunc {
-	return []app.HandlerFunc{milestoneDisabled}
+	return []app.HandlerFunc{authorizeInternalWrite}
 }
 
-func milestoneDisabled(_ context.Context, c *app.RequestContext) {
-	c.JSON(consts.StatusNotFound, map[string]string{"error": "route not available in this milestone"})
-	c.Abort()
+func authorizeInternalWrite(ctx context.Context, c *app.RequestContext) {
+	if !strings.HasPrefix(string(c.Path()), "/api/internal/v1/generated-assets:upsert") {
+		c.JSON(consts.StatusNotFound, map[string]string{"error": "route not available in this milestone"})
+		c.Abort()
+		return
+	}
+	expected := os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN")
+	actual := c.Request.Header.Peek("X-Media-Materials-Internal-Token")
+	if expected == "" || subtle.ConstantTimeCompare(actual, []byte(expected)) != 1 {
+		c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal token"})
+		c.Abort()
+		return
+	}
+	c.Next(ctx)
 }
 
 func _apiMw() []app.HandlerFunc {

@@ -6,6 +6,7 @@ import "time"
 // job_id / step_run_id 跨库指向 media_workflow（无 FK）。
 type GeneratedAsset struct {
 	ID                string     `gorm:"column:id;primaryKey"`
+	OrganizationID    string     `gorm:"column:organization_id;not null"`
 	Scope             string     `gorm:"column:scope;not null"`
 	Name              string     `gorm:"column:name;not null"`
 	AssetKind         string     `gorm:"column:asset_kind;not null"`

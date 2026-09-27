@@ -211,7 +211,7 @@ func jobInputFromPB(in *pb.JobInput) domain.JobInput {
 	}
 	if in.GetProduct() != nil {
 		p := in.GetProduct()
-		ji.Product = &domain.ProductData{ID: p.GetId(), Name: p.GetName(), TargetAudience: p.GetTargetAudience(), ProductDetails: p.GetProductDetails(), DisplayActions: p.GetDisplayActions()}
+		ji.Product = &domain.ProductData{ID: p.GetId(), Name: p.GetName(), TargetAudience: p.GetTargetAudience(), ProductDetails: p.GetProductDetails(), DisplayActions: p.GetDisplayActions(), ImageURL: p.GetImageUrl()}
 	}
 	if in.GetVirtualIp() != nil {
 		v := in.GetVirtualIp()
@@ -229,7 +229,7 @@ func jobInputFromPB(in *pb.JobInput) domain.JobInput {
 func jobInputToPB(ji domain.JobInput) *pb.JobInput {
 	out := &pb.JobInput{}
 	if ji.Product != nil {
-		out.Product = &pb.ProductData{Id: ji.Product.ID, Name: ji.Product.Name, TargetAudience: ji.Product.TargetAudience, ProductDetails: ji.Product.ProductDetails, DisplayActions: ji.Product.DisplayActions}
+		out.Product = &pb.ProductData{Id: ji.Product.ID, Name: ji.Product.Name, TargetAudience: ji.Product.TargetAudience, ProductDetails: ji.Product.ProductDetails, DisplayActions: ji.Product.DisplayActions, ImageUrl: ji.Product.ImageURL}
 	}
 	if ji.VirtualIP != nil {
 		out.VirtualIp = &pb.VirtualIpData{Id: ji.VirtualIP.ID, Name: ji.VirtualIP.Name, AvatarUrl: ji.VirtualIP.AvatarURL, FullBodyUrl: ji.VirtualIP.FullBodyURL, ThreeViewUrl: ji.VirtualIP.ThreeViewURL, NineViewUrl: ji.VirtualIP.NineViewURL}

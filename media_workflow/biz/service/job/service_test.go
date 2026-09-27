@@ -13,6 +13,19 @@ import (
 	"media_agent/media_workflow/biz/shared/client"
 )
 
+func TestConductorInputsUsesProductImageURL(t *testing.T) {
+	input := domain.JobInput{Product: &domain.ProductData{
+		ID: "product-1", ImageURL: "https://storage.example/products/main.png",
+	}}
+	product, ok := conductorInputs(input)["product"].(map[string]any)
+	if !ok {
+		t.Fatal("product input is missing")
+	}
+	if got := product["asset_ref"]; got != input.Product.ImageURL {
+		t.Fatalf("asset_ref = %v, want product image URL", got)
+	}
+}
+
 // —— mock repos ——
 
 type mockJobRepo struct {

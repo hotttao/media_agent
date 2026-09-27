@@ -54,7 +54,7 @@ export function JobCreate({
       selectedWorkflow,
       selectedIds,
       optionsQuery.data ?? {},
-      resolveLibraryObject,
+      (path) => resolveLibraryObject(shell.organization.id, path),
     );
     submitJob.mutate(
       {

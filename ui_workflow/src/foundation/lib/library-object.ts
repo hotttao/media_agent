@@ -16,10 +16,14 @@ export interface UploadedLibraryObject {
 }
 
 export async function resolveLibraryObject(
+  organizationId: string,
   objectPath?: string,
 ): Promise<string> {
   if (!objectPath) return "";
-  const query = new URLSearchParams({ object_path: objectPath });
+  const query = new URLSearchParams({
+    organization_id: organizationId,
+    object_path: objectPath,
+  });
   const result = await api.request<{ url: string }>(
     `/library-objects:resolve?${query.toString()}`,
   );

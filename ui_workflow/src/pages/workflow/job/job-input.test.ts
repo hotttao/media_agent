@@ -48,6 +48,10 @@ describe("job input form mapping", () => {
             created_at: "",
             updated_at: "",
             display_actions: ["转身"],
+            images: [
+              { id: "secondary", object_path: "secondary.png", is_main: false },
+              { id: "main", object_path: "product.png", is_main: true },
+            ],
           },
         ],
         movement: [
@@ -82,6 +86,7 @@ describe("job input form mapping", () => {
     );
 
     expect(input.product?.display_actions).toBe('["转身"]');
+    expect(input.product?.image_url).toBe("https://storage/product.png");
     expect(input.material).toEqual([
       {
         name: "movement",

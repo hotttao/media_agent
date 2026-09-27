@@ -13,15 +13,18 @@ import (
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_materials/biz/dal"
 	assetkindrepo "media_agent/media_materials/biz/dal/repo/asset_kind"
+	generatedassetrepo "media_agent/media_materials/biz/dal/repo/generated_asset"
 	materialrepo "media_agent/media_materials/biz/dal/repo/material"
 	productrepo "media_agent/media_materials/biz/dal/repo/product"
 	viprepo "media_agent/media_materials/biz/dal/repo/virtual_ip"
 	assetkindhandler "media_agent/media_materials/biz/handler/asset_kind"
+	generatedassethandler "media_agent/media_materials/biz/handler/generated_asset"
 	libraryobjecthandler "media_agent/media_materials/biz/handler/library_object"
 	materialhandler "media_agent/media_materials/biz/handler/material"
 	producthandler "media_agent/media_materials/biz/handler/product"
 	viphandler "media_agent/media_materials/biz/handler/virtual_ip"
 	assetkindsvc "media_agent/media_materials/biz/service/asset_kind"
+	generatedassetsvc "media_agent/media_materials/biz/service/generated_asset"
 	materialsvc "media_agent/media_materials/biz/service/material"
 	productsvc "media_agent/media_materials/biz/service/product"
 	vipsvc "media_agent/media_materials/biz/service/virtual_ip"
@@ -80,6 +83,7 @@ func main() {
 	vipGrantRepo := viprepo.NewGrantRepo(db)
 	vipSvc := vipsvc.NewService(vipRepo, vipGrantRepo)
 	viphandler.Svc = vipSvc
+	generatedassethandler.Svc = generatedassetsvc.NewService(generatedassetrepo.NewRepo(db), productRepo, vipRepo)
 
 	materialRepo := materialrepo.NewRepo(db)
 	materialSvc := materialsvc.NewService(materialRepo, nil, assetKindSvc, nil)

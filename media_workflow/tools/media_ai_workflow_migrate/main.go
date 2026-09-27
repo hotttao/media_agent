@@ -12,18 +12,22 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
+	texttemplate "text/template"
 	"time"
 )
 
-const workflowName = "media_ai · 完整带货视频生成（联调样本）"
+const workflowName = "media_ai · 图片与动作视频生成（联调样本）"
 
 type config struct {
 	baseURL           string
 	scope             string
 	sessionCookieName string
 	sessionCookie     string
+	sessionStatePath  string
 	bearerToken       string
+	archiveWorkflowID string
 	dryRun            bool
 }
 
@@ -35,6 +39,15 @@ type client struct {
 type resourceRef struct {
 	ID      string `json:"id"`
 	Version int    `json:"version"`
+}
+
+type templateRecord struct {
+	resourceRef
+	Name            string `json:"name"`
+	PromptBody      string `json:"prompt_body"`
+	OutputAssetKind string `json:"output_asset_kind"`
+	CapabilityKey   string `json:"capability_key"`
+	Status          int    `json:"status"`
 }
 
 type templateSpec struct {
@@ -53,15 +66,28 @@ func main() {
 	flag.StringVar(&cfg.scope, "scope", env("MEDIA_WORKFLOW_SCOPE", "ai_clothing"), "目标 Scope")
 	flag.StringVar(&cfg.sessionCookieName, "session-cookie-name", env("MEDIA_WORKFLOW_SESSION_COOKIE_NAME", "ory_kratos_session"), "会话 cookie 名")
 	flag.StringVar(&cfg.sessionCookie, "session-cookie", env("MEDIA_E2E_KRATOS_SESSION_COOKIE", ""), "会话 cookie")
+	flag.StringVar(&cfg.sessionStatePath, "session-state", "", "Playwright storage-state.json 路径（从中读取会话 Cookie）")
 	flag.StringVar(&cfg.bearerToken, "bearer-token", env("MEDIA_WORKFLOW_BEARER_TOKEN", ""), "Bearer token")
+	flag.StringVar(&cfg.archiveWorkflowID, "archive-workflow-id", "", "新 Workflow 发布成功后归档旧联调 Workflow ID")
+	promptDir := flag.String("prompt-dir", env("GPT_IMAGE2_PROMPT_DIR", "/home/tao/code/github/gpt_image2/prompts"), "gpt_image2 提示词目录")
 	flag.BoolVar(&cfg.dryRun, "dry-run", false, "只输出迁移定义")
 	flag.Parse()
 	cfg.baseURL = strings.TrimRight(cfg.baseURL, "/")
+	if cfg.sessionCookie == "" && cfg.sessionStatePath != "" {
+		var err error
+		cfg.sessionCookie, err = sessionCookieFromState(cfg.sessionStatePath, cfg.sessionCookieName)
+		if err != nil {
+			log.Fatalf("读取浏览器会话状态: %v", err)
+		}
+	}
 	if !cfg.dryRun && cfg.sessionCookie == "" && cfg.bearerToken == "" {
 		log.Fatal("需要 MEDIA_E2E_KRATOS_SESSION_COOKIE、--session-cookie 或 --bearer-token")
 	}
 
-	specs := fixtureTemplates()
+	specs, err := fixtureTemplates(*promptDir)
+	if err != nil {
+		log.Fatalf("读取 gpt_image2 提示词: %v", err)
+	}
 	if cfg.dryRun {
 		encoded, _ := json.MarshalIndent(map[string]any{"templates": specs, "workflow": workflowName}, "", "  ")
 		fmt.Println(string(encoded))
@@ -84,11 +110,74 @@ func main() {
 	if err != nil {
 		log.Fatalf("迁移 Workflow: %v", err)
 	}
+	if cfg.archiveWorkflowID != "" {
+		if cfg.archiveWorkflowID == workflow.ID {
+			log.Fatal("旧 Workflow ID 不得与新 Workflow ID 相同")
+		}
+		if err := c.json(ctx, http.MethodPost, "/api/v1/workflows/"+url.PathEscape(cfg.archiveWorkflowID)+"/archive", nil, nil); err != nil {
+			log.Fatalf("新 Workflow %s 已发布，但旧 Workflow %s 归档失败: %v", workflow.ID, cfg.archiveWorkflowID, err)
+		}
+	}
 	encoded, _ := json.Marshal(map[string]any{"workflow_id": workflow.ID, "workflow_version": workflow.Version, "name": workflowName})
 	fmt.Println(string(encoded))
 }
 
-func fixtureTemplates() []templateSpec {
+func sessionCookieFromState(path, name string) (string, error) {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	var state struct {
+		Cookies []struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"cookies"`
+	}
+	if err := json.Unmarshal(contents, &state); err != nil {
+		return "", err
+	}
+	for _, cookie := range state.Cookies {
+		if cookie.Name == name && cookie.Value != "" {
+			return cookie.Value, nil
+		}
+	}
+	return "", fmt.Errorf("会话状态中没有 %s Cookie", name)
+}
+
+func fixtureTemplates(promptDir string) ([]templateSpec, error) {
+	readPrompt := func(name string) (string, error) {
+		contents, err := os.ReadFile(filepath.Join(promptDir, name))
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", name, err)
+		}
+		return strings.TrimSpace(string(contents)), nil
+	}
+	modelPrompt, err := readPrompt("03_模特图.md")
+	if err != nil {
+		return nil, err
+	}
+	stylePrompt, err := readPrompt("04_定妆图.md")
+	if err != nil {
+		return nil, err
+	}
+	firstFramePrompt, err := readPrompt("05_首帧图.md")
+	if err != nil {
+		return nil, err
+	}
+	videoPrompt, err := readPrompt("06_文生视频提示词.md")
+	if err != nil {
+		return nil, err
+	}
+	// gpt_image2 用字符串替换“动作细节”；本服务用 Go Template 渲染槽位上下文。
+	videoPrompt = strings.ReplaceAll(videoPrompt, "{{ 动作细节 }}", "{{.movement.content}}")
+	if videoPrompt == "" {
+		return nil, errors.New("06_文生视频提示词.md 为空")
+	}
+	for _, prompt := range []string{modelPrompt, stylePrompt, firstFramePrompt, videoPrompt} {
+		if _, err := texttemplate.New("prompt").Option("missingkey=error").Parse(prompt); err != nil {
+			return nil, fmt.Errorf("提示词不符合模板语法: %w", err)
+		}
+	}
 	asset := func(name, kind string) map[string]any {
 		return map[string]any{"name": name, "asset_kind": kind, "resource_type": "ASSET", "required": true}
 	}
@@ -109,23 +198,56 @@ func fixtureTemplates() []templateSpec {
 		}
 	}
 	return []templateSpec{
-		{Key: "model", Name: "media_ai · 生成模特图", Prompt: "生成模特商品图；人物={{.virtual_ip.asset_ref}}；商品={{.product.asset_ref}}", OutputAssetKind: "model_image", CapabilityKey: "media.image.model", Slots: []map[string]any{container("virtual_ip", "VIRTUAL_IP", "virtual_ip"), container("product", "PRODUCT", "product")}, Invocation: invocation("virtual_ip", "product")},
-		{Key: "style", Name: "media_ai · 生成定妆图", Prompt: "生成定妆图；模特={{.model.asset_ref}}；姿势={{.pose.asset_ref}}", OutputAssetKind: "style_image", CapabilityKey: "media.image.style", Slots: []map[string]any{asset("model", "model_image"), material("pose", "pose")}, Invocation: invocation("model", "pose")},
-		{Key: "first_frame", Name: "media_ai · 生成首帧", Prompt: "生成视频首帧；定妆图={{.style.asset_ref}}；场景={{.scene.asset_ref}}", OutputAssetKind: "first_frame", CapabilityKey: "media.image.first_frame", Slots: []map[string]any{asset("style", "style_image"), material("scene", "scene")}, Invocation: invocation("style", "scene")},
-		{Key: "video", Name: "media_ai · 生成动作视频", Prompt: "生成动作视频；首帧={{.first_frame.asset_ref}}；动作={{.movement.asset_ref}}", OutputAssetKind: "ai_video", CapabilityKey: "media.video.generate", Slots: []map[string]any{asset("first_frame", "first_frame"), material("movement", "movement")}, Invocation: invocation("first_frame", "movement")},
-		{Key: "clip", Name: "media_ai · 剪辑成片", Prompt: "把两段动作视频剪辑为完整成片", OutputAssetKind: "final_video", CapabilityKey: "media.video.clip", Slots: []map[string]any{asset("video_a", "ai_video"), asset("video_b", "ai_video")}, Invocation: invocation("video_a", "video_b")},
-		{Key: "ai_fill", Name: "media_ai · 生成发布文案", Prompt: "根据成片生成标题和发布文案；视频={{.final_video.asset_ref}}", OutputAssetKind: "final_video", CapabilityKey: "media.content.ai_fill", Slots: []map[string]any{asset("final_video", "final_video")}, Invocation: invocation("final_video")},
-		{Key: "publish", Name: "media_ai · 发布到飞书", Prompt: "发布已完成的视频与文案", OutputAssetKind: "final_video", CapabilityKey: "media.publish.feishu", Slots: []map[string]any{asset("final_video", "final_video"), asset("publish_copy", "final_video")}, Invocation: invocation("final_video", "publish_copy")},
-	}
+		{Key: "model", Name: "media_ai · 生成模特图", Prompt: modelPrompt, OutputAssetKind: "model_image", CapabilityKey: "media.image.model", Slots: []map[string]any{container("virtual_ip", "VIRTUAL_IP", "virtual_ip"), container("product", "PRODUCT", "product")}, Invocation: invocation("virtual_ip", "product")},
+		{Key: "style", Name: "media_ai · 生成定妆图", Prompt: stylePrompt, OutputAssetKind: "style_image", CapabilityKey: "media.image.style", Slots: []map[string]any{asset("model", "model_image"), material("pose", "pose")}, Invocation: invocation("model", "pose")},
+		{Key: "first_frame", Name: "media_ai · 生成首帧", Prompt: firstFramePrompt, OutputAssetKind: "first_frame", CapabilityKey: "media.image.first_frame", Slots: []map[string]any{asset("style", "style_image"), material("scene", "scene")}, Invocation: invocation("style", "scene")},
+		{Key: "video", Name: "media_ai · 生成动作视频", Prompt: videoPrompt, OutputAssetKind: "ai_video", CapabilityKey: "media.video.generate", Slots: []map[string]any{asset("first_frame", "first_frame"), material("movement", "movement")}, Invocation: invocation("first_frame", "movement")},
+	}, nil
 }
 
 func (c *client) createAndPublishTemplate(ctx context.Context, spec templateSpec) (resourceRef, error) {
+	var listed struct {
+		Items []templateRecord `json:"items"`
+	}
+	query := url.Values{"scope": {c.config.scope}, "name": {spec.Name}, "page_size": {"200"}}
+	if err := c.json(ctx, http.MethodGet, "/api/v1/templates?"+query.Encode(), nil, &listed); err != nil {
+		return resourceRef{}, err
+	}
 	payload := map[string]any{
 		"name": spec.Name, "description": "从 media_ai scripts/workflow-cli 迁移的单样本联调模板",
 		"prompt_body": spec.Prompt, "inputs": spec.Slots, "output_asset_kind": spec.OutputAssetKind,
 		"platform": "client", "gen_way": spec.CapabilityKey, "gen_type": "media_ai_fixture",
 		"needs_confirm": false, "candidate_count": 1,
 		"capability_key": spec.CapabilityKey, "capability_version": 1, "invocation_mapping": spec.Invocation,
+	}
+	for _, existing := range listed.Items {
+		if existing.Name != spec.Name {
+			continue
+		}
+		if existing.Status == 3 {
+			return resourceRef{}, fmt.Errorf("Template %q 已归档，不能复用", spec.Name)
+		}
+		if existing.PromptBody == spec.Prompt && existing.OutputAssetKind == spec.OutputAssetKind && existing.CapabilityKey == spec.CapabilityKey {
+			if existing.Status == 1 {
+				if err := c.json(ctx, http.MethodPost, "/api/v1/templates/"+url.PathEscape(existing.ID)+"/publish", nil, nil); err != nil {
+					return resourceRef{}, err
+				}
+			}
+			return existing.resourceRef, nil
+		}
+		var updated resourceRef
+		if err := c.json(ctx, http.MethodPut, "/api/v1/templates/"+url.PathEscape(existing.ID), payload, &updated); err != nil {
+			return resourceRef{}, err
+		}
+		if updated.Version <= existing.Version {
+			return resourceRef{}, fmt.Errorf("Template %q 更新后没有递增版本", spec.Name)
+		}
+		if existing.Status == 1 {
+			if err := c.json(ctx, http.MethodPost, "/api/v1/templates/"+url.PathEscape(existing.ID)+"/publish", nil, nil); err != nil {
+				return resourceRef{}, err
+			}
+		}
+		return resourceRef{ID: existing.ID, Version: updated.Version}, nil
 	}
 	var created resourceRef
 	if err := c.json(ctx, http.MethodPost, "/api/v1/templates?scope="+url.QueryEscape(c.config.scope), payload, &created); err != nil {
@@ -151,13 +273,9 @@ func (c *client) createAndPublishWorkflow(ctx context.Context, templates map[str
 		step("model_image", "model", 1, map[string]any{"virtual_ip": binding(1, "virtual_ip"), "product": binding(1, "product")}),
 		step("style_image", "style", 2, map[string]any{"model": binding(2, "model_image"), "pose": binding(1, "pose")}),
 		step("first_frame", "first_frame", 3, map[string]any{"style": binding(2, "style_image"), "scene": binding(1, "scene")}),
-		step("video_a", "video", 4, map[string]any{"first_frame": binding(2, "first_frame"), "movement": binding(1, "movement_a")}),
-		step("video_b", "video", 5, map[string]any{"first_frame": binding(2, "first_frame"), "movement": binding(1, "movement_b")}),
-		step("clip", "clip", 6, map[string]any{"video_a": binding(2, "video_a"), "video_b": binding(2, "video_b")}),
-		step("ai_fill", "ai_fill", 7, map[string]any{"final_video": binding(2, "clip")}),
-		step("publish", "publish", 8, map[string]any{"final_video": binding(2, "clip"), "publish_copy": binding(2, "ai_fill")}),
+		step("video", "video", 4, map[string]any{"first_frame": binding(2, "first_frame"), "movement": binding(1, "movement")}),
 	}
-	payload := map[string]any{"name": workflowName, "description": "media_ai 七阶段完整视频生成流程；本轮只迁移一个联调样本", "output_step_key": "publish", "steps": steps}
+	payload := map[string]any{"name": workflowName, "description": "media_ai 图片与动作视频生成流程；不包含成片、发布文案与飞书发布", "output_step_key": "video", "steps": steps}
 	var created resourceRef
 	if err := c.json(ctx, http.MethodPost, "/api/v1/workflows?scope="+url.QueryEscape(c.config.scope), payload, &created); err != nil {
 		return resourceRef{}, err

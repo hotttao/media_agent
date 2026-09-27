@@ -392,8 +392,9 @@ export function WorkflowForm({
                 </Button>
               </div>
               <div className="grid gap-2">
-                <Label>节点标识</Label>
+                <Label htmlFor="workflow-step-key">节点标识</Label>
                 <Input
+                  id="workflow-step-key"
                   value={activeStep.key}
                   onChange={(e) =>
                     updateStep(selectedStep, { key: e.target.value })

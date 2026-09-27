@@ -17,6 +17,7 @@ const (
 // source_virtual_ip_id / source_product_id：生成时的输入容器（可达性 + 编排层 ListBySource 用）。
 type GeneratedAsset struct {
 	ID                string
+	OrganizationID    string
 	Scope             string
 	Name              string
 	AssetKind         string // resource_type=ASSET

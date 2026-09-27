@@ -86,7 +86,7 @@ http:
     auth:
       loadBalancer:
         servers:
-          - url: "http://host.docker.internal:8001"
+          - url: "http://media_auth:8001"
     materials:
       loadBalancer:
         servers:

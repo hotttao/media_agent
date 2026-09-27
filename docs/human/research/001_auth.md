@@ -60,3 +60,11 @@ conductor 我使用 /home/tao/code/github/infra/conductor/docker-compose.yaml �
 4. 共享的范围和具体资源的管理依旧是现在的模式
 
 workflow 节点的单输出是没问题，但是可能输出多张图片，需要用户反馈确定，并且确认是否重新生成。
+
+### 测试
+
+我补充一下测试要求:
+1. media_ai 里现在有一个完整的生成视频的 workflow ，我需要你迁移到当前系统上。
+2. capability 对应 conductor worker 我希望实现在客户端这一侧，所以我需要你实现一个 media_worker 的工具或者服务，当前的形态我还没有完全确定。但是可以确定的是这是一个 在客户端运行的。
+3. 联调测试的时候，我需要你启动 media_worker，在迁移 media_ai 的数据时候，真实启动 workflow，只不过 media_worker 会根据确定的任务直接 mock 返回 media_ai 里已经有的结果。这样就可以完整测试，workflow 的执行流程。
+4. 测试的时候，先只执行一个完整流程。我确认没有问题之后，再迁移所有数据。

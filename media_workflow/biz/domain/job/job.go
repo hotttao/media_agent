@@ -76,6 +76,7 @@ type ProductData struct {
 	TargetAudience string `json:"target_audience"`
 	ProductDetails string `json:"product_details"`
 	DisplayActions string `json:"display_actions"`
+	ImageURL       string `json:"image_url"`
 }
 type VirtualIpData struct {
 	ID           string `json:"id"`

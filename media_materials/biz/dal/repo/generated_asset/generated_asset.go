@@ -33,6 +33,16 @@ func (r *Repo) Get(ctx context.Context, id string) (*domain.GeneratedAsset, erro
 	return toDomain(row), nil
 }
 
+func (r *Repo) GetByStepRun(ctx context.Context, stepRunID string) (*domain.GeneratedAsset, error) {
+	Q := query.Use(dal.FromContext(ctx, r.db))
+	row, err := Q.GeneratedAsset.WithContext(ctx).
+		Where(Q.GeneratedAsset.StepRunID.Eq(stepRunID), Q.GeneratedAsset.DeletedAt.IsNull()).First()
+	if err != nil {
+		return nil, err
+	}
+	return toDomain(row), nil
+}
+
 func (r *Repo) List(ctx context.Context, q domain.ListQuery) ([]*domain.GeneratedAsset, int, error) {
 	Q := query.Use(dal.FromContext(ctx, r.db))
 	tx := Q.GeneratedAsset.WithContext(ctx).Where(Q.GeneratedAsset.DeletedAt.IsNull())
@@ -110,7 +120,7 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 
 func toModel(a *domain.GeneratedAsset) *model.GeneratedAsset {
 	return &model.GeneratedAsset{
-		ID: a.ID, Scope: a.Scope, Name: a.Name, AssetKind: a.AssetKind,
+		ID: a.ID, OrganizationID: a.OrganizationID, Scope: a.Scope, Name: a.Name, AssetKind: a.AssetKind,
 		URL: a.URL, Content: a.Content, OwnerUserID: a.OwnerUserID,
 		Visibility: string(a.Visibility), TeamID: a.TeamID,
 		JobID: a.JobID, StepRunID: a.StepRunID, TemplateID: a.TemplateID,
@@ -121,7 +131,7 @@ func toModel(a *domain.GeneratedAsset) *model.GeneratedAsset {
 
 func toDomain(row *model.GeneratedAsset) *domain.GeneratedAsset {
 	return &domain.GeneratedAsset{
-		ID: row.ID, Scope: row.Scope, Name: row.Name, AssetKind: row.AssetKind,
+		ID: row.ID, OrganizationID: row.OrganizationID, Scope: row.Scope, Name: row.Name, AssetKind: row.AssetKind,
 		URL: row.URL, Content: row.Content, OwnerUserID: row.OwnerUserID,
 		Visibility: domain.Visibility(row.Visibility), TeamID: row.TeamID,
 		JobID: row.JobID, StepRunID: row.StepRunID, TemplateID: row.TemplateID,
