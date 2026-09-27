@@ -1,5 +1,18 @@
 # execution domain 变更记录
 
+## 2026-09-27 · Worker Gateway、Dispatch 与 Task Domain
+
+- 客户端 Media Worker 不再直连 Conductor，改经统一网关与 media_workflow Worker Gateway API 领取、续租和完成任务。
+- 新增独立 WorkerDispatch 聚合与 Worker Result Inbox；结果先在本地幂等接收，再异步更新 Conductor。
+- Capability Task 在启动时通过 `taskToDomain` 按提交 User 隔离；禁止客户端指定 Domain、无域 fallback 或共享队列领取后再鉴权。
+- 客户端只看到 `dispatch_id + attempt`；Conductor task/workflow ID 留在服务端。
+- 输入 Object Path 在领取时转换为短时地址，输出先上传受控对象存储，再由 Finalizer 登记唯一 Generated Asset。
+
+## 2026-09-27 · Product 图片进入执行输入
+
+- JobInput 的 ProductData 新增 `image_url`，提交时冻结主图（无主图则首图）的可访问 URL。
+- 编译执行时 Product 的 `asset_ref` 使用该 URL，Product ID 继续保留在快照中；图片顺序仍由 Invocation Mapping 决定。
+
 ## 2026-09-26 · Conductor HUMAN 审批闭环
 
 - 编译结果冻结 `candidate_count/approval_required`，需要审批的 Step 在 Capability 与 Finalize 之间插入 HUMAN task。

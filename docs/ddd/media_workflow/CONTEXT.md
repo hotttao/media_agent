@@ -47,12 +47,20 @@ Template 的不可变快照，通过单调递增 version 区分，update 时新�
 _禁用替代词_：Conductor Task、Worker、Template
 
 **Capability Worker（能力执行器）**:
-运行在用户客户端环境、轮询 Conductor Capability Task 并实现 Execution Capability 的执行进程。它可以访问客户端本地模型、CLI、GPU 与 Provider 凭证；服务端只持有能力契约和调度状态，不持有客户端凭证。Capability Worker 不承担模板渲染、Workflow 编译或业务资源授权。
+运行在用户客户端环境、通过 Worker Gateway API 领取 Capability Task 并实现 Execution Capability 的执行进程。它可以访问客户端本地模型、CLI、GPU 与 Provider 凭证；服务端只持有能力契约和调度状态，不持有客户端 Provider 凭证。Capability Worker 不直接连接 Conductor，也不承担模板渲染、Workflow 编译或业务资源授权。
 _禁用替代词_：Server Worker、Template Renderer、Conductor
 
 **Media Worker（媒体执行客户端）**:
-承载一个或多个 Capability Worker 的客户端工具或常驻服务；通过稳定的 Conductor Task API 拉取任务、回报结果，并以 `worker_id` 标识实例。联调时可以启用显式 Mock Profile，但生产 Profile 必须调用真实本地能力。
+承载一个或多个 Capability Worker 的客户端工具或常驻服务；携带 Service Token 经统一网关调用稳定的 Worker Gateway API，以 `worker_instance_id` 标识实例，并声明支持的 Execution Capability Version。联调时可以启用显式 Mock Profile，但生产 Profile 必须调用真实本地能力。
 _禁用替代词_：media_workflow、Provider 服务、Mock Server
+
+**Worker Gateway API（客户端执行网关接口）**:
+由 `media_workflow` 提供、经统一网关认证的客户端任务协议，负责 Capability 注册、任务领取、心跳、完成与失败。它把 Execution Capability 映射为内部 Conductor Task Definition，并隐藏 Conductor task/workflow 标识。
+_禁用替代词_：Conductor Task API、Provider API、Browser API
+
+**Execution Domain（执行路由域）**:
+`media_workflow` 在启动 Conductor Workflow 时为 Capability Task 设置的领取隔离键。MVP 从 Job 提交用户派生；未来只有显式授权的 Organization Worker Pool 才能使用共享域。该值只由服务端计算，客户端不能指定，也不能回退到无域队列。
+_禁用替代词_：Organization、Workspace、Scope、Conductor Queue
 
 **Invocation Mapping（调用映射）**:
 Template Version 中把业务 Template Slot 转换为 Execution Capability 固定输入参数的声明式规则；例如把渲染结果映射到 `prompt`，把 `person`、`garment` 的资源引用按确定顺序组成 `images[]`。映射必须在 Workflow 发布时完成类型检查，禁止 Worker 根据 Slot 名猜测参数。
@@ -135,6 +143,14 @@ _禁用替代词_：Retry、Multi-output Step、Candidate
 **Step Execution Fragment（步骤执行片段）**:
 Conductor 中承载一个业务 Step 的固定版本子工作流。它编排复用判定、执行能力调用、候选持久化、人工确认和最终单输出，不改变 Step 的领域边界。
 _禁用替代词_：Business Step、Template
+
+**Worker Dispatch（客户端任务派发）**:
+一个 Conductor Capability Task 被 `media_workflow` 领取并租约式交付给某个 Media Worker 的持久记录；以不透明 `dispatch_id` 对外，绑定 Job、Step Run、attempt、User、Organization、Credential 与 Worker Instance。它与 Job/Step Run 分属不同一致性边界。
+_禁用替代词_：Conductor Task、Step Run、Worker Job
+
+**Worker Result Receipt（Worker 结果收据）**:
+`media_workflow` 接收 Worker 完成或失败结果后生成的幂等收据；先持久化结果 Inbox，再异步更新 Conductor，避免 Conductor 暂时不可用导致客户端重复执行 Provider 副作用。
+_禁用替代词_：Conductor Ack、Generated Asset、Step Output
 
 ### 校验
 

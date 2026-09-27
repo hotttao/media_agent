@@ -21,6 +21,7 @@ Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存
 - `media_auth` 是 Organization、Team 及成员关系的权威来源；Organization 表达企业及其可用功能上限，Team 表达企业内部门。
 - `media_control` 为 Team 创建和管理 Workspace；每个 Workspace 只属于一个 Team，并由该 Team 的 Organization 确定企业归属。
 - `media_auth` 向 Edge 和内部服务提供身份验证、企业/部门访问检查及受限凭据获取。
+- 客户端 `media_worker` 只能经统一网关进入系统：Edge 将 opaque Service Token 内省为短时 Internal Identity JWT，`media_workflow` 再执行 Organization、Job 所有权与 Capability 授权；Conductor 不接受客户端连接或用户 Token。
 - 资源服务使用共享访问语言实现本地 ACL；共享词典不拥有资源或授权数据。
 - `media_control` 是 Workspace 与 Agent 配置的权威来源；`media_agent_gateway` 消费其运行上下文，但不修改控制配置。
 - `media_agent_gateway` 创建 Agent Session Registration 并向 `media_agents` 注册同 ID 的 Runtime Session；两侧只共享稳定 ID，不共享数据库表。
@@ -28,6 +29,7 @@ Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存
 - 同一 Runtime Session 的 Turn 由 `media_agents` 持久化排队并串行执行；Gateway 不以进程内锁、SSE 连接或节点亲和性决定执行顺序。
 - `media_plugin` 发布 Plugin Binding 变更；Gateway 据此重建快照，Agent 运行期直连平台内业务 MCP。
 - `media_workflow` 编排 `media_crawler`、`media_gen` 和 `media_materials`，各服务保留自身任务事实。
+- `media_workflow` 是客户端 Capability Worker 与内部 Conductor 之间的防腐层：客户端只见 Worker Gateway API 和不透明 Dispatch，Conductor Task Definition、Task Domain 与 Task ID 均留在内部。
 - 所有需要二进制对象的业务服务通过 S3 Storage Port 依赖逻辑 `media_storage`；本地部署由 SeaweedFS 提供，生产可切换 MinIO、Aliyun OSS、AWS S3 等兼容实现。业务归属、分享、读取授权和删除决策仍归业务服务。
 - 各业务服务发布通知请求，`media_notification` 负责投递，不反向拥有业务事件。
 
@@ -37,4 +39,5 @@ Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存
 - 资源归属边界由权威上下文声明：Workspace 私有的运行数据持 `workspace_id`；Organization 内共享的 Material、Virtual IP、Product 与 Generated Asset 持 `organization_id`。Workspace 只属于一个 Team/Organization，跨边界引用必须同时校验 Organization 与业务 Scope。
 - 每项业务事实只有一个权威写入上下文；跨上下文只引用 ID，不共享表或建立跨库外键。
 - 直接调用服务身份与被代表用户身份是两个独立维度。
+- Internal Identity JWT 的 `sub` 使用业务 User ID；Kratos Identity、Service Token Credential 与 Worker Instance 是独立审计维度，不得混为授权主体。
 - 资源所属上下文执行最终资源授权。

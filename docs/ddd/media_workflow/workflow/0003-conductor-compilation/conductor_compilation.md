@@ -17,6 +17,7 @@ Workflow 发布时冻结所有引用版本，先经 Semantic Compiler 生成不�
 4. 事务内把 Workflow 置 `publishing`，创建 Compilation 与注册 Outbox；Definition 内嵌降低后的执行语义，Compilation 仅保存发布映射、状态和 hash。
 5. 计算 canonical JSON 的 `definition_hash`，以稳定 name/version 向 Conductor 注册。
 6. 事务内记录目标映射并把 Workflow 置 `published`；不可恢复校验错误置 `publish_failed`，网络失败保留 publishing 并重试。
+7. 启动 Job 时根据提交 User 构造 `taskToDomain`，只给 IR 中已冻结的 Capability Task 分配 Execution Domain；Domain 是运行时路由上下文，不写入可复用 Definition。
 
 ## 状态与幂等
 
@@ -43,6 +44,7 @@ Compilation 状态为 `pending -> registering -> registered | failed`。幂等�
 ```mermaid
 sequenceDiagram
     participant User as 用户/UI
+    participant G as Gateway / Edge Auth
     participant MW as media_workflow
     participant C as Conductor
     participant IW as Internal Worker
@@ -52,16 +54,24 @@ sequenceDiagram
     MW->>C: StartWorkflow(compiled_name/version, inputs)
     C-->>IW: poll media_render_template_v1
     IW->>C: COMPLETED(prompt, digest)
-    C-->>CW: poll capability task
+    CW->>G: poll(capability versions, Service Token)
+    G->>MW: Internal JWT
+    MW->>C: poll(mapped taskDef, execution domain)
+    MW-->>CW: dispatch_id + sanitized task
     CW->>CW: 调本地能力或显式 Mock Profile
-    CW->>C: COMPLETED(candidates, provenance)
+    CW->>G: complete(dispatch_id, object refs, provenance)
+    G->>MW: authenticated result
+    MW->>MW: persist Result Inbox
+    MW->>C: async COMPLETED(candidates, provenance)
     C-->>IW: poll media_finalize_step_v1
     IW->>C: COMPLETED(unique output_resource)
     C-->>MW: execution state（查询/同步）
     MW-->>User: Job/StepRun 投影
 ```
 
-- Capability Task 的幂等键为 Conductor `taskId`；客户端重投同一结果不得重复产生外部副作用。
+- Conductor `taskId` 只在服务端使用；客户端幂等键为 `dispatch_id + attempt`，重复结果返回稳定 receipt，不得重复产生 Provider 副作用。
 - 客户端离线时 Task 保持可重试状态，不改变 Workflow 或 Job 定义；恢复后继续轮询。
 - Mock Profile 只用于联调，按 capability key 返回冻结样本，并在 provenance 中标记 `media_ai_fixture`。
 - Internal Worker 与 Capability Worker 生命周期独立；任一方重启不得要求重新发布 Workflow。
+- Capability Version 到 `conductor_task_def` 的映射来自冻结 Registry；客户端不能提交原始 task type，且永远不能领取 Renderer/Finalizer。
+- 已发布 Capability Version 不可变；归档只阻止新 Workflow 引用，旧 Definition 与 Task 必须保留到在途执行排空。

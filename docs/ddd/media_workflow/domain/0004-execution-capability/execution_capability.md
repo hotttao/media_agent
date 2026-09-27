@@ -18,10 +18,10 @@ Execution Capability 把 Template 的业务意图绑定到稳定、可版本化�
 - 主键为 `(capability_key, version)`；published 版本不可修改，只能发布新版本或归档。
 - `input_schema` 中每个逻辑输入都必须能由 Template Slot 映射；`output_asset_kind` 必须与 Template 一致。
 - Capability 只声明目标参数 schema，不拥有业务 Slot 到参数的规则；该规则属于 Template Version 的 Invocation Mapping。
-- `conductor_task_def` 指向已注册 SIMPLE Task Definition；Task 输入只传稳定 ID、Object Path 与参数，不传二进制、密钥或临时下载 URL。
+- `conductor_task_def` 指向已注册 SIMPLE Task Definition；它只在 `media_workflow` 与 Conductor 内部使用，客户端按 Capability Version 声明能力，不能提交或领取任意 task type。Task 输入只传稳定 ID、Object Path 与参数，不传二进制、密钥或临时下载 URL。
 - Capability 可返回一个或多个 Candidate，但确认后的业务输出恒为一个 Generated Asset。
 - Capability Worker 归客户端 `media_worker`，服务端只保存契约和调度信息；Provider 凭证、本地 CLI 路径及 GPU 配置不进入本聚合。
-- Worker 使用 Conductor `taskId` 作为幂等键；相同 taskId 的重复执行必须返回等价结果或读取既有结果。
+- 客户端使用 `dispatch_id + attempt` 作为幂等键；Conductor `taskId` 仅由服务端 Dispatch 保存。相同 Dispatch 的重复执行必须返回等价结果或读取既有结果。
 
 ## 数据模型
 
@@ -42,10 +42,11 @@ Execution Capability 把 Template 的业务意图绑定到稳定、可版本化�
 
 ## 客户端实现契约
 
-- `media_worker` 可承载多个 Capability Version，但只能轮询显式启用的 `conductor_task_def`。
-- 每次完成返回 `candidates[]` 与 `provenance`；失败返回可观察原因，由 Conductor retry policy 决定重投。
+- `media_worker` 可承载多个 Capability Version，向 Worker Gateway API 声明 `(capability_key, version, concurrency)`；服务端通过 Registry 映射 Task Definition，并拒绝 Internal Execution Task。
+- 每次完成返回 `candidates[]`、受控 Object Path/摘要与 `provenance`；失败返回稳定错误。服务端先保存结果收据，再由 Conductor retry policy 决定是否重投。
 - Mock Profile 必须由启动参数显式开启，fixture 版本固定并可审计；它不改变 Capability Definition。
 - Renderer 与 finalizer 是 Internal Execution Task，不在客户端能力清单中。
+- archived Capability Version 禁止新 Workflow 引用，但旧 Task Definition 必须保留到在途 Job 排空。
 
 ## 与 Template 的关系
 

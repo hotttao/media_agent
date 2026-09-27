@@ -1,5 +1,11 @@
 # Conductor Compilation 变更记录
 
+## 2026-09-27：Capability Task 路由与客户端协议隔离
+
+- Definition 继续冻结 Capability taskDef，但客户端只声明 Capability Version，由 media_workflow 完成内部映射。
+- Job 启动时通过 `taskToDomain` 为 Capability Task 设置 User Execution Domain；该运行时路由不写回可复用 Definition。
+- Capability completion 改为 Worker Gateway 持久收据后异步更新 Conductor，客户端不再看到 taskId。
+
 ## 2026-09-25：引入 Executable Workflow IR
 
 - Workflow 发布时由 Semantic Compiler 生成冻结的 Executable Workflow IR。

@@ -37,7 +37,7 @@ _禁用替代词_：vendor、channel（channel 语义留给登录通道）
 _禁用替代词_：Agent Session、login state、JWT session（JWT 是载体不是会话本身）
 
 **Internal Identity JWT（内部身份 JWT）**:
-Oathkeeper 在边缘认证成功后为单次内部请求签发的短时身份断言，仅承载稳定主体和请求上下文；可变企业、部门及资源权限必须向 Keto 或资源所有服务检查，不把 JWT claim 当授权事实。
+Oathkeeper 或 Edge Auth 在浏览器 Session、Service Token 等边缘认证成功后为单次内部请求签发的短时身份断言。`sub` 统一为业务 User ID；Kratos Identity ID 如需传递必须使用独立 claim。JWT 仅承载稳定主体、Organization 上下文、凭证来源和请求 scope；可变企业、部门及资源权限必须向 Keto 或资源所有服务检查，不把 JWT claim 当授权事实。
 _禁用替代词_：Web Session、Access Token、Permission Token
 
 **Authorization Projection（授权关系投影）**:
@@ -45,7 +45,7 @@ _禁用替代词_：Web Session、Access Token、Permission Token
 _禁用替代词_：ACL Source of Truth、JWT Role
 
 **Service Token（服务令牌）**:
-B2B API 调用凭证，`tos_` 前缀 + 32 随机字节；DB 仅存 SHA-256 `token_hash`，明文仅创建时返回一次。归 `service_token` domain。
+B2B、CLI 与客户端 Media Worker 的 opaque API 调用凭证，`tos_` 前缀 + 32 随机字节；DB 仅存 SHA-256 `token_hash`，明文仅创建时返回一次。可通过 scope 和 Organization 绑定限制用途；“API Token”只描述它在客户端接口中的用途，不是另一种凭证类型。归 `service_token` domain。
 _禁用替代词_：API key、access key、bearer token（bearer 是传输方式不是凭证类型）
 
 **Platform Token（平台令牌）**:
@@ -55,6 +55,10 @@ _禁用替代词_：agent token、internal token
 **Service Token Introspection（服务令牌内省）**:
 media_auth 暴露给 Edge 和受信服务的内部能力，把 opaque Service Token 解析为 Principal；下游服务不直读 media_auth 数据库。
 _禁用替代词_：VerifyToken（旧实现名）、Token Exchange
+
+**Worker Principal（Worker 调用主体）**:
+客户端 Media Worker 通过 Service Token 被认证后形成的请求主体；身份仍是 User，`credential_id` 与 `worker_instance_id` 只用于凭证约束、租约和审计，不建立独立 Agent 权限主体。
+_禁用替代词_：Agent User、Conductor Worker Identity、Service Account
 
 **Principal（被代表主体）**:
 一次请求代表的用户、Workspace 或 Agent Session 身份；与 mTLS 证明的 CallerService 分开处理。

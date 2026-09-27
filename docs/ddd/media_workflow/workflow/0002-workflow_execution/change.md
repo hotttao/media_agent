@@ -1,5 +1,18 @@
 # workflow_execution 变更记录
 
+## 2026-09-27 · 统一网关与 Conductor 代理协议
+
+- 客户端 `media_worker` 从直连 Conductor 改为携带 Service Token 经统一网关访问 `/api/worker/v1/*`。
+- media_workflow 按 Capability Registry 和 User Execution Domain 代理 Conductor poll，领取后先持久化 WorkerDispatch 再交付。
+- heartbeat 对齐本地 lease 与 Conductor response timeout；断线不直接终止 Job，过期任务可安全重投。
+- completion/failure 先写 Worker Result Inbox 并返回稳定 receipt，再由后台 Adapter 重试更新 Conductor。
+- 浏览器执行接口继续使用 Web Session；Worker API 使用 Service Token 换取的 Internal Identity JWT，不依赖 Kratos Cookie。
+
+## 2026-09-27 · Product 图片输入映射
+
+- Product 主图（无主图则首图）的可访问 URL 进入 JobInput 快照并映射到 `asset_ref`；Invocation Mapping 决定它在 Capability 图片数组中的顺序。
+- gpt_image2 原始提示词正文不附加 URL，素材引用由固定的调用映射单独传递。
+
 ## 2026-09-26 · Executable IR 审批实现
 
 - `ExecutableStepIR` schema v2 增加候选数量与是否审批的冻结结论。
