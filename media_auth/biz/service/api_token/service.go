@@ -39,12 +39,14 @@ type VerifiedSecret struct {
 
 type MembershipValidator func(context.Context, string, string) bool
 type ActorValidator func(context.Context, domain.ActorType, string, string) bool
+type SubjectValidator func(context.Context, string) bool
 
 type Service struct {
 	repo           domain.Repository
 	secrets        SecretStore
 	membership     MembershipValidator
 	actorValidator ActorValidator
+	subjectValid   SubjectValidator
 	now            func() time.Time
 }
 
@@ -54,6 +56,7 @@ func NewService(repo domain.Repository, secrets SecretStore) *Service {
 
 func (s *Service) SetMembershipValidator(validator MembershipValidator) { s.membership = validator }
 func (s *Service) SetActorValidator(validator ActorValidator)           { s.actorValidator = validator }
+func (s *Service) SetSubjectValidator(validator SubjectValidator)       { s.subjectValid = validator }
 
 type CreateCommand struct {
 	CreatorUserID, SubjectUserID string
@@ -103,6 +106,9 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (CreateResult, 
 	}
 	if cmd.ActorType != domain.ActorService && cmd.SubjectUserID == "" {
 		return CreateResult{}, ErrInvalidRequest
+	}
+	if cmd.ActorType != domain.ActorService && (s.subjectValid == nil || !s.subjectValid(ctx, cmd.SubjectUserID)) {
+		return CreateResult{}, ErrForbidden
 	}
 	if !cmd.TrustedActorCreation && (cmd.ActorType != domain.ActorUser || cmd.SubjectUserID != cmd.CreatorUserID || cmd.ActorID != "User:"+cmd.CreatorUserID) {
 		return CreateResult{}, ErrForbidden
@@ -164,6 +170,9 @@ func (s *Service) Verify(ctx context.Context, secret string) (Principal, error) 
 	}
 	if !token.ActiveAt(s.now()) || token.ActorID != verified.ActorID || !sameScopes(token.Scopes, verified.Scopes) {
 		return Principal{}, ErrInactive
+	}
+	if token.ActorType != domain.ActorService && (s.subjectValid == nil || !s.subjectValid(ctx, token.SubjectUserID)) {
+		return Principal{}, ErrForbidden
 	}
 	if token.OrganizationID != "" && (s.membership == nil || !s.membership(ctx, token.OrganizationID, token.SubjectUserID)) {
 		return Principal{}, ErrForbidden

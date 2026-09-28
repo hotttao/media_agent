@@ -131,7 +131,7 @@ func TestRegisterRequiresPrincipalAndPublishedCapability(t *testing.T) {
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("Register() error = %v", err)
 	}
-	err = flow.Register(context.Background(), Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1"}, "desktop-1", []CapabilityVersion{{Key: "jimeng.image", Version: 1, Concurrency: 1}})
+	err = flow.Register(context.Background(), Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"}, "desktop-1", []CapabilityVersion{{Key: "jimeng.image", Version: 1, Concurrency: 1}})
 	if err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
@@ -142,7 +142,7 @@ func TestPersonalWorkerGatewayRejectsManagedCapability(t *testing.T) {
 	capability := flow.Capabilities.(*capabilityRepoStub).item
 	capability.ExecutionTarget = capabilitydomain.ExecutionTargetManagedWorker
 	capability.ManagedPoolKey = "gpu-cn"
-	principal := Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1"}
+	principal := Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"}
 
 	err := flow.Register(context.Background(), principal, "desktop-1", []CapabilityVersion{{Key: capability.Key, Version: capability.Version, Concurrency: 1}})
 	if !errors.Is(err, ErrForbidden) {
@@ -162,7 +162,7 @@ func TestPersonalWorkerGatewayRejectsManagedCapability(t *testing.T) {
 func TestPollUsesOpaqueUserDomainAndPersistsBeforeDelivery(t *testing.T) {
 	now := time.Date(2026, 9, 27, 8, 0, 0, 0, time.UTC)
 	flow, dispatches, engine := newPollFlow(now)
-	principal := Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1"}
+	principal := Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"}
 
 	dispatch, err := flow.Poll(context.Background(), PollCommand{
 		Principal: principal, WorkerInstanceID: "desktop-1", CapabilityKey: "jimeng.image", CapabilityVersion: 1,
@@ -190,7 +190,7 @@ func TestPollReturnsActiveDispatchWithoutPollingConductor(t *testing.T) {
 	dispatches.active = &jobdomain.WorkerDispatch{ID: "dispatch-existing"}
 
 	got, err := flow.Poll(context.Background(), PollCommand{
-		Principal:        Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1"},
+		Principal:        Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"},
 		WorkerInstanceID: "desktop-1", CapabilityKey: "jimeng.image", CapabilityVersion: 1,
 	})
 	if err != nil || got.ID != "dispatch-existing" {
@@ -206,11 +206,11 @@ func TestCompleteIsIdempotentAfterReceiptWasSubmitted(t *testing.T) {
 	flow, dispatches, engine := newPollFlow(now)
 	dispatches.dispatch = &jobdomain.WorkerDispatch{
 		ID: "dispatch-1", ConductorTaskID: "task-1", ConductorWorkflowID: "workflow-1", Attempt: 1,
-		UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", WorkerInstanceID: "desktop-1",
+		UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token", WorkerInstanceID: "desktop-1",
 		Status: jobdomain.DispatchDelivered, LeaseExpiresAt: now.Add(time.Minute),
 	}
 	cmd := CompleteCommand{
-		Principal:  Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1"},
+		Principal:  Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"},
 		DispatchID: "dispatch-1", WorkerInstanceID: "desktop-1", Attempt: 1, IdempotencyKey: "result-1",
 		Output: map[string]any{"candidates": []any{map[string]any{"url": "https://example.test/result.png"}}},
 	}
@@ -235,20 +235,20 @@ func TestHeartbeatRejectsForeignAndStaleDispatches(t *testing.T) {
 	now := time.Now()
 	flow, dispatches, _ := newPollFlow(now)
 	dispatches.dispatch = &jobdomain.WorkerDispatch{
-		ID: "dispatch-1", Attempt: 2, UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1",
+		ID: "dispatch-1", Attempt: 2, UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token",
 		WorkerInstanceID: "desktop-1", Status: jobdomain.DispatchDelivered, LeaseExpiresAt: now.Add(time.Minute),
 	}
 
-	_, err := flow.Heartbeat(context.Background(), Principal{UserID: "other", OrganizationID: "org-1", CredentialID: "credential-1"}, "dispatch-1", "desktop-1", 2)
+	_, err := flow.Heartbeat(context.Background(), Principal{UserID: "other", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"}, "dispatch-1", "desktop-1", 2)
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("foreign Heartbeat() error = %v", err)
 	}
-	_, err = flow.Heartbeat(context.Background(), Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1"}, "dispatch-1", "desktop-1", 1)
+	_, err = flow.Heartbeat(context.Background(), Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"}, "dispatch-1", "desktop-1", 1)
 	if !errors.Is(err, jobdomain.ErrDispatchConflict) {
 		t.Fatalf("stale Heartbeat() error = %v", err)
 	}
 	dispatches.dispatch.LeaseExpiresAt = now.Add(-time.Second)
-	_, err = flow.Heartbeat(context.Background(), Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1"}, "dispatch-1", "desktop-1", 2)
+	_, err = flow.Heartbeat(context.Background(), Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"}, "dispatch-1", "desktop-1", 2)
 	if !errors.Is(err, jobdomain.ErrDispatchExpired) {
 		t.Fatalf("expired Heartbeat() error = %v", err)
 	}
@@ -259,11 +259,11 @@ func TestCompleteRejectsCancelledJob(t *testing.T) {
 	flow, dispatches, engine := newPollFlow(now)
 	flow.Jobs.(*jobRepoStub).item.Status = jobdomain.JobCancelled
 	dispatches.dispatch = &jobdomain.WorkerDispatch{
-		ID: "dispatch-1", JobID: "job-1", Attempt: 1, UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1",
+		ID: "dispatch-1", JobID: "job-1", Attempt: 1, UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token",
 		WorkerInstanceID: "desktop-1", Status: jobdomain.DispatchDelivered, LeaseExpiresAt: now.Add(time.Minute),
 	}
 	_, err := flow.Complete(context.Background(), CompleteCommand{
-		Principal:  Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1"},
+		Principal:  Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"},
 		DispatchID: "dispatch-1", WorkerInstanceID: "desktop-1", Attempt: 1, IdempotencyKey: "result-1",
 		Output: map[string]any{"candidates": []any{map[string]any{"url": "https://example.test/result.png"}}},
 	})

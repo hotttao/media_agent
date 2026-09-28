@@ -40,6 +40,7 @@ var globalTokenSvc *tokenservice.Service
 
 type kratosIdentityRepo interface {
 	ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string, platformAdmin bool) (auth.User, error)
+	FindByID(ctx context.Context, id string) (auth.User, error)
 }
 
 // SessionFromContext 从 ctx 取 Session（middleware 注入）；无返回 nil。
@@ -128,6 +129,22 @@ func SessionWithInternalJWT(signer *session.Signer, tokenSvc *tokenservice.Servi
 		claims, err := verifier.Verify(ctx, strings.TrimPrefix(authHeader, "Bearer "))
 		if err != nil {
 			base(ctx, c) // opaque service-token fallback
+			return
+		}
+		if claims.AuthSource == "api_token" {
+			userID, ok := strings.CutPrefix(claims.Subject, "User:")
+			if !ok || userID == "" || (claims.Actor != nil && claims.Actor.Sub != "" && claims.Actor.Sub != claims.Subject) {
+				abortUnauthorized(c, "invalid API Token principal")
+				return
+			}
+			u, err := repo.FindByID(ctx, userID)
+			if err != nil || !u.IsActive() {
+				abortUnauthorized(c, "inactive API Token subject")
+				return
+			}
+			sess := &auth.Session{Sub: u.ID, Username: u.Username, Name: u.DisplayName, Email: u.Email, Role: u.Role, AuthVersion: u.AuthVersion}
+			ctx = context.WithValue(ctx, sessionCtxKey{}, sess)
+			c.Next(ctx)
 			return
 		}
 		identityID, email, name, err := fetchKratosIdentity(ctx, kratosURL, string(c.Request.Header.Peek("Cookie")))

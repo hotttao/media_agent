@@ -161,6 +161,10 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 		}
 		apiTokenSvc := apitokenservice.NewService(dalapitoken.NewRepo(db), apitokenservice.TalosAdapter{Client: talosClient})
 		apiTokenSvc.SetMembershipValidator(membershipValidator)
+		apiTokenSvc.SetSubjectValidator(func(ctx context.Context, userID string) bool {
+			user, err := userRepo.FindByID(ctx, userID)
+			return err == nil && user.IsActive()
+		})
 		apitokenhandler.Svc = apiTokenSvc
 		tokenhandler.APITokenSvc = apiTokenSvc
 	} else {

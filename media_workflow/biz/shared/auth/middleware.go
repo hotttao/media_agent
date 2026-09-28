@@ -67,9 +67,11 @@ type workerPrincipalKey struct{}
 
 type WorkerPrincipal struct {
 	UserID           string
+	ActorID          string
 	OrganizationID   string
 	CredentialID     string
 	WorkerInstanceID string
+	AuthSource       string
 	Scopes           map[string]struct{}
 }
 
@@ -283,6 +285,26 @@ func (m *Middleware) Handler() app.HandlerFunc {
 			}
 			if m.cfg.InternalJWTVerifier != nil {
 				if claims, verifyErr := m.cfg.InternalJWTVerifier.Verify(ctx, bearer); verifyErr == nil {
+					if claims.AuthSource == "api_token" {
+						userID, ok := strings.CutPrefix(claims.Subject, "User:")
+						if !ok || userID == "" || (claims.Actor != nil && claims.Actor.Sub != "" && claims.Actor.Sub != claims.Subject) {
+							c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid API Token principal"})
+							c.Abort()
+							return
+						}
+						role := claims.Role
+						if role == "" {
+							role = "user"
+						}
+						user := &User{Sub: userID, Username: userID, Name: userID, Role: role}
+						ctx = context.WithValue(ctx, callerKey{}, user)
+						teamIDs, _ := m.fetchTeams(ctx, user.Sub)
+						if teamIDs != nil {
+							ctx = context.WithValue(ctx, teamsKey{}, teamIDs)
+						}
+						c.Next(ctx)
+						return
+					}
 					user, resolveErr := m.verifyKratosSessionForIdentity(ctx, string(c.Request.Header.Peek("Cookie")), claims.Subject)
 					if resolveErr != nil {
 						c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal identity"})
@@ -357,7 +379,8 @@ func (m *Middleware) verifyWorkerIdentity(ctx context.Context, raw string) (*Wor
 	if err != nil {
 		return nil, nil, err
 	}
-	if claims.AuthSource != "service_token" || claims.OrganizationID == "" || claims.CredentialID == "" {
+	userID, userOK := strings.CutPrefix(claims.Subject, "User:")
+	if claims.AuthSource != "api_token" || !userOK || userID == "" || claims.Actor == nil || !strings.HasPrefix(claims.Actor.Sub, "Worker:") || strings.TrimPrefix(claims.Actor.Sub, "Worker:") == "" || claims.OrganizationID == "" || claims.CredentialID == "" {
 		return nil, nil, errors.New("worker JWT is missing credential or organization claims")
 	}
 	scopes := make(map[string]struct{})
@@ -365,8 +388,8 @@ func (m *Middleware) verifyWorkerIdentity(ctx context.Context, raw string) (*Wor
 		scopes[scope] = struct{}{}
 	}
 	principal := &WorkerPrincipal{
-		UserID: claims.Subject, OrganizationID: claims.OrganizationID,
-		CredentialID: claims.CredentialID, Scopes: scopes,
+		UserID: userID, ActorID: claims.Actor.Sub, OrganizationID: claims.OrganizationID,
+		CredentialID: claims.CredentialID, AuthSource: claims.AuthSource, Scopes: scopes,
 	}
 	role := claims.Role
 	if role == "" {
@@ -374,7 +397,7 @@ func (m *Middleware) verifyWorkerIdentity(ctx context.Context, raw string) (*Wor
 	}
 	username := claims.Username
 	if username == "" {
-		username = "worker:" + claims.Subject
+		username = strings.TrimPrefix(claims.Actor.Sub, "Worker:")
 	}
 	name := claims.Name
 	if name == "" {

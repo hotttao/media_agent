@@ -171,7 +171,8 @@ func requireWorker(ctx context.Context, c *app.RequestContext, scope string) (*a
 		return nil, workergateway.Principal{}, false
 	}
 	return principal, workergateway.Principal{
-		UserID: principal.UserID, OrganizationID: principal.OrganizationID, CredentialID: principal.CredentialID,
+		UserID: principal.UserID, ActorID: principal.ActorID, OrganizationID: principal.OrganizationID,
+		CredentialID: principal.CredentialID, AuthSource: principal.AuthSource,
 	}, true
 }
 

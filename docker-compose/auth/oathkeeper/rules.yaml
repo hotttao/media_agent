@@ -1,4 +1,4 @@
-- id: media-worker-service-token
+- id: media-worker-api-token
   upstream:
     url: http://host.docker.internal:8002
   match:
@@ -6,6 +6,10 @@
     methods: [GET, POST, PUT, PATCH, DELETE]
   authenticators:
     - handler: oauth2_introspection
+      config:
+        introspection_url: http://host.docker.internal:8001/internal/token/api-token:verify
+        scope_strategy: exact
+        prefix: talos_
   authorizer:
     handler: allow
   mutators:
@@ -16,24 +20,39 @@
           {
             "aud": ["media-workflow"],
             "principal_type": "user",
+            "act": {"sub": "{{ print .Extra.actor_id }}"},
             "organization_id": "{{ print .Extra.organization_id }}",
             "credential_id": "{{ print .Extra.credential_id }}",
             "scope": "{{ print .Extra.scope }}",
-            "auth_source": "{{ print .Extra.auth_source }}",
-            "username": "{{ print .Extra.username }}",
-            "name": "{{ print .Extra.name }}",
-            "role": "{{ print .Extra.role }}"
+            "auth_source": "{{ print .Extra.auth_source }}"
           }
 
 - id: media-agent-authenticated-api
   upstream:
     url: http://host.docker.internal:8002
   match:
-    url: http://192.168.2.41:18080/api/<(auth/me|oauth.*|users.*|teams.*|organizations.*|service-tokens.*|v1.*)>
+    url: http://192.168.2.41:18080/api/<(auth/me|oauth.*|users.*|teams.*|organizations.*|api-tokens.*|service-tokens.*|v1.*)>
     methods: [GET, POST, PUT, PATCH, DELETE]
   authenticators:
     - handler: cookie_session
+    - handler: oauth2_introspection
+      config:
+        introspection_url: http://host.docker.internal:8001/internal/token/api-token:verify
+        scope_strategy: exact
+        required_scope: [api.access]
+        prefix: talos_
   authorizer:
     handler: allow
   mutators:
     - handler: id_token
+      config:
+        ttl: 5m
+        claims: |
+          {
+            "aud": ["internal-api"],
+            "principal_type": "user",
+            "organization_id": "{{ print .Extra.organization_id }}",
+            "credential_id": "{{ print .Extra.credential_id }}",
+            "scope": "{{ print .Extra.scope }}",
+            "auth_source": "{{ print .Extra.auth_source }}"
+          }

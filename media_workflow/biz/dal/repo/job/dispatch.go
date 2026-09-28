@@ -46,6 +46,7 @@ func (r *DispatchRepo) Create(ctx context.Context, dispatch *domain.WorkerDispat
 		JobID: dispatch.JobID, StepRunID: dispatch.StepRunID, Attempt: dispatch.Attempt,
 		CapabilityKey: dispatch.CapabilityKey, CapabilityVersion: dispatch.CapabilityVersion,
 		UserID: dispatch.UserID, OrganizationID: dispatch.OrganizationID, CredentialID: dispatch.CredentialID,
+		ActorID: dispatch.ActorID, AuthSource: dispatch.AuthSource,
 		WorkerInstanceID: dispatch.WorkerInstanceID, Status: string(dispatch.Status), InputJSON: datatypes.JSON(dispatch.InputJSON),
 		LeaseExpiresAt: dispatch.LeaseExpiresAt, DeliveredAt: deliveredAt,
 	}
@@ -179,6 +180,7 @@ func dispatchToDomain(row *model.WorkerDispatch) *domain.WorkerDispatch {
 		JobID: row.JobID, StepRunID: row.StepRunID, Attempt: row.Attempt,
 		CapabilityKey: row.CapabilityKey, CapabilityVersion: row.CapabilityVersion,
 		UserID: row.UserID, OrganizationID: row.OrganizationID, CredentialID: row.CredentialID,
+		ActorID: row.ActorID, AuthSource: row.AuthSource,
 		WorkerInstanceID: row.WorkerInstanceID, Status: domain.DispatchStatus(row.Status), InputJSON: []byte(row.InputJSON),
 		LeaseExpiresAt: row.LeaseExpiresAt, CreatedAt: row.CreatedAt, DeliveredAt: row.DeliveredAt, CompletedAt: row.CompletedAt,
 	}

@@ -27,7 +27,7 @@ http:
       priority: 140
       service: oathkeeper-api
     oauth:
-      rule: "PathPrefix(`/api/oauth`) || PathPrefix(`/api/users`) || PathPrefix(`/api/teams`) || PathPrefix(`/api/organizations`) || PathPrefix(`/api/service-tokens`)"
+      rule: "PathPrefix(`/api/oauth`) || PathPrefix(`/api/users`) || PathPrefix(`/api/teams`) || PathPrefix(`/api/organizations`) || PathPrefix(`/api/api-tokens`) || PathPrefix(`/api/service-tokens`)"
       priority: 100
       middlewares: [oathkeeper-forward-auth]
       service: auth

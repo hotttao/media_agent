@@ -17,7 +17,7 @@
 - [x] Job 启动按 Target 生成 Personal/Managed `taskToDomain`。
 - [x] 检测相同 Task Definition 的 Domain 冲突，禁止 `NO_DOMAIN` 回退。
 - [x] Worker Gateway 只接受 Personal Capability。
-- [ ] Dispatch 拆分 subject、actor、credential、instance 和 auth source。
+- [x] Dispatch 拆分 subject、actor、credential、instance 和 auth source。
 - [ ] 实现 Managed Worker 入口、配置 allowlist 和 Managed Domain poll。
 - [ ] 共用 lease、Result Inbox 与 Conductor result adapter。
 - [ ] 单元/集成测试覆盖双 Target 隔离与审计字段。
@@ -42,10 +42,10 @@
 
 ## P5 · 委托身份与 Personal Worker 切换
 
-- [ ] Edge Auth 把 API Token 交换为短时 Internal Identity JWT。
-- [ ] JWT 支持 RFC 8693 `act.sub`，并校验 audience、TTL 和 issuer。
-- [ ] Worker Gateway 使用 `sub=User`、`act.sub=Worker`，不再把 credential 当 Actor。
-- [ ] `media_worker` 配置和文案由 Service Token 改为 API Token。
+- [x] Edge Auth 把 API Token 交换为短时 Internal Identity JWT。
+- [x] JWT 支持 RFC 8693 `act.sub`，并校验 audience、TTL 和 issuer。
+- [x] Worker Gateway 使用 `sub=User`、`act.sub=Worker`，不再把 credential 当 Actor。
+- [x] `media_worker` 配置和文案由 Service Token 改为 API Token。
 - [ ] 换发现有测试 Worker Token，删除本地 Hash 验证旁路。
 - [ ] 为测试 User 签发受限测试环境 API Token，Secret 仅保存到未跟踪的 `.env`；HTTP/CLI E2E 支持 Bearer API Token，不再要求预先模拟登录。
 - [ ] 覆盖撤销、scope、Organization、Actor disabled 和 trace_id 联调测试。

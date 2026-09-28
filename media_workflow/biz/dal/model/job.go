@@ -71,6 +71,8 @@ type WorkerDispatch struct {
 	UserID              string         `gorm:"column:user_id;not null"`
 	OrganizationID      string         `gorm:"column:organization_id;not null"`
 	CredentialID        string         `gorm:"column:credential_id;not null"`
+	ActorID             string         `gorm:"column:actor_id;not null"`
+	AuthSource          string         `gorm:"column:auth_source;not null"`
 	WorkerInstanceID    string         `gorm:"column:worker_instance_id;not null"`
 	Status              string         `gorm:"column:status;not null"`
 	InputJSON           datatypes.JSON `gorm:"column:input_json;type:jsonb;not null"`

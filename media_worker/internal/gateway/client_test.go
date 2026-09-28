@@ -14,7 +14,7 @@ func TestClientPollUsesBearerTokenAndDecodesOpaqueTask(t *testing.T) {
 		if r.URL.Path != "/api/worker/v1/tasks:poll" || r.Method != http.MethodPost {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
-		if got := r.Header.Get("Authorization"); got != "Bearer service-secret" {
+		if got := r.Header.Get("Authorization"); got != "Bearer talos_test_secret" {
 			t.Fatalf("Authorization = %q", got)
 		}
 		var body map[string]any
@@ -31,7 +31,7 @@ func TestClientPollUsesBearerTokenAndDecodesOpaqueTask(t *testing.T) {
 	}))
 	defer server.Close()
 
-	task, err := New(server.URL, "service-secret").Poll(context.Background(), "desktop-1", Capability{Key: "media.image.model", Version: 1})
+	task, err := New(server.URL, "talos_test_secret").Poll(context.Background(), "desktop-1", Capability{Key: "media.image.model", Version: 1})
 	if err != nil {
 		t.Fatalf("Poll() error = %v", err)
 	}
@@ -46,7 +46,7 @@ func TestClientReturnsTypedHTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := New(server.URL, "service-secret").Complete(context.Background(), "desktop-1", Task{DispatchID: "dispatch-1", Attempt: 1}, "key-1", map[string]any{"candidates": []any{}})
+	_, err := New(server.URL, "talos_test_secret").Complete(context.Background(), "desktop-1", Task{DispatchID: "dispatch-1", Attempt: 1}, "key-1", map[string]any{"candidates": []any{}})
 	var httpErr *HTTPError
 	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusGone {
 		t.Fatalf("Complete() error = %#v", err)
@@ -59,7 +59,7 @@ func TestClientPollNoContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	task, err := New(server.URL, "service-secret").Poll(context.Background(), "desktop-1", Capability{Key: "media.image.model", Version: 1})
+	task, err := New(server.URL, "talos_test_secret").Poll(context.Background(), "desktop-1", Capability{Key: "media.image.model", Version: 1})
 	if err != nil || task != nil {
 		t.Fatalf("Poll() = %#v, %v", task, err)
 	}
@@ -91,7 +91,7 @@ func TestClientCompleteUsesDispatchRouteAndStablePayload(t *testing.T) {
 	}))
 	defer server.Close()
 
-	receipt, err := New(server.URL, "service-secret").Complete(context.Background(), "desktop-1", Task{DispatchID: "dispatch-1", Attempt: 3}, "key-1", map[string]any{"candidates": []any{}})
+	receipt, err := New(server.URL, "talos_test_secret").Complete(context.Background(), "desktop-1", Task{DispatchID: "dispatch-1", Attempt: 3}, "key-1", map[string]any{"candidates": []any{}})
 	if err != nil || receipt.ReceiptID != "receipt-1" {
 		t.Fatalf("Complete() = %#v, %v", receipt, err)
 	}

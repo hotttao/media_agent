@@ -64,6 +64,16 @@ func Session() app.HandlerFunc {
 			if strings.HasPrefix(authHeader, "Bearer ") {
 				claims, err := internalVerifier.Verify(ctx, strings.TrimPrefix(authHeader, "Bearer "))
 				if err == nil {
+					if claims.AuthSource == "api_token" {
+						userID, ok := strings.CutPrefix(claims.Subject, "User:")
+						if !ok || userID == "" || (claims.Actor != nil && claims.Actor.Sub != "" && claims.Actor.Sub != claims.Subject) {
+							c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid API Token principal"})
+							c.Abort()
+							return
+						}
+						c.Next(context.WithValue(ctx, sessionKey{}, Principal{UserID: userID, Role: normalizeRole(claims.Role)}))
+						return
+					}
 					resolved, resolveErr := resolveKratosPrincipal(ctx, string(c.GetHeader("Cookie")), claims.Subject)
 					if resolveErr != nil {
 						c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal identity"})

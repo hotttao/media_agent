@@ -6,15 +6,15 @@
 
 ```bash
 MEDIA_GATEWAY_URL=http://192.168.2.41:18080 \
-MEDIA_WORKER_TOKEN=tos_xxx \
+MEDIA_WORKER_API_TOKEN=talos_xxx \
 MEDIA_WORKER_PROFILE=media_ai_fixture \
 MEDIA_WORKER_CAPABILITIES=media.image.model@1,media.video.generate@1 \
 go run ./cmd/media_worker
 ```
 
-`MEDIA_WORKER_TOKEN` 必须是绑定当前 Organization、尚未过期，并包含所需
+`MEDIA_WORKER_API_TOKEN` 必须绑定 `Worker:<worker_id>` Actor 和当前 Organization、尚未过期，并包含所需
 `workflow.worker.poll`、`workflow.worker.heartbeat`、`workflow.worker.complete`
-和 `workflow.worker.fail` scopes 的 Service Token。`MEDIA_WORKER_CAPABILITIES`
+和 `workflow.worker.fail` scopes 的 API Token。`MEDIA_WORKER_CAPABILITIES`
 为空时，fixture profile 注册其全部内置 Capability Version。
 
 Worker 启动后先注册能力，再按 Capability 并发轮询。任务只使用不透明

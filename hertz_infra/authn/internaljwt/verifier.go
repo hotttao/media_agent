@@ -27,7 +27,14 @@ type Claims struct {
 	Username       string `json:"username,omitempty"`
 	Name           string `json:"name,omitempty"`
 	Role           string `json:"role,omitempty"`
+	Actor          *Actor `json:"act,omitempty"`
 	jwt.RegisteredClaims
+}
+
+// Actor is the RFC 8693 actor claim. Subject identifies the delegating User;
+// Actor.Sub identifies the Agent or Personal Worker acting for that User.
+type Actor struct {
+	Sub string `json:"sub"`
 }
 
 type Verifier struct {

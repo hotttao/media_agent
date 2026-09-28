@@ -24,6 +24,7 @@ type WorkerDispatch struct {
 	CapabilityKey                            string
 	CapabilityVersion                        int
 	UserID, OrganizationID, CredentialID     string
+	ActorID, AuthSource                      string
 	WorkerInstanceID                         string
 	Status                                   DispatchStatus
 	InputJSON                                []byte

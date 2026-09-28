@@ -28,9 +28,9 @@ func (e *HTTPError) Error() string {
 	return fmt.Sprintf("worker gateway %s %s: status=%d body=%s", e.Method, e.Path, e.StatusCode, e.Body)
 }
 
-func New(baseURL, serviceToken string) *Client {
+func New(baseURL, apiToken string) *Client {
 	return &Client{
-		baseURL: strings.TrimRight(baseURL, "/"), token: serviceToken,
+		baseURL: strings.TrimRight(baseURL, "/"), token: apiToken,
 		http: &http.Client{Timeout: 35 * time.Second},
 	}
 }

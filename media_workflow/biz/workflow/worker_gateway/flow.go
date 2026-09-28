@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,7 +19,7 @@ import (
 const defaultLeaseDuration = 90 * time.Second
 
 type Principal struct {
-	UserID, OrganizationID, CredentialID string
+	UserID, ActorID, OrganizationID, CredentialID, AuthSource string
 }
 
 type PollCommand struct {
@@ -148,6 +149,7 @@ func (f *Flow) Poll(ctx context.Context, cmd PollCommand) (*jobdomain.WorkerDisp
 		JobID: jobID, StepRunID: stepRun.ID, Attempt: attempt,
 		CapabilityKey: capability.Key, CapabilityVersion: capability.Version,
 		UserID: cmd.UserID, OrganizationID: cmd.OrganizationID, CredentialID: cmd.CredentialID,
+		ActorID: cmd.ActorID, AuthSource: cmd.AuthSource,
 		WorkerInstanceID: cmd.WorkerInstanceID, Status: jobdomain.DispatchDelivered,
 		InputJSON: inputJSON, LeaseExpiresAt: now.Add(f.lease()), DeliveredAt: &deliveredAt,
 	})
@@ -249,7 +251,8 @@ func (f *Flow) authorizeDispatch(ctx context.Context, principal Principal, dispa
 		return nil, err
 	}
 	if dispatch.UserID != principal.UserID || dispatch.OrganizationID != principal.OrganizationID ||
-		dispatch.CredentialID != principal.CredentialID || dispatch.WorkerInstanceID != workerInstanceID {
+		dispatch.CredentialID != principal.CredentialID || dispatch.ActorID != principal.ActorID ||
+		dispatch.AuthSource != principal.AuthSource || dispatch.WorkerInstanceID != workerInstanceID {
 		return nil, ErrForbidden
 	}
 	if dispatch.Attempt != attempt {
@@ -336,7 +339,8 @@ func (f *Flow) RunLeaseReaper(ctx context.Context, interval time.Duration) {
 }
 
 func validatePrincipal(principal Principal) error {
-	if principal.UserID == "" || principal.OrganizationID == "" || principal.CredentialID == "" {
+	if principal.UserID == "" || !strings.HasPrefix(principal.ActorID, "Worker:") ||
+		principal.OrganizationID == "" || principal.CredentialID == "" || principal.AuthSource != "api_token" {
 		return ErrUnauthorized
 	}
 	return nil

@@ -5,7 +5,7 @@ services:
     labels:
     - traefik.enable=true
     - traefik.http.routers.media-auth.rule=PathPrefix(`/api/auth`) || PathPrefix(`/api/oauth`)
-      || PathPrefix(`/api/service-tokens`) || PathPrefix(`/api/mcp-oauth`) || PathPrefix(`/api/teams`)
+      || PathPrefix(`/api/api-tokens`) || PathPrefix(`/api/service-tokens`) || PathPrefix(`/api/mcp-oauth`) || PathPrefix(`/api/teams`)
       || PathPrefix(`/api/invites`) || PathPrefix(`/api/users`) || PathPrefix(`/internal/token`)
     - traefik.http.routers.media-auth.entrypoints=web
     - traefik.http.services.media-auth.loadbalancer.server.port=8001

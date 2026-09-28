@@ -27,8 +27,8 @@ func TestVerifyWorkerIdentityAcceptsTokenOnlyPrincipal(t *testing.T) {
 	defer server.Close()
 	issuer := "http://oathkeeper.test/"
 	claims := jwt.MapClaims{
-		"iss": issuer, "aud": []string{"media-workflow"}, "sub": "user-1", "principal_type": "user",
-		"organization_id": "org-1", "credential_id": "credential-1", "auth_source": "service_token",
+		"iss": issuer, "aud": []string{"media-workflow"}, "sub": "User:user-1", "act": map[string]any{"sub": "Worker:worker-1"}, "principal_type": "user",
+		"organization_id": "org-1", "credential_id": "credential-1", "auth_source": "api_token",
 		"scope": "workflow.worker.poll workflow.worker.complete", "username": "svc:desktop", "name": "Desktop", "role": "user",
 		"iat": time.Now().Add(-time.Second).Unix(), "exp": time.Now().Add(time.Minute).Unix(),
 	}
@@ -44,7 +44,7 @@ func TestVerifyWorkerIdentityAcceptsTokenOnlyPrincipal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verifyWorkerIdentity() error = %v", err)
 	}
-	if principal.UserID != "user-1" || principal.OrganizationID != "org-1" || principal.CredentialID != "credential-1" || !principal.HasScope("workflow.worker.complete") {
+	if principal.UserID != "user-1" || principal.ActorID != "Worker:worker-1" || principal.OrganizationID != "org-1" || principal.CredentialID != "credential-1" || principal.AuthSource != "api_token" || !principal.HasScope("workflow.worker.complete") {
 		t.Fatalf("principal = %#v", principal)
 	}
 	if user.Username != "svc:desktop" || user.Name != "Desktop" {

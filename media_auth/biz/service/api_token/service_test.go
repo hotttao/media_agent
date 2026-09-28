@@ -81,6 +81,7 @@ func TestCreateUserAPITokenAndVerify(t *testing.T) {
 	repo := &fakeRepo{}
 	secrets := &fakeSecrets{issued: IssuedSecret{KeyID: "talos-1", ActorID: "User:u1", Secret: "once", Scopes: []string{"api.access"}, ExpiresAt: expires}}
 	service := NewService(repo, secrets)
+	service.SetSubjectValidator(func(context.Context, string) bool { return true })
 	service.now = func() time.Time { return now }
 
 	result, err := service.Create(context.Background(), CreateCommand{
@@ -102,6 +103,7 @@ func TestCreateCompensatesTalosWhenMetadataPersistenceFails(t *testing.T) {
 	repo := &fakeRepo{createErr: errors.New("database unavailable")}
 	secrets := &fakeSecrets{issued: IssuedSecret{KeyID: "orphan", ActorID: "User:u1", Secret: "never-return", Scopes: []string{"api.access"}, ExpiresAt: expires}}
 	service := NewService(repo, secrets)
+	service.SetSubjectValidator(func(context.Context, string) bool { return true })
 	_, err := service.Create(context.Background(), CreateCommand{
 		CreatorUserID: "u1", SubjectUserID: "u1", ActorType: domain.ActorUser, ActorID: "User:u1",
 		Name: "test", Scopes: []string{"api.access"}, ExpiresAt: expires,
@@ -113,6 +115,7 @@ func TestCreateCompensatesTalosWhenMetadataPersistenceFails(t *testing.T) {
 
 func TestCreateRejectsUntrustedDelegatedActor(t *testing.T) {
 	service := NewService(&fakeRepo{}, &fakeSecrets{})
+	service.SetSubjectValidator(func(context.Context, string) bool { return true })
 	_, err := service.Create(context.Background(), CreateCommand{
 		CreatorUserID: "u1", SubjectUserID: "u1", ActorType: domain.ActorPersonalWorker, ActorID: "Worker:w1",
 		Name: "worker", Scopes: []string{"workflow.worker.poll"}, ExpiresAt: time.Now().Add(time.Hour),
@@ -128,6 +131,7 @@ func TestVerifyRejectsTalosMetadataMismatch(t *testing.T) {
 	repo := &fakeRepo{byKey: map[string]domain.Token{"key-1": token}}
 	secrets := &fakeSecrets{verified: VerifiedSecret{KeyID: "key-1", ActorID: "User:attacker", Scopes: []string{"api.access"}, ExpiresAt: expires}}
 	service := NewService(repo, secrets)
+	service.SetSubjectValidator(func(context.Context, string) bool { return true })
 	_, err := service.Verify(context.Background(), "redacted")
 	if !errors.Is(err, ErrInactive) {
 		t.Fatalf("Verify() error = %v", err)
@@ -144,6 +148,7 @@ func TestRotateReturnsOneTimeSecretAndReplacesKey(t *testing.T) {
 	repo := &fakeRepo{created: token}
 	secrets := &fakeSecrets{rotated: IssuedSecret{KeyID: "new-key", ActorID: "User:u1", Secret: "show-once", Scopes: token.Scopes, ExpiresAt: expires}}
 	service := NewService(repo, secrets)
+	service.SetSubjectValidator(func(context.Context, string) bool { return true })
 	service.now = func() time.Time { return now }
 
 	result, err := service.Rotate(context.Background(), "u1", token.ID, time.Time{})
@@ -159,6 +164,7 @@ func TestRotateRevokesReplacementWhenMetadataUpdateFails(t *testing.T) {
 	repo := &fakeRepo{created: token, replaceErr: errors.New("database unavailable")}
 	secrets := &fakeSecrets{rotated: IssuedSecret{KeyID: "new-key", Secret: "never-return", ExpiresAt: expires}}
 	service := NewService(repo, secrets)
+	service.SetSubjectValidator(func(context.Context, string) bool { return true })
 	service.now = func() time.Time { return now }
 
 	_, err := service.Rotate(context.Background(), "u1", token.ID, time.Time{})

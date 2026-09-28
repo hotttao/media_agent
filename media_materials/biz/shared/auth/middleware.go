@@ -271,6 +271,26 @@ func (m *Middleware) Handler() app.HandlerFunc {
 			bearer := strings.TrimPrefix(authHeader, "Bearer ")
 			if m.cfg.InternalJWTVerifier != nil {
 				if claims, verifyErr := m.cfg.InternalJWTVerifier.Verify(ctx, bearer); verifyErr == nil {
+					if claims.AuthSource == "api_token" {
+						userID, ok := strings.CutPrefix(claims.Subject, "User:")
+						if !ok || userID == "" || (claims.Actor != nil && claims.Actor.Sub != "" && claims.Actor.Sub != claims.Subject) {
+							c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid API Token principal"})
+							c.Abort()
+							return
+						}
+						role := claims.Role
+						if role == "" {
+							role = "user"
+						}
+						user := &User{Sub: userID, Username: userID, Name: userID, Role: role}
+						ctx = context.WithValue(ctx, callerKey{}, user)
+						teamIDs, _ := m.fetchTeams(ctx, user.Sub)
+						if teamIDs != nil {
+							ctx = context.WithValue(ctx, teamsKey{}, teamIDs)
+						}
+						c.Next(ctx)
+						return
+					}
 					user, resolveErr := m.verifyKratosSessionForIdentity(ctx, string(c.Request.Header.Peek("Cookie")), claims.Subject)
 					if resolveErr != nil {
 						c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal identity"})

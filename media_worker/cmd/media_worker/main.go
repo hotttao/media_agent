@@ -19,7 +19,7 @@ import (
 
 func main() {
 	gatewayURL := flag.String("gateway-url", envOr("MEDIA_GATEWAY_URL", ""), "public media gateway base URL")
-	serviceToken := flag.String("token", envOr("MEDIA_WORKER_TOKEN", ""), "opaque worker Service Token")
+	apiToken := flag.String("token", envOr("MEDIA_WORKER_API_TOKEN", ""), "opaque Personal Worker API Token")
 	workerID := flag.String("worker-id", envOr("MEDIA_WORKER_ID", defaultWorkerID()), "stable client worker id")
 	profile := flag.String("profile", envOr("MEDIA_WORKER_PROFILE", ""), "execution profile; use media_ai_fixture only for integration testing")
 	capabilityList := flag.String("capabilities", envOr("MEDIA_WORKER_CAPABILITIES", ""), "comma-separated capability key@version allowlist")
@@ -27,8 +27,8 @@ func main() {
 	if *gatewayURL == "" {
 		log.Fatal("MEDIA_GATEWAY_URL or -gateway-url is required")
 	}
-	if *serviceToken == "" {
-		log.Fatal("MEDIA_WORKER_TOKEN or -token is required")
+	if *apiToken == "" {
+		log.Fatal("MEDIA_WORKER_API_TOKEN or -token is required")
 	}
 	if *profile != "media_ai_fixture" {
 		log.Fatalf("profile %q is not implemented; integration requires -profile media_ai_fixture", *profile)
@@ -41,7 +41,7 @@ func main() {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	client := gateway.New(*gatewayURL, *serviceToken)
+	client := gateway.New(*gatewayURL, *apiToken)
 	if err := client.Register(ctx, *workerID, capabilities); err != nil {
 		log.Fatalf("register worker: %v", err)
 	}
