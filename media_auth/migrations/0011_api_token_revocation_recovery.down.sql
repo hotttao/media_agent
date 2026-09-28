@@ -1,0 +1,1 @@
+DROP INDEX media_auth.api_tokens_revoking_scan_idx;

@@ -78,6 +78,16 @@ HTTP 路径和 DTO 以锁定的 Talos OpenAPI 版本为准。Adapter 必须设�
 
 本地开发使用仓库维护的 Talos OSS 单节点容器与持久 SQLite volume；它属于认证基础设施，默认不随普通编码测试启动。
 
+### 3.1 撤销恢复
+
+`api_tokens.status=revoking` 保存不可丢失的撤销意图；先提交后调用 Talos。调用错误后按同一 Key ID 查询，仅确认 `KEY_STATUS_REVOKED` 才可提交本地 revoked，查询失败或未知状态保持 fail closed。
+
+`biz/workflow/api_token_revocation.go` 在 Talos 已装配时运行：启动即扫描，间隔 10 秒、每批 100 条，ID keyset 分页，每条尝试期限 15 秒。失败条目不能阻塞后页；下一轮重新扫描。后台使用持久化 subject 重放现有撤销能力，不保存原请求、会话或 Secret。多个实例重复撤销安全，终态记录不再被扫描。
+
+`0011_api_token_revocation_recovery` migration 增加 `(id) WHERE status='revoking'` 部分索引，不新增凭证或 Secret 表。
+
+Talos Rotate 没有 request_id 或可恢复 Secret；撤销后台不能用于轮换重试。轮换持久化操作和未知 replacement Key 清理仍是独立实现项。
+
 ## 4. Capability Execution Target
 
 ### 4.1 持久模型

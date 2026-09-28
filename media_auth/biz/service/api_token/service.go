@@ -17,6 +17,11 @@ type SecretStore interface {
 	Verify(context.Context, string) (VerifiedSecret, error)
 	Rotate(context.Context, string, []string) (IssuedSecret, error)
 	Revoke(context.Context, string) error
+	Get(context.Context, string) (SecretMetadata, error)
+}
+
+type SecretMetadata struct {
+	KeyID, Status string
 }
 
 type IssueSecretCommand struct {
@@ -205,7 +210,12 @@ func (s *Service) Revoke(ctx context.Context, subjectUserID, id string) error {
 		return nil
 	}
 	if err := s.secrets.Revoke(ctx, token.TalosKeyID); err != nil {
-		return err
+		// Revoke may have succeeded while its response was lost. Only an
+		// authoritative terminal status permits the local operation to finish.
+		metadata, queryErr := s.secrets.Get(ctx, token.TalosKeyID)
+		if queryErr != nil || metadata.KeyID != token.TalosKeyID || metadata.Status != "KEY_STATUS_REVOKED" {
+			return err
+		}
 	}
 	return s.repo.MarkRevoked(ctx, id, s.now())
 }

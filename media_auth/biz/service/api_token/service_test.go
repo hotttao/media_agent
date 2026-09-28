@@ -10,12 +10,13 @@ import (
 )
 
 type fakeRepo struct {
-	created    domain.Token
-	byKey      map[string]domain.Token
-	createErr  error
-	revoking   domain.Token
-	revoked    bool
-	replaceErr error
+	created        domain.Token
+	byKey          map[string]domain.Token
+	createErr      error
+	revoking       domain.Token
+	revoked        bool
+	replaceErr     error
+	markRevokedErr error
 }
 
 func (r *fakeRepo) Create(_ context.Context, token domain.Token) (domain.Token, error) {
@@ -44,6 +45,9 @@ func (r *fakeRepo) MarkRevoking(context.Context, string, string) (domain.Token, 
 	return r.revoking, nil
 }
 func (r *fakeRepo) MarkRevoked(context.Context, string, time.Time) error {
+	if r.markRevokedErr != nil {
+		return r.markRevokedErr
+	}
 	r.revoked = true
 	return nil
 }
@@ -61,6 +65,12 @@ type fakeSecrets struct {
 	issueErr, revokeErr error
 	rotated             IssuedSecret
 	rotateErr           error
+	metadata            SecretMetadata
+	getErr              error
+}
+
+func (f *fakeSecrets) Get(context.Context, string) (SecretMetadata, error) {
+	return f.metadata, f.getErr
 }
 
 func (f *fakeSecrets) Issue(context.Context, IssueSecretCommand) (IssuedSecret, error) {
@@ -191,5 +201,44 @@ func TestRevokeAlreadyRevokedIsIdempotent(t *testing.T) {
 	secrets := &fakeSecrets{revokeErr: errors.New("Talos unavailable")}
 	if err := NewService(repo, secrets).Revoke(context.Background(), "u1", "api-1"); err != nil {
 		t.Fatalf("already revoked token must remain successful: %v", err)
+	}
+}
+
+func TestRevokeResolvesAmbiguousUpstreamResult(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		metadata SecretMetadata
+		queryErr error
+		complete bool
+	}{
+		{"confirmed revoked", SecretMetadata{"key-1", "KEY_STATUS_REVOKED"}, nil, true},
+		{"still active", SecretMetadata{"key-1", "KEY_STATUS_ACTIVE"}, nil, false},
+		{"wrong key", SecretMetadata{"other-key", "KEY_STATUS_REVOKED"}, nil, false},
+		{"unknown status", SecretMetadata{"key-1", ""}, nil, false},
+		{"query unavailable", SecretMetadata{}, errors.New("unavailable"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &fakeRepo{revoking: domain.Token{ID: "api-1", TalosKeyID: "key-1", Status: domain.StatusRevoking}}
+			secrets := &fakeSecrets{revokeErr: errors.New("response lost"), metadata: tc.metadata, getErr: tc.queryErr}
+			err := NewService(repo, secrets).Revoke(t.Context(), "u1", "api-1")
+			if (err == nil) != tc.complete || repo.revoked != tc.complete {
+				t.Fatalf("completed=%v err=%v", repo.revoked, err)
+			}
+		})
+	}
+}
+
+func TestRevokeRetriesLocalCommitAfterUpstreamSuccess(t *testing.T) {
+	repo := &fakeRepo{revoking: domain.Token{ID: "api-1", TalosKeyID: "key-1", Status: domain.StatusRevoking}, markRevokedErr: errors.New("database unavailable")}
+	secrets := &fakeSecrets{}
+	service := NewService(repo, secrets)
+	if err := service.Revoke(t.Context(), "u1", "api-1"); err == nil || repo.revoked {
+		t.Fatal("local commit failure must remain pending")
+	}
+	repo.markRevokedErr = nil
+	secrets.revokeErr = errors.New("already revoked")
+	secrets.metadata = SecretMetadata{"key-1", "KEY_STATUS_REVOKED"}
+	if err := service.Revoke(t.Context(), "u1", "api-1"); err != nil || !repo.revoked {
+		t.Fatal("confirmed upstream revocation must finish local commit")
 	}
 }

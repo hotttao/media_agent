@@ -159,7 +159,8 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 		if err != nil {
 			log.Fatalf("init di: talos client: %v", err)
 		}
-		apiTokenSvc := apitokenservice.NewService(dalapitoken.NewRepo(db), apitokenservice.TalosAdapter{Client: talosClient})
+		apiTokenRepo := dalapitoken.NewRepo(db)
+		apiTokenSvc := apitokenservice.NewService(apiTokenRepo, apitokenservice.TalosAdapter{Client: talosClient})
 		apiTokenSvc.SetMembershipValidator(membershipValidator)
 		apiTokenSvc.SetSubjectValidator(func(ctx context.Context, userID string) bool {
 			user, err := userRepo.FindByID(ctx, userID)
@@ -167,6 +168,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 		})
 		apitokenhandler.Svc = apiTokenSvc
 		tokenhandler.APITokenSvc = apiTokenSvc
+		go workflow.NewAPITokenRevocation(apiTokenRepo, apiTokenSvc).Run(context.Background())
 	} else {
 		log.Println("init di: TALOS_URL is empty, api token service unavailable")
 	}

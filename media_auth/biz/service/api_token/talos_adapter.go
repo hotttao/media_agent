@@ -37,3 +37,8 @@ func (a TalosAdapter) Rotate(ctx context.Context, keyID string, scopes []string)
 func (a TalosAdapter) Revoke(ctx context.Context, keyID string) error {
 	return a.Client.Revoke(ctx, keyID)
 }
+
+func (a TalosAdapter) Get(ctx context.Context, keyID string) (SecretMetadata, error) {
+	result, err := a.Client.Get(ctx, keyID)
+	return SecretMetadata{KeyID: result.KeyID, Status: result.Status}, err
+}

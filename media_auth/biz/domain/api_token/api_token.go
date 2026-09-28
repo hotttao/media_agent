@@ -55,3 +55,8 @@ type Repository interface {
 }
 
 var ErrNotFound = errors.New("api token not found")
+
+// RevocationSource exposes durable pending work without exposing Secret data.
+type RevocationSource interface {
+	ListRevoking(context.Context, string, int) ([]Token, error)
+}

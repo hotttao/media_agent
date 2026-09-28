@@ -5,12 +5,18 @@ package e2e
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	repository "media_agent/media_auth/biz/dal/repo/api_token"
 	domain "media_agent/media_auth/biz/domain/api_token"
+	service "media_agent/media_auth/biz/service/api_token"
+	"media_agent/media_auth/biz/shared/client/talos"
+	"media_agent/media_auth/biz/workflow"
 )
 
 func newAPITokenRepo(t *testing.T) (*repository.Repo, domain.Token) {
@@ -27,6 +33,82 @@ func newAPITokenRepo(t *testing.T) (*repository.Repo, domain.Token) {
 		t.Fatal(err)
 	}
 	return repo, token
+}
+
+func TestAPITokenRepoRecoverySurvivesRestartAndLostResponse(t *testing.T) {
+	repo, token := newAPITokenRepo(t)
+	if _, err := repo.MarkRevoking(t.Context(), token.ID, "owner"); err != nil {
+		t.Fatal(err)
+	}
+	var revoked atomic.Bool
+	var attempt atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v2alpha1/admin/issuedApiKeys/old-key:revoke":
+			if attempt.Add(1) >= 2 {
+				revoked.Store(true)
+			}
+			w.WriteHeader(http.StatusServiceUnavailable) // success response lost on the second call
+		case r.Method == http.MethodGet && r.URL.Path == "/v2alpha1/admin/issuedApiKeys/old-key":
+			status := "KEY_STATUS_ACTIVE"
+			if revoked.Load() {
+				status = "KEY_STATUS_REVOKED"
+			}
+			_, _ = w.Write([]byte(`{"key_id":"old-key","status":"` + status + `"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstream.Close()
+	client, err := talos.New(talos.Config{BaseURL: upstream.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newRecovery := func() *workflow.APITokenRevocation {
+		// New process objects reuse only durable metadata, never request memory.
+		return workflow.NewAPITokenRevocation(repo, service.NewService(repo, service.TalosAdapter{Client: client}))
+	}
+	if _, err := newRecovery().ProcessBatch(t.Context(), ""); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := repo.Get(t.Context(), token.ID)
+	if err != nil || pending.Status != domain.StatusRevoking || pending.ActiveAt(time.Now()) {
+		t.Fatal("upstream failure must remain fail closed")
+	}
+	if _, err := newRecovery().ProcessBatch(t.Context(), ""); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := repo.Get(t.Context(), token.ID)
+	if err != nil || completed.Status != domain.StatusRevoked || completed.RevokedAt == nil {
+		t.Fatal("restart did not reconcile authoritative revoked status")
+	}
+	if _, err := newRecovery().ProcessBatch(t.Context(), ""); err != nil || attempt.Load() != 2 {
+		t.Fatal("terminal token was replayed")
+	}
+}
+
+func TestAPITokenRepoRecoveryScanUsesStableKeyset(t *testing.T) {
+	repo, token := newAPITokenRepo(t)
+	if _, err := repo.MarkRevoking(t.Context(), token.ID, "owner"); err != nil {
+		t.Fatal(err)
+	}
+	second := token
+	second.ID, second.TalosKeyID = "z-pending", "second-key"
+	second.Status = domain.StatusRevoking
+	if _, err := repo.Create(t.Context(), second); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := repo.ListRevoking(t.Context(), "", 1)
+	if err != nil || len(rows) != 1 || rows[0].ID != token.ID {
+		t.Fatal("first page incorrect")
+	}
+	if err := repo.MarkRevoked(t.Context(), token.ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = repo.ListRevoking(t.Context(), token.ID, 1)
+	if err != nil || len(rows) != 1 || rows[0].ID != second.ID {
+		t.Fatal("completed previous page skipped pending token")
+	}
 }
 
 func TestAPITokenRepoRevocationRejectsWrongOwnerAndCannotBeResurrected(t *testing.T) {

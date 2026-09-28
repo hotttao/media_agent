@@ -4,6 +4,7 @@ description: User、Agent、Personal Worker 与受控客户端的长期 API 凭�
 dependencies:
     - auth
 related_workflow:
+    - api_token_revocation
     - api_token_verification
     - agent_api_token_provisioning
 ---
@@ -66,10 +67,14 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 | organization_id | text nullable | 唯一企业上下文 |
 | name | text | 用户可读名称 |
 | scopes | text[] | 入口能力上限 |
-| status | text | active/revoked/expired |
+| status | text | active/revoking/revoked/expired；revoking 为持久化撤销意图，不可验证 |
 | expires_at | timestamptz | 到期时间 |
 | created_by | text | 创建命令的 User 或受信服务主体 |
 | created_at / rotated_at / revoked_at | timestamptz nullable | 生命周期时间 |
+
+### 约束与索引
+
+`talos_key_id` 唯一；`revoking` 状态使用按 ID 的部分索引供后台 keyset 扫描。
 
 ### UUID 生成规则
 
@@ -95,4 +100,6 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 
 ### Rotate/Revoke
 
-轮换与撤销属于跨 media_auth/Talos Workflow：本地先记录 pending operation，以稳定 operation ID 调 Talos，成功后提交终态；超时先按 `talos_key_id` 查询，禁止盲目创建第二把 Key。Actor 或 User 删除时后台命令幂等撤销全部关联 Token。
+撤销在外部调用前提交 `revoking`，立即禁止验证；以 Token Manager ID 和 Talos Key ID 为稳定操作标识，后台恢复同一撤销意图。具体事务、重试与结果确认见 [API Token Revocation](../../workflow/0008-api-token-revocation/api_token_revocation.md)。
+
+轮换同样需要本地持久化操作与恢复，但不能假设 Talos Rotate 支持 operation ID：当前接口没有 request_id，也不能再次取得 Secret。超时不能盲目轮换第二把 Key，须确认旧 Key 状态，并处理可能产生但无法交付的 replacement Key；只比较旧 Key 与 active 状态的 CAS 不足以代替持久化恢复。Actor 或 User 删除时后台命令幂等撤销全部关联 Token。

@@ -1,5 +1,10 @@
 # API Token 变更记录
 
+## 2026-09-28 · 撤销恢复与轮换边界
+
+- revoking 是聚合内持久化撤销意图，先于外部调用提交；新增后台分页恢复和错误后查询 Talos 终态的规则。
+- 核对 Talos v2alpha1：Rotate 不接受 request_id 且 Secret 仅返回一次，删除“稳定 operation ID 可直接传给轮换接口”的假设。轮换恢复仍需单独实现，不能用撤销恢复冒充。
+
 ## 2026-09-28 · Talos 与 Delegated Actor
 
 - 统一使用 API Token，删除自行生成 `tos_`、保存 SHA-256 Hash 的 Service Token 目标设计。

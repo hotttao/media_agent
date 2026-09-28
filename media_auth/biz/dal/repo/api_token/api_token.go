@@ -74,6 +74,23 @@ func (r *Repo) MarkRevoking(ctx context.Context, id, subjectUserID string) (doma
 	return r.Get(ctx, id)
 }
 
+func (r *Repo) ListRevoking(ctx context.Context, afterID string, limit int) ([]domain.Token, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	var rows []model.APIToken
+	if err := dal.FromContext(ctx, r.db).WithContext(ctx).
+		Where("status = ? AND id > ?", domain.StatusRevoking, afterID).
+		Order("id ASC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	tokens := make([]domain.Token, 0, len(rows))
+	for _, row := range rows {
+		tokens = append(tokens, toDomain(row))
+	}
+	return tokens, nil
+}
+
 func (r *Repo) MarkRevoked(ctx context.Context, id string, at time.Time) error {
 	db := dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.APIToken{}).Where("id = ?", id).
 		Updates(map[string]any{"status": domain.StatusRevoked, "revoked_at": at})

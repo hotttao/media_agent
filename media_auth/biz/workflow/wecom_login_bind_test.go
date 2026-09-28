@@ -130,14 +130,13 @@ func (r *fakeUserRepo) SoftDeleteUser(_ context.Context, id, by string) (domaina
 func (r *fakeUserRepo) CountActiveAdmins(context.Context) (int, error) { return 2, nil }
 
 type fakeEnsurer struct {
-	called bool
-	mu     sync.Mutex
+	done chan struct{}
 }
 
 func (e *fakeEnsurer) EnsurePlatformToken(_ context.Context, userID string) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.called = true
+	if e.done != nil {
+		e.done <- struct{}{}
+	}
 	return nil
 }
 
@@ -184,7 +183,7 @@ func TestWecomLogin_Success(t *testing.T) {
 	users := &fakeUserRepo{users: map[string]domainauth.User{
 		"u1": {ID: "u1", Username: "alice", DisplayName: "Alice", Role: "user"},
 	}}
-	ensurer := &fakeEnsurer{}
+	ensurer := &fakeEnsurer{done: make(chan struct{}, 1)}
 	wecom := &fakeWeComClient{useridByCode: map[string]string{"code1": "wecom-userid"}}
 	signer := newTestSigner(t)
 	w := newWecomFlow(t, wecom, users, identityservice.NewService(identityRepo), signer, ensurer)
@@ -201,10 +200,12 @@ func TestWecomLogin_Success(t *testing.T) {
 	if err != nil || sess.Sub != "u1" {
 		t.Errorf("verify session: got sess=%+v err=%v", sess, err)
 	}
-	// ensure platform token 被调（fire-and-forget，等一下 goroutine）。
-	time.Sleep(50 * time.Millisecond)
-	if !ensurer.called {
-		t.Errorf("ensurePlatformToken not called")
+	// Synchronize with the fire-and-forget call instead of reading its state
+	// after a sleep (which does not establish a happens-before relation).
+	select {
+	case <-ensurer.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ensurePlatformToken not called")
 	}
 }
 
