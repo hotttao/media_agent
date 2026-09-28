@@ -38,6 +38,24 @@ services:
     - media-net
     restart: unless-stopped
 
+  managed_worker:
+    profiles: [managed-worker]
+    build:
+      context: ..
+      dockerfile: media_workflow/Dockerfile
+    entrypoint: ["/app/media_workflow_managed_worker"]
+    environment:
+      CONFIG_FILE: /app/conf/managed-worker.yaml
+      POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_workflow?sslmode=disable
+      CONDUCTOR_URL: http://conductor:8080
+      MANAGED_EXECUTOR_URL: ${MANAGED_EXECUTOR_URL:-http://host.docker.internal:8010}
+    volumes:
+    - ${MANAGED_WORKER_CONFIG:-./conf/managed-worker.example.yaml}:/app/conf/managed-worker.yaml:ro
+    extra_hosts:
+    - host.docker.internal:host-gateway
+    networks: [media-net]
+    restart: unless-stopped
+
 networks:
   media-net:
     external: true

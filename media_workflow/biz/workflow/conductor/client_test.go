@@ -90,7 +90,7 @@ func TestPollIncludesExactDomainWithoutFallback(t *testing.T) {
 		if got := r.URL.Query().Get("domain"); got != "worker_user_abc" {
 			t.Fatalf("domain=%q", got)
 		}
-		if r.URL.Path != "/api/tasks/poll/batch/media_image_model_v1" || r.URL.Query().Get("timeout") != "20000" || r.URL.Query().Get("count") != "1" {
+		if r.URL.Path != "/api/tasks/poll/batch/media_image_model_v1" || r.URL.Query().Get("timeout") != "5000" || r.URL.Query().Get("count") != "1" {
 			t.Fatalf("request=%s?%s", r.URL.Path, r.URL.RawQuery)
 		}
 		_, _ = w.Write([]byte("[]"))
@@ -99,6 +99,26 @@ func TestPollIncludesExactDomainWithoutFallback(t *testing.T) {
 	task, err := NewClient(server.URL).Poll(t.Context(), "media_image_model_v1", "proxy", "worker_user_abc")
 	if err != nil || task != nil {
 		t.Fatalf("task=%v err=%v", task, err)
+	}
+}
+
+func TestStartWorkflowAcceptsRawOSSUUIDButRejectsMalformedBody(t *testing.T) {
+	for _, body := range []string{"01234567-89ab-4cde-8123-0123456789ab", "{\"error\":\"invalid\"}", "", "123"} {
+		t.Run(body, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+			id, err := NewClient(server.URL).StartWorkflow(t.Context(), StartWorkflowRequest{Name: "test", Version: 1})
+			if body == "01234567-89ab-4cde-8123-0123456789ab" {
+				if err != nil || id != body {
+					t.Fatalf("raw UUID: id=%q err=%v", id, err)
+				}
+			} else if err == nil {
+				t.Fatal("malformed workflow id accepted")
+			}
+		})
 	}
 }
 

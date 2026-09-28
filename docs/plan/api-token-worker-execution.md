@@ -18,9 +18,9 @@
 - [x] 检测相同 Task Definition 的 Domain 冲突，禁止 `NO_DOMAIN` 回退。
 - [x] Worker Gateway 只接受 Personal Capability。
 - [x] Dispatch 拆分 subject、actor、credential、instance 和 auth source。
-- [ ] 实现 Managed Worker 入口、配置 allowlist 和 Managed Domain poll。
-- [ ] 共用 lease、Result Inbox 与 Conductor result adapter。
-- [ ] 单元/集成测试覆盖双 Target 隔离与审计字段。
+- [x] 实现 Managed Worker 入口、配置 allowlist 和 Managed Domain poll。
+- [x] 共用 lease、Result Inbox 与 Conductor result adapter。
+- [x] 单元/集成测试覆盖双 Target 隔离与审计字段。
 
 ## P3 · Talos 基础设施与 Adapter
 
@@ -83,3 +83,6 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - `TestAPITokenGateway` 通过：用户、workflow、materials、非法凭据、跨组织拒绝、创建/轮换/撤销、scope 不足。
 - CLI `api-token create/list/rotate/revoke` 与 `auth me` 实际执行通过，Secret 只写显式指定的新 `.env` 文件。
 - 撤销支持 `revoking` 状态重试及重复撤销；持久 pending operation、轮换失败恢复、Worker/Agent Token 和 UI 优化仍待完成，以上记录不代表 P4/P5 整体完成。
+- Managed Worker 增加内部进程入口及显式启用 profile，仅允许发布的 Managed Capability/Pool，不携带 API Token。Provider 通过配置的内部执行器接入，未配置真实实现时保持关闭。
+- 真实 Conductor + testcontainers PostgreSQL 联调通过领取、续租、模拟模型结果写入 Inbox、结果重放及执行完成；结果并发/失败重试另有数据库集成测试。
+- 联调修复 Conductor OSS 返回原始 UUID 的解析、5 秒长轮询上限和 Inbox 幂等回查错误；同一次 attempt 不能同时接受 complete/fail。

@@ -1,0 +1,39 @@
+# Copy to a deployment-specific file, then use CONFIG_FILE=<path>.
+# Capability must already be published with target=managed_worker and this pool.
+app:
+  name: media-workflow-managed-worker
+  version: v1
+  env: local
+
+database:
+  enabled: true
+  driver: postgres
+  dsn: ${POSTGRES_DSN:-postgres://media_auth:media_auth@127.0.0.1:5432/media_workflow?sslmode=disable}
+  max_open_conns: 5
+  max_idle_conns: 2
+  migrate_on_start: false
+
+managed_worker:
+  enabled: true
+  worker_id: managed-gpu-cn
+  # Optional; a fresh UUID is generated if absent.
+  instance_id: ${MANAGED_WORKER_INSTANCE_ID:-}
+  poll_interval_ms: 1000
+  bindings:
+    - capability_key: managed.image
+      capability_version: 1
+      pool_key: gpu-cn
+      executor_client: managed-image-executor
+
+client:
+  managed-image-executor:
+    enabled: true
+    service_name: managed-image-executor
+    base_domain: ${MANAGED_EXECUTOR_URL:-http://127.0.0.1:8010}
+    use_discovery: false
+    timeout:
+      enabled: true
+      connect_timeout_ms: 1000
+      read_timeout_ms: 60000
+      write_timeout_ms: 5000
+      request_timeout_ms: 60000

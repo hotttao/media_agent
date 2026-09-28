@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"media_agent/media_workflow/biz/workflow/compiler"
 )
 
@@ -96,7 +98,8 @@ type Task struct {
 }
 
 func (c *Client) Poll(ctx context.Context, taskType, workerID, domain string) (*Task, error) {
-	values := url.Values{"workerid": []string{workerID}, "count": []string{"1"}, "timeout": []string{"20000"}}
+	// OSS batch polling accepts milliseconds, with a hard maximum of 5000.
+	values := url.Values{"workerid": []string{workerID}, "count": []string{"1"}, "timeout": []string{"5000"}}
 	if domain != "" {
 		values.Set("domain", domain)
 	}
@@ -203,6 +206,23 @@ func (c *Client) doJSON(ctx context.Context, method, path string, input any, out
 		return fmt.Errorf("conductor %s %s: status=%d body=%s", method, path, response.StatusCode, responseBody)
 	}
 	if output == nil || response.StatusCode == http.StatusNoContent {
+		return nil
+	}
+	if target, ok := output.(*string); ok {
+		// Conductor OSS returns a raw UUID from workflow start even when
+		// Content-Type is application/json. Other adapters return JSON strings.
+		data, err := io.ReadAll(io.LimitReader(response.Body, 4096))
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(data, target); err == nil {
+			return nil
+		}
+		id := strings.TrimSpace(string(data))
+		if _, err := uuid.Parse(id); err != nil {
+			return fmt.Errorf("conductor returned an invalid workflow id")
+		}
+		*target = id
 		return nil
 	}
 	return json.NewDecoder(response.Body).Decode(output)

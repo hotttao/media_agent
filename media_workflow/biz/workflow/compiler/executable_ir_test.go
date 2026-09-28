@@ -38,6 +38,8 @@ func TestCompileExecutableIRInlinesRendererAndCapabilityMapping(t *testing.T) {
 	require.Equal(t, "${step__model_image__render.output.prompt}", definition.Tasks[1].InputParameters["prompt"])
 	require.Equal(t, "${workflow.input.job_id}", definition.Tasks[1].InputParameters["job_id"])
 	require.Equal(t, "model_image", definition.Tasks[1].InputParameters["step_key"])
+	require.Equal(t, ir.Steps[0].Capability.Key, definition.Tasks[1].InputParameters["capability_key"])
+	require.Equal(t, ir.Steps[0].Capability.Version, definition.Tasks[1].InputParameters["capability_version"])
 	require.Equal(t, []any{
 		"${workflow.input.inputs.full_body.asset_ref}",
 		"${workflow.input.inputs.clothing.asset_ref}",

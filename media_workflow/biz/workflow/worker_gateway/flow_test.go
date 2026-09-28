@@ -74,6 +74,13 @@ func (r *dispatchRepoStub) FindActive(context.Context, string, string, string, s
 	return r.active, nil
 }
 
+func (r *dispatchRepoStub) FindActiveManaged(context.Context, string, string, string, int, time.Time) (*jobdomain.WorkerDispatch, error) {
+	if r.active == nil {
+		return nil, jobdomain.ErrDispatchNotFound
+	}
+	return r.active, nil
+}
+
 func (r *dispatchRepoStub) Create(_ context.Context, dispatch *jobdomain.WorkerDispatch) (*jobdomain.WorkerDispatch, error) {
 	r.createCalls++
 	r.created = dispatch
@@ -85,6 +92,11 @@ func (r *dispatchRepoStub) Get(context.Context, string) (*jobdomain.WorkerDispat
 	if r.dispatch == nil {
 		return nil, jobdomain.ErrDispatchNotFound
 	}
+	return r.dispatch, nil
+}
+
+func (r *dispatchRepoStub) ExtendLease(_ context.Context, _ string, _ int, expires time.Time) (*jobdomain.WorkerDispatch, error) {
+	r.dispatch.LeaseExpiresAt = expires
 	return r.dispatch, nil
 }
 

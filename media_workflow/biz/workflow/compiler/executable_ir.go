@@ -90,6 +90,8 @@ func lowerExecutableStep(step executable.ExecutableStepIR) ([]Task, error) {
 	}
 	capabilityInput["job_id"] = "${workflow.input.job_id}"
 	capabilityInput["step_key"] = step.Key
+	capabilityInput["capability_key"] = step.Capability.Key
+	capabilityInput["capability_version"] = step.Capability.Version
 	tasks := []Task{
 		{
 			Name: RenderTemplateTaskName, TaskReferenceName: renderRef, Type: "SIMPLE",

@@ -225,6 +225,13 @@ func (f *Flow) saveResult(ctx context.Context, principal Principal, dispatchID, 
 	if _, err := f.authorizeDispatch(ctx, principal, dispatchID, workerInstanceID, attempt); err != nil {
 		return nil, err
 	}
+	return f.persistResult(ctx, dispatchID, attempt, operation, idempotencyKey, result)
+}
+
+func (f *Flow) persistResult(ctx context.Context, dispatchID string, attempt int, operation, idempotencyKey string, result map[string]any) (*jobdomain.WorkerResultReceipt, error) {
+	if idempotencyKey == "" {
+		return nil, ErrInvalidRequest
+	}
 	encoded, err := json.Marshal(result)
 	if err != nil {
 		return nil, ErrInvalidOutput
@@ -255,6 +262,10 @@ func (f *Flow) authorizeDispatch(ctx context.Context, principal Principal, dispa
 		dispatch.AuthSource != principal.AuthSource || dispatch.WorkerInstanceID != workerInstanceID {
 		return nil, ErrForbidden
 	}
+	return f.checkDispatchLease(ctx, dispatch, attempt)
+}
+
+func (f *Flow) checkDispatchLease(ctx context.Context, dispatch *jobdomain.WorkerDispatch, attempt int) (*jobdomain.WorkerDispatch, error) {
 	if dispatch.Attempt != attempt {
 		return nil, jobdomain.ErrDispatchConflict
 	}

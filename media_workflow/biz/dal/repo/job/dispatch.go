@@ -59,9 +59,29 @@ func (r *DispatchRepo) Create(ctx context.Context, dispatch *domain.WorkerDispat
 		if err := r.conn(ctx).Where("conductor_task_id = ? AND attempt = ?", dispatch.ConductorTaskID, dispatch.Attempt).First(&existing).Error; err != nil {
 			return nil, err
 		}
+		if existing.UserID != dispatch.UserID || existing.OrganizationID != dispatch.OrganizationID ||
+			existing.CredentialID != dispatch.CredentialID || existing.ActorID != dispatch.ActorID ||
+			existing.AuthSource != dispatch.AuthSource || existing.WorkerInstanceID != dispatch.WorkerInstanceID {
+			return nil, domain.ErrDispatchConflict
+		}
 		return dispatchToDomain(&existing), nil
 	}
 	return r.Get(ctx, row.ID)
+}
+
+func (r *DispatchRepo) FindActiveManaged(ctx context.Context, actorID, instanceID, capabilityKey string, version int, now time.Time) (*domain.WorkerDispatch, error) {
+	var row model.WorkerDispatch
+	err := r.conn(ctx).Where("actor_id = ? AND worker_instance_id = ? AND capability_key = ? AND capability_version = ? AND auth_source = ? AND credential_id = '' AND status IN ? AND lease_expires_at > ?",
+		actorID, instanceID, capabilityKey, version, "internal_runtime",
+		[]string{string(domain.DispatchClaimed), string(domain.DispatchDelivered), string(domain.DispatchRunning)}, now).
+		Order("created_at").First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, domain.ErrDispatchNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return dispatchToDomain(&row), nil
 }
 
 func (r *DispatchRepo) Get(ctx context.Context, id string) (*domain.WorkerDispatch, error) {
@@ -105,6 +125,20 @@ func (r *DispatchRepo) SaveResult(ctx context.Context, dispatchID string, attemp
 		if now.After(dispatch.LeaseExpiresAt) && dispatch.Status != string(domain.DispatchResultReceived) {
 			return domain.ErrDispatchExpired
 		}
+		// The locked dispatch is the authority for terminal-result uniqueness.
+		// Complete and fail must not create separate receipts for one attempt.
+		if dispatch.Status == string(domain.DispatchResultReceived) {
+			var existing model.WorkerResultInbox
+			if err := tx.Where("dispatch_id = ? AND attempt = ?", dispatchID, attempt).First(&existing).Error; err != nil {
+				return err
+			}
+			if existing.ResultDigest != resultDigest || existing.Operation != operation {
+				return domain.ErrDispatchConflict
+			}
+			receipt = receiptToDomain(&existing)
+			receipt.Dispatch = dispatchToDomain(&dispatch)
+			return nil
+		}
 		row := model.WorkerResultInbox{
 			ID: "receipt_" + uuid.NewString(), DispatchID: dispatchID, Attempt: attempt, Operation: operation,
 			IdempotencyKey: idempotencyKey, ResultJSON: datatypes.JSON(resultJSON), ResultDigest: resultDigest,
@@ -115,6 +149,9 @@ func (r *DispatchRepo) SaveResult(ctx context.Context, dispatchID string, attemp
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
+			// GORM includes a nonzero primary key in First's predicate. The new
+			// receipt UUID is not the existing receipt's ID after ON CONFLICT.
+			row = model.WorkerResultInbox{}
 			if err := tx.Where("dispatch_id = ? AND (idempotency_key = ? OR (attempt = ? AND operation = ?))", dispatchID, idempotencyKey, attempt, operation).First(&row).Error; err != nil {
 				return err
 			}

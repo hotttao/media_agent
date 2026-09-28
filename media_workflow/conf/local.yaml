@@ -7,6 +7,10 @@ server:
   enabled: true
   address: ${SERVER_ADDR:-:8002}
 
+# Managed capabilities are explicitly enabled and allowlisted in deployments.
+managed_worker:
+  enabled: false
+
 database:
   enabled: true
   driver: postgres

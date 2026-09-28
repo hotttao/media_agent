@@ -74,6 +74,7 @@ message Config {
   AuthConfig auth = 70;
   // media_workflow job 配置（max_retries / claim_timeout）
   JobConfig job = 77;
+  ManagedWorkerConfig managed_worker = 78;
   // LDAP 认证配置（auth domain 登录双路之 LDAP）。
   LdapConfig ldap = 71;
   // 企微 corp OAuth 配置（wecom domain）。
@@ -93,6 +94,22 @@ message Config {
   // key = 下游 app.name；value = 该下游 client 的治理配置。
   // 新增下游 = 在这里加一项；不再调用 = 删一项。
   map<string, AppClientConfig> client = 100;
+}
+
+// Server-side capability runner. Executors are named downstream client entries.
+message ManagedWorkerConfig {
+  bool enabled = 1;
+  string worker_id = 2;
+  string instance_id = 3;
+  int32 poll_interval_ms = 4;
+  repeated ManagedWorkerBinding bindings = 5;
+}
+
+message ManagedWorkerBinding {
+  string capability_key = 1;
+  int32 capability_version = 2;
+  string pool_key = 3;
+  string executor_client = 4;
 }
 
 // ============================================================================

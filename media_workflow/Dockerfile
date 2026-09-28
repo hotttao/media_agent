@@ -12,12 +12,14 @@ COPY hertz_infra/ hertz_infra/
 COPY media_workflow/ media_workflow/
 RUN cd media_workflow && GOWORK=off CGO_ENABLED=0 go build -o /out/media_workflow .
 RUN cd media_workflow && GOWORK=off CGO_ENABLED=0 go build -o /out/media_workflow_internal_worker ./cmd/internal_worker
+RUN cd media_workflow && GOWORK=off CGO_ENABLED=0 go build -o /out/media_workflow_managed_worker ./cmd/managed_worker
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=builder /out/media_workflow /app/media_workflow
 COPY --from=builder /out/media_workflow_internal_worker /app/media_workflow_internal_worker
+COPY --from=builder /out/media_workflow_managed_worker /app/media_workflow_managed_worker
 COPY media_workflow/migrations/ /app/migrations/
 COPY media_workflow/conf/ /app/conf/
 COPY media_workflow/.env /app/.env

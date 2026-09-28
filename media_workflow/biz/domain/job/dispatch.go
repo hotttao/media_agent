@@ -48,6 +48,7 @@ type WorkerResultReceipt struct {
 
 type DispatchRepo interface {
 	FindActive(ctx context.Context, userID, organizationID, credentialID, workerInstanceID, capabilityKey string, capabilityVersion int, now time.Time) (*WorkerDispatch, error)
+	FindActiveManaged(ctx context.Context, actorID, workerInstanceID, capabilityKey string, capabilityVersion int, now time.Time) (*WorkerDispatch, error)
 	Create(ctx context.Context, dispatch *WorkerDispatch) (*WorkerDispatch, error)
 	Get(ctx context.Context, id string) (*WorkerDispatch, error)
 	ExtendLease(ctx context.Context, id string, attempt int, leaseExpiresAt time.Time) (*WorkerDispatch, error)
