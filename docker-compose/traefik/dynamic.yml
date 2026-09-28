@@ -17,6 +17,12 @@ http:
       rule: "Path(`/settings`) || PathPrefix(`/settings/`) || Path(`/recovery`) || PathPrefix(`/recovery/`) || Path(`/verification`) || PathPrefix(`/verification/`) || Path(`/logout`) || PathPrefix(`/logout/`) || Path(`/error`) || PathPrefix(`/error/`)"
       priority: 120
       service: ory-login-ui
+    ory-login-assets:
+      # Explicit Ory assets only: /assets/<hashed frontend bundles> belong to
+      # the production frontend and must not be swallowed by this router.
+      rule: "Path(`/assets/normalize.css`) || Path(`/assets/inter-font.css`) || Path(`/assets/jetbrains-mono-font.css`) || Path(`/assets/fa-brands.min.css`) || Path(`/assets/fa-solid.min.css`) || Path(`/assets/fontawesome.min.css`) || Path(`/assets/passwordInput.js`) || Path(`/auth-layout.css`) || Path(`/content-layout.css`) || Path(`/main.css`) || Path(`/style.css`) || Path(`/theme.css`) || Path(`/ory-logo.svg`) || Path(`/ory-small.svg`) || Path(`/favico.png`) || Path(`/.well-known/ory/webauthn.js`) || PathPrefix(`/assets/inter/`) || PathPrefix(`/assets/jetbrains-mono/`) || PathPrefix(`/assets/webfonts/`)"
+      priority: 120
+      service: ory-login-ui
     authenticated-user:
       rule: "Path(`/api/auth/me`)"
       priority: 110

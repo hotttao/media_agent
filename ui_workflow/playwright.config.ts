@@ -17,7 +17,9 @@ export default defineConfig({
     baseURL: process.env.BASE_URL || "http://localhost:5173",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    actionTimeout: 10_000,
+    // Allow explicitly slower diagnostics on a shared/loaded workstation;
+    // the normal regression budget remains 10 seconds.
+    actionTimeout: Number(process.env.E2E_ACTION_TIMEOUT_MS || 10_000),
     ...(process.env.E2E_CHROMIUM_EXECUTABLE
       ? { launchOptions: { executablePath: process.env.E2E_CHROMIUM_EXECUTABLE } }
       : {}),

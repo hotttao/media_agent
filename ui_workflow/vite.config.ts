@@ -64,6 +64,36 @@ const standaloneConfig: UserConfig = {
     host: "0.0.0.0",
     port: 5173,
     proxy: {
+      // These pages still belong to Ory Login UI. Without the proxy Vite's
+      // SPA fallback renders the business login page instead of recovery.
+      ...Object.fromEntries(
+        [
+          "/recovery",
+          "/settings",
+          "/verification",
+          "/logout",
+          "/error",
+          "/assets/normalize.css",
+          "/assets/inter-font.css",
+          "/assets/jetbrains-mono-font.css",
+          "/assets/fa-brands.min.css",
+          "/assets/fa-solid.min.css",
+          "/assets/fontawesome.min.css",
+          "/assets/passwordInput.js",
+          "/assets/inter/",
+          "/assets/jetbrains-mono/",
+          "/assets/webfonts/",
+          "/auth-layout.css",
+          "/content-layout.css",
+          "/main.css",
+          "/style.css",
+          "/theme.css",
+          "/ory-logo.svg",
+          "/ory-small.svg",
+          "/favico.png",
+          "/.well-known/ory/webauthn.js",
+        ].map((path) => [path, { target: gatewayTarget, changeOrigin: true }]),
+      ),
       // media_materials (8003): materials resources CRUD
       "/api/v1/materials": {
         target: gatewayTarget,

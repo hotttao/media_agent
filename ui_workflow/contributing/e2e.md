@@ -18,6 +18,9 @@ E2E_DEV_AUTH=true E2E_CHROMIUM_EXECUTABLE=/usr/bin/google-chrome yarn test:e2e
 # Run a specific test
 E2E_USER_EMAIL=<email> E2E_USER_PASSWORD=<password> yarn test:e2e --grep "roles"
 
+# Slow shared workstation: explicitly extend diagnostics, not the normal budget
+E2E_ACTION_TIMEOUT_MS=30000 yarn test:e2e --timeout=90000
+
 # Open the Playwright UI for debugging
 E2E_USER_EMAIL=<email> E2E_USER_PASSWORD=<password> yarn test:e2e:ui
 ```
@@ -274,6 +277,7 @@ Prefer semantic locators over positional or CSS-based ones. Priority (highest â†
 - **Delete cleanup optimization**: `deleteRow()` waits up to 30s for the row to disappear by default. For cleanup-only scenarios (not testing delete), use `deleteRow(name, { noWait: true })` to skip waiting â€” this saves 10-20s per call. Only tests that verify delete behavior should wait for row removal.
 - **Cancel navigation**: The cancel button uses `history.back()`. Always navigate to the list page before clicking Create, so that cancel returns to a valid page.
 - **API error logging**: The `page` fixture in `base.ts` logs all 4xx/5xx responses to stdout.
+- **Do not change container networks during browser tests**: finish Compose restarts and testcontainers tests before Playwright. Creating/removing Docker network interfaces can cause Chromium `ERR_NETWORK_CHANGED`, interrupting Vite module downloads and leaving a blank page unrelated to the UI assertions.
 
 ## Pitfalls
 
