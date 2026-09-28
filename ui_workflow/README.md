@@ -17,6 +17,21 @@ Traefik does not serve the development frontend. After the standalone UI is
 ready for deployment, it is built as static assets and served by Nginx behind
 Traefik.
 
+On Linux with a user systemd manager, keep Vite running across terminal sessions:
+
+```bash
+bash scripts/dev-service.sh start
+bash scripts/dev-service.sh status
+bash scripts/dev-service.sh logs
+# Explicitly stop the development frontend:
+bash scripts/dev-service.sh stop
+```
+
+The transient user service listens on `0.0.0.0:5173`, fails if that port is
+occupied, and restarts after a process failure. It does not survive a machine
+reboot; run `start` again after reboot. `yarn dev` remains available for foreground
+development.
+
 ## Architecture
 
 The 4-layer model from [`contributing/architecture.md`](./contributing/architecture.md) is the contract:
