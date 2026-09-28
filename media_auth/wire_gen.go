@@ -161,6 +161,9 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 		}
 		apiTokenRepo := dalapitoken.NewRepo(db)
 		apiTokenSvc := apitokenservice.NewService(apiTokenRepo, apitokenservice.TalosAdapter{Client: talosClient})
+		rotation := workflow.NewAPITokenRotation(apiTokenRepo, apitokenservice.TalosAdapter{Client: talosClient}, txRunner)
+		apiTokenSvc.SetRotator(rotation)
+		go rotation.Run(context.Background())
 		apiTokenSvc.SetMembershipValidator(membershipValidator)
 		apiTokenSvc.SetSubjectValidator(func(ctx context.Context, userID string) bool {
 			user, err := userRepo.FindByID(ctx, userID)

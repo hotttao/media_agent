@@ -2,9 +2,11 @@ package talos
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -126,5 +128,52 @@ func TestRotateRejectsMissingReplacementSecret(t *testing.T) {
 	client, _ := New(Config{BaseURL: server.URL})
 	if _, err := client.Rotate(t.Context(), "old-key", []string{"api.access"}); err == nil {
 		t.Fatal("empty replacement credential accepted")
+	}
+}
+
+func TestListEncodesActorFilterAndCursorWithoutQueryInjection(t *testing.T) {
+	actor := `User:one" OR status="anything`
+	cursor := "cursor&filter=other+value"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+		if r.Method != http.MethodGet || r.URL.Path != apiPrefix+"/issuedApiKeys" || query.Get("filter") != "actor_id="+strconv.Quote(actor) || query.Get("page_token") != cursor || query.Get("page_size") != "100" {
+			t.Error("actor or cursor changed query structure")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"issued_api_keys": []map[string]any{{"key_id": "key", "actor_id": actor, "metadata": map[string]any{"rotation_id": "operation"}}}, "next_page_token": "next"})
+	}))
+	defer server.Close()
+	client, _ := New(Config{BaseURL: server.URL})
+	page, err := client.List(t.Context(), actor, cursor)
+	if err != nil || len(page.Keys) != 1 || page.NextPageToken != "next" || page.Keys[0].Metadata["rotation_id"] != "operation" {
+		t.Fatal("key metadata or pagination lost")
+	}
+}
+
+func TestRotatePreservesRecoveryMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Metadata map[string]any `json:"metadata"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Metadata["api_token_id"] != "token" || body.Metadata["rotation_id"] != "operation" {
+			t.Error("rotation recovery identity not sent")
+		}
+		_, _ = w.Write([]byte(`{"issued_api_key":{"key_id":"new-key","actor_id":"User:one"},"secret":"one-time"}`))
+	}))
+	defer server.Close()
+	client, _ := New(Config{BaseURL: server.URL})
+	if _, err := client.RotateWithMetadata(t.Context(), "old-key", []string{"api.access"}, map[string]any{"api_token_id": "token", "rotation_id": "operation"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListRejectsInvalidOrCrossActorKeys(t *testing.T) {
+	for _, body := range []string{`{"issued_api_keys":[{"actor_id":"User:one"}]}`, `{"issued_api_keys":[{"key_id":"key","actor_id":"User:other"}]}`, `{"issued_api_keys":"invalid"}`} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(body)) }))
+		client, _ := New(Config{BaseURL: server.URL})
+		_, err := client.List(t.Context(), "User:one", "")
+		server.Close()
+		if err == nil {
+			t.Fatal("invalid list treated as successful recovery input")
+		}
 	}
 }

@@ -36,11 +36,16 @@
 - [x] 新增 API Token IDL：create/list/rotate/revoke，以及 internal verify。
 - [x] 实现 Talos Issue + 本地事务失败撤销补偿。
 - [x] 实现 VerifyAPIToken，联查 User、Actor、Organization 和 scope。
-- [ ] 实现 revoke/rotate pending operation 与幂等恢复。
+- [x] 实现 revoke/rotate pending operation 与幂等恢复。
   - [x] revoke 使用持久 revoking 意图，后台分页恢复，并查询确认不确定结果。
-  - [ ] rotate 的持久操作、超时结果确认与未知 replacement Key 清理。
+  - [x] rotate 的持久操作、超时结果确认与未知 replacement Key 清理。
+    - [x] migration、聚合操作实体、Token/操作事务 CAS。
+    - [x] Talos metadata Rotate 与 Actor 分页 List adapter。
+    - [x] 同步 Workflow、独立有界清理、后台重启恢复。
+    - [x] 单元/PG 并发与失败测试，真实 Talos 丢失响应联调，HTTP/CLI 回归。
 - [x] 生成 Hertz model/client/router/swagger，不手改生成产物。
 - [ ] 单元、DAL、HTTP E2E 覆盖生命周期与失败分支。
+  - [ ] 补齐创建时签发结果不确定、撤销补偿失败后的持久化恢复；不能只返回组合错误后丢失补偿意图。
 
 ## P5 · 委托身份与 Personal Worker 切换
 
@@ -93,3 +98,6 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - Vite 补齐 Recovery/Settings/Verification 等 Ory 页面和明确的静态资源代理；浏览器验证注册、稳定 User、独立 Session 登出、恢复入口通过。FlowGram 拖动/节点详情/进入编辑单独复测通过；Docker/testcontainers 操作与浏览器测试串行执行，避免 Chromium `ERR_NETWORK_CHANGED`。
 - 撤销恢复后台已部署：持久 revoking、keyset 扫描、失败记录不阻塞后页、错误后查询确认 Talos 撤销终态。PostgreSQL 集成测试（含 race）验证进程对象重建后恢复、响应丢失、分页和终态不重放；单元测试覆盖本地提交失败、查询失败及 Key ID 不匹配。
 - 更新认证服务后 `TestAPITokenGateway` 通过；CLI 实际执行创建、轮换、撤销、重复撤销，Secret 文件权限为 0600。企微登录测试原有异步状态读取竞态改用通道同步，相关 service/workflow race 测试通过。轮换持久恢复仍未完成。
+- 轮换恢复随后完成：rotating + 依附操作记录、同步事务 CAS、metadata 定位 replacement、旧 Key 撤销屏障、分页清理和后台恢复已部署。服务/Workflow/Talos adapter race 测试、9 项 API Token PostgreSQL/真实 Talos集成测试通过；真实 Talos 提交后丢弃响应并阻断即时清理，再重建 Workflow 验证仅靠数据库恢复，所有本次 Key 均 revoked，且晚到 Rotate 被拒绝。
+- 更新认证服务后网关 API 生命周期与 CLI 创建/轮换/撤销/重复撤销回归再次通过；未把创建补偿意图丢失问题、Worker/Agent 切换或 UI 整体验收并入该完成项。
+- 轮换恢复部署后的浏览器回归 6 项通过：登录 setup、注册入口、稳定业务 User、独立 Session 登出、密码恢复、FlowGram 节点拖动/详情/结构化编辑。仅证明这些旅程仍可用，不替代完整视觉与执行交互验收。

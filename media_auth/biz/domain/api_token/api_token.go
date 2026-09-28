@@ -23,6 +23,7 @@ type Status string
 
 const (
 	StatusActive   Status = "active"
+	StatusRotating Status = "rotating"
 	StatusRevoking Status = "revoking"
 	StatusRevoked  Status = "revoked"
 	StatusExpired  Status = "expired"
@@ -55,6 +56,7 @@ type Repository interface {
 }
 
 var ErrNotFound = errors.New("api token not found")
+var ErrConflict = errors.New("api token operation conflicts with current state")
 
 // RevocationSource exposes durable pending work without exposing Secret data.
 type RevocationSource interface {

@@ -62,7 +62,7 @@ sequenceDiagram
 
 | 状态 | 命令/事实 | 后继 |
 |:---|:---|:---|
-| active / expired | 有权 User 请求撤销 | revoking |
+| active / rotating / expired | 有权 User 请求撤销 | revoking |
 | revoking | Talos 已确认撤销且本地提交成功 | revoked |
 | revoking | 外部/本地失败、取消 | revoking |
 | revoked | 重复撤销 | revoked，不再调 Talos |
@@ -87,6 +87,6 @@ sequenceDiagram
 
 ## 范围与结果事件
 
-本流程只负责撤销，不负责轮换超时后的未知 replacement Key 或创建补偿。Talos Rotate 不接受 request_id，也不返回可再次查询的 Secret，不能套用本流程盲目重试。
+本流程只负责当前映射 Key 的撤销；rotating 期间撤销会阻止成功提交，并由 [Rotation Workflow](../0009-api-token-rotation/api_token_rotation.md) 继续清理未知 replacement。创建补偿另有职责。Talos Rotate 不接受 request_id，也不返回可再次查询的 Secret，不能套用本流程盲目重试。
 
 无新增领域事件；列表中可观察 revoking/revoked 状态。

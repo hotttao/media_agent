@@ -85,6 +85,17 @@ func (f *fakeSecrets) Revoke(_ context.Context, key string) error {
 	return f.revokeErr
 }
 
+type fakeRotator struct {
+	token  domain.Token
+	result CreateResult
+	err    error
+}
+
+func (r *fakeRotator) Rotate(_ context.Context, token domain.Token) (CreateResult, error) {
+	r.token = token
+	return r.result, r.err
+}
+
 func TestCreateUserAPITokenAndVerify(t *testing.T) {
 	now := time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC)
 	expires := now.Add(24 * time.Hour)
@@ -148,7 +159,7 @@ func TestVerifyRejectsTalosMetadataMismatch(t *testing.T) {
 	}
 }
 
-func TestRotateReturnsOneTimeSecretAndReplacesKey(t *testing.T) {
+func TestRotateDelegatesAuthorizedTokenMetadata(t *testing.T) {
 	now := time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC)
 	expires := now.Add(24 * time.Hour)
 	token := domain.Token{
@@ -160,26 +171,32 @@ func TestRotateReturnsOneTimeSecretAndReplacesKey(t *testing.T) {
 	service := NewService(repo, secrets)
 	service.SetSubjectValidator(func(context.Context, string) bool { return true })
 	service.now = func() time.Time { return now }
+	rotator := &fakeRotator{result: CreateResult{Token: token, Secret: "show-once"}}
+	service.SetRotator(rotator)
 
 	result, err := service.Rotate(context.Background(), "u1", token.ID, time.Time{})
 	if err != nil || result.Secret != "show-once" {
 		t.Fatalf("Rotate() = %#v, %v", result, err)
 	}
+	if rotator.token.ID != token.ID || rotator.token.TalosKeyID != token.TalosKeyID {
+		t.Fatal("rotation did not use authoritative token metadata")
+	}
 }
 
-func TestRotateRevokesReplacementWhenMetadataUpdateFails(t *testing.T) {
+func TestRotateRejectsWrongOwnerWithoutCallingWorkflow(t *testing.T) {
 	now := time.Now()
 	expires := now.Add(time.Hour)
 	token := domain.Token{ID: "api-1", TalosKeyID: "old-key", SubjectUserID: "u1", ActorType: domain.ActorUser, ActorID: "User:u1", Scopes: []string{"api.access"}, Status: domain.StatusActive, ExpiresAt: &expires}
-	repo := &fakeRepo{created: token, replaceErr: errors.New("database unavailable")}
-	secrets := &fakeSecrets{rotated: IssuedSecret{KeyID: "new-key", Secret: "never-return", ExpiresAt: expires}}
-	service := NewService(repo, secrets)
+	repo := &fakeRepo{created: token}
+	service := NewService(repo, &fakeSecrets{})
 	service.SetSubjectValidator(func(context.Context, string) bool { return true })
 	service.now = func() time.Time { return now }
 
-	_, err := service.Rotate(context.Background(), "u1", token.ID, time.Time{})
-	if err == nil || secrets.revokedKey != "new-key" {
-		t.Fatalf("Rotate() error=%v revoked=%q", err, secrets.revokedKey)
+	rotator := &fakeRotator{}
+	service.SetRotator(rotator)
+	_, err := service.Rotate(context.Background(), "other", token.ID, time.Time{})
+	if !errors.Is(err, ErrForbidden) || rotator.token.ID != "" {
+		t.Fatal("wrong owner invoked rotation workflow")
 	}
 }
 

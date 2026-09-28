@@ -63,7 +63,7 @@ Personal Worker 将 `act.sub` 改为 `Worker:<worker_id>`。`client_id` 不表�
 
 ## 3. Talos Adapter
 
-`media_auth/biz/shared/client/talos` 封装 Talos Admin API，业务层不能依赖 Talos SDK/HTTP DTO。初期需要四个接口：
+`media_auth/biz/shared/client/talos` 封装 Talos Admin API，业务层不能依赖 Talos SDK/HTTP DTO。生命周期与恢复接口为：
 
 ```go
 type Client interface {
@@ -71,6 +71,8 @@ type Client interface {
     Verify(ctx context.Context, secret string) (VerifiedKey, error)
     Revoke(ctx context.Context, keyID string) error
     Get(ctx context.Context, keyID string) (KeyMetadata, error)
+    RotateWithMetadata(ctx context.Context, keyID string, scopes []string, metadata map[string]any) (IssuedKey, error)
+    List(ctx context.Context, actorID, pageToken string) (KeyPage, error)
 }
 ```
 
@@ -86,7 +88,17 @@ HTTP 路径和 DTO 以锁定的 Talos OpenAPI 版本为准。Adapter 必须设�
 
 `0011_api_token_revocation_recovery` migration 增加 `(id) WHERE status='revoking'` 部分索引，不新增凭证或 Secret 表。
 
-Talos Rotate 没有 request_id 或可恢复 Secret；撤销后台不能用于轮换重试。轮换持久化操作和未知 replacement Key 清理仍是独立实现项。
+### 3.2 轮换持久化与恢复
+
+`0012_api_token_rotations` 增加 Token rotating 状态，以及 `api_token_rotations(id,token_id FK,old_key_id,actor_id,status,deadline,created_at)`；status 为 pending/recovering/completed/aborted，单 Token 最多一个 pending/recovering。表只保存元数据。
+
+`biz/workflow/api_token_rotation.go` 注入 TxRunner、RotationRepository 与 SecretStore。同步请求先在事务中 CAS active/旧 Key/subject/未过期并提交 rotating + pending，期限 30 秒；外部 Rotate 请求在 metadata 写入 api_token_id、rotation_id、subject_user_id、organization_id。成功后另开事务 CAS pending/未超时/rotating/旧 Key，提交新 Key 映射与 completed，再返回 Secret。外部调用不持有事务。
+
+失败时不返回 Secret，尝试取得 recovering 并清理；客户端取消后的清理使用独立有界 context。后台启动即扫描，间隔 10 秒、每批 100 条，以 ID keyset 遍历 recovering 和已过期限的 pending。每次恢复最多 15 秒。取得恢复后同步提交不能再成功。
+
+清理先 Revoke 旧 Key，错误后 Get 确认其 REVOKED，阻止原子 Rotate 的晚到调用；再按 actor_id 调 Talos List（每页100），仅撤销 metadata 同时匹配 api_token_id、rotation_id 的 replacement。全部确认后，在事务中提交 Token revoked + operation aborted。分页/上游/本地失败保留 recovering；不能重发 Rotate，也不能重放 Secret。completed 操作不参与恢复。
+
+Talos Adapter 增加带 metadata 的 Rotate 和按 Actor 的分页 List，正确转义 AIP filter/URL；列表异常不得被当作完整扫描。Service 的 Rotate 保留归属校验并委托 Workflow；启动 wiring 同时装配同步能力和后台恢复。
 
 ## 4. Capability Execution Target
 

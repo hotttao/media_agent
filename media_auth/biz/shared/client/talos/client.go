@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,6 +57,37 @@ type VerifiedKey struct {
 }
 
 type KeyMetadata = VerifiedKey
+
+type KeyPage struct {
+	Keys          []KeyMetadata
+	NextPageToken string
+}
+
+func (c *Client) List(ctx context.Context, actorID, pageToken string) (KeyPage, error) {
+	if strings.TrimSpace(actorID) == "" {
+		return KeyPage{}, errors.New("talos list requires actor id")
+	}
+	query := url.Values{"filter": {"actor_id=" + strconv.Quote(actorID)}, "page_size": {"100"}}
+	if pageToken != "" {
+		query.Set("page_token", pageToken)
+	}
+	var response struct {
+		Keys          []issuedAPIKey `json:"issued_api_keys"`
+		NextPageToken string         `json:"next_page_token"`
+	}
+	if err := c.do(ctx, http.MethodGet, apiPrefix+"/issuedApiKeys?"+query.Encode(), nil, &response); err != nil {
+		return KeyPage{}, err
+	}
+	page := KeyPage{Keys: make([]KeyMetadata, 0, len(response.Keys)), NextPageToken: response.NextPageToken}
+	for _, key := range response.Keys {
+		metadata, err := key.toVerified()
+		if err != nil || metadata.KeyID == "" || metadata.ActorID != actorID {
+			return KeyPage{}, errors.New("talos returned invalid key list")
+		}
+		page.Keys = append(page.Keys, metadata)
+	}
+	return page, nil
+}
 
 func New(cfg Config) (*Client, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
@@ -134,11 +166,19 @@ func (c *Client) Revoke(ctx context.Context, keyID string) error {
 }
 
 func (c *Client) Rotate(ctx context.Context, keyID string, scopes []string) (IssuedKey, error) {
+	return c.RotateWithMetadata(ctx, keyID, scopes, nil)
+}
+
+func (c *Client) RotateWithMetadata(ctx context.Context, keyID string, scopes []string, metadata map[string]any) (IssuedKey, error) {
 	var response struct {
 		IssuedAPIKey issuedAPIKey `json:"issued_api_key"`
 		Secret       string       `json:"secret"`
 	}
-	if err := c.do(ctx, http.MethodPost, apiPrefix+"/issuedApiKeys/"+url.PathEscape(keyID)+":rotate", map[string]any{"scopes": scopes}, &response); err != nil {
+	body := map[string]any{"scopes": scopes}
+	if metadata != nil {
+		body["metadata"] = metadata
+	}
+	if err := c.do(ctx, http.MethodPost, apiPrefix+"/issuedApiKeys/"+url.PathEscape(keyID)+":rotate", body, &response); err != nil {
 		return IssuedKey{}, err
 	}
 	return response.IssuedAPIKey.toIssued(response.Secret)

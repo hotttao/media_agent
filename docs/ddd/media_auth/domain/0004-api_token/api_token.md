@@ -4,6 +4,7 @@ description: User、Agent、Personal Worker 与受控客户端的长期 API 凭�
 dependencies:
     - auth
 related_workflow:
+    - api_token_rotation
     - api_token_revocation
     - api_token_verification
     - agent_api_token_provisioning
@@ -43,7 +44,7 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 
 | 聚合根 | 包含对象 | 一致性边界 | 核心不变量 |
 |:---|:---|:---|:---|
-| API Token | Token Metadata、Actor Binding | 一把 Talos Key 的管理生命周期 | 一个 active Token 只绑定一个 Actor、一个被代表 User 和至多一个 Organization；Talos Key ID 全局唯一 |
+| API Token | Token Metadata、Actor Binding、Rotation Operation | 管理生命周期与本次轮换意图 | 一个 active Token 只绑定一个 Actor、一个被代表 User 和至多一个 Organization；Talos Key ID 全局唯一 |
 
 - Secret 只在创建或轮换响应中出现，不能写入数据库、日志、Trace、Outbox 或审计载荷。
 - User Token 的 `actor_ref` 等于其 User；Agent/Personal Worker Token 必须同时固定 `subject_user_id` 和不同的 `actor_ref`。
@@ -67,7 +68,7 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 | organization_id | text nullable | 唯一企业上下文 |
 | name | text | 用户可读名称 |
 | scopes | text[] | 入口能力上限 |
-| status | text | active/revoking/revoked/expired；revoking 为持久化撤销意图，不可验证 |
+| status | text | active/rotating/revoking/revoked/expired；rotating/revoking 不可验证 |
 | expires_at | timestamptz | 到期时间 |
 | created_by | text | 创建命令的 User 或受信服务主体 |
 | created_at / rotated_at / revoked_at | timestamptz nullable | 生命周期时间 |
@@ -79,6 +80,26 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 ### UUID 生成规则
 
 本地管理 ID 使用 ULID；Secret 格式和 Talos Key ID 由 Talos 配置决定。
+
+### `api_token_rotations`
+
+依附 API Token 的轮换尝试实体；正常完成和失败恢复都必须与 Token 状态原子提交。没有独立授权或生命周期，不保存 Secret。
+
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text PK | 稳定轮换操作 ID |
+| token_id | text FK | 所属 Token Manager ID |
+| old_key_id | text | 发起时冻结的 Talos Key ID |
+| actor_id | text | 发起时冻结的 Actor，用于上游列表过滤 |
+| status | text | pending/recovering/completed/aborted |
+| deadline | timestamptz | 同步提交期限与后台恢复条件 |
+| created_at | timestamptz | 创建时间 |
+
+#### 约束与索引
+
+- 单个 Token 至多一条 pending/recovering 操作（部分唯一索引）；终态记录保留审计。
+- pending/recovering 使用按 ID 的部分索引扫描；API Token 与操作的更新必须在同一事务提交。
+- 已取得恢复的操作不能 completed；completed 不能恢复；终态不能重开。
 
 ## 能力详细说明
 
@@ -102,4 +123,4 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 
 撤销在外部调用前提交 `revoking`，立即禁止验证；以 Token Manager ID 和 Talos Key ID 为稳定操作标识，后台恢复同一撤销意图。具体事务、重试与结果确认见 [API Token Revocation](../../workflow/0008-api-token-revocation/api_token_revocation.md)。
 
-轮换同样需要本地持久化操作与恢复，但不能假设 Talos Rotate 支持 operation ID：当前接口没有 request_id，也不能再次取得 Secret。超时不能盲目轮换第二把 Key，须确认旧 Key 状态，并处理可能产生但无法交付的 replacement Key；只比较旧 Key 与 active 状态的 CAS 不足以代替持久化恢复。Actor 或 User 删除时后台命令幂等撤销全部关联 Token。
+轮换先提交 rotating 与操作记录，以操作 ID 标记 Talos replacement metadata；期限内正常提交后一次性返回 Secret。失败或超时按 [API Token Rotation](../../workflow/0009-api-token-rotation/api_token_rotation.md) 撤销旧 Key、枚举并清理本次 replacement，终态 revoked；不重发 Rotate，不持久化或重放 Secret。Actor 或 User 删除时后台命令幂等撤销全部关联 Token。

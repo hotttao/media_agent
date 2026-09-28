@@ -53,7 +53,14 @@ type Service struct {
 	actorValidator ActorValidator
 	subjectValid   SubjectValidator
 	now            func() time.Time
+	rotator        Rotator
 }
+
+type Rotator interface {
+	Rotate(context.Context, domain.Token) (CreateResult, error)
+}
+
+func (s *Service) SetRotator(rotator Rotator) { s.rotator = rotator }
 
 func NewService(repo domain.Repository, secrets SecretStore) *Service {
 	return &Service{repo: repo, secrets: secrets, now: time.Now}
@@ -234,24 +241,10 @@ func (s *Service) Rotate(ctx context.Context, subjectUserID, id string, requeste
 	if !requestedExpiry.IsZero() {
 		return CreateResult{}, fmt.Errorf("%w: changing expiry during rotation is not supported by Talos", ErrInvalidRequest)
 	}
-	issued, err := s.secrets.Rotate(ctx, token.TalosKeyID, token.Scopes)
-	if err != nil {
-		return CreateResult{}, err
+	if s.rotator == nil {
+		return CreateResult{}, ErrInactive
 	}
-	expiresAt := token.ExpiresAt
-	if !issued.ExpiresAt.IsZero() {
-		expiresAt = &issued.ExpiresAt
-	}
-	rotated, err := s.repo.ReplaceTalosKey(ctx, token.ID, token.TalosKeyID, issued.KeyID, expiresAt, s.now())
-	if err != nil {
-		// The old Talos key has already been invalidated. Revoke the replacement
-		// so a credential without matching local metadata cannot remain active.
-		if revokeErr := s.secrets.Revoke(ctx, issued.KeyID); revokeErr != nil {
-			return CreateResult{}, errors.Join(err, fmt.Errorf("compensate rotated talos key: %w", revokeErr))
-		}
-		return CreateResult{}, err
-	}
-	return CreateResult{Token: rotated, Secret: issued.Secret}, nil
+	return s.rotator.Rotate(ctx, token)
 }
 
 func normalizeScopes(input []string) ([]string, error) {

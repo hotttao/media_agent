@@ -125,6 +125,8 @@ func writeError(c *app.RequestContext, err error) {
 		c.JSON(consts.StatusForbidden, map[string]string{"error": err.Error()})
 	case errors.Is(err, domain.ErrNotFound):
 		c.JSON(consts.StatusNotFound, map[string]string{"error": "api token not found"})
+	case errors.Is(err, domain.ErrConflict):
+		c.JSON(consts.StatusConflict, map[string]string{"error": "api token operation conflicts with current state"})
 	default:
 		c.JSON(consts.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
