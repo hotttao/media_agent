@@ -61,6 +61,14 @@ func ExecutionDomainForUser(userID string) string {
 	return "worker_user_" + hex.EncodeToString(digest[:12])
 }
 
+// ExecutionDomainForManagedPool returns the opaque Conductor Task Domain used
+// by a configured managed worker pool. The raw pool key is intentionally not
+// exposed to Conductor metadata or logs.
+func ExecutionDomainForManagedPool(poolKey string) string {
+	digest := sha256.Sum256([]byte(poolKey))
+	return "worker_managed_" + hex.EncodeToString(digest[:12])
+}
+
 // JobInput bundle（自包含，存 jobs.input jsonb）。
 type JobInput struct {
 	Product   *ProductData   `json:"product,omitempty"`

@@ -4,7 +4,7 @@ package executable
 
 import template "media_agent/media_workflow/biz/domain/template"
 
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 type ValueSource string
 
@@ -32,6 +32,8 @@ type CapabilityIR struct {
 	Key              string `json:"key"`
 	Version          int    `json:"version"`
 	ConductorTaskDef string `json:"conductor_task_def"`
+	ExecutionTarget  string `json:"execution_target"`
+	ManagedPoolKey   string `json:"managed_pool_key,omitempty"`
 }
 
 type ExecutableStepIR struct {

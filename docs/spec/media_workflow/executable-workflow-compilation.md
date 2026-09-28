@@ -66,15 +66,19 @@ Worker 属于 `media_workflow`，与 API 共用代码库但以独立进程部署
 
 纯 Renderer 位于 Template Domain；Conductor poll/ack 位于基础设施适配层，Worker workflow 负责二者编排。Renderer 不查询 `media_materials`、不调用 Provider、不决定 Capability 参数顺序。同一输入必须确定性输出；缺少字段、模板语法错误或不允许的字段访问返回稳定错误码。
 
+## Worker Execution Target
+
+Capability Version 必须冻结 `execution_target=personal_worker|managed_worker` 和可选 `managed_pool_key`，Executable Workflow IR 与 Conductor `taskToDomain` 均以该冻结值为准。完整认证、双 Target 调度和迁移契约见 [API Token 与 Worker Execution Target 实现规格](../api-token-worker-execution.md)。
+
 ## 客户端 Media Worker
 
-独立 `media_worker` 可执行程序只接受统一 Gateway URL、opaque Service Token、`worker_instance_id`、启用的 Capability Version 列表和 profile；不得配置 Conductor URL。它经 `/api/worker/v1/*` 注册、长轮询、心跳并回报结果。生产 profile 调本地 Provider/CLI，`media_ai_fixture` profile 按 Capability Version 返回冻结样本并附带 provenance。它不能提交任意 task type，也不得领取 `media_render_template_v1` 或 `media_finalize_step_v1`。
+独立 `media_worker` 可执行程序只接受统一 Gateway URL、绑定 Personal Worker Actor 的 opaque API Token、`worker_instance_id`、启用的 Personal Capability Version 列表和 profile；不得配置 Conductor URL。它经 `/api/worker/v1/*` 注册、长轮询、心跳并回报结果。生产 profile 调本地 Provider/CLI，`media_ai_fixture` profile 按 Capability Version 返回冻结样本并附带 provenance。它不能提交任意 task type、Managed Capability，也不得领取 `media_render_template_v1` 或 `media_finalize_step_v1`。
 
 `media_workflow` 提供独立 internal-worker 入口执行 Renderer/finalizer。API 进程负责发布、注册与启动 Workflow，不在 HTTP goroutine 中执行 task polling。
 
 ### Worker Gateway API
 
-所有路由先经 Traefik + Oathkeeper/Edge Auth。Edge 调用 `media_auth.IntrospectServiceToken`，为 opaque Token 对应 Principal 签发 audience=`media-workflow`、TTL 1 至 5 分钟的 Internal Identity JWT。Worker 路由不要求 Kratos Cookie。
+所有路由先经 Traefik + Oathkeeper/Edge Auth。Edge 调用 `media_auth.VerifyAPIToken`，为 opaque Token 对应 Principal 签发 audience=`media-workflow`、TTL 1 至 5 分钟的 Internal Identity JWT。委托身份使用 `sub=User` 与 `act.sub=Worker`；Worker 路由不要求 Kratos Cookie。
 
 ```text
 POST /api/worker/v1/registrations
@@ -84,9 +88,9 @@ POST /api/worker/v1/tasks/{dispatch_id}:complete
 POST /api/worker/v1/tasks/{dispatch_id}:fail
 ```
 
-JWT `sub` 为业务 User ID，并包含 `organization_id`、`credential_id`、`scope`、`auth_source`、`jti`。有效权限为 Token scope、当前 Organization Membership/Entitlement、Job owner 或显式 Worker Pool 授权、Capability allowlist 的交集。Gateway 必须移除客户端伪造的 Authorization/identity header，原始 Token 不进入业务服务和日志。
+JWT `sub` 为业务 User ID，`act.sub` 为稳定 Personal Worker Actor，并包含 `organization_id`、`credential_id`、`scope`、`auth_source`、`jti`。有效权限为 Token scope、当前 Organization Membership/Entitlement、Job owner、Personal Capability allowlist 的交集。Gateway 必须移除客户端伪造的 Authorization/identity header，原始 Token 不进入业务服务和日志。
 
-Worker 只声明 `(capability_key, version, concurrency)`。服务端查询 `execution_capabilities` 得到 taskDef，排除 Internal Execution Task，并根据 Job `submitted_by` 派生 Execution Domain。启动 Conductor Workflow 必须使用 `taskToDomain`；MVP 按 User 隔离，不接受客户端 domain，不允许 `NO_DOMAIN` fallback。
+Worker 只声明 `(capability_key, version, concurrency)`。服务端查询 `execution_capabilities` 得到 taskDef 并要求 `execution_target=personal_worker`，排除 Managed 与 Internal Execution Task。启动 Conductor Workflow 必须使用 `taskToDomain`：Personal 从 Job User 派生，Managed 从受控 Pool 派生；不接受客户端 domain，不允许跨 Target 或 `NO_DOMAIN` fallback。
 
 MVP 可以为一个 Worker 的每个 Capability 建立一个受取消控制的 long-poll；后续可替换为服务端共享 Poll Multiplexer，只为活跃 `(execution_domain, taskDef)` 维护 poller，外部 API 不变。
 

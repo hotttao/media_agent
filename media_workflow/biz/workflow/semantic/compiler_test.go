@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
 	template "media_agent/media_workflow/biz/domain/template"
 	workflow "media_agent/media_workflow/biz/domain/workflow"
 	"media_agent/media_workflow/biz/workflow/executable"
@@ -40,7 +41,8 @@ func TestCompileBuildsTypedExecutableWorkflowIR(t *testing.T) {
 		Capabilities: map[CapabilityRef]CapabilitySnapshot{
 			{Key: "jimeng.image.multi", Version: 1}: {
 				Key: "jimeng.image.multi", Version: 1, ConductorTaskDef: "jimeng_image_multi_v1", OutputAssetKind: "model_image",
-				Inputs: []CapabilityInput{{Name: "prompt", Type: TypeString, Required: true}, {Name: "images", Type: TypeResourceList, Required: true}},
+				ExecutionTarget: capabilitydomain.ExecutionTargetPersonalWorker,
+				Inputs:          []CapabilityInput{{Name: "prompt", Type: TypeString, Required: true}, {Name: "images", Type: TypeResourceList, Required: true}},
 			},
 		},
 	}
@@ -52,6 +54,7 @@ func TestCompileBuildsTypedExecutableWorkflowIR(t *testing.T) {
 	require.Equal(t, "full_body", ir.Steps[0].Context["person"].Ref)
 	require.Equal(t, "clothing", ir.Steps[0].Context["garment"].Ref)
 	require.Equal(t, "jimeng_image_multi_v1", ir.Steps[0].Capability.ConductorTaskDef)
+	require.Equal(t, "personal_worker", ir.Steps[0].Capability.ExecutionTarget)
 	require.Equal(t, "person", ir.Steps[0].Invocation["images"].Items[0].Slot)
 	require.Equal(t, "garment", ir.Steps[0].Invocation["images"].Items[1].Slot)
 	require.True(t, ir.Steps[0].ApprovalRequired)
@@ -70,7 +73,8 @@ func TestCompileRejectsMissingAndMistypedCapabilityInputs(t *testing.T) {
 	}
 	capability := CapabilitySnapshot{
 		Key: "cap", Version: 1, ConductorTaskDef: "cap_v1", OutputAssetKind: "image",
-		Inputs: []CapabilityInput{{Name: "prompt", Type: TypeString, Required: true}, {Name: "images", Type: TypeResourceList, Required: true}},
+		ExecutionTarget: capabilitydomain.ExecutionTargetPersonalWorker,
+		Inputs:          []CapabilityInput{{Name: "prompt", Type: TypeString, Required: true}, {Name: "images", Type: TypeResourceList, Required: true}},
 	}
 	_, err := Compile(wf, Snapshots{
 		Templates:    map[TemplateRef]TemplateSnapshot{{ID: "tpl", Version: 1}: tpl},
@@ -94,7 +98,33 @@ func TestCompileRequiresExplicitWorkflowInputReference(t *testing.T) {
 	_, err := Compile(wf, Snapshots{Templates: map[TemplateRef]TemplateSnapshot{
 		{ID: "tpl", Version: 1}: {ID: "tpl", Version: 1, Inputs: []TemplateSlot{{Name: "person", Required: true}}, CapabilityKey: "cap", CapabilityVersion: 1},
 	}, Capabilities: map[CapabilityRef]CapabilitySnapshot{
-		{Key: "cap", Version: 1}: {Key: "cap", Version: 1, ConductorTaskDef: "cap_v1"},
+		{Key: "cap", Version: 1}: {Key: "cap", Version: 1, ConductorTaskDef: "cap_v1", ExecutionTarget: capabilitydomain.ExecutionTargetPersonalWorker},
 	}})
 	require.ErrorContains(t, err, "requires explicit ref")
+}
+
+func TestCompileValidatesAndFreezesExecutionTarget(t *testing.T) {
+	wf := workflow.Workflow{ID: "wf", Version: 1, OutputStepKey: "s", Steps: []workflow.Step{{
+		Key: "s", Order: 1, TemplateID: "tpl", TemplateVersion: 1,
+	}}}
+	templates := map[TemplateRef]TemplateSnapshot{{ID: "tpl", Version: 1}: {
+		ID: "tpl", Version: 1, OutputAssetKind: "image", CapabilityKey: "cap", CapabilityVersion: 1,
+	}}
+	capability := CapabilitySnapshot{
+		Key: "cap", Version: 1, ConductorTaskDef: "cap_v1", OutputAssetKind: "image",
+		ExecutionTarget: capabilitydomain.ExecutionTargetManagedWorker, ManagedPoolKey: "gpu-cn",
+	}
+
+	ir, err := Compile(wf, Snapshots{Templates: templates, Capabilities: map[CapabilityRef]CapabilitySnapshot{{Key: "cap", Version: 1}: capability}})
+	require.NoError(t, err)
+	require.Equal(t, "managed_worker", ir.Steps[0].Capability.ExecutionTarget)
+	require.Equal(t, "gpu-cn", ir.Steps[0].Capability.ManagedPoolKey)
+
+	capability.ManagedPoolKey = ""
+	_, err = Compile(wf, Snapshots{Templates: templates, Capabilities: map[CapabilityRef]CapabilitySnapshot{{Key: "cap", Version: 1}: capability}})
+	require.ErrorContains(t, err, "managed worker target requires managed pool")
+
+	capability.ExecutionTarget = "unknown"
+	_, err = Compile(wf, Snapshots{Templates: templates, Capabilities: map[CapabilityRef]CapabilitySnapshot{{Key: "cap", Version: 1}: capability}})
+	require.ErrorContains(t, err, "invalid execution target")
 }

@@ -82,8 +82,12 @@ func (f *Flow) Register(ctx context.Context, principal Principal, workerInstance
 		if item.Key == "" || item.Version <= 0 || item.Concurrency <= 0 {
 			return ErrInvalidRequest
 		}
-		if _, err := f.Capabilities.Get(ctx, item.Key, item.Version); err != nil {
+		capability, err := f.Capabilities.Get(ctx, item.Key, item.Version)
+		if err != nil {
 			return fmt.Errorf("load capability %s@%d: %w", item.Key, item.Version, err)
+		}
+		if capability.ExecutionTarget != capabilitydomain.ExecutionTargetPersonalWorker {
+			return ErrForbidden
 		}
 	}
 	return nil
@@ -105,6 +109,9 @@ func (f *Flow) Poll(ctx context.Context, cmd PollCommand) (*jobdomain.WorkerDisp
 	capability, err := f.Capabilities.Get(ctx, cmd.CapabilityKey, cmd.CapabilityVersion)
 	if err != nil {
 		return nil, fmt.Errorf("load capability: %w", err)
+	}
+	if capability.ExecutionTarget != capabilitydomain.ExecutionTargetPersonalWorker {
+		return nil, ErrForbidden
 	}
 	domain := jobdomain.ExecutionDomainForUser(cmd.UserID)
 	task, err := f.Engine.PollCapabilityTask(ctx, capability.ConductorTaskDef, "media-workflow-proxy", domain)

@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	domain "media_agent/media_workflow/biz/domain/job"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
 	"media_agent/media_workflow/biz/shared/client"
+	"media_agent/media_workflow/biz/workflow/executable"
 )
 
 func TestConductorInputsUsesProductImageURL(t *testing.T) {
@@ -327,6 +329,79 @@ func TestSubmit_ExplicitStaleWorkflowVersionRejected(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected stale workflow version to be rejected")
+	}
+}
+
+func TestTaskDomainsForIRSeparatesPersonalAndManagedTargets(t *testing.T) {
+	ir := executable.ExecutableWorkflowIR{SchemaVersion: executable.SchemaVersion, Steps: []executable.ExecutableStepIR{
+		{Capability: executable.CapabilityIR{Key: "personal", Version: 1, ConductorTaskDef: "personal_v1", ExecutionTarget: "personal_worker"}},
+		{Capability: executable.CapabilityIR{Key: "managed", Version: 1, ConductorTaskDef: "managed_v1", ExecutionTarget: "managed_worker", ManagedPoolKey: "gpu-cn"}},
+	}}
+
+	domains, err := taskDomainsForIR(ir, "user-1")
+	if err != nil {
+		t.Fatalf("taskDomainsForIR() error = %v", err)
+	}
+	if domains["personal_v1"] != domain.ExecutionDomainForUser("user-1") {
+		t.Fatalf("personal domain = %q", domains["personal_v1"])
+	}
+	if domains["managed_v1"] != domain.ExecutionDomainForManagedPool("gpu-cn") {
+		t.Fatalf("managed domain = %q", domains["managed_v1"])
+	}
+	if domains["personal_v1"] == domains["managed_v1"] {
+		t.Fatal("personal and managed tasks must not share a domain")
+	}
+}
+
+func TestTaskDomainsForIRRejectsInvalidOrConflictingTargets(t *testing.T) {
+	tests := []struct {
+		name string
+		ir   executable.ExecutableWorkflowIR
+		want string
+	}{
+		{
+			name: "managed pool required",
+			ir: executable.ExecutableWorkflowIR{SchemaVersion: executable.SchemaVersion, Steps: []executable.ExecutableStepIR{{
+				Capability: executable.CapabilityIR{Key: "managed", Version: 1, ConductorTaskDef: "managed_v1", ExecutionTarget: "managed_worker"},
+			}}},
+			want: "requires managed pool",
+		},
+		{
+			name: "unknown target",
+			ir: executable.ExecutableWorkflowIR{SchemaVersion: executable.SchemaVersion, Steps: []executable.ExecutableStepIR{{
+				Capability: executable.CapabilityIR{Key: "bad", Version: 1, ConductorTaskDef: "bad_v1", ExecutionTarget: "remote"},
+			}}},
+			want: "invalid execution target",
+		},
+		{
+			name: "same task definition in different domains",
+			ir: executable.ExecutableWorkflowIR{SchemaVersion: executable.SchemaVersion, Steps: []executable.ExecutableStepIR{
+				{Capability: executable.CapabilityIR{Key: "personal", Version: 1, ConductorTaskDef: "shared_v1", ExecutionTarget: "personal_worker"}},
+				{Capability: executable.CapabilityIR{Key: "managed", Version: 1, ConductorTaskDef: "shared_v1", ExecutionTarget: "managed_worker", ManagedPoolKey: "gpu-cn"}},
+			}},
+			want: "conflicting execution domains",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := taskDomainsForIR(tt.ir, "user-1")
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("taskDomainsForIR() error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestTaskDomainsForIRTreatsLegacyIRAsPersonal(t *testing.T) {
+	ir := executable.ExecutableWorkflowIR{SchemaVersion: 2, Steps: []executable.ExecutableStepIR{{
+		Capability: executable.CapabilityIR{Key: "legacy", Version: 1, ConductorTaskDef: "legacy_v1"},
+	}}}
+	domains, err := taskDomainsForIR(ir, "user-1")
+	if err != nil {
+		t.Fatalf("taskDomainsForIR() error = %v", err)
+	}
+	if domains["legacy_v1"] != domain.ExecutionDomainForUser("user-1") {
+		t.Fatalf("legacy domain = %q", domains["legacy_v1"])
 	}
 }
 

@@ -10,6 +10,8 @@ type ExecutionCapability struct {
 	InputSchema      []byte     `gorm:"column:input_schema;type:jsonb;not null"`
 	OutputAssetKind  string     `gorm:"column:output_asset_kind;not null"`
 	ConductorTaskDef string     `gorm:"column:conductor_task_def;not null"`
+	ExecutionTarget  string     `gorm:"column:execution_target;not null"`
+	ManagedPoolKey   *string    `gorm:"column:managed_pool_key"`
 	RetryPolicy      []byte     `gorm:"column:retry_policy;type:jsonb;not null"`
 	TimeoutSeconds   int        `gorm:"column:timeout_seconds;not null"`
 	Status           string     `gorm:"column:status;not null"`

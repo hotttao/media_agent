@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
 	templatedomain "media_agent/media_workflow/biz/domain/template"
 	workflowdomain "media_agent/media_workflow/biz/domain/workflow"
 	"media_agent/media_workflow/biz/workflow/executable"
@@ -30,6 +31,8 @@ type CapabilitySnapshot struct {
 	Key              string
 	Version          int
 	ConductorTaskDef string
+	ExecutionTarget  capabilitydomain.ExecutionTarget
+	ManagedPoolKey   string
 	Inputs           []CapabilityInput
 	OutputAssetKind  string
 }
@@ -107,6 +110,9 @@ func Compile(wf workflowdomain.Workflow, snapshots Snapshots) (executable.Execut
 		if tpl.OutputAssetKind != capability.OutputAssetKind {
 			return executable.ExecutableWorkflowIR{}, fmt.Errorf("step %q output asset kind %q does not match capability %q", step.Key, tpl.OutputAssetKind, capability.OutputAssetKind)
 		}
+		if err := validateExecutionTarget(capability); err != nil {
+			return executable.ExecutableWorkflowIR{}, fmt.Errorf("step %q capability %s@%d: %w", step.Key, capability.Key, capability.Version, err)
+		}
 
 		slots := make(map[string]TemplateSlot, len(tpl.Inputs))
 		for _, slot := range tpl.Inputs {
@@ -122,9 +128,12 @@ func Compile(wf workflowdomain.Workflow, snapshots Snapshots) (executable.Execut
 
 		ir.Steps = append(ir.Steps, executable.ExecutableStepIR{
 			Key: step.Key, Order: step.Order, DependsOn: dependencies,
-			Template:   executable.TemplateIR{ID: tpl.ID, Version: tpl.Version, Body: tpl.Body},
-			Context:    context,
-			Capability: executable.CapabilityIR{Key: capability.Key, Version: capability.Version, ConductorTaskDef: capability.ConductorTaskDef},
+			Template: executable.TemplateIR{ID: tpl.ID, Version: tpl.Version, Body: tpl.Body},
+			Context:  context,
+			Capability: executable.CapabilityIR{
+				Key: capability.Key, Version: capability.Version, ConductorTaskDef: capability.ConductorTaskDef,
+				ExecutionTarget: string(capability.ExecutionTarget), ManagedPoolKey: capability.ManagedPoolKey,
+			},
 			Invocation: cloneMapping(tpl.Invocation), OutputAssetKind: tpl.OutputAssetKind,
 			ApprovalPolicy:   string(step.ApprovalPolicy),
 			ApprovalRequired: tpl.NeedsConfirm || tpl.CandidateCount > 1 || step.ApprovalPolicy == workflowdomain.ApprovalAlways,
@@ -135,6 +144,24 @@ func Compile(wf workflowdomain.Workflow, snapshots Snapshots) (executable.Execut
 		return executable.ExecutableWorkflowIR{}, fmt.Errorf("output step %q not found", wf.OutputStepKey)
 	}
 	return ir, nil
+}
+
+func validateExecutionTarget(capability CapabilitySnapshot) error {
+	if !capability.ExecutionTarget.Valid() {
+		return fmt.Errorf("invalid execution target %q", capability.ExecutionTarget)
+	}
+	pool := strings.TrimSpace(capability.ManagedPoolKey)
+	switch capability.ExecutionTarget {
+	case capabilitydomain.ExecutionTargetPersonalWorker:
+		if pool != "" {
+			return fmt.Errorf("personal worker target cannot declare managed pool")
+		}
+	case capabilitydomain.ExecutionTargetManagedWorker:
+		if pool == "" {
+			return fmt.Errorf("managed worker target requires managed pool")
+		}
+	}
+	return nil
 }
 
 func compileBindings(step workflowdomain.Step, slots map[string]TemplateSlot, seen map[string]struct{}) (map[string]executable.ValueRef, []string, error) {

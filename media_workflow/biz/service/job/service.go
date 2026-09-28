@@ -15,6 +15,7 @@ import (
 
 	configpb "media_agent/hertz_gen/config"
 	"media_agent/media_workflow/biz/dal"
+	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
 	domain "media_agent/media_workflow/biz/domain/job"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
 	"media_agent/media_workflow/biz/shared/client"
@@ -127,12 +128,10 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 		_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobFailed, err.Error())
 		return nil, fmt.Errorf("decode executable workflow IR: %w", err)
 	}
-	taskToDomain := make(map[string]string, len(ir.Steps))
-	executionDomain := domain.ExecutionDomainForUser(cmd.SubmittedBy)
-	for _, step := range ir.Steps {
-		if step.Capability.ConductorTaskDef != "" {
-			taskToDomain[step.Capability.ConductorTaskDef] = executionDomain
-		}
+	taskToDomain, err := taskDomainsForIR(ir, cmd.SubmittedBy)
+	if err != nil {
+		_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobFailed, err.Error())
+		return nil, err
 	}
 	executionID, err := s.engine.Start(ctx, compilation.ConductorName, compilation.ConductorVersion, jobID, map[string]any{
 		"job_id": jobID,
@@ -147,6 +146,42 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 	}
 	_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobRunning, "")
 	return s.jobRepo.Get(ctx, jobID)
+}
+
+func taskDomainsForIR(ir executable.ExecutableWorkflowIR, submittedBy string) (map[string]string, error) {
+	taskToDomain := make(map[string]string, len(ir.Steps))
+	for _, step := range ir.Steps {
+		taskDef := strings.TrimSpace(step.Capability.ConductorTaskDef)
+		if taskDef == "" {
+			continue
+		}
+		target := capabilitydomain.ExecutionTarget(step.Capability.ExecutionTarget)
+		// IR v1/v2 predate execution_target and only supported Personal Worker.
+		if target == "" && ir.SchemaVersion < 3 {
+			target = capabilitydomain.ExecutionTargetPersonalWorker
+		}
+		var executionDomain string
+		switch target {
+		case capabilitydomain.ExecutionTargetPersonalWorker:
+			if strings.TrimSpace(step.Capability.ManagedPoolKey) != "" {
+				return nil, fmt.Errorf("capability %s@%d personal target cannot declare managed pool", step.Capability.Key, step.Capability.Version)
+			}
+			executionDomain = domain.ExecutionDomainForUser(submittedBy)
+		case capabilitydomain.ExecutionTargetManagedWorker:
+			poolKey := strings.TrimSpace(step.Capability.ManagedPoolKey)
+			if poolKey == "" {
+				return nil, fmt.Errorf("capability %s@%d managed target requires managed pool", step.Capability.Key, step.Capability.Version)
+			}
+			executionDomain = domain.ExecutionDomainForManagedPool(poolKey)
+		default:
+			return nil, fmt.Errorf("capability %s@%d has invalid execution target %q", step.Capability.Key, step.Capability.Version, target)
+		}
+		if existing, ok := taskToDomain[taskDef]; ok && existing != executionDomain {
+			return nil, fmt.Errorf("conductor task definition %q maps to conflicting execution domains", taskDef)
+		}
+		taskToDomain[taskDef] = executionDomain
+	}
+	return taskToDomain, nil
 }
 
 // validateBundle 闸2: bundle vs input_schema。

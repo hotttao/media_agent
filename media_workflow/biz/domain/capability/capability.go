@@ -7,11 +7,22 @@ import (
 
 type InputType string
 
+type ExecutionTarget string
+
 const (
 	InputString          InputType = "string"
 	InputResourceRef     InputType = "resource_ref"
 	InputResourceRefList InputType = "resource_ref_list"
 )
+
+const (
+	ExecutionTargetPersonalWorker ExecutionTarget = "personal_worker"
+	ExecutionTargetManagedWorker  ExecutionTarget = "managed_worker"
+)
+
+func (t ExecutionTarget) Valid() bool {
+	return t == ExecutionTargetPersonalWorker || t == ExecutionTargetManagedWorker
+}
 
 type Input struct {
 	Name     string    `json:"name"`
@@ -27,6 +38,8 @@ type Capability struct {
 	Inputs            []Input
 	OutputAssetKind   string
 	ConductorTaskDef  string
+	ExecutionTarget   ExecutionTarget
+	ManagedPoolKey    string
 	RetryCount        int
 	RetryLogic        string
 	RetryDelaySeconds int

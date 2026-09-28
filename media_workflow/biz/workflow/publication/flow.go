@@ -63,6 +63,7 @@ func (f *Flow) CompileAndRegister(ctx context.Context, workflow *workflowdomain.
 		}
 		snapshots.Capabilities[semantic.CapabilityRef{Key: capability.Key, Version: capability.Version}] = semantic.CapabilitySnapshot{
 			Key: capability.Key, Version: capability.Version, ConductorTaskDef: capability.ConductorTaskDef,
+			ExecutionTarget: capability.ExecutionTarget, ManagedPoolKey: capability.ManagedPoolKey,
 			Inputs: inputs, OutputAssetKind: capability.OutputAssetKind,
 		}
 		capabilitiesByTask[capability.ConductorTaskDef] = capability

@@ -119,7 +119,7 @@ func newPollFlow(now time.Time) (*Flow, *dispatchRepoStub, *taskEngineStub) {
 		}},
 		StepRuns: &stepRunRepoStub{item: &jobdomain.StepRun{ID: "step-run-1", JobID: "job-1", StepKey: "generate"}},
 		Capabilities: &capabilityRepoStub{item: &capabilitydomain.Capability{
-			Key: "jimeng.image", Version: 1, ConductorTaskDef: "jimeng_image_v1",
+			Key: "jimeng.image", Version: 1, ConductorTaskDef: "jimeng_image_v1", ExecutionTarget: capabilitydomain.ExecutionTargetPersonalWorker,
 		}},
 		Engine: engine, Now: func() time.Time { return now }, Lease: time.Minute,
 	}, dispatches, engine
@@ -134,6 +134,28 @@ func TestRegisterRequiresPrincipalAndPublishedCapability(t *testing.T) {
 	err = flow.Register(context.Background(), Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1"}, "desktop-1", []CapabilityVersion{{Key: "jimeng.image", Version: 1, Concurrency: 1}})
 	if err != nil {
 		t.Fatalf("Register() error = %v", err)
+	}
+}
+
+func TestPersonalWorkerGatewayRejectsManagedCapability(t *testing.T) {
+	flow, _, engine := newPollFlow(time.Now())
+	capability := flow.Capabilities.(*capabilityRepoStub).item
+	capability.ExecutionTarget = capabilitydomain.ExecutionTargetManagedWorker
+	capability.ManagedPoolKey = "gpu-cn"
+	principal := Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1"}
+
+	err := flow.Register(context.Background(), principal, "desktop-1", []CapabilityVersion{{Key: capability.Key, Version: capability.Version, Concurrency: 1}})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("Register() error = %v, want forbidden", err)
+	}
+	_, err = flow.Poll(context.Background(), PollCommand{
+		Principal: principal, WorkerInstanceID: "desktop-1", CapabilityKey: capability.Key, CapabilityVersion: capability.Version,
+	})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("Poll() error = %v, want forbidden", err)
+	}
+	if engine.pollType != "" {
+		t.Fatalf("managed capability reached Conductor poll: %q", engine.pollType)
 	}
 }
 

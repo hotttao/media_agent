@@ -76,3 +76,5 @@
 - [x] 修改 `media_worker`：删除 Conductor URL/client，改用 Gateway URL、Service Token、dispatch/heartbeat/result receipt。
 - [ ] 覆盖 Token 撤销、断线恢复、重复完成、旧 attempt、租约过期、Job 取消、Conductor 暂时不可用和 trace_id 跨服务关联测试。
 - [ ] 用一个 `media_ai_fixture` 完整流程验证客户端无法访问 Conductor，确认后再开始全量旧数据迁移。
+
+> P9 记录已完成的旧 Service Token/User Domain 基线。API Token、Delegated Actor、Capability Execution Target 与 Managed Worker 的替换计划以 [API Token 与 Worker Execution Target 落地计划](../api-token-worker-execution.md) 为准。

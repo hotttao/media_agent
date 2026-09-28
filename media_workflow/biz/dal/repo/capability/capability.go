@@ -3,6 +3,7 @@ package capability
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"gorm.io/gorm"
 
@@ -56,9 +57,24 @@ func toDomain(row *model.ExecutionCapability) (*domain.Capability, error) {
 	if err := json.Unmarshal(row.RetryPolicy, &retry); err != nil {
 		return nil, err
 	}
+	executionTarget := domain.ExecutionTarget(row.ExecutionTarget)
+	if !executionTarget.Valid() {
+		return nil, fmt.Errorf("invalid execution target %q for capability %s@%d", row.ExecutionTarget, row.CapabilityKey, row.Version)
+	}
+	managedPoolKey := ""
+	if row.ManagedPoolKey != nil {
+		managedPoolKey = *row.ManagedPoolKey
+	}
+	if executionTarget == domain.ExecutionTargetPersonalWorker && managedPoolKey != "" {
+		return nil, fmt.Errorf("personal capability %s@%d cannot declare managed pool", row.CapabilityKey, row.Version)
+	}
+	if executionTarget == domain.ExecutionTargetManagedWorker && managedPoolKey == "" {
+		return nil, fmt.Errorf("managed capability %s@%d requires managed pool", row.CapabilityKey, row.Version)
+	}
 	return &domain.Capability{
 		Key: row.CapabilityKey, Version: row.Version, Provider: row.Provider, Mode: row.Mode,
 		Inputs: inputs, OutputAssetKind: row.OutputAssetKind, ConductorTaskDef: row.ConductorTaskDef,
+		ExecutionTarget: executionTarget, ManagedPoolKey: managedPoolKey,
 		RetryCount: retry.RetryCount, RetryLogic: retry.RetryLogic,
 		RetryDelaySeconds: retry.RetryDelaySeconds, TimeoutSeconds: row.TimeoutSeconds,
 		Status: row.Status, CreatedAt: row.CreatedAt, PublishedAt: row.PublishedAt,

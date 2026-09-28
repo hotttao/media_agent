@@ -18,7 +18,7 @@ func TestCompileExecutableIRInlinesRendererAndCapabilityMapping(t *testing.T) {
 				"person":  {Source: executable.ValueWorkflowInput, Ref: "full_body"},
 				"garment": {Source: executable.ValueWorkflowInput, Ref: "clothing"},
 			},
-			Capability: executable.CapabilityIR{Key: "jimeng.image.multi", Version: 1, ConductorTaskDef: "jimeng_image_multi_v1"},
+			Capability: executable.CapabilityIR{Key: "jimeng.image.multi", Version: 1, ConductorTaskDef: "jimeng_image_multi_v1", ExecutionTarget: "personal_worker"},
 			Invocation: template.InvocationMapping{
 				"prompt": {Op: template.InvocationRenderTemplate},
 				"images": {Op: template.InvocationList, Items: []template.InvocationExpression{
@@ -85,7 +85,7 @@ func minimalIRStep(key string, order int, dependencies []string) executable.Exec
 		Key: key, Order: order, DependsOn: dependencies,
 		Template:        executable.TemplateIR{ID: "tpl_" + key, Version: 1, Body: "prompt"},
 		Context:         map[string]executable.ValueRef{},
-		Capability:      executable.CapabilityIR{Key: "cap", Version: 1, ConductorTaskDef: "cap_v1"},
+		Capability:      executable.CapabilityIR{Key: "cap", Version: 1, ConductorTaskDef: "cap_v1", ExecutionTarget: "personal_worker"},
 		Invocation:      template.InvocationMapping{"prompt": {Op: template.InvocationRenderTemplate}},
 		OutputAssetKind: "image",
 	}
