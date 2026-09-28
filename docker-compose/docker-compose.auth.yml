@@ -152,6 +152,40 @@ services:
     networks: [auth]
     restart: unless-stopped
 
+  # Talos OSS is intentionally built from a pinned upstream source revision:
+  # the community edition does not publish a supported public image. It runs
+  # single-node with SQLite and stays inside the authentication network.
+  talos-init:
+    build:
+      context: https://github.com/ory/talos.git#${TALOS_GIT_REF:-2e2295d}
+      dockerfile: deployments/docker/Dockerfile.oss.init
+    environment:
+      DB_DSN: sqlite3:///var/lib/talos/talos.db?_journal_mode=WAL
+    volumes:
+      - ${DATA_ROOT:-/data}/talos:/var/lib/talos
+    networks: [auth]
+    restart: "no"
+
+  talos:
+    build:
+      context: https://github.com/ory/talos.git#${TALOS_GIT_REF:-2e2295d}
+      dockerfile: .docker/Dockerfile-local-build
+    command: ["serve", "--config", "/etc/talos/config.yaml"]
+    depends_on:
+      talos-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./auth/talos/config.oss.yaml:/etc/talos/config.yaml:ro
+      - ${DATA_ROOT:-/data}/talos:/var/lib/talos
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4422/health/alive"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks: [auth]
+    restart: unless-stopped
+
   login-ui:
     image: ghcr.io/korjavin/kratos-selfservice-ui-node-vendor:latest
     depends_on: [kratos, hydra]

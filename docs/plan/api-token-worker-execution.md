@@ -25,10 +25,10 @@
 ## P3 · Talos 基础设施与 Adapter
 
 - [x] 按 Talos `v2alpha1` OpenAPI 锁定 Issue/Verify/Get/Rotate/Revoke adapter 契约；部署镜像版本仍需在接入 compose 时固定。
-- [ ] 在当前仓库增加 Talos OSS 配置和独立数据 volume。
-- [ ] 增加 `talos` typed adapter、配置 schema、超时、trace 和错误映射（typed HTTP adapter、超时和错误映射已完成，配置装配与 trace 注入待完成）。
+- [x] 在当前仓库增加 Talos OSS 配置和独立数据 volume。
+- [x] 增加 `talos` typed adapter、配置 schema、超时、trace 和错误映射。
 - [x] Adapter 使用 fake HTTP server 覆盖签发、验证、查询、轮换、撤销、超时和敏感信息不落错误。
-- [ ] 默认编码测试不启动 Talos；仅集成/E2E profile 启动。
+- [x] 默认编码测试不启动 Talos；仅显式启动认证栈时运行。
 
 ## P4 · API Token 聚合
 

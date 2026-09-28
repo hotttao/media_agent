@@ -1,0 +1,57 @@
+# Ory Talos OSS single-node configuration for local and test environments.
+# The SQLite database lives under ${DATA_ROOT:-/data}/talos on the host.
+serve:
+  http:
+    host: "0.0.0.0"
+    port: 4420
+    request_log:
+      exclude_health_endpoints: true
+    cors:
+      enabled: false
+  metrics:
+    host: "0.0.0.0"
+    port: 4422
+
+credentials:
+  issuer: "http://talos:4420"
+  api_keys:
+    default_ttl: "720h"
+    max_ttl: "8760h"
+    prefix:
+      current: "talos"
+      retired: []
+  derived_tokens:
+    default_ttl: "5m"
+    jwt:
+      signing_keys:
+        urls:
+          # Published development-only key from the upstream OSS compose.
+          - "base64://eyAgImtleXMiOiBbICAgIHsgICAgICAiYWxnIjogIkVkRFNBIiwgICAgICAiY3J2IjogIkVkMjU1MTkiLCAgICAgICJkIjogIjl3VTNfV3p0dmx3TXg0SGlfN2dsSVduY09XNlVIR2I5amxDdDZEZkVGa2MiLCAgICAgICJraWQiOiAiZG9ja2VyLWRldi0wMDEiLCAgICAgICJrdHkiOiAiT0tQIiwgICAgICAidXNlIjogInNpZyIsICAgICAieCI6ICI0a1NBN201TmNicUNQLWZmT180aFAza2w0cHQ0Zy0tM1FDbXNCbDNvTmVVIiAgICB9ICBdIH0="
+    macaroon:
+      prefix:
+        current: "mc"
+        retired: []
+
+db:
+  dsn: "sqlite3:///var/lib/talos/talos.db?_journal_mode=WAL"
+
+secrets:
+  hmac:
+    current: "local-talos-hmac-secret-minimum-32-chars-long"
+    retired: []
+
+cache:
+  type: "noop"
+  ttl: "5m"
+
+multitenancy:
+  enabled: false
+
+# Observability is opt-in for integration debugging. Keep normal coding tests
+# self-contained and do not require an OTLP collector.
+tracing:
+  enabled: false
+
+log:
+  level: "info"
+  format: "json"

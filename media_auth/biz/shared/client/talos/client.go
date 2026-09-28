@@ -11,6 +11,9 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 const apiPrefix = "/v2alpha1/admin"
@@ -192,6 +195,7 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 		return err
 	}
 	request.Header.Set("Accept", "application/json")
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(request.Header))
 	if input != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
