@@ -21,6 +21,7 @@ func Register(r *server.Hertz) {
 		_internal := root.Group("/internal", _internalMw()...)
 		{
 			_token := _internal.Group("/token", _tokenMw()...)
+			_token.POST("/api-token:verify", append(_verifyapitokenMw(), token.VerifyApiToken)...)
 			_token.POST("/platform", append(_getplatformtokenMw(), token.GetPlatformToken)...)
 			_token.POST("/session", append(_verifysessionMw(), token.VerifySession)...)
 			_token.POST("/verify", append(_verifytokenMw(), token.VerifyToken)...)

@@ -22,6 +22,8 @@ type Client interface {
 	GetPlatformToken(context context.Context, req *token.GetPlatformTokenRequest, reqOpt ...config.RequestOption) (resp *token.GetPlatformTokenResponse, rawResponse *protocol.Response, err error)
 
 	VerifySession(context context.Context, req *token.VerifySessionRequest, reqOpt ...config.RequestOption) (resp *token.VerifyTokenResponse, rawResponse *protocol.Response, err error)
+
+	VerifyApiToken(context context.Context, req *token.VerifyApiTokenRequest, reqOpt ...config.RequestOption) (resp *token.VerifyApiTokenResponse, rawResponse *protocol.Response, err error)
 }
 
 type TokenServiceClient struct {
@@ -105,6 +107,28 @@ func (s *TokenServiceClient) VerifySession(context context.Context, req *token.V
 	return resp, rawResponse, nil
 }
 
+func (s *TokenServiceClient) VerifyApiToken(context context.Context, req *token.VerifyApiTokenRequest, reqOpt ...config.RequestOption) (resp *token.VerifyApiTokenResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &token.VerifyApiTokenResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/internal/token/api-token:verify")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
 var defaultClient, _ = NewTokenServiceClient("")
 
 func ConfigDefaultClient(ops ...Option) (err error) {
@@ -122,4 +146,8 @@ func GetPlatformToken(context context.Context, req *token.GetPlatformTokenReques
 
 func VerifySession(context context.Context, req *token.VerifySessionRequest, reqOpt ...config.RequestOption) (resp *token.VerifyTokenResponse, rawResponse *protocol.Response, err error) {
 	return defaultClient.VerifySession(context, req, reqOpt...)
+}
+
+func VerifyApiToken(context context.Context, req *token.VerifyApiTokenRequest, reqOpt ...config.RequestOption) (resp *token.VerifyApiTokenResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.VerifyApiToken(context, req, reqOpt...)
 }

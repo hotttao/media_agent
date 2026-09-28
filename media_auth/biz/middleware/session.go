@@ -74,9 +74,10 @@ var skipAllPaths = map[string]bool{
 	"/api/oauth/token":                true,
 	"/api/oauth/userinfo":             true,
 	// internal token API 不经 cookie/session；每个 handler 校验内部凭证。
-	"/internal/token/verify":   true,
-	"/internal/token/platform": true,
-	"/internal/token/session":  true,
+	"/internal/token/verify":           true,
+	"/internal/token/platform":         true,
+	"/internal/token/session":          true,
+	"/internal/token/api-token:verify": true,
 	// internal teams 查询：供下游服务 fetchTeams 调用。
 	"/internal/teams:byUser":              true,
 	"/internal/organizations:byUser":      true,

@@ -35,3 +35,8 @@ func _verifysessionMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _verifyapitokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

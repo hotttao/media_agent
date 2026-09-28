@@ -19,6 +19,7 @@ import (
 	configpb "media_agent/hertz_gen/config"
 	"media_agent/hertz_infra/authn/internaljwt"
 	"media_agent/media_auth/biz/dal"
+	dalapitoken "media_agent/media_auth/biz/dal/repo/api_token"
 	dalauth "media_agent/media_auth/biz/dal/repo/auth"
 	dalauthorizationprojection "media_agent/media_auth/biz/dal/repo/authorizationprojection"
 	dalidentity "media_agent/media_auth/biz/dal/repo/identity"
@@ -28,6 +29,7 @@ import (
 	dalservicetoken "media_agent/media_auth/biz/dal/repo/service_token"
 	dalteam "media_agent/media_auth/biz/dal/repo/team"
 	domainwecom "media_agent/media_auth/biz/domain/wecom"
+	apitokenhandler "media_agent/media_auth/biz/handler/api_token"
 	authhandler "media_agent/media_auth/biz/handler/auth"
 	identityhandler "media_agent/media_auth/biz/handler/identity"
 	mcpoauthhandler "media_agent/media_auth/biz/handler/mcp_oauth"
@@ -41,6 +43,7 @@ import (
 	userhandler "media_agent/media_auth/biz/handler/user"
 	wecomhandler "media_agent/media_auth/biz/handler/wecom"
 	"media_agent/media_auth/biz/middleware"
+	apitokenservice "media_agent/media_auth/biz/service/api_token"
 	authservice "media_agent/media_auth/biz/service/auth"
 	identityservice "media_agent/media_auth/biz/service/identity"
 	mcpoauthservice "media_agent/media_auth/biz/service/mcp_oauth"
@@ -56,6 +59,7 @@ import (
 	kratosclient "media_agent/media_auth/biz/shared/client/kratos"
 	ldapclient "media_agent/media_auth/biz/shared/client/ldap"
 	mcpclient "media_agent/media_auth/biz/shared/client/mcp"
+	talosclient "media_agent/media_auth/biz/shared/client/talos"
 	wecomclient "media_agent/media_auth/biz/shared/client/wecom"
 	"media_agent/media_auth/biz/shared/pendingauth"
 	"media_agent/media_auth/biz/shared/session"
@@ -145,6 +149,23 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	tokenSvc := tokenservice.NewService(stRepo, userRepo)
 	tokenSvc.SetMembershipValidator(membershipValidator)
 	tokenhandler.TokenSvc = tokenSvc
+
+	// api_token domain：Talos 保存 Secret 生命周期事实，本地只保存授权元数据。
+	// Talos 未配置时管理接口明确返回 503，避免退回旧的本地 Hash 验证旁路。
+	if talosURL := os.Getenv("TALOS_URL"); talosURL != "" {
+		talosClient, err := talosclient.New(talosclient.Config{
+			BaseURL: talosURL, AdminToken: os.Getenv("TALOS_ADMIN_TOKEN"), Timeout: 5 * time.Second,
+		})
+		if err != nil {
+			log.Fatalf("init di: talos client: %v", err)
+		}
+		apiTokenSvc := apitokenservice.NewService(dalapitoken.NewRepo(db), apitokenservice.TalosAdapter{Client: talosClient})
+		apiTokenSvc.SetMembershipValidator(membershipValidator)
+		apitokenhandler.Svc = apiTokenSvc
+		tokenhandler.APITokenSvc = apiTokenSvc
+	} else {
+		log.Println("init di: TALOS_URL is empty, api token service unavailable")
+	}
 
 	// 重新装配 session middleware（支持 cookie JWT + Bearer service token）。
 	SessionMiddleware = middleware.SessionWithToken(signer, tokenSvc)

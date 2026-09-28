@@ -11,16 +11,19 @@ import (
 	"context"
 	"crypto/subtle"
 	"os"
+	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	tokenpb "media_agent/hertz_gen/model/media_auth/token"
 	"media_agent/media_auth/biz/middleware"
+	apitokenservice "media_agent/media_auth/biz/service/api_token"
 	tokenservice "media_agent/media_auth/biz/service/token"
 )
 
 // TokenSvc 是 internal token 用例服务的全局实例，由 wire_gen.go InitDI() 注入。
 var TokenSvc *tokenservice.Service
+var APITokenSvc *apitokenservice.Service
 
 // VerifyToken POST /internal/token/verify —— 把明文 service token 解析为 Subject。
 //
@@ -110,4 +113,35 @@ func VerifySession(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	c.JSON(consts.StatusOK, &tokenpb.VerifyTokenResponse{Active: true, Sub: sess.Sub, Username: sess.Username, Name: sess.Name, Role: sess.Role, TokenType: "session"})
+}
+
+// VerifyApiToken .
+// @router /internal/token/api-token:verify [POST]
+func VerifyApiToken(ctx context.Context, c *app.RequestContext) {
+	if !authorizeInternal(c) {
+		return
+	}
+	var req tokenpb.VerifyApiTokenRequest
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	if APITokenSvc == nil {
+		c.JSON(consts.StatusServiceUnavailable, map[string]string{"error": "api token service is unavailable"})
+		return
+	}
+	principal, err := APITokenSvc.Verify(ctx, req.GetToken())
+	if err != nil {
+		c.JSON(consts.StatusOK, &tokenpb.VerifyApiTokenResponse{Active: false})
+		return
+	}
+	expiresAt := int64(0)
+	if !principal.ExpiresAt.IsZero() {
+		expiresAt = principal.ExpiresAt.Unix()
+	}
+	c.JSON(consts.StatusOK, &tokenpb.VerifyApiTokenResponse{
+		Active: true, Sub: "User:" + principal.SubjectUserID, ActorType: string(principal.ActorType), ActorId: principal.ActorID,
+		CredentialId: principal.CredentialID, OrganizationId: principal.OrganizationID,
+		Scope: strings.Join(principal.Scopes, " "), Exp: expiresAt, AuthSource: "api_token",
+	})
 }

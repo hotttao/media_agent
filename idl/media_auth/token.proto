@@ -31,11 +31,29 @@ service TokenService {
   rpc VerifySession(VerifySessionRequest) returns(VerifyTokenResponse) {
     option (api.post) = "/internal/token/session";
   };
+  // POST /internal/token/api-token:verify —— 通过 Talos 验证 API Token，返回委托主体。
+  rpc VerifyApiToken(VerifyApiTokenRequest) returns(VerifyApiTokenResponse) {
+    option (api.post) = "/internal/token/api-token:verify";
+  };
 }
 
 message GetPlatformTokenRequest { string user_id = 1; }
 message GetPlatformTokenResponse { string token = 1; }
 message VerifySessionRequest { string token = 1; }
+
+message VerifyApiTokenRequest { string token = 1; }
+
+message VerifyApiTokenResponse {
+  bool active = 1;
+  string sub = 2;
+  string actor_type = 3;
+  string actor_id = 4;
+  string credential_id = 5;
+  string organization_id = 6;
+  string scope = 7;
+  int64 exp = 8;
+  string auth_source = 9;
+}
 
 message VerifyTokenRequest {
   // tos_xxx 明文;media_auth 内部 sha256 后查 service_tokens.token_hash,

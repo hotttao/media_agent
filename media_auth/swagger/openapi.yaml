@@ -6,6 +6,107 @@ info:
     title: ""
     version: 0.0.1
 paths:
+    /api/api-tokens:
+        get:
+            tags:
+                - ApiTokenService
+            operationId: ApiTokenService_ListApiTokens
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListApiTokensResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - ApiTokenService
+            operationId: ApiTokenService_CreateApiToken
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateApiTokenRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateApiTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/api-tokens/{id}:revoke:
+        post:
+            tags:
+                - ApiTokenService
+            operationId: ApiTokenService_RevokeApiToken
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RevokeApiTokenRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RevokeApiTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/api-tokens/{id}:rotate:
+        post:
+            tags:
+                - ApiTokenService
+            operationId: ApiTokenService_RotateApiToken
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RotateApiTokenRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RotateApiTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/auth/.well-known/jwks.json:
         get:
             tags:
@@ -1713,6 +1814,37 @@ components:
                     type: string
                 joined_at:
                     type: string
+        ApiTokenRecord:
+            type: object
+            properties:
+                id:
+                    type: string
+                subject_user_id:
+                    type: string
+                actor_type:
+                    type: string
+                actor_id:
+                    type: string
+                organization_id:
+                    type: string
+                name:
+                    type: string
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                status:
+                    type: string
+                expires_at:
+                    type: string
+                created_by:
+                    type: string
+                created_at:
+                    type: string
+                rotated_at:
+                    type: string
+                revoked_at:
+                    type: string
         ApiUser:
             type: object
             properties:
@@ -1791,6 +1923,28 @@ components:
                 connected:
                     type: boolean
                 expires_at:
+                    type: string
+        CreateApiTokenRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                organization_id:
+                    type: string
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                expires_at:
+                    type: string
+                idempotency_key:
+                    type: string
+        CreateApiTokenResponse:
+            type: object
+            properties:
+                api_token:
+                    $ref: '#/components/schemas/ApiTokenRecord'
+                secret:
                     type: string
         CreateClientRequest:
             type: object
@@ -2002,6 +2156,13 @@ components:
                     type: string
                 e:
                     type: string
+        ListApiTokensResponse:
+            type: object
+            properties:
+                api_tokens:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ApiTokenRecord'
         ListClientsResponse:
             type: object
             properties:
@@ -2121,6 +2282,16 @@ components:
             properties:
                 success:
                     type: boolean
+        RevokeApiTokenRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+        RevokeApiTokenResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
         RevokeClientResponse:
             type: object
             properties:
@@ -2136,6 +2307,20 @@ components:
             properties:
                 success:
                     type: boolean
+        RotateApiTokenRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                expires_at:
+                    type: string
+        RotateApiTokenResponse:
+            type: object
+            properties:
+                api_token:
+                    $ref: '#/components/schemas/ApiTokenRecord'
+                secret:
+                    type: string
         ServiceTokenRecord:
             type: object
             properties:
@@ -2306,6 +2491,7 @@ components:
                 created_at:
                     type: string
 tags:
+    - name: ApiTokenService
     - name: AuthService
       description: |-
         AuthService —— 本地账号 + LDAP 双路登录,以及当前用户/会话域。

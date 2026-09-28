@@ -32,12 +32,12 @@
 
 ## P4 · API Token 聚合
 
-- [ ] 新增 `api_tokens` migration、行模型、Repository 和领域不变量。
-- [ ] 新增 API Token IDL：create/list/rotate/revoke，以及 internal verify。
-- [ ] 实现 Talos Issue + 本地事务失败撤销补偿。
-- [ ] 实现 VerifyAPIToken，联查 User、Actor、Organization 和 scope。
+- [x] 新增 `api_tokens` migration、行模型、Repository 和领域不变量。
+- [x] 新增 API Token IDL：create/list/rotate/revoke，以及 internal verify。
+- [x] 实现 Talos Issue + 本地事务失败撤销补偿。
+- [x] 实现 VerifyAPIToken，联查 User、Actor、Organization 和 scope。
 - [ ] 实现 revoke/rotate pending operation 与幂等恢复。
-- [ ] 生成 Hertz model/client/router/swagger，不手改生成产物。
+- [x] 生成 Hertz model/client/router/swagger，不手改生成产物。
 - [ ] 单元、DAL、HTTP E2E 覆盖生命周期与失败分支。
 
 ## P5 · 委托身份与 Personal Worker 切换

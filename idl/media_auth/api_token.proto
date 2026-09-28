@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package media_auth.api_token;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_auth/api_token";
+
+service ApiTokenService {
+  rpc CreateApiToken(CreateApiTokenRequest) returns (CreateApiTokenResponse) {
+    option (google.api.http) = { post: "/api/api-tokens" body: "*" };
+    option (api.post) = "/api/api-tokens";
+  }
+  rpc ListApiTokens(ListApiTokensRequest) returns (ListApiTokensResponse) {
+    option (google.api.http) = { get: "/api/api-tokens" };
+    option (api.get) = "/api/api-tokens";
+  }
+  rpc RevokeApiToken(RevokeApiTokenRequest) returns (RevokeApiTokenResponse) {
+    option (google.api.http) = { post: "/api/api-tokens/{id}:revoke" body: "*" };
+    option (api.post) = "/api/api-tokens/:id/revoke";
+  }
+  rpc RotateApiToken(RotateApiTokenRequest) returns (RotateApiTokenResponse) {
+    option (google.api.http) = { post: "/api/api-tokens/{id}:rotate" body: "*" };
+    option (api.post) = "/api/api-tokens/:id/rotate";
+  }
+}
+
+message CreateApiTokenRequest {
+  string name = 1;
+  string organization_id = 2;
+  repeated string scopes = 3;
+  string expires_at = 4;
+  string idempotency_key = 5;
+}
+
+message CreateApiTokenResponse {
+  ApiTokenRecord api_token = 1;
+  string secret = 2;
+}
+
+message ListApiTokensRequest {}
+message ListApiTokensResponse { repeated ApiTokenRecord api_tokens = 1; }
+
+message ApiTokenRecord {
+  string id = 1;
+  string subject_user_id = 2;
+  string actor_type = 3;
+  string actor_id = 4;
+  string organization_id = 5;
+  string name = 6;
+  repeated string scopes = 7;
+  string status = 8;
+  string expires_at = 9;
+  string created_by = 10;
+  string created_at = 11;
+  string rotated_at = 12;
+  string revoked_at = 13;
+}
+
+message RevokeApiTokenRequest { string id = 1 [(api.path) = "id"]; }
+message RevokeApiTokenResponse { bool success = 1; }
+
+message RotateApiTokenRequest {
+  string id = 1 [(api.path) = "id"];
+  string expires_at = 2;
+}
+message RotateApiTokenResponse {
+  ApiTokenRecord api_token = 1;
+  string secret = 2;
+}
