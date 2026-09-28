@@ -152,27 +152,22 @@ services:
     networks: [auth]
     restart: unless-stopped
 
-  # Talos OSS is intentionally built from a pinned upstream source revision:
-  # the community edition does not publish a supported public image. It runs
-  # single-node with SQLite and stays inside the authentication network.
-  talos-init:
-    build:
-      context: https://github.com/ory/talos.git#${TALOS_GIT_REF:-2e2295d}
-      dockerfile: deployments/docker/Dockerfile.oss.init
-    environment:
-      DB_DSN: sqlite3:///var/lib/talos/talos.db?_journal_mode=WAL
+  # Talos OSS runs single-node with SQLite and stays inside the authentication
+  # network. The image is pinned to the same v26.2.0 build as the other Ory
+  # components (OCI revision 7fd7c2131500c3ce09006672e2aef66f9a96d9c3).
+  talos-migrate:
+    image: ghcr.io/hotttao/ory-talos:v26.2.0
+    command: ["migrate", "up", "--database", "sqlite3:///var/lib/talos/talos.db?_journal_mode=WAL"]
     volumes:
       - ${DATA_ROOT:-/data}/talos:/var/lib/talos
     networks: [auth]
     restart: "no"
 
   talos:
-    build:
-      context: https://github.com/ory/talos.git#${TALOS_GIT_REF:-2e2295d}
-      dockerfile: .docker/Dockerfile-local-build
+    image: ghcr.io/hotttao/ory-talos:v26.2.0
     command: ["serve", "--config", "/etc/talos/config.yaml"]
     depends_on:
-      talos-init:
+      talos-migrate:
         condition: service_completed_successfully
     volumes:
       - ./auth/talos/config.oss.yaml:/etc/talos/config.yaml:ro
