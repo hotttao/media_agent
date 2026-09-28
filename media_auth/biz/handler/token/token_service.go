@@ -143,5 +143,12 @@ func VerifyApiToken(ctx context.Context, c *app.RequestContext) {
 		Active: true, Sub: "User:" + principal.SubjectUserID, ActorType: string(principal.ActorType), ActorId: principal.ActorID,
 		CredentialId: principal.CredentialID, OrganizationId: principal.OrganizationID,
 		Scope: strings.Join(principal.Scopes, " "), Exp: expiresAt, AuthSource: "api_token",
+		Ext: map[string]string{
+			"actor_type":      string(principal.ActorType),
+			"actor_id":        principal.ActorID,
+			"credential_id":   principal.CredentialID,
+			"organization_id": principal.OrganizationID,
+			"auth_source":     "api_token",
+		},
 	})
 }

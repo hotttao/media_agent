@@ -53,6 +53,9 @@ message VerifyApiTokenResponse {
   string scope = 7;
   int64 exp = 8;
   string auth_source = 9;
+  // Oathkeeper exposes non-standard introspection claims to mutator templates
+  // through Extra when they are carried in Oathkeeper's `ext` object.
+  map<string, string> ext = 10;
 }
 
 message VerifyTokenRequest {

@@ -7,7 +7,7 @@
   authenticators:
     - handler: oauth2_introspection
       config:
-        introspection_url: http://host.docker.internal:8001/internal/token/api-token:verify
+        introspection_url: http://media_auth:8001/internal/token/api-token:verify
         scope_strategy: exact
         prefix: talos_
   authorizer:
@@ -37,7 +37,7 @@
     - handler: cookie_session
     - handler: oauth2_introspection
       config:
-        introspection_url: http://host.docker.internal:8001/internal/token/api-token:verify
+        introspection_url: http://media_auth:8001/internal/token/api-token:verify
         scope_strategy: exact
         required_scope: [api.access]
         prefix: talos_

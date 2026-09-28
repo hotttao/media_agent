@@ -59,12 +59,16 @@ func (r *Repo) ListBySubject(ctx context.Context, userID string) ([]domain.Token
 
 func (r *Repo) MarkRevoking(ctx context.Context, id, subjectUserID string) (domain.Token, error) {
 	db := dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.APIToken{}).
-		Where("id = ? AND subject_user_id = ? AND status = ?", id, subjectUserID, domain.StatusActive).
+		Where("id = ? AND subject_user_id = ? AND status IN ?", id, subjectUserID, []domain.Status{domain.StatusActive, domain.StatusRevoking, domain.StatusExpired}).
 		Update("status", domain.StatusRevoking)
 	if db.Error != nil {
 		return domain.Token{}, db.Error
 	}
 	if db.RowsAffected == 0 {
+		token, err := r.Get(ctx, id)
+		if err == nil && token.SubjectUserID == subjectUserID && token.Status == domain.StatusRevoked {
+			return token, nil
+		}
 		return domain.Token{}, domain.ErrNotFound
 	}
 	return r.Get(ctx, id)

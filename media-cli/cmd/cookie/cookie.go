@@ -51,6 +51,12 @@ func New(rootDir string) *Store {
 func (s *Store) Middleware(host string) client.Middleware {
 	return func(next client.Endpoint) client.Endpoint {
 		return func(ctx context.Context, req *protocol.Request, resp *protocol.Response) (err error) {
+			// Explicit API credentials take precedence over persisted browser state.
+			if token := os.Getenv("MEDIA_API_TOKEN"); token != "" {
+				req.Header.Del("Cookie")
+				req.Header.Set("Authorization", "Bearer "+token)
+				return next(ctx, req, resp)
+			}
 			// 请求前：从 store 取该 host cookie 注入 req。
 			s.inject(host, req)
 			// 执行。

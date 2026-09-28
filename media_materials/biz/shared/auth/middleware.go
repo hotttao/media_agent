@@ -288,6 +288,18 @@ func (m *Middleware) Handler() app.HandlerFunc {
 						if teamIDs != nil {
 							ctx = context.WithValue(ctx, teamsKey{}, teamIDs)
 						}
+						organizationIDs := []string(nil)
+						if claims.OrganizationID != "" {
+							organizationIDs = []string{claims.OrganizationID}
+						} else {
+							organizationIDs, verifyErr = m.fetchOrganizations(ctx, user.Sub)
+							if verifyErr != nil {
+								c.JSON(consts.StatusServiceUnavailable, map[string]string{"error": "organization authorization unavailable"})
+								c.Abort()
+								return
+							}
+						}
+						ctx = context.WithValue(ctx, organizationsKey{}, organizationIDs)
 						c.Next(ctx)
 						return
 					}

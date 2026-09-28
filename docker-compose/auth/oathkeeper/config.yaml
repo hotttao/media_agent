@@ -25,7 +25,7 @@ authenticators:
   oauth2_introspection:
     enabled: true
     config:
-      introspection_url: http://host.docker.internal:8001/internal/token/verify
+      introspection_url: http://media_auth:8001/internal/token/verify
       scope_strategy: exact
       prefix: tos_
       cache:

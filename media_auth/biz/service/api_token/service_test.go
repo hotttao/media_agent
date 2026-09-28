@@ -172,3 +172,24 @@ func TestRotateRevokesReplacementWhenMetadataUpdateFails(t *testing.T) {
 		t.Fatalf("Rotate() error=%v revoked=%q", err, secrets.revokedKey)
 	}
 }
+
+func TestRevokeCanRetryAfterTalosFailure(t *testing.T) {
+	repo := &fakeRepo{revoking: domain.Token{ID: "api-1", TalosKeyID: "key-1", Status: domain.StatusRevoking}}
+	secrets := &fakeSecrets{revokeErr: errors.New("Talos unavailable")}
+	service := NewService(repo, secrets)
+	if err := service.Revoke(context.Background(), "u1", "api-1"); err == nil || repo.revoked {
+		t.Fatal("failed upstream revocation must remain pending")
+	}
+	secrets.revokeErr = nil
+	if err := service.Revoke(context.Background(), "u1", "api-1"); err != nil || !repo.revoked {
+		t.Fatalf("retry must finish revocation: %v", err)
+	}
+}
+
+func TestRevokeAlreadyRevokedIsIdempotent(t *testing.T) {
+	repo := &fakeRepo{revoking: domain.Token{Status: domain.StatusRevoked}}
+	secrets := &fakeSecrets{revokeErr: errors.New("Talos unavailable")}
+	if err := NewService(repo, secrets).Revoke(context.Background(), "u1", "api-1"); err != nil {
+		t.Fatalf("already revoked token must remain successful: %v", err)
+	}
+}

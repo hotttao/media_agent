@@ -53,6 +53,7 @@ import (
 
 	clisub "media_agent/media_cli/cmd/client"
 	gatewaycmd "media_agent/media_cli/cmd/media_agent_gateway"
+	apitokensub "media_agent/media_cli/cmd/media_auth/api_token"
 	authsub "media_agent/media_cli/cmd/media_auth/auth"
 	oauthclientsub "media_agent/media_cli/cmd/media_auth/oauth_client"
 	teamsub "media_agent/media_cli/cmd/media_auth/team"
@@ -109,6 +110,9 @@ func run() int {
 	//     client.media_auth 未配置时跳过（其他子命令仍可用）。
 	if cfg.GetClient()["media_auth"] != nil {
 		authsub.Init(cfg)
+		if err := apitokensub.Init(cfg); err != nil {
+			log.Fatalf("media_auth/api-token: %v", err)
+		}
 		teamsub.Init(cfg)        // team 共享同一 cookie store，login 后 team 子命令自动带 cookie
 		oauthclientsub.Init(cfg) // oauth-client 共享同一 cookie store
 		usersub.Init(cfg)        // user 管理共享同一 cookie store

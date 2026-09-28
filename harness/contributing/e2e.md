@@ -96,6 +96,30 @@ media-cli/
 
 ## 关键约定
 
+### 通过统一网关使用 API Token
+
+Ory 认证环境的接口测试使用预先签发的 API Token。业务服务接收网关交换的内部 JWT；测试应请求网关地址。
+当前本地测试凭据保存在未跟踪的 `ui_workflow/e2e/.env` 的 `E2E_API_TOKEN` 中。
+
+```bash
+set -a
+. ui_workflow/e2e/.env
+set +a
+export MEDIA_API_TOKEN="$E2E_API_TOKEN"
+export MEDIA_GATEWAY_ADDR=http://192.168.2.41:18080
+export MEDIA_AUTH_ADDR="$MEDIA_GATEWAY_ADDR"
+export MEDIA_E2E_ORGANIZATION_ID=8afeb26b9df643952f4f816576eb2504
+
+# HTTP 生命周期、scope 与组织隔离测试（不模拟登录）
+go -C media-cli test ./e2e -run '^TestAPITokenGateway$' -count=1 -v
+
+# CLI 跨进程调用（MEDIA_API_TOKEN 优先于 Cookie）
+go -C media-cli run . media_auth auth me
+go -C media-cli run . media_auth api-token list
+```
+
+CLI 提供 `api-token create/list/rotate/revoke`。创建和轮换要求 `--env-out` 指向新文件，Secret 只写该文件（0600），控制台只返回元数据。测试不会输出 Secret；`.env` 不得提交。旧的本地 Session 测试仍适用于没有启用 Ory 的独立服务环境。
+
 - **`media-cli` 不用管服务启停**——那是 docker-compose 的事。media-cli 只发 HTTP 请求。
 - **两个 E2E 层级都要验收**——功能存在用户/管理 HTTP 入口时，既要运行 `media-cli/e2e` 的 Go HTTP E2E，也要实际执行对应 media-cli 命令链路；纯内部事件入口可以由面向用户的 CLI 流程间接覆盖，不要求暴露危险的内部命令。
 - **基础环境常驻**（除非确定不再测试才停），避免每次 e2e 重复 build/起。

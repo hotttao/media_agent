@@ -201,6 +201,9 @@ func (s *Service) Revoke(ctx context.Context, subjectUserID, id string) error {
 	if err != nil {
 		return err
 	}
+	if token.Status == domain.StatusRevoked {
+		return nil
+	}
 	if err := s.secrets.Revoke(ctx, token.TalosKeyID); err != nil {
 		return err
 	}
