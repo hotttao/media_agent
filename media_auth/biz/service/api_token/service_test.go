@@ -47,7 +47,7 @@ func (r *fakeRepo) MarkRevoked(context.Context, string, time.Time) error {
 	r.revoked = true
 	return nil
 }
-func (r *fakeRepo) ReplaceTalosKey(context.Context, string, string, *time.Time, time.Time) (domain.Token, error) {
+func (r *fakeRepo) ReplaceTalosKey(context.Context, string, string, string, *time.Time, time.Time) (domain.Token, error) {
 	if r.replaceErr != nil {
 		return domain.Token{}, r.replaceErr
 	}

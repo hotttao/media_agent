@@ -112,7 +112,8 @@ func (c *Client) Verify(ctx context.Context, secret string) (VerifiedKey, error)
 		return VerifiedKey{}, err
 	}
 	if !response.IsValid {
-		return VerifiedKey{}, fmt.Errorf("%w: %s", ErrInvalidCredential, response.ErrorCode)
+		// Upstream error fields may echo credentials; only expose our sentinel.
+		return VerifiedKey{}, ErrInvalidCredential
 	}
 	return response.toVerified()
 }
@@ -160,6 +161,9 @@ type verifyResponse struct {
 }
 
 func (k issuedAPIKey) toIssued(secret string) (IssuedKey, error) {
+	if k.KeyID == "" || secret == "" {
+		return IssuedKey{}, errors.New("talos returned incomplete issued key")
+	}
 	verified, err := k.toVerified()
 	if err != nil {
 		return IssuedKey{}, err
@@ -173,7 +177,7 @@ func (k issuedAPIKey) toVerified() (VerifiedKey, error) {
 	if k.ExpireTime != "" {
 		expiresAt, err = time.Parse(time.RFC3339Nano, k.ExpireTime)
 		if err != nil {
-			return VerifiedKey{}, fmt.Errorf("decode talos expiry: %w", err)
+			return VerifiedKey{}, errors.New("talos returned invalid expiry")
 		}
 	}
 	return VerifiedKey{KeyID: k.KeyID, ActorID: k.ActorID, Status: k.Status, Scopes: append([]string(nil), k.Scopes...), Metadata: k.Metadata, ExpiresAt: expiresAt}, nil
@@ -204,18 +208,25 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 	}
 	response, err := c.http.Do(request)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+		if ctx.Err() != nil {
+			return errors.Join(ErrUnavailable, ctx.Err())
+		}
+		return ErrUnavailable
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		payload, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		return fmt.Errorf("talos %s %s returned %d: %s", method, path, response.StatusCode, strings.TrimSpace(string(payload)))
+		// Never surface an upstream response body: HTTP failures can contain
+		// echoed Secret values and are later logged by handlers/compensators.
+		if response.StatusCode >= 500 || response.StatusCode == http.StatusTooManyRequests {
+			return fmt.Errorf("%w: HTTP %d", ErrUnavailable, response.StatusCode)
+		}
+		return fmt.Errorf("talos returned HTTP %d", response.StatusCode)
 	}
 	if output == nil || response.StatusCode == http.StatusNoContent {
 		return nil
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(output); err != nil {
-		return fmt.Errorf("decode talos response: %w", err)
+		return errors.New("talos returned invalid JSON")
 	}
 	return nil
 }

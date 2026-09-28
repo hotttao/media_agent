@@ -232,7 +232,7 @@ func (s *Service) Rotate(ctx context.Context, subjectUserID, id string, requeste
 	if !issued.ExpiresAt.IsZero() {
 		expiresAt = &issued.ExpiresAt
 	}
-	rotated, err := s.repo.ReplaceTalosKey(ctx, token.ID, issued.KeyID, expiresAt, s.now())
+	rotated, err := s.repo.ReplaceTalosKey(ctx, token.ID, token.TalosKeyID, issued.KeyID, expiresAt, s.now())
 	if err != nil {
 		// The old Talos key has already been invalidated. Revoke the replacement
 		// so a credential without matching local metadata cannot remain active.

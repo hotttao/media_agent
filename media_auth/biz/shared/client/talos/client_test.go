@@ -86,3 +86,45 @@ func TestClientTimeoutDoesNotLeakCredential(t *testing.T) {
 		t.Fatalf("Verify() error = %v", err)
 	}
 }
+
+func TestUpstreamFailuresNeverExposeEchoedCredential(t *testing.T) {
+	const secret = "credential-must-not-appear-in-errors"
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{"server error", 503, secret},
+		{"client error", 400, secret},
+		{"invalid field type", 200, `{"is_valid":true,"scopes":"` + secret + `"}`},
+		{"invalid expiry", 200, `{"is_valid":true,"expire_time":"` + secret + `"}`},
+		{"verification error code", 200, `{"is_valid":false,"error_code":"` + secret + `"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+			client, _ := New(Config{BaseURL: server.URL})
+			_, err := client.Verify(t.Context(), secret)
+			if err == nil || strings.Contains(err.Error(), secret) {
+				t.Fatal("upstream error was not safely redacted")
+			}
+			if tc.status == 503 && !errors.Is(err, ErrUnavailable) {
+				t.Fatal("server failure did not map to unavailable")
+			}
+		})
+	}
+}
+
+func TestRotateRejectsMissingReplacementSecret(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"issued_api_key":{"key_id":"replacement","actor_id":"User:1"}}`))
+	}))
+	defer server.Close()
+	client, _ := New(Config{BaseURL: server.URL})
+	if _, err := client.Rotate(t.Context(), "old-key", []string{"api.access"}); err == nil {
+		t.Fatal("empty replacement credential accepted")
+	}
+}

@@ -51,7 +51,7 @@ type Repository interface {
 	ListBySubject(context.Context, string) ([]Token, error)
 	MarkRevoking(context.Context, string, string) (Token, error)
 	MarkRevoked(context.Context, string, time.Time) error
-	ReplaceTalosKey(context.Context, string, string, *time.Time, time.Time) (Token, error)
+	ReplaceTalosKey(context.Context, string, string, string, *time.Time, time.Time) (Token, error)
 }
 
 var ErrNotFound = errors.New("api token not found")

@@ -86,8 +86,11 @@ func (r *Repo) MarkRevoked(ctx context.Context, id string, at time.Time) error {
 	return nil
 }
 
-func (r *Repo) ReplaceTalosKey(ctx context.Context, id, keyID string, expiresAt *time.Time, at time.Time) (domain.Token, error) {
-	db := dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.APIToken{}).Where("id = ?", id).
+func (r *Repo) ReplaceTalosKey(ctx context.Context, id, oldKeyID, keyID string, expiresAt *time.Time, at time.Time) (domain.Token, error) {
+	// A rotation in flight must never reactivate a concurrently revoked token
+	// or overwrite the result of another successful rotation.
+	db := dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.APIToken{}).
+		Where("id = ? AND talos_key_id = ? AND status = ?", id, oldKeyID, domain.StatusActive).
 		Updates(map[string]any{"talos_key_id": keyID, "expires_at": expiresAt, "rotated_at": at, "status": domain.StatusActive})
 	if db.Error != nil {
 		return domain.Token{}, db.Error
