@@ -32,7 +32,7 @@ browser            media_auth                                    企微 corp API
    |   │       无 → redirect /login?error=not_bound                  |
    |   │     查 users；system→system_account；无→user_not_found      |
    |   │     auth.issueSession(user) → Set-Cookie token(JWT 24h)     |
-   |   │     service_token.ensurePlatformToken(user.id) [fire&forget]|
+   |   │     platform_token.ensurePlatformToken(user.id) [fire&forget]|
    |   │     → redirect /                                            |
    |   │   bind:                                                     |
    |   │     手动验 cookie JWT（callback 在 skip list）              |

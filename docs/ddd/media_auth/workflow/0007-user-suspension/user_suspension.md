@@ -2,7 +2,7 @@
 name: user_suspension
 description: User 临时禁用、会话撤销与恢复
 participants: [administrator, auth, revocation_worker, token_domains, kratos]
-domains: [auth, service_token, platform_token, oauth, mcp_oauth]
+domains: [auth, api_token, platform_token, oauth, mcp_oauth]
 ---
 
 ## 一句话说明

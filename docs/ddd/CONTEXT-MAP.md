@@ -2,7 +2,7 @@
 
 ## 限界上下文
 
-- [认证上下文](media_auth/CONTEXT.md) — 用户身份、企业、部门、成员关系、服务凭证与 OAuth 凭据
+- [认证上下文](media_auth/CONTEXT.md) — 用户身份、企业、部门、成员关系、API Token 与 OAuth 凭据
 - [控制上下文](media_control/CONTEXT.md) — 部门所属 Workspace、运行环境、Agent 配置、定时计划与 Teamwork 拓扑
 - [Agent 网关上下文](media_agent_gateway/CONTEXT.md) — Agent Session 注册、访问控制、执行任务接入、SSE 协议适配与 Platform MCP
 - [Agent 执行上下文](media_agents/CONTEXT.md) — Runtime Session、Turn 队列、模型/工具执行、交互记录与可恢复事件
@@ -20,8 +20,10 @@ Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存
 
 - `media_auth` 是 Organization、Team 及成员关系的权威来源；Organization 表达企业及其可用功能上限，Team 表达企业内部门。
 - `media_control` 为 Team 创建和管理 Workspace；每个 Workspace 只属于一个 Team，并由该 Team 的 Organization 确定企业归属。
-- `media_auth` 向 Edge 和内部服务提供身份验证、企业/部门访问检查及受限凭据获取。
-- 客户端 `media_worker` 只能经统一网关进入系统：Edge 将 opaque Service Token 内省为短时 Internal Identity JWT，`media_workflow` 再执行 Organization、Job 所有权与 Capability 授权；Conductor 不接受客户端连接或用户 Token。
+- `media_auth` 是 API Token 管理与验证的业务入口，保存 Token 元数据和 Talos Key 引用；Talos 持有 Secret 生命周期，Edge/Gateway 将有效 API Token 换成短时 Internal Identity JWT。
+- Agent 是 User 的委托 Actor：创建 Agent 时 `media_agent_gateway` 请求 `media_auth` 签发绑定该 Agent 的 API Token；运行时 Agent 只经 `media_agent_gateway` 代理访问内部服务，JWT 使用 `sub=User`、`act.sub=Agent` 表达委托。
+- Personal Worker 是 User 的委托 Actor，只能经统一网关进入系统：Edge 将 opaque API Token 换成 `sub=User`、`act.sub=Worker` 的短时 Internal Identity JWT，`media_workflow` 再执行 Organization、Job 所有权与 Capability 授权；Conductor 不接受客户端连接或 API Token。
+- Managed Worker 属于 `media_workflow` 内部运行时，不使用 API Token 或 Talos；它只领取 Capability Version 指定的 Managed Execution Domain，并以内部运行身份写入 Dispatch 审计。
 - 资源服务使用共享访问语言实现本地 ACL；共享词典不拥有资源或授权数据。
 - `media_control` 是 Workspace 与 Agent 配置的权威来源；`media_agent_gateway` 消费其运行上下文，但不修改控制配置。
 - `media_agent_gateway` 创建 Agent Session Registration 并向 `media_agents` 注册同 ID 的 Runtime Session；两侧只共享稳定 ID，不共享数据库表。
@@ -39,5 +41,5 @@ Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存
 - 资源归属边界由权威上下文声明：Workspace 私有的运行数据持 `workspace_id`；Organization 内共享的 Material、Virtual IP、Product 与 Generated Asset 持 `organization_id`。Workspace 只属于一个 Team/Organization，跨边界引用必须同时校验 Organization 与业务 Scope。
 - 每项业务事实只有一个权威写入上下文；跨上下文只引用 ID，不共享表或建立跨库外键。
 - 直接调用服务身份与被代表用户身份是两个独立维度。
-- Internal Identity JWT 的 `sub` 使用业务 User ID；Kratos Identity、Service Token Credential 与 Worker Instance 是独立审计维度，不得混为授权主体。
+- Internal Identity JWT 的 `sub` 表示被代表主体；委托调用使用 RFC 8693 `act.sub` 表示当前 Agent/Worker Actor。API Token Credential、Actor、Worker Instance 与 Kratos Identity 是独立审计维度，不得混为授权主体。
 - 资源所属上下文执行最终资源授权。

@@ -1,6 +1,6 @@
 # media_auth 认证鉴权上下文
 
-media 平台的用户档案、企业、部门、成员关系与功能授权服务。目标架构中 Ory Kratos 持有登录身份和浏览器会话，Ory Oathkeeper 承担边缘认证并签发内部身份断言，Ory Keto 持有授权关系投影；media_auth 不再保存终端用户密码或自行签发 Web Session，但仍持有业务 User、Organization、Team、Membership、Entitlement 及其 Outbox。现有本地 Cookie JWT/OAuth 实现按迁移计划逐步退出，不作为新接口的目标边界。
+media 平台的用户档案、企业、部门、成员关系、功能授权与 API Token 管理服务。目标架构中 Ory Kratos 持有登录身份和浏览器会话，Ory Oathkeeper 承担边缘认证并签发内部身份断言，Ory Keto 持有授权关系投影，Talos 持有 API Token Secret 生命周期事实；media_auth 不再保存终端用户密码或自行签发 Web Session，但仍持有业务 User、Organization、Team、Membership、Entitlement、API Token 管理元数据及其 Outbox。现有本地 Cookie JWT/OAuth 实现按迁移计划逐步退出，不作为新接口的目标边界。
 
 ## 业务术语词典
 
@@ -37,31 +37,35 @@ _禁用替代词_：vendor、channel（channel 语义留给登录通道）
 _禁用替代词_：Agent Session、login state、JWT session（JWT 是载体不是会话本身）
 
 **Internal Identity JWT（内部身份 JWT）**:
-Oathkeeper 或 Edge Auth 在浏览器 Session、Service Token 等边缘认证成功后为单次内部请求签发的短时身份断言。`sub` 统一为业务 User ID；Kratos Identity ID 如需传递必须使用独立 claim。JWT 仅承载稳定主体、Organization 上下文、凭证来源和请求 scope；可变企业、部门及资源权限必须向 Keto 或资源所有服务检查，不把 JWT claim 当授权事实。
+Oathkeeper、Agent Gateway 或 Edge Auth 在浏览器 Session、API Token 等边缘认证成功后为单次内部请求签发的短时身份断言。用户直接调用时 `sub` 为业务 User ID；Agent 或 Personal Worker 代表用户调用时使用 RFC 8693 的 `sub=User` 与 `act.sub=Agent|Worker`。JWT 仅承载稳定主体、当前 Actor、Organization 上下文、凭证来源和请求 scope；可变企业、部门及资源权限必须向 Keto 或资源所有服务检查，不把 JWT claim 当授权事实。
 _禁用替代词_：Web Session、Access Token、Permission Token
 
 **Authorization Projection（授权关系投影）**:
 由 Organization、Team、Membership、Entitlement 和资源 Grant 领域事件幂等投影到 Keto 的关系元组；业务数据库是事实源，Keto 是请求路径上的授权判定投影。
 _禁用替代词_：ACL Source of Truth、JWT Role
 
-**Service Token（服务令牌）**:
-B2B、CLI 与客户端 Media Worker 的 opaque API 调用凭证，`tos_` 前缀 + 32 随机字节；DB 仅存 SHA-256 `token_hash`，明文仅创建时返回一次。可通过 scope 和 Organization 绑定限制用途；“API Token”只描述它在客户端接口中的用途，不是另一种凭证类型。归 `service_token` domain。
-_禁用替代词_：API key、access key、bearer token（bearer 是传输方式不是凭证类型）
+**API Token（API 令牌）**:
+User、Agent、Personal Worker、CLI 或受控 Service 调用平台 API 的 opaque 长期凭证。`media_auth` 保存管理元数据与 `talos_key_id`，Talos 负责 Secret 的签发、验证、轮换、撤销和过期；Secret 只在创建或轮换时返回一次。Token 必须绑定唯一 Actor，可按 Organization、audience 和 scope 限制用途。归 `api_token` domain。
+_禁用替代词_：Service Token、Session Token、OAuth Access Token、bearer token（bearer 是传输方式，不是凭证类型）
+
+**Delegated Actor（委托执行身份）**:
+代表 User 实际发起调用的 Agent 或 Personal Worker。Internal Identity JWT 使用 `sub=User:<id>` 与 `act.sub=Agent:<id>|Worker:<id>` 表达；`act.sub` 是审计和 Actor 授权维度，不能替换业务 User。Managed Worker 是平台内部执行身份，不是 User 的 Delegated Actor。
+_禁用替代词_：Sub User、API Client、Worker Instance
 
 **Platform Token（平台令牌）**:
-代表用户执行长期离线委托的特殊 Service Token，每用户至多一个 active；数据库保存 hash 与加密密文，只有 Gateway 和 Control Schedule Worker 可按固定 purpose 获取。归 `platform_token` domain（ADR-0007）。
+代表用户执行长期离线委托的独立加密托管凭证，每用户至多一个 active；数据库保存 hash 与加密密文，只有 Gateway 和 Control Schedule Worker 可按固定 purpose 获取。它不属于 API Token/Talos 生命周期。归 `platform_token` domain（ADR-0007）。
 _禁用替代词_：agent token、internal token
 
-**Service Token Introspection（服务令牌内省）**:
-media_auth 暴露给 Edge 和受信服务的内部能力，把 opaque Service Token 解析为 Principal；下游服务不直读 media_auth 数据库。
-_禁用替代词_：VerifyToken（旧实现名）、Token Exchange
+**API Token Verification（API 令牌验证）**:
+media_auth 暴露给 Edge、Agent Gateway 和受信服务的内部能力：调用 Talos 验证 opaque API Token，并结合当前 Token 元数据、Actor 状态、User 状态、Organization Membership 与 scope 形成 Principal。下游服务不直读 Talos 或 media_auth 数据库。
+_禁用替代词_：Service Token Introspection、数据库 Hash 校验、OAuth Introspection
 
 **Worker Principal（Worker 调用主体）**:
-客户端 Media Worker 通过 Service Token 被认证后形成的请求主体；身份仍是 User，`credential_id` 与 `worker_instance_id` 只用于凭证约束、租约和审计，不建立独立 Agent 权限主体。
-_禁用替代词_：Agent User、Conductor Worker Identity、Service Account
+Personal Worker 通过 API Token 被认证后形成的委托主体，`sub` 为 User、`act.sub` 为稳定 Worker Actor；`credential_id` 标识 Talos API Token，`worker_instance_id` 只标识本次运行实例。Managed Worker 不形成外部 Worker Principal，而以 `internal_runtime` 身份执行。
+_禁用替代词_：Agent User、Conductor Worker Identity、Worker Instance
 
 **Principal（被代表主体）**:
-一次请求代表的用户、Workspace 或 Agent Session 身份；与 mTLS 证明的 CallerService 分开处理。
+一次请求的顶层被代表主体；与 `act.sub` 表示的当前 Actor、mTLS 证明的 CallerService 和 Credential 分开处理。
 _禁用替代词_：Subject、CallerService、claim
 
 ### OAuth Provider（media_auth 作为 Authorization Server）

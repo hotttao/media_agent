@@ -1,5 +1,12 @@
 # execution domain 变更记录
 
+## 2026-09-28 · Personal 与 Managed Worker 路由
+
+- WorkerDispatch 增加 `execution_target`、`actor_id`、`auth_source`；Managed Worker 的 `credential_id` 为空。
+- Personal Worker 使用 API Token 委托身份和 User Domain；Managed Worker 使用 `internal_runtime` 身份和受控 Managed Domain。
+- Managed Worker 不读取 Job User 后模拟登录，不请求 Talos；Job User 是业务归属，Worker Actor 是实际执行者。
+- 两类 Worker 复用 Dispatch/Result Inbox 幂等链路，但认证入口和 Conductor Domain 严格分离。
+
 ## 2026-09-27 · Worker Gateway、Dispatch 与 Task Domain
 
 - 客户端 Media Worker 不再直连 Conductor，改经统一网关与 media_workflow Worker Gateway API 领取、续租和完成任务。

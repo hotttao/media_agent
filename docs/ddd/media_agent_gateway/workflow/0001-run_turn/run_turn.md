@@ -141,7 +141,7 @@ Gateway 禁止开启跨 Gateway DB 与 Agent PostgreSQL 的事务。跨服务通
 
 ## 权限与失败
 
-Gateway 从 Cookie JWT 或用户 Service Token 取得身份，读取本地 Registration 校验 user/workspace/status，然后通过 mTLS 调 Agent。Agent 接受 Gateway 服务身份，但仍校验 `session_id + context_version` 已注册；请求体中的 user/workspace/agent 字段不得覆盖 Gateway 持久化身份。
+Gateway 从 Web Session 或用户 API Token 的 Internal JWT 取得身份，读取本地 Registration 校验 user/workspace/status，然后通过 mTLS 调 Agent。Agent 接受 Gateway 服务身份，但仍校验 `session_id + context_version` 已注册；请求体中的 user/workspace/agent 字段不得覆盖 Gateway 持久化身份。
 
 | 失败 | 是否自动重试 | 处理 |
 |:---|:---|:---|

@@ -94,7 +94,7 @@ sequenceDiagram
 
 ## 权限与失败
 
-Web 创建使用 Cookie JWT 或用户 Service Token；Schedule 使用代表固定用户的受控身份。Worker 用内部服务令牌与 acting user ID 向 Control 读取 Runtime Context，不持久化用户 Cookie。Gateway 把已持久化 Task 身份与 Agent Session Registration 交叉校验后，以服务身份调用 Agent。
+Web 创建使用 Web Session 或用户 API Token Internal JWT；Schedule 使用代表固定用户的受控身份。Worker 用内部工作负载身份与 acting user ID 向 Control 读取 Runtime Context，不持久化用户 Cookie/API Token。Gateway 把已持久化 Task 身份与 Agent Session Registration 交叉校验后，以服务身份调用 Agent。
 
 | 失败 | 处理 |
 |:---|:---|

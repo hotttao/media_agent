@@ -110,6 +110,6 @@ Runtime Environment 负责可用执行环境及 Workspace Placement 的控制面
 ### Environment Token 不变量
 
 - Token 使用 `env_` 前缀和 256-bit 随机值，原始值只在签发响应出现一次，数据库只保存 SHA-256。
-- Token 验证只解析为固定 `environment_id`，不映射为创建用户，也不继承用户或 Service Token 权限。
+- Environment Credential 验证只解析为固定 `environment_id`，不映射为创建用户，也不继承用户或 API Token 权限。
 - 同一环境允许新旧 Token 短期并存；Runner 切换到新 Token 后撤销旧 Token，实现无中断轮换。
 - 列表只返回 active Token 元数据；撤销幂等，环境删除时 Token 由外键级联删除。

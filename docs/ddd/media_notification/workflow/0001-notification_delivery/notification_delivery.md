@@ -51,7 +51,7 @@ TX1 原子提交 Inbox、Notification、Delivery、Outbox；TX2 提交发送 lea
 `event_id + recipient + notification_type` 去重通知，`delivery_id` 传给支持幂等的渠道。瞬时错误指数退避；永久地址/权限错误直接死信。人工重放创建新 attempt 并引用原 Delivery，不篡改历史。
 
 ## 权限与失败
-业务发布者以可配置 mTLS 服务身份写入并受事件类型 allowlist 约束；用户通过 Cookie JWT/Service Token 只能读取和更新自己的通知与偏好。渠道凭据由服务配置持有，不传给发布方。
+业务发布者以可配置 mTLS 服务身份写入并受事件类型 allowlist 约束；用户通过 Web Session/API Token Internal JWT 只能读取和更新自己的通知与偏好。渠道凭据由服务配置持有，不传给发布方。
 
 ## 结果事件
 产生 `NotificationDelivered` 或 `NotificationDeliveryDeadLettered`。

@@ -101,7 +101,7 @@ Turn 提交、中断、Agent Request 响应和事件订阅是跨服务 Workflow�
 
 ### Authorize
 
-1. 从 Cookie JWT 或用户 Service Token 取得真实用户身份。
+1. 从 Web Session 或用户 API Token 形成的 Internal JWT 取得真实用户身份。
 2. 加载 Registration，检查 status、user_id 和 Workspace 访问范围。
 3. 生成只包含稳定 session/user/workspace/agent/context version 的内部命令；请求体同名字段不得覆盖。
 4. Agent 仍校验调用方 mTLS 服务身份和 Runtime Session 注册关系。

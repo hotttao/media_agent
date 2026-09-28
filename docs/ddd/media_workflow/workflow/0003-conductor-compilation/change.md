@@ -1,5 +1,11 @@
 # Conductor Compilation 变更记录
 
+## 2026-09-28：Execution Target 进入 IR 与 taskToDomain
+
+- Semantic Compiler 将 Capability Version 的 Personal/Managed Target 冻结进 Executable Step IR。
+- Job 启动按 Target 生成 User Domain 或 Managed Pool Domain；Definition 继续可复用，不持久化某次 Job Domain。
+- Personal/Managed 不能互相或向 `NO_DOMAIN` 回退，具体 Worker Instance 不进入 IR。
+
 ## 2026-09-27：Capability Task 路由与客户端协议隔离
 
 - Definition 继续冻结 Capability taskDef，但客户端只声明 Capability Version，由 media_workflow 完成内部映射。

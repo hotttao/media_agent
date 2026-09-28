@@ -1,5 +1,12 @@
 # Execution Capability 变更记录
 
+## 2026-09-28：冻结 Personal/Managed Execution Target
+
+- Capability Version 新增不可变 `execution_target=personal_worker|managed_worker` 与可选 `managed_pool_key`。
+- Personal Capability 由带 Delegated Actor API Token 的客户端 media_worker 执行；Managed Capability 由 media_workflow 内部 Worker 执行，不使用 Talos/API Token。
+- Semantic Compiler 把 Target 冻结进 Executable IR；Job 启动按 Target 生成 Personal 或 Managed Task Domain，两类队列不得互相或向 `NO_DOMAIN` 回退。
+- 相同协议需要不同执行位置时优先发布不同 Capability Key，避免用 version 表达部署位置变化。
+
 ## 2026-09-27：Capability Worker 改用 Worker Gateway API
 
 - Worker 声明 `(capability_key, version, concurrency)`，不再配置或提交原始 Conductor Task Definition。

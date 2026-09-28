@@ -1,12 +1,19 @@
 # workflow_execution 变更记录
 
+## 2026-09-28 · Personal/Managed Capability 执行
+
+- Capability Version 冻结 Execution Target；Job 启动分别分配 Personal User Domain 或 Managed Pool Domain。
+- Personal Worker 使用绑定 Worker Actor 的 API Token，JWT 为 `sub=User + act.sub=Worker`；Managed Worker 位于 media_workflow 内部，不使用 Talos或 API Token。
+- 两种 Worker 复用 Dispatch、lease 和 Result Inbox，但不能互相领取或自动回退任务。
+- Managed Worker 记录 Job User 与执行 Worker Actor 两个维度，不读取 Job User 后冒充登录。
+
 ## 2026-09-27 · 统一网关与 Conductor 代理协议
 
-- 客户端 `media_worker` 从直连 Conductor 改为携带 Service Token 经统一网关访问 `/api/worker/v1/*`。
+- 客户端 `media_worker` 从直连 Conductor 改为携带 API Token 经统一网关访问 `/api/worker/v1/*`。
 - media_workflow 按 Capability Registry 和 User Execution Domain 代理 Conductor poll，领取后先持久化 WorkerDispatch 再交付。
 - heartbeat 对齐本地 lease 与 Conductor response timeout；断线不直接终止 Job，过期任务可安全重投。
 - completion/failure 先写 Worker Result Inbox 并返回稳定 receipt，再由后台 Adapter 重试更新 Conductor。
-- 浏览器执行接口继续使用 Web Session；Worker API 使用 Service Token 换取的 Internal Identity JWT，不依赖 Kratos Cookie。
+- 浏览器执行接口继续使用 Web Session；Personal Worker API 使用 API Token 换取的委托 Internal Identity JWT，不依赖 Kratos Cookie。
 
 ## 2026-09-27 · Product 图片输入映射
 

@@ -1,0 +1,58 @@
+---
+name: agent_api_token_provisioning
+description: 创建 Agent 时为其申请绑定 owner User 的一次性可见 API Token
+participants: [browser, media_agent_gateway, media_control, media_auth, talos]
+domains: [agent_configuration, api_token]
+---
+
+## 一句话说明
+
+用户创建 Agent 后，media_agent_gateway 以受信服务身份请求 media_auth 为 `Agent:<agent_id>` 创建 API Token；media_auth 验证 Agent、owner 与 Organization 后调用 Talos，完整 Secret 只沿同步响应返回一次。
+
+## 执行时间线
+
+```mermaid
+sequenceDiagram
+    participant U as User Browser
+    participant G as media_agent_gateway
+    participant C as media_control
+    participant A as media_auth
+    participant T as Talos
+    participant DB as Auth DB
+    U->>G: Create Agent + request API Token (Web Session)
+    G->>C: Create/Get Agent Configuration
+    C-->>G: agent_id + owner_user_id + organization_id
+    G->>A: CreateActorAPIToken(agent facts, scopes, idempotency key)
+    A->>C: Verify Agent active + owner/org
+    C-->>A: authoritative relationship
+    A->>T: Create API Key(actor_id=Agent:id)
+    T-->>A: talos_key_id + one-time Secret
+    A->>DB: TX: API Token metadata + Actor Binding + audit
+    alt Auth TX committed
+        A-->>G: token metadata + one-time Secret
+        G-->>U: Agent + one-time Secret
+    else Auth TX failed
+        A->>T: revoke talos_key_id (compensation)
+        A-->>G: creation failed; Secret discarded
+        G-->>U: Agent created, Token provisioning requires retry
+    end
+```
+
+Agent Configuration 由 media_control 持有，API Token Metadata 由 media_auth 持有，Talos 持有 Secret。Gateway 只协调，不保存 Secret。Agent 创建成功但 Token 创建失败时不回滚 Agent；返回明确的 `token_provisioning_failed`，用户可以对同一 Agent 使用稳定幂等键重试。
+
+## 幂等、恢复与生命周期
+
+- 创建幂等键为 `agent_id + token_purpose + client_idempotency_key`；重复成功返回同一 Token 元数据，但绝不再次返回旧 Secret。
+- Talos 创建成功而 Auth 事务失败时立即撤销 Key；撤销结果不明确写补偿任务，禁止把 Secret 交给调用方。
+- Agent disabled/deleted 或 owner 关系解除后，Gateway/Control 发布事实，media_auth 幂等撤销该 Agent 的全部 active API Token。
+- 轮换生成新 Secret并撤销旧 Key；旧 Secret 不可恢复。撤销失败保留 `revoking` 状态并重试，运行时验证 fail closed。
+
+## 权限与信任边界
+
+Web Session 决定创建者 User；请求体中的 owner、Organization 和 Agent ID 只能作为目标引用，必须回查 media_control。Gateway 到 Auth、Auth 到 Control/Talos 使用受信服务通道。Agent Token scope 不得超过 User 在 Organization 内可委托权限；第一阶段 Agent 可继承 User 权限上限，但资源服务仍按当前 User、Actor、Organization 和资源事实决定最终授权。
+
+Agent 运行时只调用 media_agent_gateway。Gateway 按全局 API Token Verification 流程形成 `sub=User:<owner>`、`act.sub=Agent:<id>` 的 Internal Identity JWT 后代理内部服务；API Token 不直接传播给内部服务。
+
+## 结果
+
+成功产生一个 active API Token Metadata 和 Talos Key，Agent/User 仅本次获得 Secret；失败不会留下可用但无管理记录的 Key。该流程不创建 Agent Session，Session 生命周期由 Agent Session Startup 单独管理。

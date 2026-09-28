@@ -54,7 +54,7 @@ Publish Adapter 与 Publish Worker 同属 media_gen，可同进程部署；它�
 
 ## 权限与失败
 
-Web 使用 Cookie JWT/用户 Service Token，Agent 使用 Session Token；Materials 执行 Asset 最终授权。Worker 使用 mTLS 服务身份，用户/Workspace 来自 Publish Task。平台凭据不得暴露给调用方、Agent、日志或 Trace。
+Web 使用 Web Session/用户 API Token Internal JWT，Agent 使用 Session Token；Materials 执行 Asset 最终授权。Worker 使用 mTLS 服务身份，用户/Workspace 来自 Publish Task。平台凭据不得暴露给调用方、Agent、日志或 Trace。
 
 ## 结果事件
 

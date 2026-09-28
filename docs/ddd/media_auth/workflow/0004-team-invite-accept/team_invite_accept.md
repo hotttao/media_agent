@@ -78,7 +78,7 @@ Accept 先读取 Organization Membership，再在一个本地事务中重新读�
 ## 权限与失败
 
 - Invite Token 是部门加入凭证，不是企业加入凭证；非本企业成员即使持有 Token 也必须拒绝。
-- Cookie JWT 或用户 Service Token 决定接受者，body/path 不允许覆盖 user_id；角色固定为 member。
+- Web Session 或用户 API Token 形成的 Internal JWT 决定接受者，body/path 不允许覆盖 user_id；角色固定为 member。
 - Invite 不存在、撤销、过期或 Team 已删除不可重试；并发接受由唯一约束收敛为同一 Membership。
 - Token 不得进入访问日志和 Trace；目标实现只保存高强度随机 Token 的 Hash，预览/接受时 Hash 查询。
 - **invite 无一次性消费**：control-plane 现状是接受后 token 仍留痕（审计 / 防止合法邀请被反复 retry）。如业务要求"一次接受即失效"，需在 invite 上加 `consumed_at` 字段 + 接受时 UPDATE；当前不引入，留待按需建模。

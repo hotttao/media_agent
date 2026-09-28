@@ -103,7 +103,7 @@ sequenceDiagram
 
 ## 权限与失败
 
-Web 身份来自 Gateway 验证后的 Cookie JWT 或用户 Service Token；Control 最终校验 Workspace。Gateway、Control、Plugin 和 Agent 使用 mTLS 服务身份。请求体不得覆盖 user_id；Agent 只接受受信 Gateway 的注册命令。
+Web 身份来自 Gateway 验证后的 Web Session 或用户 API Token Internal JWT；Control 最终校验 Workspace。Gateway、Control、Plugin 和 Agent 使用 mTLS 服务身份。请求体不得覆盖 user_id；Agent 只接受受信 Gateway 的注册命令。
 
 ## 结果事件
 

@@ -69,7 +69,7 @@ Session Analytics 把 Gateway Session Registration/Agent Task 与 Agent Turn 终
 
 ## 能力详细说明
 
-查询必须按 Cookie JWT 或 Service Token 中的用户范围过滤；管理员查询另行校验管理权限。
+查询必须按 Web Session 或 API Token Internal JWT 中的用户范围过滤；管理员查询另行校验管理权限。
 
 ## 关联关系
 

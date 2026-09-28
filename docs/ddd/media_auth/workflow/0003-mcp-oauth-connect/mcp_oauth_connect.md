@@ -46,7 +46,7 @@ Discovery、Registration、Token Exchange 均在事务外。TX1 持久化可跨�
 
 ## 权限与安全
 
-用户身份来自 Edge Cookie JWT/Service Token；Plugin 固定 user/workspace/definition，Auth 不信任 callback 参数覆盖。服务间使用可配置 mTLS。state、code_verifier、Access/Refresh Token 不进入 URL 日志、Trace、Outbox 或 Plugin；数据库使用 AEAD 密文与 key_version。
+用户身份来自 Edge Web Session/API Token Internal JWT；Plugin 固定 user/workspace/definition，Auth 不信任 callback 参数覆盖。服务间使用可配置 mTLS。state、code_verifier、Access/Refresh Token 不进入 URL 日志、Trace、Outbox 或 Plugin；数据库使用 AEAD 密文与 key_version。
 
 ## 结果事件
 

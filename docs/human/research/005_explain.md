@@ -1,4 +1,4 @@
-# 客户端 Media Worker、统一网关与 Conductor 代理方案记录
+# API Token、Personal/Managed Worker 与 Conductor 代理方案记录
 
 本文记录围绕“客户端 `media_worker` 如何安全领取并完成 Conductor Capability Task”的讨论过程与最终方案。它用于解释方案如何形成；当前有效的领域边界和实现契约仍以 `docs/ddd`、`docs/spec` 为准。
 
@@ -20,7 +20,7 @@ Capability Task 的类型在编译时已经由不可变的 Execution Capability 
 这个方式验证执行链路很直接，但不适合作为正式边界：
 
 - Conductor 会被暴露到客户端网络，绕过统一网关；
-- Conductor 不理解平台的 User、Organization、Service Token 与资源权限；
+- Conductor 不理解平台的 User、Actor、Organization、API Token 与资源权限；
 - 客户端能看到内部 task id、workflow id 和内部任务类型；
 - Token 撤销、租约、重放、审计与限流只能散落在客户端和 Conductor 之间；
 - 无法保证用户只能领取自己的任务。
@@ -31,7 +31,7 @@ Capability Task 的类型在编译时已经由不可变的 Execution Capability 
 
 随后把 `media_workflow` 作为业务代理：客户端只调用稳定的 Worker API，`media_workflow` 在内部轮询和更新 Conductor。这样 Conductor 可以保持内网部署，业务服务也能执行任务归属和输出校验。
 
-这个方向正确，但还缺少入口认证边界：客户端是外部调用方，不应直接请求内部服务，也不应把 Service Token 原样传入 `media_workflow`。
+这个方向正确，但还缺少入口认证边界：客户端是外部调用方，不应直接请求内部服务，也不应把 API Token 原样传入 `media_workflow`。
 
 ### 2.3 最终修正：统一网关完成认证与身份交换
 
@@ -39,7 +39,7 @@ Capability Task 的类型在编译时已经由不可变的 Execution Capability 
 
 ```text
 media_worker
-  -- opaque Service Token --> Unified Gateway / Traefik
+  -- opaque API Token --> Unified Gateway / Traefik
   --> Oathkeeper 或 Edge Auth 适配器
   -- short-lived Internal Identity JWT --> media_workflow Worker API
   --> internal Conductor
@@ -48,7 +48,7 @@ media_worker
 其中：
 
 - Traefik 负责路由、ForwardAuth 接入及剥离客户端伪造的内部身份头；
-- Oathkeeper 或专用 Edge Auth 适配器调用 `media_auth` 的 Service Token Introspection，并签发短时 Internal Identity JWT；
+- Oathkeeper 或专用 Edge Auth 适配器调用 `media_auth`，由 media_auth 通过 Talos 验证 API Token，并签发短时 Internal Identity JWT；
 - `media_workflow` 验证 JWT 后，执行任务归属、Organization、Capability 与输出 schema 授权；
 - Conductor 只在内网接受 `media_workflow` 的代理调用，不识别用户 Token。
 
@@ -77,9 +77,10 @@ MVP 可为每个已启用 Capability 启动一个服务端长轮询；规模扩�
 正式方案使用 Conductor Task Domain：
 
 - 启动 Workflow 时，`media_workflow` 通过 `taskToDomain` 为 Capability Task 设置 Execution Domain；
-- MVP 的 Execution Domain 从 Job 的提交用户派生，确保用户只能领取自己的任务；
-- 企业共享 Worker Pool 后续可以显式选择 Organization/Worker Pool Domain，但不能隐式扩大范围；
+- `execution_target=personal_worker` 时从 Job 提交用户派生 Personal Domain，确保用户只能领取自己的任务；
+- `execution_target=managed_worker` 时从受控 Managed Pool 配置派生 Managed Domain；
 - Domain 值由服务端派生，客户端不能传入；
+- Personal 与 Managed Domain 不能互相回退；
 - 不允许回退到 `NO_DOMAIN`；
 - Renderer 与 Finalizer 留在服务端内部 Domain，不会进入客户端队列。
 
@@ -96,7 +97,7 @@ POST /api/worker/v1/tasks:poll
 
 Worker 上报实例标识及支持的 Capability Version。服务端验证：
 
-1. Internal JWT 的 `sub`、`organization_id`、`credential_id` 与 scope；
+1. Internal JWT 的 `sub`、`act.sub`、`organization_id`、`credential_id` 与 scope；
 2. 当前 Organization Membership 与 Capability 使用权限；
 3. Capability Version 已发布且允许客户端执行；
 4. 由服务端计算 Execution Domain 与 Conductor Task Definition；
@@ -169,37 +170,87 @@ POST /api/worker/v1/tasks/{dispatch_id}:fail
 
 前者是客户端调度协议，后者是服务间业务协作。
 
-## 7. 身份、权限与撤销
+## 7. API Token 与委托身份
 
-客户端使用的“API Token”在统一语言中仍称 Service Token，不引入第二种凭证聚合。用于 Worker 的 Service Token 必须绑定一个 Organization，并至少支持：
-
-- `workflow.worker.poll`
-- `workflow.worker.heartbeat`
-- `workflow.worker.complete`
-- `workflow.worker.fail`
-- `workflow.worker.upload`
-
-Internal Identity JWT 至少携带：
+讨论最终否决了 media_auth 自行生成 `tos_`、保存 SHA-256 Hash 的 Service Token 方案，统一采用 API Token：
 
 ```text
-iss, aud, sub, organization_id, scope,
-credential_id, auth_source, iat, exp, jti
+media_auth Token Manager
+  保存：token manager id、talos_key_id、subject、actor、org、scope、状态
+
+Talos
+  持有：Secret 创建、验证、轮换、撤销、过期
 ```
 
-`sub` 统一为业务 User ID；Kratos Identity ID 如需审计使用独立 claim，不能与业务 User ID 混用。JWT audience 固定为 `media-workflow`，TTL 建议 1 至 5 分钟。Worker 路由不要求浏览器 Kratos Cookie。
+Secret 只在创建或轮换时返回一次。API Token 必须绑定稳定 Actor，而不只绑定 User。RFC 8693 的 Actor Claim 用来表达“谁代表谁”：
 
-最终有效权限是以下条件的交集：
+```json
+// Agent 代表用户
+{
+  "sub": "User:user-1",
+  "act": {"sub": "Agent:agent-17"},
+  "credential_id": "api-token-17",
+  "organization_id": "org-1"
+}
+
+// Personal Worker 代表用户
+{
+  "sub": "User:user-1",
+  "act": {"sub": "Worker:worker-21"},
+  "credential_id": "api-token-21",
+  "organization_id": "org-1"
+}
+```
+
+`sub` 是业务上被代表的 User，`act.sub` 是实际调用的 Agent/Worker；`credential_id` 是哪把 Token，`worker_instance_id` 是哪个进程实例。四者不能互换，`client_id` 也不能替代 Actor。
+
+Agent 创建时，`media_agent_gateway` 确认 Agent/owner/Organization 后请求 `media_auth` 签发绑定 `Agent:<id>` 的 API Token。Agent 运行时只调用 Agent Gateway；Gateway 通过 media_auth/Talos 验证 Token、重新检查委托关系，以 `sub=User + act.sub=Agent` 代理内部服务。Gateway 不保存 Secret。
+
+Personal Worker Token 至少支持 `workflow.worker.poll/heartbeat/complete/fail/upload`。有效权限为：
 
 ```text
-Token scope
-∩ 当前 Organization Membership / Entitlement
-∩ Job 所有权或显式 Worker Pool 授权
-∩ Capability allowlist
+User 当前权限
+∩ Worker Actor 当前状态
+∩ API Token scope
+∩ Organization Membership / Entitlement
+∩ Job owner
+∩ Personal Capability allowlist
 ```
 
-每次 poll、heartbeat 和 completion 都经过 Gateway，因此 Token 撤销后不能继续领取或续租。已发出的短时 JWT 只在 TTL 内有有限滞后，现有租约到期后由 Conductor 重投。
+每次 Personal poll、heartbeat 和 completion 都经过 Gateway；Token 撤销后不能继续调用，已签发 JWT 的最大滞后等于其短 TTL。
 
-## 8. Capability 版本演进
+## 8. Capability Execution Target
+
+Capability Version 在发布时冻结：
+
+```text
+execution_target = personal_worker | managed_worker
+managed_pool_key = <optional>
+```
+
+它定义允许哪类执行者实现该契约，不保存具体 Worker 实例。Semantic Compiler 把 Target 冻结进 Executable Workflow IR，Job 启动时据此生成 `taskToDomain`。
+
+```text
+personal_worker → user:{opaque_user_hash}
+managed_worker  → managed:{pool_key}
+```
+
+Published Version 不允许修改 Target。相同输入输出协议需要不同执行位置时，推荐使用不同 Capability Key，例如 `media.image.model.personal@1` 与 `media.image.model.managed@1`，避免 version 同时表示协议和部署位置。任何 Worker 离线都不能触发跨 Target 或 `NO_DOMAIN` 隐式回退。
+
+## 9. Managed Worker 为什么不需要 Talos
+
+Managed Worker 实现在 `media_workflow` 服务边界内，可以作为独立进程部署，但不经过公开 Worker API。它不申请 API Token、不请求 Talos，也不读取 Job User 后模拟登录。信任来自内部进程/工作负载边界，执行范围来自：
+
+- `execution_target=managed_worker`；
+- 配置允许的 Managed Pool/Capability；
+- Managed Execution Domain；
+- 持久 WorkerDispatch、lease、attempt 和 Result Inbox。
+
+审计同时记录 `requested_by=Job User` 与 `executed_by=Worker:managed-*`。Managed Worker 与 Personal Worker复用结果幂等链路，但 `credential_id` 为空、`auth_source=internal_runtime`。
+
+如果以后 Managed Worker 被拆出 media_workflow 信任边界，使用 mTLS/Workload Identity，而不是用户 API Token。只有它确实需要代表 Job User 调内部资源服务时，才由 media_workflow 签发绑定 `dispatch_id + audience + minimal scope + lease` 的短期委托 JWT。
+
+## 10. Capability 版本演进
 
 - 已发布 Capability Version 不可修改；
 - 老 Workflow/Task 继续引用老版本和老 `conductor_task_def`；
@@ -209,13 +260,13 @@ Token scope
 
 Worker 声明业务 Capability Version，而不是原始 Task Definition，防止客户端越权领取内部任务或未来新增任务。
 
-## 9. 错误与审计语义
+## 11. 错误与审计语义
 
 建议稳定错误语义：
 
 | 状态码 | 含义 |
 |:---|:---|
-| 401 | Service Token 或 Internal JWT 无效 |
+| 401 | API Token 或 Internal JWT 无效 |
 | 403 | scope、Organization、Job 或 Capability 权限不足 |
 | 204 | 当前无可领取任务 |
 | 409 | attempt 过期、归属冲突或重复操作冲突 |
@@ -224,9 +275,9 @@ Worker 声明业务 Capability Version，而不是原始 Task Definition，防�
 | 429 | Worker 并发或速率超限 |
 | 503 | Conductor/调度器暂时不可用 |
 
-审计至少记录 user、organization、credential、worker_instance、dispatch、step_run、attempt、capability、trace_id 与结果摘要。原始 Token、Provider 密钥、完整 presigned URL 和敏感提示词不得写入日志。
+审计至少记录 subject user、actor、organization、credential、worker_instance、execution_target、dispatch、step_run、attempt、capability、trace_id 与结果摘要。原始 Token、Provider 密钥、完整 presigned URL 和敏感提示词不得写入日志。
 
-## 10. 被否决或延后的方案
+## 12. 被否决或延后的方案
 
 | 方案 | 结论 | 原因 |
 |:---|:---|:---|
@@ -235,30 +286,34 @@ Worker 声明业务 Capability Version，而不是原始 Task Definition，防�
 | 客户端提交任意 task type | 否决 | 可能领取内部任务，绕过 Capability Registry |
 | completion 同步直写 Conductor 后才响应 | 否决 | Conductor 短暂失败会让客户端重复 Provider 副作用 |
 | API Token 写入 Workflow/IR/Task Input | 否决 | 长期凭证会被定义、历史与日志持久化 |
-| MVP 引入独立 Agent 权限模型 | 延后 | 当前身份仍是 User；`credential_id` 和 `worker_instance_id` 仅用于凭证与审计 |
-| Organization 共享 Worker Pool | 延后 | MVP 按 User Execution Domain 隔离，未来以显式授权扩展 |
+| 只用 User `sub` 表示 Agent/Worker | 否决 | 无法审计和授权实际 Actor，采用 RFC 8693 `act.sub` |
+| 使用 OAuth `client_id` 表示 Actor | 否决 | client_id 表示 OAuth Client，不是执行身份 |
+| Managed Worker 使用用户长期 API Token | 否决 | 扩大凭证泄露和冒充范围；内部 Worker 使用工作负载边界 |
+| Personal/Managed 自动回退 | 否决 | 破坏发布时执行边界和队列隔离 |
 
-## 11. 当前实现差距
+## 13. 当前实现差距
 
 本节只记录审查时的实现差距，不改变目标设计：
 
-- `media_worker` 当前仍配置 `CONDUCTOR_URL` 并直接 poll/update；
-- Gateway/Oathkeeper 当前主要处理浏览器 Cookie Session，尚无完整 Service Token -> Internal JWT Worker 链路；
-- `media_workflow` 的 Internal JWT 中间件仍依赖 Kratos Cookie，不适用于 token-only Worker；
-- Service Token 的现有持久化尚未完整实现 scope、Organization 与 expiry；
-- 尚无 Worker Registration、WorkerDispatch、Result Inbox、heartbeat 与代理 Worker API；
-- StartWorkflow 尚需确认并改为携带 `taskToDomain` 的请求形式。
+- 当前 Service Token 代码与数据表需要由 Talos API Token 实现替换并删除；
+- 当前 Worker JWT 尚未表达 `act.sub=Worker`，Dispatch 尚未独立记录 subject/actor；
+- Execution Capability 尚未持久化和编译 `execution_target/managed_pool_key`；
+- 当前 `taskToDomain` 只支持 User Domain，尚无 Managed Domain；
+- Managed Worker 运行入口尚未实现，现有 internal worker 只执行 Renderer/Finalizer；
+- Agent 创建时申请 API Token、Agent Gateway 验证与代理链路尚未实现。
 
 这些差距属于后续实现计划，不能通过让客户端临时直连 Conductor 规避。
 
-## 12. 能力覆盖矩阵
+## 14. 能力覆盖矩阵
 
 | 原能力/需求 | 目标限界上下文 | Domain | 聚合/读模型 | Workflow | 状态 |
 |:---|:---|:---|:---|:---|:---|
-| Service Token 创建、撤销、内省 | media_auth | service_token | ServiceToken | service_token_verification | covered |
-| Token 换取 Internal JWT | Edge + media_auth | service_token | Principal | service_token_verification | covered |
-| Worker Capability 声明 | media_workflow | execution_capability | ExecutionCapability Version | workflow_execution | covered |
-| 按用户隔离领取任务 | media_workflow | execution | WorkerDispatch | workflow_execution | covered |
+| API Token 创建、轮换、撤销、验证 | media_auth + Talos | api_token | API Token Metadata | api_token_verification | covered |
+| Agent 创建时申请 Token | media_agent_gateway + media_auth | agent_configuration/api_token | Agent + API Token Metadata | agent_api_token_provisioning | covered |
+| Agent 委托调用 | media_agent_gateway | agent delegation | Principal | api_token_verification | covered |
+| Capability 执行目标 | media_workflow | execution_capability | ExecutionCapability Version | conductor_compilation | covered |
+| Personal Worker 身份与领取 | media_workflow | execution | WorkerDispatch | workflow_execution | covered |
+| Managed Worker 内部领取 | media_workflow | execution | WorkerDispatch | workflow_execution | covered |
 | 心跳、租约与取消感知 | media_workflow | execution | WorkerDispatch | workflow_execution | covered |
 | 幂等完成/失败并代理 Conductor | media_workflow | execution | WorkerDispatch + WorkerResult Inbox | workflow_execution | covered |
 | Internal Renderer/Finalizer | media_workflow | template/execution | Internal Execution Task | conductor_compilation | covered |

@@ -60,7 +60,7 @@ Workspace 的 `desired_state` 由 Workspace 聚合决定，`observed_state` 是�
 `workspace_id + version` 是协调幂等键，Workspace Runtime Directory 以 `workspace_id` 幂等取得。外部结果不明确时先读取 Runtime/AFS 当前状态再决定继续，不重复创建资源。目录已存在但 mount identity 不匹配属于不可自动覆盖的隔离错误；瞬时错误退避重试，新 version 到达即使旧任务失效。无法收敛时保留 desired_state 和错误，管理员可重新发命令产生新 version。
 
 ## 权限与失败
-入口用 Cookie JWT/用户 Service Token 校验 Workspace manage；内部调用通过可配置 mTLS 认证服务。配置错误不可重试，基础设施瞬时错误重试，权限撤销不回滚已提交命令但阻止后续用户命令。
+入口用 Web Session/用户 API Token Internal JWT 校验 Workspace manage；内部调用通过可配置 mTLS 认证服务。配置错误不可重试，基础设施瞬时错误重试，权限撤销不回滚已提交命令但阻止后续用户命令。
 
 ## 结果事件
 产生 `WorkspaceStateConverged` 或 `WorkspaceConvergenceFailed`。

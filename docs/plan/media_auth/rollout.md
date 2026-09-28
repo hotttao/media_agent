@@ -10,7 +10,7 @@
 - [x] IDL 7 proto：`docs/research/media_auth/idl/media_auth/*.proto`（含 `token.proto`）
 - [x] SQL：`docs/research/media_auth/sql/0001_init.sql`（mcp_oauth 宽限列已对齐 control-plane migration 117）
 - [x] 领域模型：`docs/ddd/media_auth/`（CONTEXT + 6 domain + change + 3 service workflow）
-- [x] 跨服务 workflow：`docs/ddd/workflow/0001-service-token-verification.md`
+- [x] 跨服务 workflow：`docs/ddd/workflow/0001-api-token-verification.md`
 - [x] ADR：`docs/ddd/adr/0001`（token 校验契约）、`docs/ddd/adr/0002`（platform token 明文列）
 - [x] spec：`docs/spec/media_auth/impl.md`（自包含）
 

@@ -24,7 +24,7 @@ Team Domain 维护 Organization 内部门、部门成员关系、部门有效功
 ### 不做什么
 - 不做资源级 ACL 业务（`visibility='team'`、Resource Grant 校验）——team 仅暴露 team_id 与成员关系，下游服务（media_materials / media_workflow）按需取用。
 - 不签发 OAuth Client / 不接管 Session——分别归 [oauth](../0005-oauth/oauth.md) / [auth](../0001-auth/auth.md)。
-- 不管理 service token、identity 绑定、企微登录通道——分别归 [service_token](../0004-service_token/service_token.md) / [identity](../0002-identity/identity.md) / [wecom](../0003-wecom/wecom.md)。
+- 不管理 API Token、identity 绑定、企微登录通道——分别归 [api_token](../0004-api_token/api_token.md) / [identity](../0002-identity/identity.md) / [wecom](../0003-wecom/wecom.md)。
 - 不实现跨 workspace 的 teamwork 协作（多 workspace + AFS 共享）——那是 control-plane 现存 `teamwork` 域，与本 team domain 不同概念；本服务不迁 teamwork。
 - 不拥有企业信息和企业功能上限——归 [organization](../0009-organization/organization.md) Domain。
 - 不拥有 Workspace；一个 Team 可创建多个 Workspace，但 Workspace 事实归 `media_control.workspace`。
@@ -95,7 +95,7 @@ Team Domain 维护 Organization 内部门、部门成员关系、部门有效功
 | created_at | timestamptz | 签发时间 |
 
 ### UUID 生成规则
-- `teams.id` = `generateId()` 短随机字符串（与 `users.id` / `service_tokens.id` 同机制），非自增 / 非 ulid / 兼容存量。
+- `teams.id` = `generateId()` 短随机字符串（兼容存量），非自增 / 非 ulid；新的 API Token 管理 ID 使用 ULID。
 - `team_invites.token` = `tinv_` 前缀 + 24 字节随机串 base64url 编码（约 32 字符，URL-safe），全局唯一。
 
 ## 能力详细说明

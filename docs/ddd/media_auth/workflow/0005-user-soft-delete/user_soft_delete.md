@@ -1,8 +1,8 @@
 ---
 name: user_soft_delete
 description: User 软删除与全平台访问能力撤销
-participants: [auth, service_token, platform_token, mcp_oauth, edge]
-domains: [auth, service_token, platform_token, mcp_oauth]
+participants: [auth, api_token, platform_token, mcp_oauth, edge, talos]
+domains: [auth, api_token, platform_token, mcp_oauth]
 ---
 
 ## 一句话说明
@@ -32,7 +32,8 @@ sequenceDiagram
     U->>DB: TX1: status=deleted, auth_version++, deleted_at/by, Outbox
     DB-->>W: UserAccessRevoked
     W->>T: RevokeAllForUser(user_id, auth_version)
-    T->>DB: TX2: revoke Service/Platform/MCP OAuth credentials
+    T->>DB: TX2: mark API/Platform/MCP OAuth credentials revoked
+    T->>T: revoke API Keys in Talos (retryable)
     W-->>E: UserAccessRevoked(user_id, auth_version)
     E->>E: 更新本地撤销缓存并拒绝旧 Cookie JWT
 ```

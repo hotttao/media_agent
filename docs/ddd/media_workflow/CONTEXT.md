@@ -43,15 +43,27 @@ _禁用替代词_：argument、parameter、variable。
 Template 的不可变快照，通过单调递增 version 区分，update 时新建 +1 的 version（保留旧可查询）。归 `template` domain。
 
 **Execution Capability（执行能力）**:
-可被生成 Worker 实现的、带版本的执行契约；声明输入 schema、唯一输出类别、Provider 路由和 Conductor Task Definition。Template 只引用已发布的 `(capability_key, capability_version)`，不直接绑定临时队列名或 Provider API。
+可被生成 Worker 实现的、带版本的执行契约；声明输入 schema、唯一输出类别、Provider 路由、Conductor Task Definition 与不可变 `execution_target`。Template 只引用已发布的 `(capability_key, capability_version)`，不直接绑定临时队列名、Worker 实例或 Provider API。
 _禁用替代词_：Conductor Task、Worker、Template
 
 **Capability Worker（能力执行器）**:
-运行在用户客户端环境、通过 Worker Gateway API 领取 Capability Task 并实现 Execution Capability 的执行进程。它可以访问客户端本地模型、CLI、GPU 与 Provider 凭证；服务端只持有能力契约和调度状态，不持有客户端 Provider 凭证。Capability Worker 不直接连接 Conductor，也不承担模板渲染、Workflow 编译或业务资源授权。
-_禁用替代词_：Server Worker、Template Renderer、Conductor
+实现 Execution Capability 的执行组件。`personal_worker` 运行在用户环境并经 Worker Gateway API 领取 User Execution Domain；`managed_worker` 运行在 media_workflow 内部并领取 Managed Execution Domain。二者都不承担模板渲染、Workflow 编译或业务资源授权。
+_禁用替代词_：Template Renderer、Conductor Worker、Worker Instance
+
+**Execution Target（执行目标）**:
+Execution Capability Version 冻结的执行者类别，取值 `personal_worker | managed_worker`。它决定 Job 启动时的 Task Domain 类型，不指定具体 Worker 实例；已发布版本不得修改，也不得在某类 Worker 离线时隐式回退。
+_禁用替代词_：Worker ID、Deployment、Fallback Queue
+
+**Personal Worker（个人执行器）**:
+User 拥有的委托 Worker Actor，由 `media_worker` 客户端承载；使用绑定 `Worker:<id>` 的 API Token，经 Gateway 获得 `sub=User`、`act.sub=Worker` 的 Internal Identity JWT，只能领取该 User 的 Personal Execution Domain。
+_禁用替代词_：Managed Worker、Agent、Worker Instance
+
+**Managed Worker（托管执行器）**:
+由 `media_workflow` 服务边界内运行的 Capability Worker，可作为独立进程部署但不经过公开 Worker API。它不申请 API Token、不请求 Talos，只轮询配置允许的 Managed Execution Domain 和 Capability；可信 `worker_id` 来自服务配置，`worker_instance_id` 只用于运行审计。
+_禁用替代词_：Personal Worker、Delegated Worker、External Worker
 
 **Media Worker（媒体执行客户端）**:
-承载一个或多个 Capability Worker 的客户端工具或常驻服务；携带 Service Token 经统一网关调用稳定的 Worker Gateway API，以 `worker_instance_id` 标识实例，并声明支持的 Execution Capability Version。联调时可以启用显式 Mock Profile，但生产 Profile 必须调用真实本地能力。
+承载一个或多个 Personal Worker Capability 的客户端工具或常驻服务；携带 API Token 经统一网关调用稳定的 Worker Gateway API，以 `worker_instance_id` 标识运行实例，并声明支持的 Personal Execution Capability Version。联调时可以启用显式 Mock Profile，但生产 Profile 必须调用真实本地能力。
 _禁用替代词_：media_workflow、Provider 服务、Mock Server
 
 **Worker Gateway API（客户端执行网关接口）**:
@@ -59,7 +71,7 @@ _禁用替代词_：media_workflow、Provider 服务、Mock Server
 _禁用替代词_：Conductor Task API、Provider API、Browser API
 
 **Execution Domain（执行路由域）**:
-`media_workflow` 在启动 Conductor Workflow 时为 Capability Task 设置的领取隔离键。MVP 从 Job 提交用户派生；未来只有显式授权的 Organization Worker Pool 才能使用共享域。该值只由服务端计算，客户端不能指定，也不能回退到无域队列。
+`media_workflow` 在启动 Conductor Workflow 时依据 Capability Version 的 Execution Target 设置的领取隔离键。Personal Domain 从 Job User 派生；Managed Domain 从受控 Worker Pool 配置派生。该值只由服务端计算，客户端不能指定，两类 Domain 不能相互回退，也不能回退到无域队列。
 _禁用替代词_：Organization、Workspace、Scope、Conductor Queue
 
 **Invocation Mapping（调用映射）**:

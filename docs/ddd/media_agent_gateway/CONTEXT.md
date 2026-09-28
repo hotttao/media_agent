@@ -17,8 +17,16 @@ _禁用替代词_：Runtime Session、Turn Store、Chat History
 _禁用替代词_：Anonymous Session、Unowned Workspace、Temporary Chat
 
 **Session Token（会话令牌）**:
-每个 Agent Session 唯一且稳定的 opaque 凭证，仅供 Agent 调用 Platform MCP 或平台内业务 MCP。
+每个 Agent Session 唯一且稳定的 opaque 凭证，仅供该会话调用 Platform MCP 或平台内业务 MCP；它绑定 Session，不代表 Agent 调用通用内部 API，也不替代创建 Agent 时签发的 Agent API Token。
 _禁用替代词_：Platform Token、Cookie、Access Token
+
+**Agent API Client（Agent API 客户端）**:
+以 `Agent:<agent_id>` 作为 Delegated Actor、代表其 owner User 调用平台内部服务的客户端形态。创建时 Gateway 请求 media_auth 签发绑定 Agent 的 API Token；运行时 Agent 只调用 Gateway，由 Gateway 验证 Token、校验委托关系并代理内部服务。
+_禁用替代词_：Agent Session、Personal Worker、Service Account
+
+**Agent Delegation（Agent 委托）**:
+Agent 代表 owner User 发起请求的关系。有效 Internal Identity JWT 使用 `sub=User:<id>` 与 `act.sub=Agent:<id>`；Agent 初期继承 User 权限上限，但仍受 API Token scope、Organization 和资源服务当前授权约束。
+_禁用替代词_：Impersonation、User Token、Session Ownership
 
 **Session Context Version（会话上下文版本）**:
 Agent Session Registration 创建时固定引用的运行配置版本；Workspace 后续切换 Agent 或更新凭证不会原地改变该版本，继续使用新配置必须创建新的 Agent Session。

@@ -1,6 +1,8 @@
 # media_auth 抽离边界与 control_plane token 校验契约
 
-把 control_plane 的认证鉴权能力抽成独立 media_auth 微服务后，control_plane 作为网关继续承接非认证路由，其自有路由仍需校验 `Cookie: token=<jwt>` 与 `Authorization: Bearer <service_token|jwt>`。最终敲定：JWT 沿用 HS256 + 共享 `JWT_SECRET` 由 control_plane 本地验（零 RPC），opaque Service Token 走 media_auth 新增的 mTLS 内部 `VerifyToken` RPC 解析，4 个认证专属前缀由网关反向代理到 media_auth。核心理由：JWT 是自包含对称签名、本地验代价为零且无需 media_auth 介入；Service Token 无法本地验，必须查库，走 RPC 既消除 control_plane 对 media_auth schema 的直读耦合，又把 per-request RPC 仅压在 Bearer service-token 这条少数路径上。
+> 本 ADR 的本地 Cookie JWT 与 Service Token 验证方案已被 ADR 0012 和 ADR 0018 取代，仅保留为历史决策。
+
+把 control_plane 的认证鉴权能力抽成独立 media_auth 微服务后，control_plane 作为网关继续承接非认证路由，其自有路由仍需校验 `Cookie: token=<jwt>` 与 `Authorization: Bearer <service_token|jwt>`。当时敲定：JWT 沿用 HS256 + 共享 `JWT_SECRET` 由 control_plane 本地验（零 RPC），opaque Service Token 走 media_auth 新增的 mTLS 内部 `VerifyToken` RPC 解析，4 个认证专属前缀由网关反向代理到 media_auth。该方案现已退出目标架构。
 
 ## 状态元数据
 accepted

@@ -27,7 +27,7 @@ auth 负责平台账号的本地密码 / LDAP 双路登录、会话（JWT cookie
 ### 不做什么
 - 不签发 OAuth Access/Refresh Token（归 [oauth](../0005-oauth/oauth.md)）。
 - 不管理外部身份绑定（归 [identity](../0002-identity/identity.md)）；仅按只读查询推导 `auth_source`。
-- 不验证 Service Token（归 internal `token` service + [service_token](../0004-service_token/service_token.md)）。
+- 不验证 API Token（归 [api_token](../0004-api_token/api_token.md) 与 Talos）。
 - 不承载企微登录通道（归 [wecom](../0003-wecom/wecom.md)），但为其提供 Session 签发能力。
 - 不解析 `default_prompt_name`（prompts 表留在 control_plane，name 由网关补，见 ADR-0001）。
 
@@ -53,7 +53,7 @@ auth 负责平台账号的本地密码 / LDAP 双路登录、会话（JWT cookie
 | User | 用户档案、登录状态 | 单个用户生命周期 | deleted 不可恢复为 active；历史 user_id 永不复用 |
 
 - User 状态为 `active/disabled/deleted`；disabled 可由管理员恢复，deleted 为终态。
-- disabled/deleted User 不能登录、续期 Cookie JWT、创建新 Service/Platform Token 或发起新的代表调用。
+- disabled/deleted User 不能登录、续期 Cookie JWT、创建新 API/Platform Token 或发起新的代表调用。
 - 软删除不级联删除历史 Session、Task、Workspace、Team 审计记录；跨服务保留稳定 user_id。
 - 禁用、恢复和删除事务都递增 `auth_version`；禁用/删除发布 `UserAccessRevoked`。恢复只允许签发新凭证，不恢复已经撤销的凭证或 Kratos Session。
 - 浏览器身份只能从已验证的 Kratos Session 建立业务用户映射；`metadata_admin.role=platform_admin` 是受信任的管理员引导声明，只能把对应业务用户提升为平台管理员，客户端请求体不能直接声明该权限。
@@ -164,7 +164,7 @@ verifySession(cookie):
 
 1. 要求管理员身份，禁止删除最后一个有效平台管理员。
 2. 在 User 本地事务中将 status 置为 deleted、写 deleted_at/deleted_by、递增 auth_version，并写 Outbox。
-3. Token Worker 幂等撤销该用户全部 Service Token、Platform Token 和 MCP OAuth Credential。
+3. Token Worker 幂等撤销该用户全部 API Token、Platform Token 和 MCP OAuth Credential。
 4. 当前旧 control-plane 通过 Session introspection 立即拒绝旧 Cookie JWT；未来 Edge 消费 `UserAccessRevoked` 后，才可按 user_id 维护最低 auth_version 缓存。
 5. 已开始请求允许自然结束；删除提交后禁止新请求和后台长期委托启动。
 
@@ -172,7 +172,7 @@ verifySession(cookie):
 
 1. 仅接受 `active | disabled`；`deleted` 只能由 SoftDeleteUser 进入且不可恢复。
 2. `active -> disabled` 禁止操作者禁用自己，并保护最后一个 active 平台管理员；事务写 `disabled_at`、递增 `auth_version` 并写撤销 Outbox。
-3. 撤销 Worker 幂等撤销 Service/Platform/OAuth/MCP 凭证，并通过 Kratos Admin API 删除该 Identity 的全部 Web Session。
+3. 撤销 Worker 幂等撤销 API/Platform/OAuth/MCP 凭证，并通过 Kratos Admin API 删除该 Identity 的全部 Web Session。
 4. `disabled -> active` 清空 `disabled_at` 并再次递增 `auth_version`；旧凭证和旧 Session 不复活，用户必须重新登录或重新创建委托凭证。
 5. 请求把 User 设置为其当前状态视为幂等成功；任何从 `deleted` 出发的状态修改返回冲突。
 
@@ -180,7 +180,7 @@ verifySession(cookie):
 
 ### 依赖的 domain
 - [identity](../0002-identity/identity.md) — 只读查询，推导 `auth_source`
-- [service_token](../0004-service_token/service_token.md) — 登录后委托 `ensurePlatformToken`
+- [api_token](../0004-api_token/api_token.md) — 用户、Agent 和 Personal Worker 的长期 API 凭证
 
 ### 被依赖的 domain
 - [wecom](../0003-wecom/wecom.md) — 企微登录成功后调 `issueSession` 签 cookie

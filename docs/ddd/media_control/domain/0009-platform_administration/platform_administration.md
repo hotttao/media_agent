@@ -77,7 +77,7 @@ Cluster 和统计为可重建读模型，不作为命令侧聚合。
 
 管理查询可组合 Workspace 与投影数据，但不得绕过各 Domain 的命令接口修改事实。
 
-Platform Setting 管理入口只接受 `admin/system` 角色；内部调用必须同时持有 Control Service Token、acting user 和受控 acting role。创建与更新在同一事务写入 `PlatformSettingChanged` Outbox，配置订阅方不得依赖同步回调。
+Platform Setting 管理入口只接受 `admin/system` 角色；内部调用必须同时具有 Control 工作负载身份、acting user 和受控 acting role。创建与更新在同一事务写入 `PlatformSettingChanged` Outbox，配置订阅方不得依赖同步回调。
 
 Cluster Projection 上报只接受内部 `system` Principal；`observed_at` 必须单调递增，迟到或重复观察不得覆盖较新状态。管理员只能查询该读模型，不能通过普通管理请求上报基础设施事实。
 

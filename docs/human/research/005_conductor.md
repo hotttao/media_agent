@@ -13,3 +13,18 @@
 当下还有一个问题。现在基础服务的管理比较混乱。后面做一个统一:
 1. 所有的基础服务都在 /home/tao/code/github/infra 管理，并以服务常见端口暴露在宿主机上上
 2. media_agent 使用自己的容器网络，只有网管服务和 react 测试服务对外暴露端口
+
+## api token
+目前位置我觉得，关于如何实现 api token，还没有对齐。api token 的认证架构，你可以参考 /home/tao/code/github/ddd-learn/deployments/auth/005_ory_token 下的实现。其中:
+1. ory talos: 开源实现，只支持 sqlite3，所以这个服务只能单节点部署。我们先使用 ory 体系完成功能，后续再考虑如何替换
+2. token-manager: 不用创建新的服务，直接实现在 media_auth 服务内
+3. agent_gateway: 请求 media_auth 服务，为 agent 申请 api_token
+
+## media_worker 的实现问题
+我之前其实已经规划了 media_worker 的实现，对应的是当前目录的 media_gen 服务。我需要你协助我做一个判断:
+
+我目前还不能确定 media_worker 最终的服务形态，有可能是 cmd 有可能是 http server。有可能是 http server 的原因是:
+1. 当前 worker 是 pull 任务的状态，woker 是直接部署的在客户端一侧，在服务端一侧是不太好控制具体 job 执行的优先级
+2. worker 如果实现为 http server 可以提供简单的管理页面，用户可以配置自动拉取并执行所有 job，也可以查看有哪些 job，通过页面点击的方式执行某一个具体的 job
+
+你觉得我这样的需求合理么，如果合理，需要你复用 media_gen 服务的代码，按照 ddd 领域驱动的方式来开发。不过这里面的代码有过期代码，需要删除。然后迁移 media_worker 的代码。最终保留 media_worker 作为服务名称。请注意代码要严格按照 harness 约束的代码规范，使用 ddd 领域驱动进行开发。

@@ -58,7 +58,7 @@ Batch 为 `creating -> running -> completed/partial_failed/failed/cancelled`。�
 `owner + idempotency_key` 去重 Batch；`batch_id + item_key` 去重 Task；`event_id` 去重终态事件。拆分失败从持久化游标继续，不删除已创建 Task。投影计数不一致时从 BatchItem 重建，而非手工补数。
 
 ## 权限与失败
-创建和查询按 Batch 所属 Workspace 授权；内部拆分使用 Control Service Token 与 acting-user 身份，代表用户/Workspace 取自 Batch 事实。
+创建和查询按 Batch 所属 Workspace 授权；内部拆分使用 Control 工作负载身份与 acting-user 上下文，代表用户/Workspace 取自 Batch 事实。
 
 | 失败 | 处理 |
 |:---|:---|
