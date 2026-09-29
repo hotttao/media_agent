@@ -65,6 +65,8 @@
     - [x] CLI新文件0600交付与失败撤销，HTTP/CLI各自验证归属、scope、停用/删除、重复和错误分支。
   - [x] 经公开CLI签发联调Worker Token，写入被Git忽略的media_worker/.env（0600），五类worker scope，不保存到文档/日志。
   - [ ] 经网关换发测试 Worker API Token、实际启动 media_worker 跑一个完整流程，覆盖禁用/撤销/跨组织拒绝。
+    - [x] 稳定Worker API Token + 真实media_worker四节点单样本执行/结果收据门禁。
+    - [ ] 已完成样本结果URL修复、页面图片/视频预览和生产对象上传验收。
 - [x] 为测试 User 签发受限测试环境 API Token，Secret 仅保存到未跟踪的 `.env`；HTTP/CLI E2E 支持 Bearer API Token，不再要求预先模拟登录。
 - [ ] 覆盖撤销、scope、Organization、Actor disabled 和 trace_id 联调测试。
 
@@ -139,3 +141,12 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - CLI实际完成创建/读取/列表/签发/轮换/停用/重复停用/撤销/删除/读取历史；Secret文件0600。认证与FlowGram浏览器回归6项通过，5173可访问。
 - 已通过公开CLI签发稳定Worker Actor的联调Token到media_worker/.env（0600且Git忽略），不替换User接口测试凭据。未启动Worker消费任务：只读列表发现历史RUNNING/NEED_CONFIRM Job，部分引用的Workflow返回404；单流程联调先核对队列与任务Capability，不擅自取消历史Job或启动批量执行。此观察不是阻塞，仍可继续安全排查。
 - P5实际Worker单流程、P6/P7和UI整体验收仍未完成；本节不把公开接口门禁冒充完整Workflow执行门禁。
+
+### Personal Worker 单样本执行门禁
+
+- 真实media_worker使用稳定Worker Actor/API Token，经统一网关完成四个Capability；Job `job_4b90d93f-30bf-4248-b60c-e4e93d80c733` 四个StepRun均成功并持久化输出资源。四条Dispatch的auth_source为api_token、Actor正确；Result Inbox均submitted并保留mock/source/profile provenance。Renderer/finalizer仍由内部Worker执行。
+- 原样本发布定义缺少Job/Step元数据；首次执行超时后经业务API取消，保留记录。使用现有迁移API工具发布新样本`wf_ed878c49-f6a7-47f4-8866-03420ac5ffec`，成功后归档旧样本。不修改旧Definition/Compilation或其他账号历史Job。
+- 新增显式单样本HTTP门禁，已有Job观察模式不再次提交；迁移工具支持新样本名称，避免覆盖旧发布。
+- 样本结果原地址192.168.2.89:3000不可达；已验证192.168.2.38上相同三张图片与视频均HTTP200，Worker改为可配置资源根地址。已完成Job仍保留原URL，页面结果预览与生产对象上传尚未验收，不能用状态成功替代可见结果验收。用户确认前不迁移其他Workflow。
+- P5撤销/跨组织/trace_id整体门禁、P6/P7和Workflow UI整体验收继续保留未完成。
+- 默认未启用可观测性时工作流访问日志的trace_id/span_id目前为null；尚未证明跨网关/服务/Worker关联，不能宣称关联日志门禁通过。

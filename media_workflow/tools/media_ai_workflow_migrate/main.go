@@ -23,6 +23,7 @@ const workflowName = "media_ai · 图片与动作视频生成（联调样本）"
 type config struct {
 	baseURL           string
 	scope             string
+	workflowName      string
 	sessionCookieName string
 	sessionCookie     string
 	sessionStatePath  string
@@ -64,6 +65,7 @@ func main() {
 	var cfg config
 	flag.StringVar(&cfg.baseURL, "target-url", env("MEDIA_WORKFLOW_URL", "http://127.0.0.1:18080"), "统一网关地址")
 	flag.StringVar(&cfg.scope, "scope", env("MEDIA_WORKFLOW_SCOPE", "ai_clothing"), "目标 Scope")
+	flag.StringVar(&cfg.workflowName, "workflow-name", workflowName, "样本 Workflow 名称；重建发布时使用新名称，保留旧版本")
 	flag.StringVar(&cfg.sessionCookieName, "session-cookie-name", env("MEDIA_WORKFLOW_SESSION_COOKIE_NAME", "ory_kratos_session"), "会话 cookie 名")
 	flag.StringVar(&cfg.sessionCookie, "session-cookie", env("MEDIA_E2E_KRATOS_SESSION_COOKIE", ""), "会话 cookie")
 	flag.StringVar(&cfg.sessionStatePath, "session-state", "", "Playwright storage-state.json 路径（从中读取会话 Cookie）")
@@ -89,7 +91,7 @@ func main() {
 		log.Fatalf("读取 gpt_image2 提示词: %v", err)
 	}
 	if cfg.dryRun {
-		encoded, _ := json.MarshalIndent(map[string]any{"templates": specs, "workflow": workflowName}, "", "  ")
+		encoded, _ := json.MarshalIndent(map[string]any{"templates": specs, "workflow": cfg.workflowName}, "", "  ")
 		fmt.Println(string(encoded))
 		return
 	}
@@ -118,7 +120,7 @@ func main() {
 			log.Fatalf("新 Workflow %s 已发布，但旧 Workflow %s 归档失败: %v", workflow.ID, cfg.archiveWorkflowID, err)
 		}
 	}
-	encoded, _ := json.Marshal(map[string]any{"workflow_id": workflow.ID, "workflow_version": workflow.Version, "name": workflowName})
+	encoded, _ := json.Marshal(map[string]any{"workflow_id": workflow.ID, "workflow_version": workflow.Version, "name": cfg.workflowName})
 	fmt.Println(string(encoded))
 }
 
@@ -275,7 +277,11 @@ func (c *client) createAndPublishWorkflow(ctx context.Context, templates map[str
 		step("first_frame", "first_frame", 3, map[string]any{"style": binding(2, "style_image"), "scene": binding(1, "scene")}),
 		step("video", "video", 4, map[string]any{"first_frame": binding(2, "first_frame"), "movement": binding(1, "movement")}),
 	}
-	payload := map[string]any{"name": workflowName, "description": "media_ai 图片与动作视频生成流程；不包含成片、发布文案与飞书发布", "output_step_key": "video", "steps": steps}
+	name := c.config.workflowName
+	if name == "" {
+		name = workflowName
+	}
+	payload := map[string]any{"name": name, "description": "media_ai 图片与动作视频生成流程；不包含成片、发布文案与飞书发布", "output_step_key": "video", "steps": steps}
 	var created resourceRef
 	if err := c.json(ctx, http.MethodPost, "/api/v1/workflows?scope="+url.QueryEscape(c.config.scope), payload, &created); err != nil {
 		return resourceRef{}, err

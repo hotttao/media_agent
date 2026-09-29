@@ -1,5 +1,11 @@
 # Executable Workflow 编译实现规格
 
+## 联调发布兼容性
+
+Capability Task input 在 Invocation Mapping 之外固定包含 `job_id=${workflow.input.job_id}`、原始 `step_key`、`capability_key` 和 `capability_version`。Worker Gateway 使用这些字段加载并核对 Job、StepRun 和执行实例；不从 task reference 名字推断缺失归属。缺字段的历史联调样本先经 `CancelJob` 结束，再通过现有迁移工具创建/发布新样本，成功后归档旧 Workflow；不修改旧 Compilation 或 Conductor 执行快照。
+
+真实 Worker 单样本 HTTP 门禁位于 `media-cli/e2e/workflow_personal_worker_fixture_test.go`，显式开启才能提交一次。设置 `MEDIA_E2E_SAMPLE_JOB_ID` 时只查询/确认已有执行，绝不再次提交。测试使用 User API Token 访问统一网关，外部独立运行的 media_worker 使用 Worker API Token；内部渲染/收口任务仍由 media_workflow 执行。多候选审批由测试模拟用户调用确认接口，不能由 Worker 自批。普通单测不消费测试环境队列。
+
 ## 范围
 
 本规格定义 `media_workflow` 从业务 Workflow 发布到 Conductor Definition 的两阶段编译，以及内部模板渲染 Worker。FlowGram 文档、业务 Workflow DSL、Executable Workflow IR 和 Conductor Definition 必须分层，不互相充当事实源。
@@ -71,6 +77,8 @@ Worker 属于 `media_workflow`，与 API 共用代码库但以独立进程部署
 Capability Version 必须冻结 `execution_target=personal_worker|managed_worker` 和可选 `managed_pool_key`，Executable Workflow IR 与 Conductor `taskToDomain` 均以该冻结值为准。完整认证、双 Target 调度和迁移契约见 [API Token 与 Worker Execution Target 实现规格](../api-token-worker-execution.md)。
 
 ## 客户端 Media Worker
+
+Mock Profile 的旧样本资源服务根地址由 `MEDIA_WORKER_FIXTURE_ASSETS_URL` / `--fixture-assets-url` 配置，默认与素材迁移工具一致。只能是无凭据、无 query/fragment 的 HTTP(S) 地址；结果文件路径与 mock provenance 冻结不变，仅支持内置 Capability Version 1。该测试配置不替代生产对象上传，不会回写已完成 Job 的历史 URL。
 
 独立 `media_worker` 可执行程序只接受统一 Gateway URL、绑定 Personal Worker Actor 的 opaque API Token、`worker_instance_id`、启用的 Personal Capability Version 列表和 profile；不得配置 Conductor URL。它经 `/api/worker/v1/*` 注册、长轮询、心跳并回报结果。生产 profile 调本地 Provider/CLI，`media_ai_fixture` profile 按 Capability Version 返回冻结样本并附带 provenance。它不能提交任意 task type、Managed Capability，也不得领取 `media_render_template_v1` 或 `media_finalize_step_v1`。
 

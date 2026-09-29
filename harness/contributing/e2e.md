@@ -140,6 +140,18 @@ go -C media-cli test ./e2e -run '^TestWorkerIdentityGateway$' -count=1 -v
 
 环境变量同上方User API Token网关测试。CLI另用`media_auth worker-identity create/list/get/create-token/disable/delete`验收，Token Secret用`--env-out`新文件0600交付，禁止输出；完整命令链和HTTP断言是两道独立门禁。
 
+### Personal Worker 单样本执行门禁
+
+真实 Personal Worker 单流程门禁需要先按 `media_worker/README.md` 启动独立客户端，再显式执行；测试本身不模拟 Worker，不启动服务，不输出凭据或签名资源 URL：
+
+```bash
+MEDIA_E2E_PERSONAL_WORKER_SAMPLE=1 \
+MEDIA_E2E_SAMPLE_WORKFLOW_ID=<published-four-step-sample-id> \
+go -C media-cli test ./e2e -run '^TestWorkflowPersonalWorkerFixture$' -count=1 -v
+```
+
+沿用上文网关/User API Token/Organization 环境变量。当前用户有未结束 Job 时拒绝提交。失败/超时保留执行供排查，不能自动重提；使用 `MEDIA_E2E_SAMPLE_JOB_ID=<existing-job-id>` 仅验收已有执行。样本完成后须用户确认，再迁移其他 Workflow 数据。
+
 ### API Token 轮换恢复集成测试
 
 `media_auth/e2e/api_token_rotation_test.go` 使用 testcontainers 的隔离 PostgreSQL；设置 `MEDIA_E2E_TALOS_URL` 后还会连接已由仓库启动的 Talos Admin API。测试为唯一临时 User Actor 创建 Key，不使用测试账号的既有凭据；结束后撤销自己创建的 Key。

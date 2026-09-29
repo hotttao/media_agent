@@ -1,5 +1,11 @@
 # Conductor Compilation 变更记录
 
+## 2026-09-29 · 旧联调定义恢复
+
+- 明确 Capability Task 必须携带 Dispatch 校验所需的 Job/Step/Capability 元数据。
+- 旧定义缺字段时不降级鉴权、不猜测归属、不覆写运行快照；经业务 API 取消旧样本并重新发布新样本定义。
+- Mock 样本资源服务根地址独立配置，保留冻结路径与来源；状态门禁不替代资源访问验收。
+
 ## 2026-09-28：Execution Target 进入 IR 与 taskToDomain
 
 - Semantic Compiler 将 Capability Version 的 Personal/Managed Target 冻结进 Executable Step IR。

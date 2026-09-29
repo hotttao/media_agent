@@ -2,6 +2,7 @@ package fixture
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"media_agent/media_worker/internal/gateway"
@@ -18,19 +19,32 @@ var capabilities = []gateway.Capability{
 
 func Capabilities() []gateway.Capability { return append([]gateway.Capability(nil), capabilities...) }
 
-func Execute(task gateway.Task) (map[string]any, error) {
-	url, content := fixtureResult(task)
-	if url == "" && content == "" {
+type Executor struct{ baseURL string }
+
+func NewExecutor(baseURL string) (*Executor, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return nil, fmt.Errorf("fixture asset base must be an HTTP(S) URL without credentials, query or fragment")
+	}
+	return &Executor{baseURL: strings.TrimRight(baseURL, "/")}, nil
+}
+
+func (e *Executor) Execute(task gateway.Task) (map[string]any, error) {
+	if task.CapabilityVersion != 1 {
+		return nil, fmt.Errorf("media_ai fixture does not support capability version %d", task.CapabilityVersion)
+	}
+	resourceURL, content := e.fixtureResult(task)
+	if resourceURL == "" && content == "" {
 		return nil, fmt.Errorf("media_ai fixture does not support capability %q", task.CapabilityKey)
 	}
 	return map[string]any{
-		"candidates": []map[string]any{{"index": 0, "url": url, "content": content, "is_primary": true}},
+		"candidates": []map[string]any{{"index": 0, "url": resourceURL, "content": content, "is_primary": true}},
 		"provenance": map[string]any{"profile": "media_ai_fixture", "source": source, "mock": true},
 	}, nil
 }
 
-func fixtureResult(task gateway.Task) (string, string) {
-	const base = "http://192.168.2.89:3000"
+func (e *Executor) fixtureResult(task gateway.Task) (string, string) {
+	base := e.baseURL
 	switch task.CapabilityKey {
 	case "media.image.model":
 		return base + "/uploads/teams/cf88f650-a530-4356-81db-391b62522778/model-images/result-01_afbaea05-ec31-4a49-824c-ba0fd1889655.png", ""

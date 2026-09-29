@@ -54,7 +54,7 @@ func TestWorkflowMigrationStopsAtVideo(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":"workflow-1","version":1}`))
 	}))
 	defer server.Close()
-	c := &client{config: config{baseURL: server.URL, scope: "ai_clothing"}, http: server.Client()}
+	c := &client{config: config{baseURL: server.URL, scope: "ai_clothing", workflowName: "republished sample"}, http: server.Client()}
 	templates := map[string]resourceRef{
 		"model": {ID: "model", Version: 1}, "style": {ID: "style", Version: 1},
 		"first_frame": {ID: "first_frame", Version: 1}, "video": {ID: "video", Version: 1},
@@ -63,6 +63,9 @@ func TestWorkflowMigrationStopsAtVideo(t *testing.T) {
 		t.Fatal(err)
 	}
 	steps := workflow["steps"].([]any)
+	if workflow["name"] != "republished sample" {
+		t.Fatal("migration must use the requested new name, preserving old publication")
+	}
 	if len(steps) != 4 || workflow["output_step_key"] != "video" {
 		t.Fatalf("workflow must stop at video: %v", workflow)
 	}

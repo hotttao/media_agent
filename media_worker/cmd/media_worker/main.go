@@ -23,6 +23,7 @@ func main() {
 	workerID := flag.String("worker-id", envOr("MEDIA_WORKER_ID", defaultWorkerID()), "stable client worker id")
 	profile := flag.String("profile", envOr("MEDIA_WORKER_PROFILE", ""), "execution profile; use media_ai_fixture only for integration testing")
 	capabilityList := flag.String("capabilities", envOr("MEDIA_WORKER_CAPABILITIES", ""), "comma-separated capability key@version allowlist")
+	fixtureAssetsURL := flag.String("fixture-assets-url", envOr("MEDIA_WORKER_FIXTURE_ASSETS_URL", "http://192.168.2.38"), "media_ai fixture asset service base URL (test profile only)")
 	flag.Parse()
 	if *gatewayURL == "" {
 		log.Fatal("MEDIA_GATEWAY_URL or -gateway-url is required")
@@ -33,8 +34,11 @@ func main() {
 	if *profile != "media_ai_fixture" {
 		log.Fatalf("profile %q is not implemented; integration requires -profile media_ai_fixture", *profile)
 	}
+	executor, err := fixture.NewExecutor(*fixtureAssetsURL)
+	if err != nil {
+		log.Fatal(err)
+	}
 	capabilities := fixture.Capabilities()
-	var err error
 	capabilities, err = selectCapabilities(capabilities, *capabilityList)
 	if err != nil {
 		log.Fatal(err)
@@ -51,7 +55,7 @@ func main() {
 			wg.Add(1)
 			go func(capability gateway.Capability) {
 				defer wg.Done()
-				runCapability(ctx, client, *workerID, capability)
+				runCapability(ctx, client, *workerID, capability, executor)
 			}(capability)
 		}
 	}
@@ -60,7 +64,7 @@ func main() {
 	wg.Wait()
 }
 
-func runCapability(ctx context.Context, client *gateway.Client, workerID string, capability gateway.Capability) {
+func runCapability(ctx context.Context, client *gateway.Client, workerID string, capability gateway.Capability, executor *fixture.Executor) {
 	for ctx.Err() == nil {
 		task, err := client.Poll(ctx, workerID, capability)
 		if err != nil {
@@ -74,7 +78,7 @@ func runCapability(ctx context.Context, client *gateway.Client, workerID string,
 		}
 		taskCtx, cancelTask := context.WithCancel(ctx)
 		go heartbeat(taskCtx, client, workerID, *task)
-		output, executeErr := fixture.Execute(*task)
+		output, executeErr := executor.Execute(*task)
 		idempotencyKey := task.DispatchID + ":" + fmt.Sprint(task.Attempt)
 		submitted := submitResult(ctx, client, workerID, *task, idempotencyKey, output, executeErr)
 		cancelTask()
