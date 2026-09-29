@@ -64,6 +64,10 @@ _禁用替代词_：Service Token Introspection、数据库 Hash 校验、OAuth 
 Personal Worker 通过 API Token 被认证后形成的委托主体，`sub` 为 User、`act.sub` 为稳定 Worker Actor；`credential_id` 标识 Talos API Token，`worker_instance_id` 只标识本次运行实例。Managed Worker 不形成外部 Worker Principal，而以 `internal_runtime` 身份执行。
 _禁用替代词_：Agent User、Conductor Worker Identity、Worker Instance
 
+**Personal Worker Identity（个人 Worker 身份）**:
+属于唯一 User 和 Organization 的稳定委托身份，作为 `Worker:<id>` 的身份与停用事实来源；它不是一把凭证，也不是某次 Worker 进程。
+_禁用替代词_：Worker Instance、Credential、Managed Worker、Agent
+
 **Principal（被代表主体）**:
 一次请求的顶层被代表主体；与 `act.sub` 表示的当前 Actor、mTLS 证明的 CallerService 和 Credential 分开处理。
 _禁用替代词_：Subject、CallerService、claim

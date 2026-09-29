@@ -28,6 +28,7 @@ var (
 	TeamMember             *teamMember
 	User                   *user
 	UserIdentity           *userIdentity
+	WorkerIdentity         *workerIdentity
 )
 
 func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
@@ -43,6 +44,7 @@ func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	TeamMember = &Q.TeamMember
 	User = &Q.User
 	UserIdentity = &Q.UserIdentity
+	WorkerIdentity = &Q.WorkerIdentity
 }
 
 func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
@@ -59,6 +61,7 @@ func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 		TeamMember:             newTeamMember(db, opts...),
 		User:                   newUser(db, opts...),
 		UserIdentity:           newUserIdentity(db, opts...),
+		WorkerIdentity:         newWorkerIdentity(db, opts...),
 	}
 }
 
@@ -76,6 +79,7 @@ type Query struct {
 	TeamMember             teamMember
 	User                   user
 	UserIdentity           userIdentity
+	WorkerIdentity         workerIdentity
 }
 
 func (q *Query) Available() bool { return q.db != nil }
@@ -96,6 +100,7 @@ func (q *Query) clone(db *gorm.DB) *Query {
 		TeamMember:             q.TeamMember.clone(db),
 		User:                   q.User.clone(db),
 		UserIdentity:           q.UserIdentity.clone(db),
+		WorkerIdentity:         q.WorkerIdentity.clone(db),
 	}
 }
 
@@ -121,6 +126,7 @@ func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 		TeamMember:             q.TeamMember.replaceDB(db),
 		User:                   q.User.replaceDB(db),
 		UserIdentity:           q.UserIdentity.replaceDB(db),
+		WorkerIdentity:         q.WorkerIdentity.replaceDB(db),
 	}
 }
 
@@ -136,6 +142,7 @@ type queryCtx struct {
 	TeamMember             ITeamMemberDo
 	User                   IUserDo
 	UserIdentity           IUserIdentityDo
+	WorkerIdentity         IWorkerIdentityDo
 }
 
 func (q *Query) WithContext(ctx context.Context) *queryCtx {
@@ -151,6 +158,7 @@ func (q *Query) WithContext(ctx context.Context) *queryCtx {
 		TeamMember:             q.TeamMember.WithContext(ctx),
 		User:                   q.User.WithContext(ctx),
 		UserIdentity:           q.UserIdentity.WithContext(ctx),
+		WorkerIdentity:         q.WorkerIdentity.WithContext(ctx),
 	}
 }
 

@@ -66,3 +66,9 @@ var ErrConflict = errors.New("api token operation conflicts with current state")
 type RevocationSource interface {
 	ListRevoking(context.Context, string, int) ([]Token, error)
 }
+
+// ActorRevocationRepository stores cleanup intents only; the caller owns the
+// transaction with the actor's lifecycle fact. It does not contact Talos.
+type ActorRevocationRepository interface {
+	PrepareActorRevocation(context.Context, ActorType, string, string, string) error
+}

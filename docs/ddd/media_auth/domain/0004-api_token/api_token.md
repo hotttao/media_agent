@@ -3,6 +3,7 @@ name: api_token
 description: User、Agent、Personal Worker 与受控客户端的长期 API 凭证
 dependencies:
     - auth
+    - worker_identity
 related_workflow:
     - api_token_issuance
     - api_token_rotation
@@ -28,7 +29,7 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 
 - 不自行生成另一套长期 Token，不保存可恢复 Secret 或 Secret Hash。
 - 不处理 Web Session、OAuth Access Token、Session Token 或 Platform Token。
-- 不拥有 Agent、Worker、Organization 或资源权限事实；验证时查询其权威来源。
+- 不拥有 Agent、Worker 运行、Organization 或资源权限事实；Personal Worker 的身份/停用事实归 worker_identity，验证时查询权威来源。
 - 不替业务服务执行最终资源授权。
 
 ## 能力清单
@@ -52,6 +53,7 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 - Agent/Worker 不能用请求体覆盖 owner User；创建者必须通过受信 Gateway 编排或当前 User 对 Actor 的所有权校验。
 - scope 是凭证能力上限，不代表资源授权；User、Actor、Organization 和资源授权在请求时重新检查。
 - Actor disabled/deleted、User disabled/deleted、Membership 失效、Token revoked/expired 中任一成立即验证失败。
+- Personal Worker 委托校验同时精确匹配 Actor、owner User 和 Identity 所绑定 Organization；只有前缀正确不构成授权。
 - Token 轮换产生新 Secret 并使旧 Secret失效；重复撤销幂等，不能恢复 revoked Token。
 - Talos 是 Secret 状态事实源，本地状态用于管理、授权上下文与审计；不允许本地 Hash 验证旁路 Talos。
 
@@ -130,6 +132,8 @@ issuing/issuance_cleanup 保存聚合内的持久创建意图，并使用按 ID 
 5. 返回 Principal，由调用方签发精确 audience、1 至 5 分钟 TTL 的 Internal Identity JWT。
 
 ### Rotate/Revoke
+
+轮换重新验证当前 User、Organization membership 和委托 Actor 权威；Token 的本地 active 状态不能代替身份授权。撤销不要求身份仍 active，以便停用后继续清理凭据。
 
 撤销在外部调用前提交 `revoking`，立即禁止验证；以 Token Manager ID 和 Talos Key ID 为稳定操作标识，后台恢复同一撤销意图。具体事务、重试与结果确认见 [API Token Revocation](../../workflow/0008-api-token-revocation/api_token_revocation.md)。
 

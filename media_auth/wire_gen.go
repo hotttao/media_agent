@@ -28,6 +28,8 @@ import (
 	dalorganization "media_agent/media_auth/biz/dal/repo/organization"
 	dalservicetoken "media_agent/media_auth/biz/dal/repo/service_token"
 	dalteam "media_agent/media_auth/biz/dal/repo/team"
+	dalworkeridentity "media_agent/media_auth/biz/dal/repo/worker_identity"
+	domainapitoken "media_agent/media_auth/biz/domain/api_token"
 	domainwecom "media_agent/media_auth/biz/domain/wecom"
 	apitokenhandler "media_agent/media_auth/biz/handler/api_token"
 	authhandler "media_agent/media_auth/biz/handler/auth"
@@ -54,6 +56,7 @@ import (
 	tokenservice "media_agent/media_auth/biz/service/token"
 	userservice "media_agent/media_auth/biz/service/user"
 	wecomservice "media_agent/media_auth/biz/service/wecom"
+	workeridentityservice "media_agent/media_auth/biz/service/worker_identity"
 	"media_agent/media_auth/biz/shared/client/introspect"
 	ketoclient "media_agent/media_auth/biz/shared/client/keto"
 	kratosclient "media_agent/media_auth/biz/shared/client/kratos"
@@ -172,6 +175,17 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 			user, err := userRepo.FindByID(ctx, userID)
 			return err == nil && user.IsActive()
 		})
+		workerIdentityRepo := dalworkeridentity.NewRepo(db)
+		workerIdentitySvc := workeridentityservice.NewService(workerIdentityRepo)
+		workerIdentitySvc.SetMembershipValidator(workeridentityservice.MembershipValidator(membershipValidator))
+		workerIdentitySvc.SetUserValidator(func(ctx context.Context, userID string) bool {
+			user, err := userRepo.FindByID(ctx, userID)
+			return err == nil && user.IsActive()
+		})
+		apiTokenSvc.SetActorValidator(func(ctx context.Context, actorType domainapitoken.ActorType, actorID, userID, organizationID string) bool {
+			return actorType == domainapitoken.ActorPersonalWorker && workerIdentitySvc.ValidateActor(ctx, actorID, userID, organizationID)
+		})
+		go workflow.NewWorkerAccessRevocation(workerIdentitySvc, workerIdentityRepo, apiTokenRepo, txRunner).Run(context.Background())
 		apitokenhandler.Svc = apiTokenSvc
 		tokenhandler.APITokenSvc = apiTokenSvc
 		go workflow.NewAPITokenRevocation(apiTokenRepo, apiTokenSvc).Run(context.Background())

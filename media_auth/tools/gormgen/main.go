@@ -45,6 +45,7 @@ func main() {
 	g.ApplyBasic(
 		model.User{},
 		model.UserIdentity{},
+		model.WorkerIdentity{},
 		model.ServiceToken{},
 		model.OAuthClient{},
 		model.OAuthAuthorizationCode{},

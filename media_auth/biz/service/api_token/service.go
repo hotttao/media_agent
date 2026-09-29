@@ -43,7 +43,7 @@ type VerifiedSecret struct {
 }
 
 type MembershipValidator func(context.Context, string, string) bool
-type ActorValidator func(context.Context, domain.ActorType, string, string) bool
+type ActorValidator func(context.Context, domain.ActorType, string, string, string) bool
 type SubjectValidator func(context.Context, string) bool
 
 type Service struct {
@@ -141,7 +141,7 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (CreateResult, 
 		return CreateResult{}, ErrInvalidRequest
 	}
 	if cmd.ActorType != domain.ActorUser && cmd.ActorType != domain.ActorService {
-		if s.actorValidator == nil || !s.actorValidator(ctx, cmd.ActorType, cmd.ActorID, cmd.SubjectUserID) {
+		if s.actorValidator == nil || !s.actorValidator(ctx, cmd.ActorType, cmd.ActorID, cmd.SubjectUserID, cmd.OrganizationID) {
 			return CreateResult{}, ErrForbidden
 		}
 	}
@@ -185,7 +185,7 @@ func (s *Service) Verify(ctx context.Context, secret string) (Principal, error) 
 		return Principal{}, ErrForbidden
 	}
 	if token.ActorType != domain.ActorUser && token.ActorType != domain.ActorService {
-		if s.actorValidator == nil || !s.actorValidator(ctx, token.ActorType, token.ActorID, token.SubjectUserID) {
+		if s.actorValidator == nil || !s.actorValidator(ctx, token.ActorType, token.ActorID, token.SubjectUserID, token.OrganizationID) {
 			return Principal{}, ErrForbidden
 		}
 	}
@@ -238,6 +238,17 @@ func (s *Service) Rotate(ctx context.Context, subjectUserID, id string, requeste
 	}
 	if token.SubjectUserID != subjectUserID || !token.ActiveAt(s.now()) {
 		return CreateResult{}, ErrForbidden
+	}
+	if token.ActorType != domain.ActorService && (s.subjectValid == nil || !s.subjectValid(ctx, token.SubjectUserID)) {
+		return CreateResult{}, ErrForbidden
+	}
+	if token.OrganizationID != "" && (s.membership == nil || !s.membership(ctx, token.OrganizationID, token.SubjectUserID)) {
+		return CreateResult{}, ErrForbidden
+	}
+	if token.ActorType != domain.ActorUser && token.ActorType != domain.ActorService {
+		if s.actorValidator == nil || !s.actorValidator(ctx, token.ActorType, token.ActorID, token.SubjectUserID, token.OrganizationID) {
+			return CreateResult{}, ErrForbidden
+		}
 	}
 	if !requestedExpiry.IsZero() {
 		return CreateResult{}, fmt.Errorf("%w: changing expiry during rotation is not supported by Talos", ErrInvalidRequest)

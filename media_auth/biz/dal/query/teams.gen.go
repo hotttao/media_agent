@@ -34,6 +34,7 @@ func newTeam(db *gorm.DB, opts ...gen.DOOption) team {
 	_team.Description = field.NewString(tableName, "description")
 	_team.EntitlementMode = field.NewString(tableName, "entitlement_mode")
 	_team.Status = field.NewString(tableName, "status")
+	_team.AuthorizationVersion = field.NewInt64(tableName, "authorization_version")
 	_team.CreatedBy = field.NewString(tableName, "created_by")
 	_team.CreatedAt = field.NewTime(tableName, "created_at")
 	_team.UpdatedAt = field.NewTime(tableName, "updated_at")
@@ -46,16 +47,17 @@ func newTeam(db *gorm.DB, opts ...gen.DOOption) team {
 type team struct {
 	teamDo teamDo
 
-	ALL             field.Asterisk
-	ID              field.String
-	OrganizationID  field.String
-	Name            field.String
-	Description     field.String
-	EntitlementMode field.String
-	Status          field.String
-	CreatedBy       field.String
-	CreatedAt       field.Time
-	UpdatedAt       field.Time
+	ALL                  field.Asterisk
+	ID                   field.String
+	OrganizationID       field.String
+	Name                 field.String
+	Description          field.String
+	EntitlementMode      field.String
+	Status               field.String
+	AuthorizationVersion field.Int64
+	CreatedBy            field.String
+	CreatedAt            field.Time
+	UpdatedAt            field.Time
 
 	fieldMap map[string]field.Expr
 }
@@ -78,6 +80,7 @@ func (t *team) updateTableName(table string) *team {
 	t.Description = field.NewString(table, "description")
 	t.EntitlementMode = field.NewString(table, "entitlement_mode")
 	t.Status = field.NewString(table, "status")
+	t.AuthorizationVersion = field.NewInt64(table, "authorization_version")
 	t.CreatedBy = field.NewString(table, "created_by")
 	t.CreatedAt = field.NewTime(table, "created_at")
 	t.UpdatedAt = field.NewTime(table, "updated_at")
@@ -105,13 +108,14 @@ func (t *team) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (t *team) fillFieldMap() {
-	t.fieldMap = make(map[string]field.Expr, 9)
+	t.fieldMap = make(map[string]field.Expr, 10)
 	t.fieldMap["id"] = t.ID
 	t.fieldMap["organization_id"] = t.OrganizationID
 	t.fieldMap["name"] = t.Name
 	t.fieldMap["description"] = t.Description
 	t.fieldMap["entitlement_mode"] = t.EntitlementMode
 	t.fieldMap["status"] = t.Status
+	t.fieldMap["authorization_version"] = t.AuthorizationVersion
 	t.fieldMap["created_by"] = t.CreatedBy
 	t.fieldMap["created_at"] = t.CreatedAt
 	t.fieldMap["updated_at"] = t.UpdatedAt

@@ -36,6 +36,9 @@ func newServiceToken(db *gorm.DB, opts ...gen.DOOption) serviceToken {
 	_serviceToken.CreatedAt = field.NewTime(tableName, "created_at")
 	_serviceToken.RevokedAt = field.NewTime(tableName, "revoked_at")
 	_serviceToken.IsPlatform = field.NewBool(tableName, "is_platform")
+	_serviceToken.OrganizationID = field.NewString(tableName, "organization_id")
+	_serviceToken.Scopes = field.NewField(tableName, "scopes")
+	_serviceToken.ExpiresAt = field.NewTime(tableName, "expires_at")
 
 	_serviceToken.fillFieldMap()
 
@@ -45,15 +48,18 @@ func newServiceToken(db *gorm.DB, opts ...gen.DOOption) serviceToken {
 type serviceToken struct {
 	serviceTokenDo serviceTokenDo
 
-	ALL        field.Asterisk
-	ID         field.String
-	Name       field.String
-	TokenHash  field.String
-	Token      field.String
-	CreatedBy  field.String
-	CreatedAt  field.Time
-	RevokedAt  field.Time
-	IsPlatform field.Bool
+	ALL            field.Asterisk
+	ID             field.String
+	Name           field.String
+	TokenHash      field.String
+	Token          field.String
+	CreatedBy      field.String
+	CreatedAt      field.Time
+	RevokedAt      field.Time
+	IsPlatform     field.Bool
+	OrganizationID field.String
+	Scopes         field.Field
+	ExpiresAt      field.Time
 
 	fieldMap map[string]field.Expr
 }
@@ -78,6 +84,9 @@ func (s *serviceToken) updateTableName(table string) *serviceToken {
 	s.CreatedAt = field.NewTime(table, "created_at")
 	s.RevokedAt = field.NewTime(table, "revoked_at")
 	s.IsPlatform = field.NewBool(table, "is_platform")
+	s.OrganizationID = field.NewString(table, "organization_id")
+	s.Scopes = field.NewField(table, "scopes")
+	s.ExpiresAt = field.NewTime(table, "expires_at")
 
 	s.fillFieldMap()
 
@@ -106,7 +115,7 @@ func (s *serviceToken) GetFieldByName(fieldName string) (field.OrderExpr, bool) 
 }
 
 func (s *serviceToken) fillFieldMap() {
-	s.fieldMap = make(map[string]field.Expr, 8)
+	s.fieldMap = make(map[string]field.Expr, 11)
 	s.fieldMap["id"] = s.ID
 	s.fieldMap["name"] = s.Name
 	s.fieldMap["token_hash"] = s.TokenHash
@@ -115,6 +124,9 @@ func (s *serviceToken) fillFieldMap() {
 	s.fieldMap["created_at"] = s.CreatedAt
 	s.fieldMap["revoked_at"] = s.RevokedAt
 	s.fieldMap["is_platform"] = s.IsPlatform
+	s.fieldMap["organization_id"] = s.OrganizationID
+	s.fieldMap["scopes"] = s.Scopes
+	s.fieldMap["expires_at"] = s.ExpiresAt
 }
 
 func (s serviceToken) clone(db *gorm.DB) serviceToken {

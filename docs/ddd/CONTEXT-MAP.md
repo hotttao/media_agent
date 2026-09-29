@@ -23,6 +23,7 @@ Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存
 - `media_auth` 是 API Token 管理与验证的业务入口，保存 Token 元数据和 Talos Key 引用；Talos 持有 Secret 生命周期，Edge/Gateway 将有效 API Token 换成短时 Internal Identity JWT。
 - Agent 是 User 的委托 Actor：创建 Agent 时 `media_agent_gateway` 请求 `media_auth` 签发绑定该 Agent 的 API Token；运行时 Agent 只经 `media_agent_gateway` 代理访问内部服务，JWT 使用 `sub=User`、`act.sub=Agent` 表达委托。
 - Personal Worker 是 User 的委托 Actor，只能经统一网关进入系统：Edge 将 opaque API Token 换成 `sub=User`、`act.sub=Worker` 的短时 Internal Identity JWT，`media_workflow` 再执行 Organization、Job 所有权与 Capability 授权；Conductor 不接受客户端连接或 API Token。
+- `media_auth/worker_identity` 持有 Personal Worker 的稳定身份、不可变 owner/Organization 和停用事实；`media_workflow` 持有 Dispatch/lease/执行事实，客户端进程实例不成为授权主体。Agent 的配置和业务生命周期仍归 `media_control`，不迁入 Worker 身份领域。
 - Managed Worker 属于 `media_workflow` 内部运行时，不使用 API Token 或 Talos；它只领取 Capability Version 指定的 Managed Execution Domain，并以内部运行身份写入 Dispatch 审计。
 - 资源服务使用共享访问语言实现本地 ACL；共享词典不拥有资源或授权数据。
 - `media_control` 是 Workspace 与 Agent 配置的权威来源；`media_agent_gateway` 消费其运行上下文，但不修改控制配置。

@@ -187,6 +187,64 @@ func TestCreateRejectsUntrustedDelegatedActor(t *testing.T) {
 	}
 }
 
+func TestPersonalWorkerIssuanceAndVerificationRecheckOrganizationAuthority(t *testing.T) {
+	expires := time.Now().Add(time.Hour)
+	repo := &fakeRepo{}
+	secrets := &fakeSecrets{}
+	svc := NewService(repo, secrets)
+	svc.SetSubjectValidator(func(context.Context, string) bool { return true })
+	svc.SetMembershipValidator(func(context.Context, string, string) bool { return true })
+	issuer := &fakeIssuer{}
+	svc.SetIssuer(issuer)
+	cmd := CreateCommand{CreatorUserID: "owner", SubjectUserID: "owner", ActorType: domain.ActorPersonalWorker,
+		ActorID: "Worker:stable", OrganizationID: "org", Name: "worker", Scopes: []string{"workflow.worker.poll"},
+		ExpiresAt: expires, TrustedActorCreation: true}
+	if _, err := svc.Create(t.Context(), cmd); !errors.Is(err, ErrForbidden) {
+		t.Fatal("missing identity authority accepted")
+	}
+	active := true
+	svc.SetActorValidator(func(_ context.Context, kind domain.ActorType, actor, owner, org string) bool {
+		return active && kind == domain.ActorPersonalWorker && actor == "Worker:stable" && owner == "owner" && org == "org"
+	})
+	result, err := svc.Create(t.Context(), cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.byKey = map[string]domain.Token{"talos-1": result.Token}
+	secrets.verified = VerifiedSecret{KeyID: "talos-1", ActorID: cmd.ActorID, Scopes: cmd.Scopes}
+	if _, err := svc.Verify(t.Context(), "redacted"); err != nil {
+		t.Fatal(err)
+	}
+	active = false
+	repo.created = result.Token
+	rotator := &fakeRotator{}
+	svc.SetRotator(rotator)
+	if _, err := svc.Rotate(t.Context(), "owner", result.Token.ID, time.Time{}); !errors.Is(err, ErrForbidden) || rotator.token.ID != "" {
+		t.Fatal("disabled identity rotated credential")
+	}
+	if _, err := svc.Create(t.Context(), cmd); !errors.Is(err, ErrForbidden) {
+		t.Fatal("disabled identity issued token")
+	}
+	if _, err := svc.Verify(t.Context(), "redacted"); !errors.Is(err, ErrForbidden) {
+		t.Fatal("disabled identity verified token")
+	}
+	active = true
+	cmd.OrganizationID = "other"
+	if _, err := svc.Create(t.Context(), cmd); !errors.Is(err, ErrForbidden) {
+		t.Fatal("cross-organization worker accepted")
+	}
+	token := repo.byKey["talos-1"]
+	token.OrganizationID = "other"
+	repo.byKey["talos-1"] = token
+	if _, err := svc.Verify(t.Context(), "redacted"); !errors.Is(err, ErrForbidden) {
+		t.Fatal("verification lost organization boundary")
+	}
+	cmd.OrganizationID, cmd.ActorType, cmd.ActorID = "org", domain.ActorAgent, "Agent:stable"
+	if _, err := svc.Create(t.Context(), cmd); !errors.Is(err, ErrForbidden) {
+		t.Fatal("Worker authority accepted Agent")
+	}
+}
+
 func TestVerifyRejectsTalosMetadataMismatch(t *testing.T) {
 	expires := time.Now().Add(time.Hour)
 	token := domain.Token{ID: "api-1", TalosKeyID: "key-1", SubjectUserID: "u1", ActorType: domain.ActorUser, ActorID: "User:u1", Scopes: []string{"api.access"}, Status: domain.StatusActive, ExpiresAt: &expires}

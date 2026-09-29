@@ -58,6 +58,10 @@
 - [x] Worker Gateway 使用 `sub=User`、`act.sub=Worker`，不再把 credential 当 Actor。
 - [x] `media_worker` 配置和文案由 Service Token 改为 API Token。
 - [ ] 换发现有测试 Worker Token，删除本地 Hash 验证旁路。
+  - [x] Worker Identity 术语/边界、migration、domain/DAL/service 与 owner/Organization/active 校验。
+  - [x] 停用/删除事务与后台补偿；即时拒绝身份、精确 Actor/owner/Organization 撤销意图、晚到签发扫描，PG 与真实 Talos 测试。
+  - [ ] 公开身份管理和 Worker Token 签发 IDL/CLI。
+  - [ ] 经网关换发测试 Worker API Token、实际启动 media_worker 跑一个完整流程，覆盖禁用/撤销/跨组织拒绝。
 - [x] 为测试 User 签发受限测试环境 API Token，Secret 仅保存到未跟踪的 `.env`；HTTP/CLI E2E 支持 Bearer API Token，不再要求预先模拟登录。
 - [ ] 覆盖撤销、scope、Organization、Actor disabled 和 trace_id 联调测试。
 
@@ -114,3 +118,12 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 创建持久恢复随后完成：migration0013、聚合 CAS、创建者范围内去重、Issuance Workflow、未完成创建的撤销和启动恢复已部署。单元 race 覆盖响应丢失、初始写库/激活提交/最终清理失败、取消、晚到成功、分页循环、跨 Actor/尝试拒绝、权威撤销确认和失败不阻塞后页。
 - 15项 API Token PostgreSQL/真实 Talos 集成测试（race）通过；真实 Talos 提交签发后丢弃响应并阻断清理，再重建 Workflow，仅靠数据库恢复到 revoked。PG 验证 NULL Key、并发去重、创建者隔离、CAS、事务回滚、未完成创建撤销、期限与 migration 回滚保护。
 - 部署确认数据库版本13且 dirty=false、认证容器运行新镜像且未重启。网关 HTTP 生命周期与重复创建409/不重发Secret通过；CLI实际执行创建/列表/轮换/撤销/重复撤销，Secret文件0600；认证与FlowGram浏览器回归6项再次通过。P4完成不代表P5/P6/P7或UI整体验收完成。
+
+### Personal Worker 稳定身份与撤销基础
+
+- 按 domain-modeling 先补充 Context Map、Worker Identity domain、Worker Access Revocation workflow、spec/plan，区分稳定身份、凭据、实例与任务。
+- 实现0014迁移、domain/DAL/service与Organization-aware ActorValidator；签发、验证、轮换都检查当前身份授权，Agent未接权威前继续拒绝。
+- 停用/删除与精确Worker Token撤销意图在同库事务提交；后台扫描非active Identity捕获晚到签发，现有签发/轮换/撤销恢复流程清理Talos。无Secret副本、无事务内外部调用、不复活停用身份。
+- 单元/竞态/架构检查通过；隔离PG及真实Talos回归20项通过，包含5项Worker身份/撤销测试，验证即时拒绝与重建流程后Key revoked。GORM查询通过工具重生成，未手改生成文件。
+- 部署数据库版本14、dirty=false，新镜像运行且RestartCount=0。网关HTTP生命周期、CLI实际创建/列表/轮换/撤销/重复撤销通过，Secret文件0600；认证与FlowGram浏览器回归6项通过，5173返回200。
+- 公开Worker身份管理/签发IDL与CLI、测试Worker Token换发、真实media_worker单流程联调仍未完成；P5/P6/P7和UI整体验收仍未完成。

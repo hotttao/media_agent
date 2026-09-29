@@ -172,6 +172,14 @@ Domain 只能由服务端生成，不接受 API/客户端传入。Personal 与 M
 - 只能注册和领取 `execution_target=personal_worker` 的 Capability；
 - Dispatch 保存 `subject_user_id`、`actor_id`、`credential_id`、`worker_instance_id` 和 `auth_source=api_token`。
 
+#### Personal Worker 身份基础
+
+`media_auth/worker_identity` 是 Personal Worker 稳定身份的权威来源，不是 Worker runtime。`0014_worker_identities` 创建表 `(id,owner_user_id FK,organization_id FK,name,status,created_at,disabled_at?,deleted_at?)`，状态 active/disabled/deleted，owner/Organization 不允许变更。身份模型不保存 API Token、Secret、Capability 列表或进程实例。
+
+领域/代码映射为 `biz/domain/worker_identity`、`biz/dal/model/worker_identity.go`、`biz/dal/repo/worker_identity`、`biz/service/worker_identity`。Service.Create 注入 User active 与 Organization membership 校验；ValidateActor 对精确 Worker ID、active、owner、Organization 校验，错误和查不到均拒绝。API Token ActorValidator 增加 Organization 参数，并在签发、验证和轮换时传递；轮换也重新验证 User/企业状态。startup wiring 只装配 Personal Worker 权威，Agent 仍需独立来源。
+
+状态管理只能从 active 进入 disabled/deleted，disabled 可进入 deleted，同状态幂等；不提供重新激活。停用对外入口必须使用 WorkerAccessRevocation：本地事务同时更新身份和 Token 撤销意图，已有后台循环清理 Talos。并发晚到创建仍需非 active 身份扫描补偿，不能只做一次 bulk update。持久查询/状态基础、公开身份与签发 API、撤销编排/后台、Worker Token 换发和真实运行联调作为独立验收项，未完成入口不能把 P5 标记完成。
+
 ### 5.2 Managed Worker
 
 - 是 `media_workflow` 服务边界内的独立运行入口；

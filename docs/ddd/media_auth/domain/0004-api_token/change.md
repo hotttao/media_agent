@@ -1,5 +1,15 @@
 # API Token 变更记录
 
+## 2026-09-29 · Personal Worker 撤销协调
+
+- 新增 ActorRevocationRepository，按精确 ActorType/Actor/owner/Organization 保存 revoking 或 issuance_cleanup；事务边界由 WorkerAccessRevocation 持有。
+- 轮换重新校验当前 User、企业和委托身份；停用后的凭据不得再换发，撤销仍可执行。
+
+## 2026-09-29 · Personal Worker 身份权威来源
+
+- 新增 worker_identity 领域持有 Personal Worker 的稳定身份与访问状态，明确区别于实例注册和任务执行。
+- ActorValidator 增加 Organization 上下文，签发和验证都精确校验 owner/Organization/active；Agent 验证未接入前继续 fail closed，不以 Worker 回调冒充 Agent 权威。
+
 ## 2026-09-29 · 创建意图与未知签发结果恢复
 
 - 创建先持久 issuing 意图，再调用 Talos；无法交付的凭据进入 issuance_cleanup，跨请求取消与服务重启保留。
