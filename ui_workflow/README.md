@@ -27,10 +27,18 @@ bash scripts/dev-service.sh logs
 bash scripts/dev-service.sh stop
 ```
 
-The transient user service listens on `0.0.0.0:5173`, fails if that port is
-occupied, and restarts after a process failure. It does not survive a machine
-reboot; run `start` again after reboot. `yarn dev` remains available for foreground
-development.
+The repository-owned persistent user-service template listens on
+`0.0.0.0:5173`, fails if that port is occupied, and restarts after a process
+failure. `start` links/enables an instance for this checkout, so it starts again
+when the user manager starts. `stop` also disables automatic startup. The script
+migrates the older transient unit automatically. `yarn dev` remains available
+for foreground development.
+
+For startup at boot without waiting for an interactive login, enable user
+lingering once: `loginctl enable-linger "$USER"` (host policy may require an
+administrator). Check with `loginctl show-user "$USER" -p Linger`. Node/npm must
+be available in `/usr/local/bin`, `/usr/bin` or `/bin`; credentials remain in the
+existing ignored environment files, not in the service definition.
 
 ## Architecture
 

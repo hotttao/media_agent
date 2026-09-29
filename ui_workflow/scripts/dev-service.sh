@@ -1,24 +1,22 @@
 #!/usr/bin/env bash
-# Keep the local Vite process alive independently of a terminal/tool session.
+# Keep Vite alive across terminal sessions and user-manager restarts.
 set -euo pipefail
 
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-unit=media-agent-ui-workflow-vite.service
+template=media-agent-ui-workflow-vite@.service
+unit="$(systemd-escape --path --template="$template" "$project_dir")"
 action="${1:-start}"
 
 case "$action" in
   start)
-    if systemctl --user is-active --quiet "$unit"; then
-      printf 'Vite is already running.\n'
-    elif [ "$(systemctl --user show "$unit" --property=LoadState --value)" != not-found ]; then
-      systemctl --user start "$unit"
-    else
-      systemd-run --user --unit="$unit" \
-        --property="WorkingDirectory=$project_dir" \
-        --property=Restart=on-failure --property=RestartSec=3 \
-        --setenv="PATH=$PATH" \
-        /usr/bin/env npm run dev -- --host 0.0.0.0 --port 5173 --strictPort
+    # Migrate the old transient unit before claiming the same listening port.
+    if systemctl --user is-active --quiet media-agent-ui-workflow-vite.service; then
+      systemctl --user stop media-agent-ui-workflow-vite.service
     fi
+    systemctl --user link "$project_dir/scripts/$template"
+    systemctl --user daemon-reload
+    systemctl --user enable --now "$unit"
+    printf 'Persistent Vite service enabled.\n'
     ;;
   status)
     exec systemctl --user status "$unit" --no-pager
@@ -27,7 +25,8 @@ case "$action" in
     exec journalctl --user --unit="$unit" --no-pager -n 80
     ;;
   stop)
-    exec systemctl --user stop "$unit"
+    # Explicit stop also opts out of automatic startup at the next login/boot.
+    exec systemctl --user disable --now "$unit"
     ;;
   *)
     printf 'Usage: bash scripts/dev-service.sh [start|status|logs|stop]\n' >&2
