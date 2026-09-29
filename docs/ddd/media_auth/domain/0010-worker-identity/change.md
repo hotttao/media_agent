@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2026-09-29 · 公开管理接口
+
+- 明确Create/List/Get/Disable/Delete HTTP与IDL契约，owner固定来自当前User；状态入口仅调用撤销Workflow。
+- CreateWorkerApiToken由WorkerTokenProvisioning派生Actor/User/Organization并限制五类worker scope，Secret交付和持久恢复复用API Token生命周期。
+
 ## 2026-09-29
 
 - 明确 Personal Worker Identity 的稳定身份、不可变 owner/Organization、active/disabled/deleted 状态归 media_auth；运行实例/Capability/任务不进入聚合。

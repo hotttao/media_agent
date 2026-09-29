@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package media_auth.worker_identity;
+import "api.proto";
+import "google/api/annotations.proto";
+import "media_auth/api_token.proto";
+option go_package = "media_auth/worker_identity";
+
+service WorkerIdentityService {
+  rpc CreateWorkerIdentity(CreateWorkerIdentityRequest) returns (WorkerIdentityResponse) {
+    option (google.api.http) = { post: "/api/worker-identities" body: "*" };
+    option (api.post) = "/api/worker-identities";
+  }
+  rpc ListWorkerIdentities(ListWorkerIdentitiesRequest) returns (ListWorkerIdentitiesResponse) {
+    option (google.api.http) = { get: "/api/worker-identities" };
+    option (api.get) = "/api/worker-identities";
+  }
+  rpc GetWorkerIdentity(WorkerIdentityRequest) returns (WorkerIdentityResponse) {
+    option (google.api.http) = { get: "/api/worker-identities/{id}" };
+    option (api.get) = "/api/worker-identities/:id";
+  }
+  rpc DisableWorkerIdentity(WorkerIdentityRequest) returns (WorkerIdentityStatusResponse) {
+    option (google.api.http) = { post: "/api/worker-identities/{id}/disable" body: "*" };
+    option (api.post) = "/api/worker-identities/:id/disable";
+  }
+  rpc DeleteWorkerIdentity(WorkerIdentityRequest) returns (WorkerIdentityStatusResponse) {
+    option (google.api.http) = { post: "/api/worker-identities/{id}/delete" body: "*" };
+    option (api.post) = "/api/worker-identities/:id/delete";
+  }
+  rpc CreateWorkerApiToken(CreateWorkerApiTokenRequest) returns (media_auth.api_token.CreateApiTokenResponse) {
+    option (google.api.http) = { post: "/api/worker-identities/{id}/api-tokens" body: "*" };
+    option (api.post) = "/api/worker-identities/:id/api-tokens";
+  }
+}
+
+message CreateWorkerIdentityRequest { string name = 1; string organization_id = 2; }
+message WorkerIdentityRequest { string id = 1 [(api.path) = "id"]; }
+message WorkerIdentityResponse { WorkerIdentityRecord worker_identity = 1; }
+message ListWorkerIdentitiesRequest {}
+message ListWorkerIdentitiesResponse { repeated WorkerIdentityRecord worker_identities = 1; }
+message WorkerIdentityStatusResponse { bool success = 1; }
+message WorkerIdentityRecord {
+  string id = 1;
+  string owner_user_id = 2;
+  string organization_id = 3;
+  string name = 4;
+  string status = 5;
+  string created_at = 6;
+  string disabled_at = 7;
+  string deleted_at = 8;
+  string actor_id = 9;
+}
+message CreateWorkerApiTokenRequest {
+  string id = 1 [(api.path) = "id"];
+  string name = 2;
+  repeated string scopes = 3;
+  string expires_at = 4;
+  string idempotency_key = 5;
+}

@@ -44,6 +44,7 @@ import (
 	tokenhandler "media_agent/media_auth/biz/handler/token"
 	userhandler "media_agent/media_auth/biz/handler/user"
 	wecomhandler "media_agent/media_auth/biz/handler/wecom"
+	workeridentityhandler "media_agent/media_auth/biz/handler/worker_identity"
 	"media_agent/media_auth/biz/middleware"
 	apitokenservice "media_agent/media_auth/biz/service/api_token"
 	authservice "media_agent/media_auth/biz/service/auth"
@@ -152,6 +153,17 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	tokenSvc := tokenservice.NewService(stRepo, userRepo)
 	tokenSvc.SetMembershipValidator(membershipValidator)
 	tokenhandler.TokenSvc = tokenSvc
+	workerIdentityRepo := dalworkeridentity.NewRepo(db)
+	workerIdentitySvc := workeridentityservice.NewService(workerIdentityRepo)
+	workerIdentitySvc.SetMembershipValidator(workeridentityservice.MembershipValidator(membershipValidator))
+	workerIdentitySvc.SetUserValidator(func(ctx context.Context, userID string) bool {
+		user, err := userRepo.FindByID(ctx, userID)
+		return err == nil && user.IsActive()
+	})
+	apiTokenRepo := dalapitoken.NewRepo(db)
+	workerRevocation := workflow.NewWorkerAccessRevocation(workerIdentitySvc, workerIdentityRepo, apiTokenRepo, txRunner)
+	workeridentityhandler.Svc = workerIdentitySvc
+	workeridentityhandler.Revocation = workerRevocation
 
 	// api_token domain：Talos 保存 Secret 生命周期事实，本地只保存授权元数据。
 	// Talos 未配置时管理接口明确返回 503，避免退回旧的本地 Hash 验证旁路。
@@ -162,7 +174,6 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 		if err != nil {
 			log.Fatalf("init di: talos client: %v", err)
 		}
-		apiTokenRepo := dalapitoken.NewRepo(db)
 		apiTokenSvc := apitokenservice.NewService(apiTokenRepo, apitokenservice.TalosAdapter{Client: talosClient})
 		issuance := workflow.NewAPITokenIssuance(apiTokenRepo, apitokenservice.TalosAdapter{Client: talosClient}, txRunner)
 		apiTokenSvc.SetIssuer(issuance)
@@ -175,17 +186,11 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 			user, err := userRepo.FindByID(ctx, userID)
 			return err == nil && user.IsActive()
 		})
-		workerIdentityRepo := dalworkeridentity.NewRepo(db)
-		workerIdentitySvc := workeridentityservice.NewService(workerIdentityRepo)
-		workerIdentitySvc.SetMembershipValidator(workeridentityservice.MembershipValidator(membershipValidator))
-		workerIdentitySvc.SetUserValidator(func(ctx context.Context, userID string) bool {
-			user, err := userRepo.FindByID(ctx, userID)
-			return err == nil && user.IsActive()
-		})
 		apiTokenSvc.SetActorValidator(func(ctx context.Context, actorType domainapitoken.ActorType, actorID, userID, organizationID string) bool {
 			return actorType == domainapitoken.ActorPersonalWorker && workerIdentitySvc.ValidateActor(ctx, actorID, userID, organizationID)
 		})
-		go workflow.NewWorkerAccessRevocation(workerIdentitySvc, workerIdentityRepo, apiTokenRepo, txRunner).Run(context.Background())
+		workeridentityhandler.Provisioning = workflow.NewWorkerTokenProvisioning(workerIdentitySvc, apiTokenSvc)
+		go workerRevocation.Run(context.Background())
 		apitokenhandler.Svc = apiTokenSvc
 		tokenhandler.APITokenSvc = apiTokenSvc
 		go workflow.NewAPITokenRevocation(apiTokenRepo, apiTokenSvc).Run(context.Background())

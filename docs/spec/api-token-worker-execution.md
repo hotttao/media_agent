@@ -180,6 +180,25 @@ Domain 只能由服务端生成，不接受 API/客户端传入。Personal 与 M
 
 状态管理只能从 active 进入 disabled/deleted，disabled 可进入 deleted，同状态幂等；不提供重新激活。停用对外入口必须使用 WorkerAccessRevocation：本地事务同时更新身份和 Token 撤销意图，已有后台循环清理 Talos。并发晚到创建仍需非 active 身份扫描补偿，不能只做一次 bulk update。持久查询/状态基础、公开身份与签发 API、撤销编排/后台、Worker Token 换发和真实运行联调作为独立验收项，未完成入口不能把 P5 标记完成。
 
+#### Personal Worker 管理与签发接口
+
+`idl/media_auth/worker_identity.proto` 定义 WorkerIdentityService，所有RPC同时声明google.api.http与api.*注解：
+
+| RPC | HTTP | 输入/输出 |
+|:---|:---|:---|
+| CreateWorkerIdentity | POST /api/worker-identities | name、organization_id；201 worker_identity |
+| ListWorkerIdentities | GET /api/worker-identities | 当前User全部身份，含历史状态；200 worker_identities |
+| GetWorkerIdentity | GET /api/worker-identities/:id | 200 worker_identity，其他Owner/未知404 |
+| DisableWorkerIdentity | POST /api/worker-identities/:id/disable | WorkerAccessRevocation；200 success |
+| DeleteWorkerIdentity | POST /api/worker-identities/:id/delete | 软删除，同上事务；200 success |
+| CreateWorkerApiToken | POST /api/worker-identities/:id/api-tokens | name、scopes[]、expires_at、idempotency_key；201 ApiTokenResponse |
+
+Actor、owner与企业不能由签发请求覆盖。WorkerTokenProvisioning.GetOwned检查active，派生`Worker:<id>`、subject=owner、Organization，再通过受信服务内部CreateCommand调用API Token Create；原通用User Token接口不新增任意Actor字段。五类scope为poll/heartbeat/complete/fail/upload，空值默认全部，非空只接受其子集。查询不返回Secret；错误正文固定安全描述。状态命令在Talos不可用时也保存禁止访问及清理意图，首次创建身份的Service独立于Talos配置，签发未配置返回503。
+
+CLI `media_auth worker-identity create/list/get/disable/delete/create-token` 使用生成typed client；create-token必须传`--env-out`新文件，0600保存Secret，不输出Secret，保存失败撤销新凭据；可指定到期、子scope和幂等键。单元/handler/HTTP网关/CLI各自验收，CLI成功不能代替接口失败分支测试。
+
+Traefik认证服务路由与Oathkeeper普通认证API规则同时包含`/api/worker-identities`，沿用Session或要求api.access的User API Token，不将管理入口加入`/api/worker/v1`规则。网关文件配置变更后重启本仓库网关；与浏览器回归串行。
+
 ### 5.2 Managed Worker
 
 - 是 `media_workflow` 服务边界内的独立运行入口；

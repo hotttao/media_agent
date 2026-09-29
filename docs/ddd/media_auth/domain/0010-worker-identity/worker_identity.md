@@ -7,6 +7,7 @@ dependencies:
 related_workflow:
   - worker_access_revocation
   - api_token_verification
+  - worker_token_provisioning
 ---
 
 ## 一句话职责
@@ -32,10 +33,11 @@ related_workflow:
 
 | 能力 | 说明 | 对外接口/函数 |
 |:---|:---|:---|
-| 创建身份 | 当前 User 固定 owner 与 Organization | Service.Create；HTTP 待 IDL 定义 |
-| 查询本人身份 | 不返回他人记录或 Token Secret | Service.List/GetOwned；HTTP 待 IDL 定义 |
+| 创建身份 | 当前 User 固定 owner 与 Organization | Service.Create；CreateWorkerIdentity |
+| 查询本人身份 | 不返回他人记录或 Token Secret | Service.List/GetOwned；ListWorkerIdentities/GetWorkerIdentity |
 | 校验委托 | 精确 Actor、active、owner、Organization | Service.ValidateActor |
-| 改变状态 | active→disabled；active/disabled→deleted | Service.ChangeStatus，仅由撤销 Workflow 调用；HTTP 待 IDL 定义 |
+| 改变状态 | active→disabled；active/disabled→deleted | Service.ChangeStatus，仅由撤销 Workflow 调用；DisableWorkerIdentity/DeleteWorkerIdentity |
+| 申请凭据 | Owner为已有active身份申请受限Token | CreateWorkerApiToken；WorkerTokenProvisioning |
 
 ## 聚合与不变量
 

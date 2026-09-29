@@ -58,6 +58,7 @@ import (
 	oauthclientsub "media_agent/media_cli/cmd/media_auth/oauth_client"
 	teamsub "media_agent/media_cli/cmd/media_auth/team"
 	usersub "media_agent/media_cli/cmd/media_auth/user"
+	workeridentitysub "media_agent/media_cli/cmd/media_auth/worker_identity"
 	controlcmd "media_agent/media_cli/cmd/media_control"
 	hellosub "media_agent/media_cli/cmd/media_example/hello"
 	wfsub "media_agent/media_cli/cmd/media_workflow"
@@ -112,6 +113,9 @@ func run() int {
 		authsub.Init(cfg)
 		if err := apitokensub.Init(cfg); err != nil {
 			log.Fatalf("media_auth/api-token: %v", err)
+		}
+		if err := workeridentitysub.Init(cfg); err != nil {
+			log.Fatalf("init worker identity CLI: %v", err)
 		}
 		teamsub.Init(cfg)        // team 共享同一 cookie store，login 后 team 子命令自动带 cookie
 		oauthclientsub.Init(cfg) // oauth-client 共享同一 cookie store

@@ -132,6 +132,14 @@ MEDIA_E2E_TALOS_URL="http://${worker_talos_ip}:4420" \
 
 这组测试不替代后续公开身份/签发接口、CLI和真实media_worker执行验收。未配置Talos时对应测试明确Skip；普通单测不连接Talos。
 
+公开接口门禁为`media-cli/e2e/worker_identity_e2e_test.go`：使用User API Token访问网关创建/读取/查询/签发/停用/删除，验证客户端不能覆盖owner/Actor/Organization、scope限制、重复签发不交付Secret、Worker JWT交换、管理API隔离、停用即时拒绝及后台撤销收敛。未消费Conductor任务，不替代真实Worker单流程验收。
+
+```bash
+go -C media-cli test ./e2e -run '^TestWorkerIdentityGateway$' -count=1 -v
+```
+
+环境变量同上方User API Token网关测试。CLI另用`media_auth worker-identity create/list/get/create-token/disable/delete`验收，Token Secret用`--env-out`新文件0600交付，禁止输出；完整命令链和HTTP断言是两道独立门禁。
+
 ### API Token 轮换恢复集成测试
 
 `media_auth/e2e/api_token_rotation_test.go` 使用 testcontainers 的隔离 PostgreSQL；设置 `MEDIA_E2E_TALOS_URL` 后还会连接已由仓库启动的 Talos Admin API。测试为唯一临时 User Actor 创建 Key，不使用测试账号的既有凭据；结束后撤销自己创建的 Key。

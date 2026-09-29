@@ -5,6 +5,7 @@ dependencies:
     - auth
     - worker_identity
 related_workflow:
+    - worker_token_provisioning
     - api_token_issuance
     - api_token_rotation
     - api_token_revocation

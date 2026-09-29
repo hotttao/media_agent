@@ -60,7 +60,10 @@
 - [ ] 换发现有测试 Worker Token，删除本地 Hash 验证旁路。
   - [x] Worker Identity 术语/边界、migration、domain/DAL/service 与 owner/Organization/active 校验。
   - [x] 停用/删除事务与后台补偿；即时拒绝身份、精确 Actor/owner/Organization 撤销意图、晚到签发扫描，PG 与真实 Talos 测试。
-  - [ ] 公开身份管理和 Worker Token 签发 IDL/CLI。
+  - [x] 公开身份管理和 Worker Token 签发 IDL/CLI。
+    - [x] WorkerTokenProvisioning与受限scope、生成IDL/client/router/OpenAPI、薄handler、Talos独立身份服务接线。
+    - [x] CLI新文件0600交付与失败撤销，HTTP/CLI各自验证归属、scope、停用/删除、重复和错误分支。
+  - [x] 经公开CLI签发联调Worker Token，写入被Git忽略的media_worker/.env（0600），五类worker scope，不保存到文档/日志。
   - [ ] 经网关换发测试 Worker API Token、实际启动 media_worker 跑一个完整流程，覆盖禁用/撤销/跨组织拒绝。
 - [x] 为测试 User 签发受限测试环境 API Token，Secret 仅保存到未跟踪的 `.env`；HTTP/CLI E2E 支持 Bearer API Token，不再要求预先模拟登录。
 - [ ] 覆盖撤销、scope、Organization、Actor disabled 和 trace_id 联调测试。
@@ -127,3 +130,12 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 单元/竞态/架构检查通过；隔离PG及真实Talos回归20项通过，包含5项Worker身份/撤销测试，验证即时拒绝与重建流程后Key revoked。GORM查询通过工具重生成，未手改生成文件。
 - 部署数据库版本14、dirty=false，新镜像运行且RestartCount=0。网关HTTP生命周期、CLI实际创建/列表/轮换/撤销/重复撤销通过，Secret文件0600；认证与FlowGram浏览器回归6项通过，5173返回200。
 - 公开Worker身份管理/签发IDL与CLI、测试Worker Token换发、真实media_worker单流程联调仍未完成；P5/P6/P7和UI整体验收仍未完成。
+
+### Personal Worker 公开管理与签发
+
+- 新增WorkerTokenProvisioning、公开Create/List/Get/Disable/Delete/CreateToken IDL与薄handler；owner/Actor/Organization只从可信User与Worker Identity派生，scope只能是五类worker能力的子集，空值默认为全部。身份Service与撤销意图独立于Talos配置。
+- Hertz model/client/router及OpenAPI由工具生成；新增路由的两套HTTP注解保持实际路径一致。Traefik与Oathkeeper普通User管理规则同时加入worker-identities，并重启本仓库容器。
+- media_auth与media-cli全量单测通过，workflow/handler/CLI竞态和架构检查通过。HTTP网关覆盖伪造字段拒绝、未知身份、scope隔离、JWT交换、User不能冒充Worker、重复签发无Secret重放、停用/重复停用/删除/重复删除、轮换拒绝和后台revoked收敛。
+- CLI实际完成创建/读取/列表/签发/轮换/停用/重复停用/撤销/删除/读取历史；Secret文件0600。认证与FlowGram浏览器回归6项通过，5173可访问。
+- 已通过公开CLI签发稳定Worker Actor的联调Token到media_worker/.env（0600且Git忽略），不替换User接口测试凭据。未启动Worker消费任务：只读列表发现历史RUNNING/NEED_CONFIRM Job，部分引用的Workflow返回404；单流程联调先核对队列与任务Capability，不擅自取消历史Job或启动批量执行。此观察不是阻塞，仍可继续安全排查。
+- P5实际Worker单流程、P6/P7和UI整体验收仍未完成；本节不把公开接口门禁冒充完整Workflow执行门禁。

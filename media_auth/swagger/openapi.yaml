@@ -1682,6 +1682,161 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/worker-identities:
+        get:
+            tags:
+                - WorkerIdentityService
+            operationId: WorkerIdentityService_ListWorkerIdentities
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListWorkerIdentitiesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - WorkerIdentityService
+            operationId: WorkerIdentityService_CreateWorkerIdentity
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateWorkerIdentityRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkerIdentityResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/worker-identities/{id}:
+        get:
+            tags:
+                - WorkerIdentityService
+            operationId: WorkerIdentityService_GetWorkerIdentity
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkerIdentityResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/worker-identities/{id}/api-tokens:
+        post:
+            tags:
+                - WorkerIdentityService
+            operationId: WorkerIdentityService_CreateWorkerApiToken
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateWorkerApiTokenRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateApiTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/worker-identities/{id}/delete:
+        post:
+            tags:
+                - WorkerIdentityService
+            operationId: WorkerIdentityService_DeleteWorkerIdentity
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/WorkerIdentityRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkerIdentityStatusResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/worker-identities/{id}/disable:
+        post:
+            tags:
+                - WorkerIdentityService
+            operationId: WorkerIdentityService_DisableWorkerIdentity
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/WorkerIdentityRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkerIdentityStatusResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
 components:
     schemas:
         AcceptInviteResponse:
@@ -2034,6 +2189,28 @@ components:
                     type: string
                 role:
                     type: string
+        CreateWorkerApiTokenRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                expires_at:
+                    type: string
+                idempotency_key:
+                    type: string
+        CreateWorkerIdentityRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                organization_id:
+                    type: string
         DeleteIdentityResponse:
             type: object
             properties:
@@ -2228,6 +2405,13 @@ components:
                 page_size:
                     type: integer
                     format: int32
+        ListWorkerIdentitiesResponse:
+            type: object
+            properties:
+                worker_identities:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkerIdentityRecord'
         LoginRequest:
             type: object
             properties:
@@ -2490,6 +2674,42 @@ components:
                     type: string
                 created_at:
                     type: string
+        WorkerIdentityRecord:
+            type: object
+            properties:
+                id:
+                    type: string
+                owner_user_id:
+                    type: string
+                organization_id:
+                    type: string
+                name:
+                    type: string
+                status:
+                    type: string
+                created_at:
+                    type: string
+                disabled_at:
+                    type: string
+                deleted_at:
+                    type: string
+                actor_id:
+                    type: string
+        WorkerIdentityRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+        WorkerIdentityResponse:
+            type: object
+            properties:
+                worker_identity:
+                    $ref: '#/components/schemas/WorkerIdentityRecord'
+        WorkerIdentityStatusResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
 tags:
     - name: ApiTokenService
     - name: AuthService
@@ -2566,3 +2786,4 @@ tags:
          内部逻辑见 services/wecom.ts:getAuthorizeUrl / getUserByCode / getUserInfo。
          /callback 在 control_plane auth skip list 中短路(无 JWT),
          media_auth 这里保持同语义,handler 内部不依赖 c.get('user')。
+    - name: WorkerIdentityService
