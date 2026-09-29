@@ -1,5 +1,11 @@
 # API Token 变更记录
 
+## 2026-09-29 · 创建意图与未知签发结果恢复
+
+- 创建先持久 issuing 意图，再调用 Talos；无法交付的凭据进入 issuance_cleanup，跨请求取消与服务重启保留。
+- 使用服务生成的 Token ID 作为 Talos request_id，客户端幂等键只在创建者范围内去重。恢复接受 Talos 无 Secret 的幂等响应，正常签发仍拒绝缺失 Secret。
+- 创建副作用和恢复时序归 api_token_issuance Workflow；本轮先落恢复 Adapter 契约，持久模型和运行时接线仍由 plan 跟踪，不将目标设计冒充已实现。
+
 ## 2026-09-28 · 轮换操作与失败清理
 
 - 增加 rotating 状态和依附的轮换操作实体，操作 ID 写入 Talos replacement metadata 用于定位，不误称为上游幂等键。

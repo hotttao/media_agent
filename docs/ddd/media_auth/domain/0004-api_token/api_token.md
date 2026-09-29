@@ -4,6 +4,7 @@ description: User、Agent、Personal Worker 与受控客户端的长期 API 凭�
 dependencies:
     - auth
 related_workflow:
+    - api_token_issuance
     - api_token_rotation
     - api_token_revocation
     - api_token_verification
@@ -61,14 +62,16 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
 | id | text PK | 面向用户和 Gateway 的 Token Manager ID |
-| talos_key_id | text unique | Talos API Key 稳定标识，不是 Secret |
+| talos_key_id | text nullable unique | Talos API Key 稳定标识，不是 Secret；issuing 时尚无映射 |
 | subject_user_id | text nullable | 被代表业务 User；直接 Service Actor Token 可为空 |
 | actor_type | text | user/agent/personal_worker/service |
 | actor_id | text | `User:*`、`Agent:*`、`Worker:*` 或 `Service:*` |
 | organization_id | text nullable | 唯一企业上下文 |
 | name | text | 用户可读名称 |
 | scopes | text[] | 入口能力上限 |
-| status | text | active/rotating/revoking/revoked/expired；rotating/revoking 不可验证 |
+| status | text | issuing/issuance_cleanup/active/rotating/revoking/revoked/expired；只有 active 可验证 |
+| issuance_deadline | timestamptz nullable | 签发尝试允许正常激活的期限 |
+| client_request_key | text nullable | 创建者范围内的客户端去重键，不直接发给 Talos |
 | expires_at | timestamptz | 到期时间 |
 | created_by | text | 创建命令的 User 或受信服务主体 |
 | created_at / rotated_at / revoked_at | timestamptz nullable | 生命周期时间 |
@@ -77,9 +80,11 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 
 `talos_key_id` 唯一；`revoking` 状态使用按 ID 的部分索引供后台 keyset 扫描。
 
-### UUID 生成规则
+issuing/issuance_cleanup 保存聚合内的持久创建意图，并使用按 ID 的部分索引供恢复扫描；不存在 Key 时使用 NULL 而不是空字符串。`(created_by, client_request_key)` 对非空键和非 revoked/expired 状态保持唯一，重复命令不能重放 Secret。active 必须有非空 Key；清理状态不能重新激活。
 
-本地管理 ID 使用 ULID；Secret 格式和 Talos Key ID 由 Talos 配置决定。
+### ID 生成规则
+
+本地管理 ID 使用应用层 ID 生成器产生的 32 位随机十六进制串；Secret 格式和 Talos Key ID 由 Talos 配置决定。
 
 ### `api_token_rotations`
 
@@ -108,8 +113,8 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 1. 从 Web Session 或受信服务身份取得创建者，不接受客户端覆盖 User。
 2. 校验 Actor 存在、active，并验证 `actor -> owner User -> Organization` 关系。
 3. 校验 scope 不超过创建者可委托范围，过期时间在策略上限内。
-4. 调 Talos 创建 `actor_id` 对应 API Key；成功后事务保存本地元数据。
-5. 本地提交失败时立即撤销已创建的 Talos Key；撤销结果不明确进入补偿队列，不能再次展示 Secret。
+4. 先保存 issuing 意图和期限，成功激活必须同时满足 issuing、期限内以及完整 Key 映射；持久提交后才返回一次性 Secret。
+5. 失败/取消/撤销进入 issuance_cleanup，清理状态禁止激活；所有本次 Key 确认撤销后才进入 revoked。外部副作用、幂等屏障与恢复见 [API Token Issuance](../../workflow/0010-api-token-issuance/api_token_issuance.md)。
 
 ### VerifyAPIToken
 

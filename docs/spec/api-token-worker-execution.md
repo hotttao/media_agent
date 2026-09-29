@@ -68,6 +68,7 @@ Personal Worker 将 `act.sub` 改为 `Worker:<worker_id>`。`client_id` 不表�
 ```go
 type Client interface {
     Issue(ctx context.Context, cmd IssueCommand) (IssuedKey, error)
+    RecoverIssue(ctx context.Context, cmd IssueCommand) (KeyMetadata, error)
     Verify(ctx context.Context, secret string) (VerifiedKey, error)
     Revoke(ctx context.Context, keyID string) error
     Get(ctx context.Context, keyID string) (KeyMetadata, error)
@@ -99,6 +100,18 @@ HTTP 路径和 DTO 以锁定的 Talos OpenAPI 版本为准。Adapter 必须设�
 清理先 Revoke 旧 Key，错误后 Get 确认其 REVOKED，阻止原子 Rotate 的晚到调用；再按 actor_id 调 Talos List（每页100），仅撤销 metadata 同时匹配 api_token_id、rotation_id 的 replacement。全部确认后，在事务中提交 Token revoked + operation aborted。分页/上游/本地失败保留 recovering；不能重发 Rotate，也不能重放 Secret。completed 操作不参与恢复。
 
 Talos Adapter 增加带 metadata 的 Rotate 和按 Actor 的分页 List，正确转义 AIP filter/URL；列表异常不得被当作完整扫描。Service 的 Rotate 保留归属校验并委托 Workflow；启动 wiring 同时装配同步能力和后台恢复。
+
+### 3.3 创建意图与未知签发结果恢复
+
+`api_token_issuance` Workflow 的实现契约见 [签发与恢复时序](../ddd/media_auth/workflow/0010-api-token-issuance/api_token_issuance.md)。`api_tokens` 增加 issuing/issuance_cleanup、nullable talos_key_id、issuance_deadline、nullable client_request_key；创建者范围内的非终态客户端键唯一。迁移回滚遇到未完成意图必须拒绝，不丢弃清理事实。
+
+Service 保留授权/参数校验，委托 Issuer 接口；Workflow 在 Talos 调用前持久化 issuing，使用 Token ID 作为 request_id 和 metadata 的 api_token_id/issuance_id。期限内 CAS 提交 active 后才返回 Secret；失败取得清理状态并进行独立有界补偿。后台启动即运行、每10秒扫描100条、每条15秒，失败不阻塞后页。撤销尚未完成的创建进入相同清理状态，不调用空 Key 的普通撤销。
+
+Talos Client `RecoverIssue` 与正常 `Issue` 分离：必须提供非空 request_id、Actor、api_token_id、issuance_id；响应只有 KeyMetadata，不提供 Secret 字段，即使上游重新签发返回 Secret 也必须丢弃。正常 Issue 仍拒绝缺失 Secret。RecoverIssue 精确校验返回的 Actor 和两个 metadata 标识，异常不能撤销其他凭据；错误不得暴露上游正文、Secret 或异常字段。
+
+恢复先分页枚举 Actor 的匹配 metadata；无匹配时使用同一 request_id 调 RecoverIssue 形成晚到签发屏障，随后撤销得到的唯一 Key并确认终态。Talos 在幂等查询前检查 quota；存在 Key 优先通过 List 定位，无 Key 且重放被拒绝时保持清理状态。不能只 List 后宣布完成，也不能生成新的 request_id 重试签发。已成功 active 的 Token 不参与补偿；重复客户端命令返回 conflict，不重新交付 Secret。
+
+测试分别覆盖 Adapter 无 Secret 重放、新签发 Secret 丢弃、跨 Actor/metadata 拒绝，以及 Workflow 取消/本地提交失败/持久恢复、PostgreSQL CAS与去重、真实 Talos 响应丢失后恢复。必须同时通过 HTTP 与 CLI 生命周期门禁才可完成 P4。
 
 ## 4. Capability Execution Target
 

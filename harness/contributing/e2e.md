@@ -132,6 +132,18 @@ MEDIA_E2E_TALOS_URL="http://${rotation_talos_ip}:4420" \
 
 这个测试让真实 Talos 提交轮换，然后在 transport 层丢弃响应并模拟清理不可用；重建 Workflow 后只用持久化操作恢复，验证旧 Key 与未知 replacement 均 revoked、不会重发 Rotate、已完成操作不被补偿。普通 `go test ./...` 不会连接 Talos。此测试与浏览器 E2E 串行执行。
 
+### API Token 签发恢复上游契约测试
+
+`media_auth/e2e/api_token_issuance_test.go` 为唯一临时 Actor 验证真实 Talos 的 request_id 重放规则，不使用既有测试账号的 Key：签发提交后丢弃响应，恢复只取得元数据；恢复先于原请求到达时也仅创建一个 Key；撤销后重放不能复活凭据，正常 Issue 不能再次取得 Secret。
+
+```bash
+issuance_talos_ip=$(docker inspect --format '{{(index .NetworkSettings.Networks "media-auth").IPAddress}}' media-agent-auth-talos-1)
+MEDIA_E2E_TALOS_URL="http://${issuance_talos_ip}:4420" \
+  go -C media_auth test -tags=e2e -race ./e2e -run '^TestAPITokenIssuanceTalosRecoveryContract$' -count=1 -v
+```
+
+未设置地址时该测试明确 skip。它只证明 Adapter 与锁定 Talos 的契约，不替代创建 Workflow 的数据库持久意图/CAS/重启恢复测试，也不替代 HTTP 与 CLI 生命周期门禁。
+
 - **`media-cli` 不用管服务启停**——那是 docker-compose 的事。media-cli 只发 HTTP 请求。
 - **两个 E2E 层级都要验收**——功能存在用户/管理 HTTP 入口时，既要运行 `media-cli/e2e` 的 Go HTTP E2E，也要实际执行对应 media-cli 命令链路；纯内部事件入口可以由面向用户的 CLI 流程间接覆盖，不要求暴露危险的内部命令。
 - **基础环境常驻**（除非确定不再测试才停），避免每次 e2e 重复 build/起。

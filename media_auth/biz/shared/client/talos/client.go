@@ -135,6 +135,42 @@ func (c *Client) Issue(ctx context.Context, cmd IssueCommand) (IssuedKey, error)
 	return response.IssuedAPIKey.toIssued(response.Secret)
 }
 
+// RecoverIssue resolves an uncertain issuance using the original trusted
+// request ID. Talos's idempotent replay intentionally omits Secret. If this
+// call creates the key first, its Secret is discarded as well: this method is
+// only for locating a key to revoke, never for delivering credentials.
+func (c *Client) RecoverIssue(ctx context.Context, cmd IssueCommand) (KeyMetadata, error) {
+	tokenID, tokenOK := cmd.Metadata["api_token_id"].(string)
+	issuanceID, issuanceOK := cmd.Metadata["issuance_id"].(string)
+	if strings.TrimSpace(cmd.Name) == "" || strings.TrimSpace(cmd.ActorID) == "" ||
+		strings.TrimSpace(cmd.RequestID) == "" || !tokenOK || !issuanceOK ||
+		tokenID != cmd.RequestID || issuanceID != cmd.RequestID {
+		return KeyMetadata{}, errors.New("talos issuance recovery requires trusted request identity")
+	}
+	body := map[string]any{"name": cmd.Name, "actor_id": cmd.ActorID, "scopes": cmd.Scopes,
+		"request_id": cmd.RequestID, "metadata": cmd.Metadata}
+	if cmd.TTL != "" {
+		body["ttl"] = cmd.TTL
+	}
+	// Do not decode the secret field. KeyMetadata cannot carry it into the
+	// workflow, logs, durable state, or a replayed client response.
+	var response struct {
+		IssuedAPIKey issuedAPIKey `json:"issued_api_key"`
+	}
+	if err := c.do(ctx, http.MethodPost, apiPrefix+"/issuedApiKeys", body, &response); err != nil {
+		return KeyMetadata{}, err
+	}
+	key, err := response.IssuedAPIKey.toVerified()
+	if err != nil {
+		return KeyMetadata{}, err
+	}
+	if key.KeyID == "" || key.ActorID != cmd.ActorID ||
+		key.Metadata["api_token_id"] != tokenID || key.Metadata["issuance_id"] != issuanceID {
+		return KeyMetadata{}, errors.New("talos returned mismatched issuance recovery identity")
+	}
+	return key, nil
+}
+
 func (c *Client) Verify(ctx context.Context, secret string) (VerifiedKey, error) {
 	if strings.TrimSpace(secret) == "" {
 		return VerifiedKey{}, ErrInvalidCredential

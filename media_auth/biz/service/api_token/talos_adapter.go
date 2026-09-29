@@ -8,6 +8,23 @@ import (
 
 type TalosAdapter struct{ Client *client.Client }
 
+// IssuanceKey contains only the identity needed to safely clean an uncertain
+// issuance. In particular it cannot carry a one-time Secret.
+type IssuanceKey struct {
+	KeyID, ActorID, Status string
+	Metadata               map[string]any
+}
+
+func (a TalosAdapter) RecoverIssue(ctx context.Context, cmd IssueSecretCommand) (IssuanceKey, error) {
+	key, err := a.Client.RecoverIssue(ctx, client.IssueCommand{
+		Name: cmd.Name, ActorID: cmd.ActorID, RequestID: cmd.RequestID, TTL: cmd.TTL, Scopes: cmd.Scopes, Metadata: cmd.Metadata,
+	})
+	if err != nil {
+		return IssuanceKey{}, err
+	}
+	return IssuanceKey{KeyID: key.KeyID, ActorID: key.ActorID, Status: key.Status, Metadata: key.Metadata}, nil
+}
+
 func (a TalosAdapter) Issue(ctx context.Context, cmd IssueSecretCommand) (IssuedSecret, error) {
 	result, err := a.Client.Issue(ctx, client.IssueCommand{
 		Name: cmd.Name, ActorID: cmd.ActorID, RequestID: cmd.RequestID, TTL: cmd.TTL, Scopes: cmd.Scopes, Metadata: cmd.Metadata,

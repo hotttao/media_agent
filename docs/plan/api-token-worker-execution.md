@@ -46,6 +46,10 @@
 - [x] 生成 Hertz model/client/router/swagger，不手改生成产物。
 - [ ] 单元、DAL、HTTP E2E 覆盖生命周期与失败分支。
   - [ ] 补齐创建时签发结果不确定、撤销补偿失败后的持久化恢复；不能只返回组合错误后丢失补偿意图。
+    - [x] 独立 RecoverIssue Adapter：同 request_id 重放，仅返回元数据，严格核对 Actor/签发标识，单元与真实 Talos 契约测试。
+    - [ ] issuing/issuance_cleanup、nullable Key、期限与客户端去重迁移和聚合 CAS。
+    - [ ] Issuance Workflow、撤销未完成创建、后台重启恢复与 wiring。
+    - [ ] PG 并发/失败与真实丢失响应恢复测试；部署后 HTTP/CLI/浏览器回归。
 
 ## P5 · 委托身份与 Personal Worker 切换
 
@@ -101,3 +105,9 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 轮换恢复随后完成：rotating + 依附操作记录、同步事务 CAS、metadata 定位 replacement、旧 Key 撤销屏障、分页清理和后台恢复已部署。服务/Workflow/Talos adapter race 测试、9 项 API Token PostgreSQL/真实 Talos集成测试通过；真实 Talos 提交后丢弃响应并阻断即时清理，再重建 Workflow 验证仅靠数据库恢复，所有本次 Key 均 revoked，且晚到 Rotate 被拒绝。
 - 更新认证服务后网关 API 生命周期与 CLI 创建/轮换/撤销/重复撤销回归再次通过；未把创建补偿意图丢失问题、Worker/Agent 切换或 UI 整体验收并入该完成项。
 - 轮换恢复部署后的浏览器回归 6 项通过：登录 setup、注册入口、稳定业务 User、独立 Session 登出、密码恢复、FlowGram 节点拖动/详情/结构化编辑。仅证明这些旅程仍可用，不替代完整视觉与执行交互验收。
+
+## 2026-09-29 联调记录
+
+- 创建恢复契约已通过真实 Talos 验证：签发提交后丢失响应，以及恢复先于原请求到达，均只产生一个 Key；撤销后相同 request_id 重放仍返回同一 revoked Key，正常 Issue 不重发 Secret。此处仅完成恢复 Adapter，不代表创建意图、后台恢复或 P4 已完成。
+- 重启后发现临时 Vite unit 消失；改为仓库维护的持久 user-service 模板，启动脚本 link/enable，显式 stop 同时 disable。当前机器启用 Linger，让用户服务管理器随主机启动，不依赖终端会话；仍采用 Vite :5173 → Traefik 后端的开发拓扑。
+- 验证记录：media_auth 全模块单元测试、Talos/API Token service race 与架构检查通过；真实 Talos 恢复契约两种场景通过。5173 返回 200、持久 unit enabled/active、Linger=yes；网关 API Token HTTP 生命周期与认证/FlowGram 浏览器回归6项通过。没有执行整机重启验证，不以 enabled 状态宣称已完成重启实测；创建 Workflow 持久恢复和完整 UI 验收仍未完成。
