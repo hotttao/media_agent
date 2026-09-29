@@ -44,12 +44,12 @@
     - [x] 同步 Workflow、独立有界清理、后台重启恢复。
     - [x] 单元/PG 并发与失败测试，真实 Talos 丢失响应联调，HTTP/CLI 回归。
 - [x] 生成 Hertz model/client/router/swagger，不手改生成产物。
-- [ ] 单元、DAL、HTTP E2E 覆盖生命周期与失败分支。
-  - [ ] 补齐创建时签发结果不确定、撤销补偿失败后的持久化恢复；不能只返回组合错误后丢失补偿意图。
+- [x] 单元、DAL、HTTP E2E 覆盖生命周期与失败分支。
+  - [x] 补齐创建时签发结果不确定、撤销补偿失败后的持久化恢复；不能只返回组合错误后丢失补偿意图。
     - [x] 独立 RecoverIssue Adapter：同 request_id 重放，仅返回元数据，严格核对 Actor/签发标识，单元与真实 Talos 契约测试。
-    - [ ] issuing/issuance_cleanup、nullable Key、期限与客户端去重迁移和聚合 CAS。
-    - [ ] Issuance Workflow、撤销未完成创建、后台重启恢复与 wiring。
-    - [ ] PG 并发/失败与真实丢失响应恢复测试；部署后 HTTP/CLI/浏览器回归。
+    - [x] issuing/issuance_cleanup、nullable Key、期限与客户端去重迁移和聚合 CAS。
+    - [x] Issuance Workflow、撤销未完成创建、后台重启恢复与 wiring。
+    - [x] PG 并发/失败与真实丢失响应恢复测试；部署后 HTTP/CLI/浏览器回归。
 
 ## P5 · 委托身份与 Personal Worker 切换
 
@@ -111,3 +111,6 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 创建恢复契约已通过真实 Talos 验证：签发提交后丢失响应，以及恢复先于原请求到达，均只产生一个 Key；撤销后相同 request_id 重放仍返回同一 revoked Key，正常 Issue 不重发 Secret。此处仅完成恢复 Adapter，不代表创建意图、后台恢复或 P4 已完成。
 - 重启后发现临时 Vite unit 消失；改为仓库维护的持久 user-service 模板，启动脚本 link/enable，显式 stop 同时 disable。当前机器启用 Linger，让用户服务管理器随主机启动，不依赖终端会话；仍采用 Vite :5173 → Traefik 后端的开发拓扑。
 - 验证记录：media_auth 全模块单元测试、Talos/API Token service race 与架构检查通过；真实 Talos 恢复契约两种场景通过。5173 返回 200、持久 unit enabled/active、Linger=yes；网关 API Token HTTP 生命周期与认证/FlowGram 浏览器回归6项通过。没有执行整机重启验证，不以 enabled 状态宣称已完成重启实测；创建 Workflow 持久恢复和完整 UI 验收仍未完成。
+- 创建持久恢复随后完成：migration0013、聚合 CAS、创建者范围内去重、Issuance Workflow、未完成创建的撤销和启动恢复已部署。单元 race 覆盖响应丢失、初始写库/激活提交/最终清理失败、取消、晚到成功、分页循环、跨 Actor/尝试拒绝、权威撤销确认和失败不阻塞后页。
+- 15项 API Token PostgreSQL/真实 Talos 集成测试（race）通过；真实 Talos 提交签发后丢弃响应并阻断清理，再重建 Workflow，仅靠数据库恢复到 revoked。PG 验证 NULL Key、并发去重、创建者隔离、CAS、事务回滚、未完成创建撤销、期限与 migration 回滚保护。
+- 部署确认数据库版本13且 dirty=false、认证容器运行新镜像且未重启。网关 HTTP 生命周期与重复创建409/不重发Secret通过；CLI实际执行创建/列表/轮换/撤销/重复撤销，Secret文件0600；认证与FlowGram浏览器回归6项再次通过。P4完成不代表P5/P6/P7或UI整体验收完成。

@@ -54,7 +54,15 @@ type Service struct {
 	subjectValid   SubjectValidator
 	now            func() time.Time
 	rotator        Rotator
+	issuer         Issuer
 }
+
+type Issuer interface {
+	Issue(context.Context, domain.Token) (CreateResult, error)
+	Recover(context.Context, string, bool) error
+}
+
+func (s *Service) SetIssuer(issuer Issuer) { s.issuer = issuer }
 
 type Rotator interface {
 	Rotate(context.Context, domain.Token) (CreateResult, error)
@@ -113,6 +121,10 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (CreateResult, 
 	cmd.Name = strings.TrimSpace(cmd.Name)
 	cmd.ActorID = strings.TrimSpace(cmd.ActorID)
 	cmd.SubjectUserID = strings.TrimSpace(cmd.SubjectUserID)
+	cmd.IdempotencyKey = strings.TrimSpace(cmd.IdempotencyKey)
+	if len(cmd.IdempotencyKey) > 200 {
+		return CreateResult{}, ErrInvalidRequest
+	}
 	if cmd.Name == "" || !cmd.ActorType.Valid() || cmd.ActorID == "" || cmd.CreatorUserID == "" || s.secrets == nil {
 		return CreateResult{}, ErrInvalidRequest
 	}
@@ -144,31 +156,14 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (CreateResult, 
 	if cmd.ExpiresAt.IsZero() || !cmd.ExpiresAt.After(now) {
 		return CreateResult{}, fmt.Errorf("%w: future expires_at is required", ErrInvalidRequest)
 	}
-	id := ids.New()
-	ttl := cmd.ExpiresAt.Sub(now).Round(time.Second).String()
-	issued, err := s.secrets.Issue(ctx, IssueSecretCommand{
-		Name: cmd.Name, ActorID: cmd.ActorID, RequestID: cmd.IdempotencyKey, TTL: ttl, Scopes: scopes,
-		Metadata: map[string]any{"api_token_id": id, "subject_user_id": cmd.SubjectUserID, "organization_id": cmd.OrganizationID},
+	if s.issuer == nil {
+		return CreateResult{}, ErrInactive
+	}
+	return s.issuer.Issue(ctx, domain.Token{
+		ID: ids.New(), SubjectUserID: cmd.SubjectUserID, ActorType: cmd.ActorType, ActorID: cmd.ActorID,
+		OrganizationID: cmd.OrganizationID, Name: cmd.Name, Scopes: scopes,
+		ExpiresAt: &cmd.ExpiresAt, CreatedBy: cmd.CreatorUserID, CreatedAt: now, ClientRequestKey: cmd.IdempotencyKey,
 	})
-	if err != nil {
-		return CreateResult{}, err
-	}
-	expiresAt := issued.ExpiresAt
-	if expiresAt.IsZero() {
-		expiresAt = cmd.ExpiresAt
-	}
-	token, err := s.repo.Create(ctx, domain.Token{
-		ID: id, TalosKeyID: issued.KeyID, SubjectUserID: cmd.SubjectUserID, ActorType: cmd.ActorType, ActorID: cmd.ActorID,
-		OrganizationID: cmd.OrganizationID, Name: cmd.Name, Scopes: scopes, Status: domain.StatusActive,
-		ExpiresAt: &expiresAt, CreatedBy: cmd.CreatorUserID, CreatedAt: now,
-	})
-	if err != nil {
-		if revokeErr := s.secrets.Revoke(ctx, issued.KeyID); revokeErr != nil {
-			return CreateResult{}, errors.Join(err, fmt.Errorf("compensate talos key: %w", revokeErr))
-		}
-		return CreateResult{}, err
-	}
-	return CreateResult{Token: token, Secret: issued.Secret}, nil
 }
 
 func (s *Service) Verify(ctx context.Context, secret string) (Principal, error) {
@@ -215,6 +210,12 @@ func (s *Service) Revoke(ctx context.Context, subjectUserID, id string) error {
 	}
 	if token.Status == domain.StatusRevoked {
 		return nil
+	}
+	if token.Status == domain.StatusIssuanceCleanup {
+		if s.issuer == nil {
+			return ErrInactive
+		}
+		return s.issuer.Recover(ctx, token.ID, true)
 	}
 	if err := s.secrets.Revoke(ctx, token.TalosKeyID); err != nil {
 		// Revoke may have succeeded while its response was lost. Only an

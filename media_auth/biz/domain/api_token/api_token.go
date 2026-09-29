@@ -9,10 +9,12 @@ import (
 type ActorType string
 
 const (
-	ActorUser           ActorType = "user"
-	ActorAgent          ActorType = "agent"
-	ActorPersonalWorker ActorType = "personal_worker"
-	ActorService        ActorType = "service"
+	StatusIssuing         Status    = "issuing"
+	StatusIssuanceCleanup Status    = "issuance_cleanup"
+	ActorUser             ActorType = "user"
+	ActorAgent            ActorType = "agent"
+	ActorPersonalWorker   ActorType = "personal_worker"
+	ActorService          ActorType = "service"
 )
 
 func (t ActorType) Valid() bool {
@@ -39,6 +41,8 @@ type Token struct {
 	CreatedBy                              string
 	CreatedAt                              time.Time
 	RotatedAt, RevokedAt                   *time.Time
+	IssuanceDeadline                       *time.Time
+	ClientRequestKey                       string
 }
 
 func (t Token) ActiveAt(now time.Time) bool {

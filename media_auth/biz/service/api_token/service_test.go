@@ -91,6 +91,28 @@ type fakeRotator struct {
 	err    error
 }
 
+type fakeIssuer struct {
+	token       domain.Token
+	err         error
+	recoveredID string
+}
+
+func (f *fakeIssuer) Issue(_ context.Context, token domain.Token) (CreateResult, error) {
+	f.token = token
+	if f.err != nil {
+		return CreateResult{}, f.err
+	}
+	token.Status, token.TalosKeyID = domain.StatusActive, "talos-1"
+	return CreateResult{Token: token, Secret: "once"}, nil
+}
+func (f *fakeIssuer) Recover(_ context.Context, id string, force bool) error {
+	if !force {
+		return errors.New("revocation must claim cleanup immediately")
+	}
+	f.recoveredID = id
+	return f.err
+}
+
 func (r *fakeRotator) Rotate(_ context.Context, token domain.Token) (CreateResult, error) {
 	r.token = token
 	return r.result, r.err
@@ -104,6 +126,8 @@ func TestCreateUserAPITokenAndVerify(t *testing.T) {
 	service := NewService(repo, secrets)
 	service.SetSubjectValidator(func(context.Context, string) bool { return true })
 	service.now = func() time.Time { return now }
+	issuer := &fakeIssuer{}
+	service.SetIssuer(issuer)
 
 	result, err := service.Create(context.Background(), CreateCommand{
 		CreatorUserID: "u1", SubjectUserID: "u1", ActorType: domain.ActorUser, ActorID: "User:u1",
@@ -112,6 +136,10 @@ func TestCreateUserAPITokenAndVerify(t *testing.T) {
 	if err != nil || result.Secret != "once" || result.Token.TalosKeyID != "talos-1" {
 		t.Fatalf("Create() = %#v, %v", result, err)
 	}
+	if issuer.token.ClientRequestKey != "req-1" || issuer.token.Status != "" || issuer.token.TalosKeyID != "" {
+		t.Fatal("validated creation was not delegated as an unsigned draft")
+	}
+	repo.byKey = map[string]domain.Token{"talos-1": result.Token}
 	secrets.verified = VerifiedSecret{KeyID: "talos-1", ActorID: "User:u1", Scopes: []string{"api.access"}, ExpiresAt: expires}
 	principal, err := service.Verify(context.Background(), "once")
 	if err != nil || principal.SubjectUserID != "u1" || principal.ActorID != "User:u1" || principal.CredentialID == "" {
@@ -119,18 +147,31 @@ func TestCreateUserAPITokenAndVerify(t *testing.T) {
 	}
 }
 
-func TestCreateCompensatesTalosWhenMetadataPersistenceFails(t *testing.T) {
+func TestCreateDelegatesFailureWithoutIssuingOutsideWorkflow(t *testing.T) {
 	expires := time.Now().Add(time.Hour)
 	repo := &fakeRepo{createErr: errors.New("database unavailable")}
 	secrets := &fakeSecrets{issued: IssuedSecret{KeyID: "orphan", ActorID: "User:u1", Secret: "never-return", Scopes: []string{"api.access"}, ExpiresAt: expires}}
 	service := NewService(repo, secrets)
 	service.SetSubjectValidator(func(context.Context, string) bool { return true })
+	issuer := &fakeIssuer{err: domain.ErrConflict}
+	service.SetIssuer(issuer)
 	_, err := service.Create(context.Background(), CreateCommand{
 		CreatorUserID: "u1", SubjectUserID: "u1", ActorType: domain.ActorUser, ActorID: "User:u1",
 		Name: "test", Scopes: []string{"api.access"}, ExpiresAt: expires,
 	})
-	if err == nil || secrets.revokedKey != "orphan" {
+	if !errors.Is(err, domain.ErrConflict) || secrets.revokedKey != "" || issuer.token.ID == "" {
 		t.Fatalf("Create() error=%v revoked=%q", err, secrets.revokedKey)
+	}
+}
+
+func TestRevokeUnfinishedIssuanceUsesDurableCleanupWorkflow(t *testing.T) {
+	repo := &fakeRepo{revoking: domain.Token{ID: "pending", Status: domain.StatusIssuanceCleanup}}
+	secrets := &fakeSecrets{}
+	svc := NewService(repo, secrets)
+	issuer := &fakeIssuer{err: errors.New("upstream unavailable")}
+	svc.SetIssuer(issuer)
+	if err := svc.Revoke(t.Context(), "owner", "pending"); err == nil || issuer.recoveredID != "pending" || repo.revoked || secrets.revokedKey != "" {
+		t.Fatal("issuance cleanup bypassed workflow or lost failure")
 	}
 }
 

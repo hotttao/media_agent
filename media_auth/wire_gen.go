@@ -161,6 +161,9 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 		}
 		apiTokenRepo := dalapitoken.NewRepo(db)
 		apiTokenSvc := apitokenservice.NewService(apiTokenRepo, apitokenservice.TalosAdapter{Client: talosClient})
+		issuance := workflow.NewAPITokenIssuance(apiTokenRepo, apitokenservice.TalosAdapter{Client: talosClient}, txRunner)
+		apiTokenSvc.SetIssuer(issuance)
+		go issuance.Run(context.Background())
 		rotation := workflow.NewAPITokenRotation(apiTokenRepo, apitokenservice.TalosAdapter{Client: talosClient}, txRunner)
 		apiTokenSvc.SetRotator(rotation)
 		go rotation.Run(context.Background())

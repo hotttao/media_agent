@@ -41,10 +41,12 @@ func TestAPITokenGateway(t *testing.T) {
 		request("GET", "/api/v1/materials?organization_id=not-a-member", token, nil, 404)
 	}
 	create := func(scopes []string) (string, string) {
-		body := request("POST", "/api/api-tokens", token, map[string]any{
-			"name": fmt.Sprintf("http-e2e-%d", time.Now().UnixNano()), "scopes": scopes,
+		name := fmt.Sprintf("http-e2e-%d", time.Now().UnixNano())
+		command := map[string]any{
+			"name": name, "scopes": scopes, "idempotency_key": name,
 			"organization_id": org, "expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
-		}, 201)
+		}
+		body := request("POST", "/api/api-tokens", token, command, 201)
 		var result struct {
 			Secret string `json:"secret"`
 			Token  struct {
@@ -55,6 +57,10 @@ func TestAPITokenGateway(t *testing.T) {
 			t.Fatal("create did not return one-time credential")
 		}
 		t.Cleanup(func() { request("POST", "/api/api-tokens/"+result.Token.ID+"/revoke", token, nil, 200) })
+		duplicate := request("POST", "/api/api-tokens", token, command, http.StatusConflict)
+		if bytes.Contains(duplicate, []byte(result.Secret)) {
+			t.Fatal("duplicate creation replayed the one-time credential")
+		}
 		return result.Token.ID, result.Secret
 	}
 	id, secret := create([]string{"api.access"})

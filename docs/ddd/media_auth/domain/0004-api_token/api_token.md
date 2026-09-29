@@ -82,6 +82,11 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 
 issuing/issuance_cleanup 保存聚合内的持久创建意图，并使用按 ID 的部分索引供恢复扫描；不存在 Key 时使用 NULL 而不是空字符串。`(created_by, client_request_key)` 对非空键和非 revoked/expired 状态保持唯一，重复命令不能重放 Secret。active 必须有非空 Key；清理状态不能重新激活。
 
+- issuing 必须具有 issuance_deadline 且 Key 为 NULL；issuance_cleanup 必须具有期限。其余状态必须具有非空 Key。
+- 创建完成同时 CAS issuing、NULL Key、期限和未来有效期；清理领取与激活互斥。清理完成只允许同一 Key 幂等重放，不能覆盖另一个终态 Key。
+- 普通 MarkRevoked 只允许 revoking/revoked；未完成创建必须走 FinishIssuanceCleanup，不能用普通撤销丢弃意图。
+- 客户端键为空时保存 NULL，非空最大200字符；数据库唯一冲突统一映射为领域 conflict，不暴露驱动细节。
+
 ### ID 生成规则
 
 本地管理 ID 使用应用层 ID 生成器产生的 32 位随机十六进制串；Secret 格式和 Talos Key ID 由 Talos 配置决定。

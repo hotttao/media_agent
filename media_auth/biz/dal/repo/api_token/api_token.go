@@ -24,6 +24,13 @@ func (r *Repo) Create(ctx context.Context, token domain.Token) (domain.Token, er
 		row.ID = ids.New()
 	}
 	if err := dal.FromContext(ctx, r.db).WithContext(ctx).Create(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return domain.Token{}, domain.ErrConflict
+		}
+		var sqlErr interface{ SQLState() string }
+		if errors.As(err, &sqlErr) && sqlErr.SQLState() == "23505" {
+			return domain.Token{}, domain.ErrConflict
+		}
 		return domain.Token{}, err
 	}
 	return toDomain(row), nil
@@ -58,6 +65,17 @@ func (r *Repo) ListBySubject(ctx context.Context, userID string) ([]domain.Token
 }
 
 func (r *Repo) MarkRevoking(ctx context.Context, id, subjectUserID string) (domain.Token, error) {
+	// An unfinished issuance has no credential mapping yet. Preserve its
+	// distinct cleanup intent; ordinary revocation must never receive an empty key.
+	pending := dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.APIToken{}).
+		Where("id = ? AND subject_user_id = ? AND status IN ?", id, subjectUserID, []domain.Status{domain.StatusIssuing, domain.StatusIssuanceCleanup}).
+		Update("status", domain.StatusIssuanceCleanup)
+	if pending.Error != nil {
+		return domain.Token{}, pending.Error
+	}
+	if pending.RowsAffected == 1 {
+		return r.Get(ctx, id)
+	}
 	db := dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.APIToken{}).
 		Where("id = ? AND subject_user_id = ? AND status IN ?", id, subjectUserID, []domain.Status{domain.StatusActive, domain.StatusRotating, domain.StatusRevoking, domain.StatusExpired}).
 		Update("status", domain.StatusRevoking)
@@ -92,7 +110,7 @@ func (r *Repo) ListRevoking(ctx context.Context, afterID string, limit int) ([]d
 }
 
 func (r *Repo) MarkRevoked(ctx context.Context, id string, at time.Time) error {
-	db := dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.APIToken{}).Where("id = ?", id).
+	db := dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.APIToken{}).Where("id = ? AND status IN ?", id, []domain.Status{domain.StatusRevoking, domain.StatusRevoked}).
 		Updates(map[string]any{"status": domain.StatusRevoked, "revoked_at": at})
 	if db.Error != nil {
 		return db.Error
@@ -127,10 +145,17 @@ func mapNotFound(err error) error {
 
 func toRow(token domain.Token) model.APIToken {
 	row := model.APIToken{
-		ID: token.ID, TalosKeyID: token.TalosKeyID, ActorType: string(token.ActorType), ActorID: token.ActorID,
+		ID: token.ID, ActorType: string(token.ActorType), ActorID: token.ActorID,
 		Name: token.Name, Scopes: pq.StringArray(append([]string(nil), token.Scopes...)), Status: string(token.Status),
 		ExpiresAt: token.ExpiresAt, CreatedBy: token.CreatedBy, CreatedAt: token.CreatedAt,
 		RotatedAt: token.RotatedAt, RevokedAt: token.RevokedAt,
+		IssuanceDeadline: token.IssuanceDeadline,
+	}
+	if token.TalosKeyID != "" {
+		row.TalosKeyID = &token.TalosKeyID
+	}
+	if token.ClientRequestKey != "" {
+		row.ClientRequestKey = &token.ClientRequestKey
 	}
 	if token.SubjectUserID != "" {
 		row.SubjectUserID = &token.SubjectUserID
@@ -143,9 +168,16 @@ func toRow(token domain.Token) model.APIToken {
 
 func toDomain(row model.APIToken) domain.Token {
 	token := domain.Token{
-		ID: row.ID, TalosKeyID: row.TalosKeyID, ActorType: domain.ActorType(row.ActorType), ActorID: row.ActorID,
+		ID: row.ID, ActorType: domain.ActorType(row.ActorType), ActorID: row.ActorID,
 		Name: row.Name, Scopes: append([]string(nil), row.Scopes...), Status: domain.Status(row.Status), ExpiresAt: row.ExpiresAt,
 		CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt, RotatedAt: row.RotatedAt, RevokedAt: row.RevokedAt,
+		IssuanceDeadline: row.IssuanceDeadline,
+	}
+	if row.TalosKeyID != nil {
+		token.TalosKeyID = *row.TalosKeyID
+	}
+	if row.ClientRequestKey != nil {
+		token.ClientRequestKey = *row.ClientRequestKey
 	}
 	if row.SubjectUserID != nil {
 		token.SubjectUserID = *row.SubjectUserID

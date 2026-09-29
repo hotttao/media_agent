@@ -144,6 +144,8 @@ MEDIA_E2E_TALOS_URL="http://${issuance_talos_ip}:4420" \
 
 未设置地址时该测试明确 skip。它只证明 Adapter 与锁定 Talos 的契约，不替代创建 Workflow 的数据库持久意图/CAS/重启恢复测试，也不替代 HTTP 与 CLI 生命周期门禁。
 
+`api_token_issuance_repo_test.go` 使用隔离 PostgreSQL 验证 nullable Key、创建者范围内并发去重、激活/清理 CAS、事务回滚、过期扫描、未完成创建的撤销和 migration 回滚保护。`TestAPITokenIssuanceRealTalosLostResponseSurvivesRestart` 使用真实 Talos 提交后丢弃响应并阻断即时清理，重建 Workflow 后仅用数据库意图清理。统一运行 `-run '^TestAPIToken'` 同时覆盖创建、撤销和轮换；普通单元测试不连接这些服务。
+
 - **`media-cli` 不用管服务启停**——那是 docker-compose 的事。media-cli 只发 HTTP 请求。
 - **两个 E2E 层级都要验收**——功能存在用户/管理 HTTP 入口时，既要运行 `media-cli/e2e` 的 Go HTTP E2E，也要实际执行对应 media-cli 命令链路；纯内部事件入口可以由面向用户的 CLI 流程间接覆盖，不要求暴露危险的内部命令。
 - **基础环境常驻**（除非确定不再测试才停），避免每次 e2e 重复 build/起。

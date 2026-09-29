@@ -105,6 +105,10 @@ Talos Adapter 增加带 metadata 的 Rotate 和按 Actor 的分页 List，正确
 
 `api_token_issuance` Workflow 的实现契约见 [签发与恢复时序](../ddd/media_auth/workflow/0010-api-token-issuance/api_token_issuance.md)。`api_tokens` 增加 issuing/issuance_cleanup、nullable talos_key_id、issuance_deadline、nullable client_request_key；创建者范围内的非终态客户端键唯一。迁移回滚遇到未完成意图必须拒绝，不丢弃清理事实。
 
+`0013_api_token_issuance` migration 的 shape 约束要求 issuing 的 Key 为 NULL、创建/清理状态有 deadline，其他状态有非空 Key。客户端键空值存 NULL，最大200字符。Repository 把驱动 SQLSTATE 23505 及 GORM `ErrDuplicatedKey` 映射为 domain conflict。`CommitIssuance` CAS issuing/NULL Key/deadline，并拒绝空 Key 或非未来有效期；`ClaimIssuanceCleanup` 只接受 cleanup、已超时 issuing 或同步强制清理；`FinishIssuanceCleanup` 只提交 cleanup→revoked，同终态 Key 重复完成幂等。普通 `MarkRevoked` 不能终结创建状态。
+
+代码映射：`biz/domain/api_token/issuance.go` 定义仓库接口，`biz/dal/repo/api_token/issuance.go` 实现本地事实，`biz/workflow/api_token_issuance.go` 协调副作用并持有 TxRunner；`Service.SetIssuer` 装配已完成参数/授权校验的创建入口与撤销恢复入口。`wire_gen.go` 同时装配同步入口和后台循环，Talos 未配置仍无可用 Token 服务。
+
 Service 保留授权/参数校验，委托 Issuer 接口；Workflow 在 Talos 调用前持久化 issuing，使用 Token ID 作为 request_id 和 metadata 的 api_token_id/issuance_id。期限内 CAS 提交 active 后才返回 Secret；失败取得清理状态并进行独立有界补偿。后台启动即运行、每10秒扫描100条、每条15秒，失败不阻塞后页。撤销尚未完成的创建进入相同清理状态，不调用空 Key 的普通撤销。
 
 Talos Client `RecoverIssue` 与正常 `Issue` 分离：必须提供非空 request_id、Actor、api_token_id、issuance_id；响应只有 KeyMetadata，不提供 Secret 字段，即使上游重新签发返回 Secret 也必须丢弃。正常 Issue 仍拒绝缺失 Secret。RecoverIssue 精确校验返回的 Actor 和两个 metadata 标识，异常不能撤销其他凭据；错误不得暴露上游正文、Secret 或异常字段。

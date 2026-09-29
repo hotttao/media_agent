@@ -6,6 +6,11 @@
 - 使用服务生成的 Token ID 作为 Talos request_id，客户端幂等键只在创建者范围内去重。恢复接受 Talos 无 Secret 的幂等响应，正常签发仍拒绝缺失 Secret。
 - 创建副作用和恢复时序归 api_token_issuance Workflow；本轮先落恢复 Adapter 契约，持久模型和运行时接线仍由 plan 跟踪，不将目标设计冒充已实现。
 
+### 持久化与编排实现
+
+- 聚合增加 deadline、创建者范围内客户端键和 nullable Key；数据库 shape/唯一约束与 CAS 阻止重复接受、过期激活和终态覆盖。
+- Service 创建委托 Issuance Workflow，后台从持久状态扫描恢复；撤销未完成创建复用该流程。普通撤销不再允许直接终结 issuing/cleanup 意图。
+
 ## 2026-09-28 · 轮换操作与失败清理
 
 - 增加 rotating 状态和依附的轮换操作实体，操作 ID 写入 Talos replacement metadata 用于定位，不误称为上游幂等键。
