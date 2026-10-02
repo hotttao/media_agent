@@ -11,12 +11,17 @@ services:
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_workflow?sslmode=disable
       MEDIA_AUTH_URL: http://media_auth:8001
       MEDIA_MATERIALS_URL: http://host.docker.internal:8003
+      MEDIA_STORAGE_PUBLIC_ENDPOINT: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://192.168.2.41:8333}
+      MEDIA_CONTROL_URL: http://host.docker.internal:8007
+      CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
       CONDUCTOR_URL: http://conductor:8080
       INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
       INTERNAL_JWT_ISSUER: http://oathkeeper:4456/
       ORY_KRATOS_PUBLIC_URL: http://kratos:4433
       MEDIA_AUTH_INTERNAL_TOKEN: ${MEDIA_AUTH_INTERNAL_TOKEN:-dev-media-auth-internal-token}
       MEDIA_MATERIALS_INTERNAL_TOKEN: ${MEDIA_MATERIALS_INTERNAL_TOKEN:-dev-media-materials-internal-token}
+      # Disabled by default; only a one-shot migration operator supplies this.
+      MEDIA_WORKFLOW_MIGRATION_TOKEN: ${MEDIA_WORKFLOW_MIGRATION_TOKEN:-}
       LOG_DIR: /media_logs/media-workflow
     volumes:
     - ../media_logs/media-workflow:/media_logs/media-workflow
@@ -34,6 +39,11 @@ services:
     entrypoint: ["/app/media_workflow_internal_worker"]
     environment:
       CONDUCTOR_URL: http://conductor:8080
+      POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_workflow?sslmode=disable
+      MEDIA_MATERIALS_URL: http://media_materials:8003
+      MEDIA_MATERIALS_INTERNAL_TOKEN: ${MEDIA_MATERIALS_INTERNAL_TOKEN:-dev-media-materials-internal-token}
+    extra_hosts:
+    - host.docker.internal:host-gateway
     networks:
     - media-net
     restart: unless-stopped

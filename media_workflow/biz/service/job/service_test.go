@@ -41,6 +41,17 @@ func (m *mockJobRepo) Save(_ context.Context, j *domain.Job, srs []*domain.StepR
 	m.stepRuns[j.ID] = srs
 	return nil
 }
+func (m *mockJobRepo) SaveImported(ctx context.Context, j *domain.Job, srs []*domain.StepRun) error {
+	return m.Save(ctx, j, srs)
+}
+func (m *mockJobRepo) GetByLegacySource(_ context.Context, workspaceID, sourceSystem, sourceRecordID string) (*domain.Job, error) {
+	for _, j := range m.jobs {
+		if j.WorkspaceID == workspaceID && j.SourceSystem == sourceSystem && j.SourceRecordID == sourceRecordID {
+			return j, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
 func (m *mockJobRepo) Get(_ context.Context, id string) (*domain.Job, error) {
 	j, ok := m.jobs[id]
 	if !ok {

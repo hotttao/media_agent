@@ -9,7 +9,68 @@ import (
 
 	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
 	jobdomain "media_agent/media_workflow/biz/domain/job"
+	"media_agent/media_workflow/biz/shared/client"
 )
+
+type importedAssetStub struct {
+	asset  *client.ImportedGeneratedAsset
+	object client.ResolvedStorageObject
+}
+
+func (s importedAssetStub) GetImportedGeneratedAsset(context.Context, string) (*client.ImportedGeneratedAsset, error) {
+	return s.asset, nil
+}
+
+func (s importedAssetStub) ResolveInternalObject(context.Context, string, string) (client.ResolvedStorageObject, error) {
+	return s.object, nil
+}
+
+func TestResolveImportedInputRefsRefreshesURLAndEnforcesOrganization(t *testing.T) {
+	job := &jobdomain.Job{Origin: "legacy_import", OrganizationID: "org", Scope: "ai_clothing", SubmittedBy: "owner"}
+	asset := &client.ImportedGeneratedAsset{ID: "gen_1", OrganizationID: "org", Scope: "ai_clothing", OwnerUserID: "owner",
+		SourceSystem: "media_ai", AccessURL: "https://storage.example/frame.png", AccessExpiresAt: time.Now().Add(time.Minute).Unix()}
+	flow := &Flow{ImportedAssets: importedAssetStub{asset: asset}}
+	input := map[string]any{"images": []any{"gen_1", "https://storage.example/native.png"}, "job_id": "job_1"}
+	result, err := flow.resolveImportedInputRefs(context.Background(), job, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	images := result["images"].([]any)
+	if images[0] != asset.AccessURL || images[1] != "https://storage.example/native.png" || input["images"].([]any)[0] != "gen_1" {
+		t.Fatalf("bad refreshed inputs: %+v", result)
+	}
+	asset.OrganizationID = "another"
+	if _, err := flow.resolveImportedInputRefs(context.Background(), job, input); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("foreign asset was not rejected: %v", err)
+	}
+}
+
+func TestResolveImportedInputRefsRefreshesStableStorageReference(t *testing.T) {
+	job := &jobdomain.Job{Origin: "legacy_import", OrganizationID: "org", Scope: "ai_clothing", SubmittedBy: "owner"}
+	flow := &Flow{ImportedAssets: importedAssetStub{object: client.ResolvedStorageObject{
+		URL: "https://storage.example/media/materials/org/movement.mp4?fresh=1", ExpiresAt: time.Now().Add(time.Minute).Unix(),
+	}}}
+	input := map[string]any{"inputs": map[string]any{"movement": map[string]any{"asset_ref": "object_path:materials/org/movement.mp4"}}}
+	result, err := flow.resolveImportedInputRefs(context.Background(), job, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	movement := result["inputs"].(map[string]any)["movement"].(map[string]any)
+	if movement["asset_ref"] != "https://storage.example/media/materials/org/movement.mp4?fresh=1" {
+		t.Fatalf("object reference was not refreshed: %+v", movement)
+	}
+	input["inputs"].(map[string]any)["movement"].(map[string]any)["asset_ref"] = "object_path:materials/other/movement.mp4"
+	if _, err := flow.resolveImportedInputRefs(context.Background(), job, input); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("foreign object was not rejected: %v", err)
+	}
+	input["inputs"].(map[string]any)["movement"].(map[string]any)["asset_ref"] = "object_path:materials/org/movement.mp4"
+	flow.ImportedAssets = importedAssetStub{object: client.ResolvedStorageObject{
+		URL: "https://storage.example/media/materials/org/movement.mp4?expired=1", ExpiresAt: time.Now().Add(10 * time.Second).Unix(),
+	}}
+	if _, err := flow.resolveImportedInputRefs(context.Background(), job, input); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("nearly expired object URL was not rejected: %v", err)
+	}
+}
 
 type capabilityRepoStub struct {
 	capabilitydomain.Repo

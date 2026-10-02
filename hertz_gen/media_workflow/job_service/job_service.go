@@ -17,6 +17,8 @@ var (
 )
 
 type Client interface {
+	ImportIncompleteExecution(context context.Context, req *job.ImportIncompleteExecutionReq, reqOpt ...config.RequestOption) (resp *job.ImportIncompleteExecutionResp, rawResponse *protocol.Response, err error)
+
 	SubmitJob(context context.Context, req *job.SubmitJobReq, reqOpt ...config.RequestOption) (resp *job.SubmitJobResp, rawResponse *protocol.Response, err error)
 
 	GetJob(context context.Context, req *job.GetJobReq, reqOpt ...config.RequestOption) (resp *job.GetJobResp, rawResponse *protocol.Response, err error)
@@ -26,6 +28,8 @@ type Client interface {
 	CancelJob(context context.Context, req *job.GetJobReq, reqOpt ...config.RequestOption) (resp *job.Job, rawResponse *protocol.Response, err error)
 
 	RetryJob(context context.Context, req *job.RetryJobReq, reqOpt ...config.RequestOption) (resp *job.Job, rawResponse *protocol.Response, err error)
+
+	ResumeJob(context context.Context, req *job.ResumeJobReq, reqOpt ...config.RequestOption) (resp *job.Job, rawResponse *protocol.Response, err error)
 
 	ConfirmStepRun(context context.Context, req *job.ConfirmStepRunReq, reqOpt ...config.RequestOption) (resp *job.StepRun, rawResponse *protocol.Response, err error)
 
@@ -55,6 +59,28 @@ func NewJobServiceClient(hostUrl string, ops ...Option) (Client, error) {
 	return &JobServiceClient{
 		client: cli,
 	}, nil
+}
+
+func (s *JobServiceClient) ImportIncompleteExecution(context context.Context, req *job.ImportIncompleteExecutionReq, reqOpt ...config.RequestOption) (resp *job.ImportIncompleteExecutionResp, rawResponse *protocol.Response, err error) {
+	httpResp := &job.ImportIncompleteExecutionResp{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/api/internal/v1/jobs/import-incomplete")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
 }
 
 func (s *JobServiceClient) SubmitJob(context context.Context, req *job.SubmitJobReq, reqOpt ...config.RequestOption) (resp *job.SubmitJobResp, rawResponse *protocol.Response, err error) {
@@ -173,6 +199,30 @@ func (s *JobServiceClient) RetryJob(context context.Context, req *job.RetryJobRe
 		setRequestOption(reqOpt...).
 		setResult(httpResp).
 		execute("POST", "/api/v1/jobs/:id/retry")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *JobServiceClient) ResumeJob(context context.Context, req *job.ResumeJobReq, reqOpt ...config.RequestOption) (resp *job.Job, rawResponse *protocol.Response, err error) {
+	httpResp := &job.Job{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"id": req.GetId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/api/v1/jobs/:id/resume")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -355,6 +405,10 @@ func ConfigDefaultClient(ops ...Option) (err error) {
 	return
 }
 
+func ImportIncompleteExecution(context context.Context, req *job.ImportIncompleteExecutionReq, reqOpt ...config.RequestOption) (resp *job.ImportIncompleteExecutionResp, rawResponse *protocol.Response, err error) {
+	return defaultClient.ImportIncompleteExecution(context, req, reqOpt...)
+}
+
 func SubmitJob(context context.Context, req *job.SubmitJobReq, reqOpt ...config.RequestOption) (resp *job.SubmitJobResp, rawResponse *protocol.Response, err error) {
 	return defaultClient.SubmitJob(context, req, reqOpt...)
 }
@@ -373,6 +427,10 @@ func CancelJob(context context.Context, req *job.GetJobReq, reqOpt ...config.Req
 
 func RetryJob(context context.Context, req *job.RetryJobReq, reqOpt ...config.RequestOption) (resp *job.Job, rawResponse *protocol.Response, err error) {
 	return defaultClient.RetryJob(context, req, reqOpt...)
+}
+
+func ResumeJob(context context.Context, req *job.ResumeJobReq, reqOpt ...config.RequestOption) (resp *job.Job, rawResponse *protocol.Response, err error) {
+	return defaultClient.ResumeJob(context, req, reqOpt...)
 }
 
 func ConfirmStepRun(context context.Context, req *job.ConfirmStepRunReq, reqOpt ...config.RequestOption) (resp *job.StepRun, rawResponse *protocol.Response, err error) {

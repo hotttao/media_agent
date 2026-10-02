@@ -22,6 +22,7 @@ type GeneratedAsset struct {
 	Name              string
 	AssetKind         string // resource_type=ASSET
 	URL               string
+	ObjectPath        string
 	Content           string // TEXT 产物
 	OwnerUserID       string // = job.submitted_by
 	Visibility        Visibility
@@ -30,6 +31,12 @@ type GeneratedAsset struct {
 	StepRunID         string
 	TemplateID        string
 	TemplateVersion   int
+	Origin            string
+	SourceSystem      string
+	SourceRecordID    string
+	SourceSHA256      string
+	SourceCreatedAt   *time.Time
+	ImportedAt        *time.Time
 	SourceVirtualIPID string
 	SourceProductID   string
 	CreatedAt         time.Time

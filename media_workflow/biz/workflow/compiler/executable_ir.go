@@ -1,8 +1,11 @@
 package compiler
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
+	"strings"
 
 	template "media_agent/media_workflow/biz/domain/template"
 	"media_agent/media_workflow/biz/workflow/executable"
@@ -11,12 +14,51 @@ import (
 const (
 	RenderTemplateTaskName = "media_render_template_v1"
 	FinalizeStepTaskName   = "media_finalize_step_v1"
+	RestoreStepTaskName    = "media_restore_historical_step_v1"
 )
 
 // CompileExecutableIR lowers the engine-neutral IR into a deterministic
 // Conductor definition. Business references have already been validated by the
 // semantic compiler; this backend only translates them to Conductor paths.
 func CompileExecutableIR(ir executable.ExecutableWorkflowIR) (Definition, error) {
+	return compileExecutableIR(ir, nil)
+}
+
+// CompileResumeExecutableIR replaces only a dependency-closed set of frozen
+// successful historical steps with trusted restore tasks. Other steps retain
+// their original Render/Capability/Approval/Finalize plan.
+func CompileResumeExecutableIR(ir executable.ExecutableWorkflowIR, restored map[string]bool) (Definition, error) {
+	if len(restored) == 0 || restored[ir.OutputStepKey] {
+		return Definition{}, fmt.Errorf("resume requires a non-empty proper completed prefix")
+	}
+	byKey := make(map[string]executable.ExecutableStepIR, len(ir.Steps))
+	keys := make([]string, 0, len(restored))
+	for _, step := range ir.Steps {
+		byKey[step.Key] = step
+	}
+	for key := range restored {
+		step, exists := byKey[key]
+		if !exists {
+			return Definition{}, fmt.Errorf("unknown restored step %q", key)
+		}
+		for _, dependency := range step.DependsOn {
+			if !restored[dependency] {
+				return Definition{}, fmt.Errorf("restored step %q has uncompleted predecessor %q", key, dependency)
+			}
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	definition, err := compileExecutableIR(ir, restored)
+	if err != nil {
+		return Definition{}, err
+	}
+	hash := sha256.Sum256([]byte(strings.Join(keys, "\x00")))
+	definition.Name = "media_workflow_resume_" + sanitize(ir.WorkflowID) + "_" + hex.EncodeToString(hash[:6])
+	return definition, nil
+}
+
+func compileExecutableIR(ir executable.ExecutableWorkflowIR, restored map[string]bool) (Definition, error) {
 	if ir.SchemaVersion != executable.SchemaVersion {
 		return Definition{}, fmt.Errorf("unsupported executable workflow IR schema version %d", ir.SchemaVersion)
 	}
@@ -47,7 +89,7 @@ func CompileExecutableIR(ir executable.ExecutableWorkflowIR) (Definition, error)
 	}
 	for waveIndex, steps := range waves {
 		if len(steps) == 1 {
-			branch, err := lowerExecutableStep(steps[0])
+			branch, err := lowerStepOrRestore(steps[0], restored)
 			if err != nil {
 				return Definition{}, err
 			}
@@ -57,7 +99,7 @@ func CompileExecutableIR(ir executable.ExecutableWorkflowIR) (Definition, error)
 		branches := make([][]Task, 0, len(steps))
 		joinOn := make([]string, 0, len(steps))
 		for _, step := range steps {
-			branch, err := lowerExecutableStep(step)
+			branch, err := lowerStepOrRestore(step, restored)
 			if err != nil {
 				return Definition{}, err
 			}
@@ -71,6 +113,16 @@ func CompileExecutableIR(ir executable.ExecutableWorkflowIR) (Definition, error)
 	}
 	definition.OutputParameters["output_resource_id"] = fmt.Sprintf("${%s.output.output_resource_id}", finalizeRef(ir.OutputStepKey))
 	return definition, nil
+}
+
+func lowerStepOrRestore(step executable.ExecutableStepIR, restored map[string]bool) ([]Task, error) {
+	if restored[step.Key] {
+		return []Task{{
+			Name: RestoreStepTaskName, TaskReferenceName: finalizeRef(step.Key), Type: "SIMPLE",
+			InputParameters: map[string]any{"job_id": "${workflow.input.job_id}", "step_key": step.Key},
+		}}, nil
+	}
+	return lowerExecutableStep(step)
 }
 
 func lowerExecutableStep(step executable.ExecutableStepIR) ([]Task, error) {

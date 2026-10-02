@@ -44,6 +44,10 @@
 - [x] 迁移七阶段 `model-image -> style-image -> first-frame -> video -> clip -> ai-fill -> publish` Workflow、Templates 和 Capability 引用。
 - [x] 只通过 API 导入并执行一个完整样本；验证 Job、Conductor tasks 与最终视频结果。
 - [ ] 等用户确认后再迁移全部旧数据。
+- [x] 只读清点旧 Workflow/WorkflowTemplate/VideoTask/Video，导出 0600 初始源清单；确认 153 条 VideoTask 的单任务来源均标为 manual_upload。
+- [x] 沿 ModelImage→StyleImage→FirstFrame→Video→VideoPush 关联重建旧视频谱系与异常清单，不能以 `VideoTask.source` 或 `workflows` 表直接判定业务流程。
+- [ ] 按 WorkflowTemplate 的动作集合和 VideoPush 的多视频引用归并旧流程实例，保留复用中间结果与未归属的独立产物。
+- [ ] 为历史执行谱系定义幂等的导入 API、对象迁移和旧 ID 对照；无下游 Video 的完整图片链须导入为待继续执行，具体跨服务步骤见 [media_ai 历史迁移计划](../media-ai-history-migration.md)；再逐条导入、核对总数与媒体可访问性。
 
 ## P8 · 人工审批闭环
 

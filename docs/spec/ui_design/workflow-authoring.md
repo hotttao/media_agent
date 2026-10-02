@@ -6,11 +6,13 @@
 
 ## 组件边界
 
-- `workflowToFlowDocument`：纯函数，把 `WorkflowStep[] + output_step_key` 转为 FlowGram `WorkflowJSON`。
+- `workflowToFlowDocument`：纯函数，把 `WorkflowStep[] + output_step_key` 转为 FlowGram `WorkflowJSON`；只绘制 `step_output` 执行依赖。`workflow_input` 和 `const` 留在节点绑定详情。
 - `WorkflowGraph`：负责 FlowGram Provider、只读画布、节点 Renderer 和视图适配。
 - `WorkflowForm`：负责业务草稿与节点 Inspector；不直接查询 Template domain。
 - Workflow Create/Edit Page：查询 Template 候选并注入 `WorkflowForm`，保持 L2 domain 之间无依赖。
 - Workflow Show Page：组合业务摘要、FlowGram 画布和 Step 摘要。
+- Workflow Create/Edit Page 以画布工作台为主视图，占满 App 可用区域；元数据默认折叠，仅创建时引导补全必填信息。Inspector 按“使用的 Template → 输入来源 → 审批/复用”组织，并从 Template Slots 生成待配置绑定。
+- 已发布 Workflow 详情提供直接运行入口，Job 创建页接受预选 Workflow ID。
 
 ## 数据兼容
 

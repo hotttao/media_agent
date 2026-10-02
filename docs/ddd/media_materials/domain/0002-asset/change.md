@@ -1,5 +1,16 @@
 # asset domain 变更记录
 
+## 2026-10-02 · 历史执行的对象引用解析
+
+- media_materials 提供受内部服务凭证保护的 Object Path 解析入口，限定 Organization 命名空间并返回短期 URL；业务素材访问授权仍由原有调用链处理。
+- 原生视频/图片 Generated Asset 登记时，必须验证 Worker 返回的短期 URL 对应本企业、同 Scope 的目标对象存储对象和正确媒体类型；持久事实只保留 Object Path，不保留签名 URL。
+
+## 2026-10-01 · 历史生成产物的独立来源
+
+- 旧图片/视频可先登记为 Imported Generated Asset，再由多个未完成 Execution 的 StepRun 引用；不为满足现有非空生成记录而伪造 Job、StepRun 或 Template。
+- `origin=native|legacy_import` 区分互斥来源：原生产物保留生成记录，导入产物使用 `(source_system, source_record_id)` + SHA-256 幂等并保存原时间/导入时间。
+- 旧媒体须先摄取到受控对象存储；源 URL 不作为最终资产地址。对象搬运和跨服务 Job 导入仍由 Workflow 协调，不在 Asset 聚合事务内访问旧库。
+
 ## 2026-09-21 · 固化对象上传入口
 
 - Material CRUD 仍只保存 Object Path，但不再允许浏览器直接调用 media_storage。

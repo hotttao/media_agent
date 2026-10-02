@@ -24,6 +24,7 @@ func main() {
 	profile := flag.String("profile", envOr("MEDIA_WORKER_PROFILE", ""), "execution profile; use media_ai_fixture only for integration testing")
 	capabilityList := flag.String("capabilities", envOr("MEDIA_WORKER_CAPABILITIES", ""), "comma-separated capability key@version allowlist")
 	fixtureAssetsURL := flag.String("fixture-assets-url", envOr("MEDIA_WORKER_FIXTURE_ASSETS_URL", "http://192.168.2.38"), "media_ai fixture asset service base URL (test profile only)")
+	fixtureVideoResultURL := flag.String("fixture-video-result-url", envOr("MEDIA_WORKER_FIXTURE_VIDEO_RESULT_URL", ""), "pre-uploaded target-storage video URL for the historical fixture")
 	flag.Parse()
 	if *gatewayURL == "" {
 		log.Fatal("MEDIA_GATEWAY_URL or -gateway-url is required")
@@ -36,6 +37,9 @@ func main() {
 	}
 	executor, err := fixture.NewExecutor(*fixtureAssetsURL)
 	if err != nil {
+		log.Fatal(err)
+	}
+	if err := executor.SetVideoResultURL(*fixtureVideoResultURL); err != nil {
 		log.Fatal(err)
 	}
 	capabilities := fixture.Capabilities()

@@ -3,7 +3,12 @@
 package library_object
 
 import (
+	"context"
+	"crypto/subtle"
+	"os"
+
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
 
 func rootMw() []app.HandlerFunc {
@@ -32,6 +37,29 @@ func _readlibraryobjectMw() []app.HandlerFunc {
 }
 
 func _resolvelibraryobjectMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _internalMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _resolveinternallibraryobjectMw() []app.HandlerFunc {
+	return []app.HandlerFunc{func(ctx context.Context, c *app.RequestContext) {
+		expected := os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN")
+		actual := c.Request.Header.Peek("X-Media-Materials-Internal-Token")
+		if expected == "" || subtle.ConstantTimeCompare(actual, []byte(expected)) != 1 {
+			c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal token"})
+			c.Abort()
+			return
+		}
+		c.Next(ctx)
+	}}
+}
+
+func _v10Mw() []app.HandlerFunc {
 	// your code...
 	return nil
 }

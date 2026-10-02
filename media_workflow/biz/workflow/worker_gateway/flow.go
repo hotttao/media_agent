@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 
 	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
 	jobdomain "media_agent/media_workflow/biz/domain/job"
+	"media_agent/media_workflow/biz/shared/client"
 )
 
 const defaultLeaseDuration = 90 * time.Second
@@ -49,13 +51,17 @@ type FailCommand struct {
 }
 
 type Flow struct {
-	Dispatches   jobdomain.DispatchRepo
-	Jobs         jobdomain.JobRepo
-	StepRuns     jobdomain.StepRunRepo
-	Capabilities capabilitydomain.Repo
-	Engine       jobdomain.CapabilityTaskEngine
-	Now          func() time.Time
-	Lease        time.Duration
+	Dispatches     jobdomain.DispatchRepo
+	Jobs           jobdomain.JobRepo
+	StepRuns       jobdomain.StepRunRepo
+	Capabilities   capabilitydomain.Repo
+	Engine         jobdomain.CapabilityTaskEngine
+	ImportedAssets interface {
+		GetImportedGeneratedAsset(context.Context, string) (*client.ImportedGeneratedAsset, error)
+		ResolveInternalObject(context.Context, string, string) (client.ResolvedStorageObject, error)
+	}
+	Now   func() time.Time
+	Lease time.Duration
 }
 
 func (f *Flow) now() time.Time {
@@ -135,6 +141,13 @@ func (f *Flow) Poll(ctx context.Context, cmd PollCommand) (*jobdomain.WorkerDisp
 	if err != nil {
 		return nil, fmt.Errorf("load task step run: %w", err)
 	}
+	if job.Origin == "legacy_import" {
+		resolved, err := f.resolveImportedInputRefs(ctx, job, task.Input)
+		if err != nil {
+			return nil, fmt.Errorf("resolve historical task inputs: %w", err)
+		}
+		task.Input = resolved
+	}
 	inputJSON, err := json.Marshal(task.Input)
 	if err != nil {
 		return nil, err
@@ -153,6 +166,81 @@ func (f *Flow) Poll(ctx context.Context, cmd PollCommand) (*jobdomain.WorkerDisp
 		WorkerInstanceID: cmd.WorkerInstanceID, Status: jobdomain.DispatchDelivered,
 		InputJSON: inputJSON, LeaseExpiresAt: now.Add(f.lease()), DeliveredAt: &deliveredAt,
 	})
+}
+
+func (f *Flow) resolveImportedInputRefs(ctx context.Context, job *jobdomain.Job, input map[string]any) (map[string]any, error) {
+	if f.ImportedAssets == nil {
+		return nil, errors.New("historical asset resolver is not configured")
+	}
+	cache := map[string]string{}
+	var resolve func(any) (any, error)
+	resolve = func(value any) (any, error) {
+		switch item := value.(type) {
+		case string:
+			if strings.HasPrefix(item, "object_path:") {
+				objectPath := strings.TrimPrefix(item, "object_path:")
+				if !strings.HasPrefix(objectPath, "materials/"+job.OrganizationID+"/") || path.Clean(objectPath) != objectPath || strings.Contains(objectPath, "\\") {
+					return nil, ErrForbidden
+				}
+				if cached := cache[item]; cached != "" {
+					return cached, nil
+				}
+				resolved, err := f.ImportedAssets.ResolveInternalObject(ctx, job.OrganizationID, objectPath)
+				if err != nil {
+					return nil, err
+				}
+				if resolved.URL == "" || resolved.ExpiresAt <= f.now().Add(30*time.Second).Unix() {
+					return nil, ErrForbidden
+				}
+				cache[item] = resolved.URL
+				return resolved.URL, nil
+			}
+			if !strings.HasPrefix(item, "gen_") {
+				return item, nil
+			}
+			if cached := cache[item]; cached != "" {
+				return cached, nil
+			}
+			asset, err := f.ImportedAssets.GetImportedGeneratedAsset(ctx, item)
+			if err != nil {
+				return nil, err
+			}
+			if asset.ID != item || asset.OrganizationID != job.OrganizationID || asset.OwnerUserID != job.SubmittedBy ||
+				asset.Scope != job.Scope || asset.SourceSystem != "media_ai" || asset.AccessURL == "" ||
+				asset.AccessExpiresAt <= f.now().Add(30*time.Second).Unix() {
+				return nil, ErrForbidden
+			}
+			cache[item] = asset.AccessURL
+			return asset.AccessURL, nil
+		case []any:
+			out := make([]any, len(item))
+			for i, child := range item {
+				result, err := resolve(child)
+				if err != nil {
+					return nil, err
+				}
+				out[i] = result
+			}
+			return out, nil
+		case map[string]any:
+			out := make(map[string]any, len(item))
+			for key, child := range item {
+				result, err := resolve(child)
+				if err != nil {
+					return nil, err
+				}
+				out[key] = result
+			}
+			return out, nil
+		default:
+			return value, nil
+		}
+	}
+	result, err := resolve(input)
+	if err != nil {
+		return nil, err
+	}
+	return result.(map[string]any), nil
 }
 
 func (f *Flow) Heartbeat(ctx context.Context, principal Principal, dispatchID, workerInstanceID string, attempt int) (*jobdomain.WorkerDispatch, error) {

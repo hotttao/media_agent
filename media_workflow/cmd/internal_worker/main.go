@@ -7,9 +7,15 @@ import (
 	"os/signal"
 	"syscall"
 
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+
+	"media_agent/media_workflow/biz/dal/repo/job"
+	"media_agent/media_workflow/biz/shared/client"
 	"media_agent/media_workflow/biz/workflow/conductor"
 	"media_agent/media_workflow/biz/workflow/finalize_task"
 	"media_agent/media_workflow/biz/workflow/render_task"
+	"media_agent/media_workflow/biz/workflow/restore_task"
 )
 
 func main() {
@@ -24,11 +30,23 @@ func main() {
 
 	renderHandler := render_task.Handler{}
 	finalizeHandler := finalize_task.Handler{}
+	db, err := gorm.Open(postgres.Open(os.Getenv("POSTGRES_DSN")), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("connect history restore database: %v", err)
+	}
+	materialsURL := os.Getenv("MEDIA_MATERIALS_URL")
+	if materialsURL == "" {
+		log.Fatal("MEDIA_MATERIALS_URL is required for historical restore")
+	}
+	restoreHandler := restore_task.Handler{
+		Jobs: job.NewJobRepo(db), Steps: job.NewStepRunRepo(db), Assets: client.NewMaterialsClient(materialsURL),
+	}
 	runner := conductor.Runner{
 		Client: conductor.NewClient(conductorURL), WorkerID: workerID,
 		Handlers: map[string]conductor.Handler{
 			render_task.TaskDefinitionName:   conductor.JSONHandler(renderHandler.Execute),
 			finalize_task.TaskDefinitionName: conductor.JSONHandler(finalizeHandler.Execute),
+			restore_task.TaskDefinitionName:  conductor.JSONHandlerContext(restoreHandler.Execute),
 		},
 	}
 	log.Printf("media-workflow internal worker starting: worker_id=%s", workerID)

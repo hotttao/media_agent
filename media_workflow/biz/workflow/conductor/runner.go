@@ -80,7 +80,11 @@ func (r *Runner) runTaskType(ctx context.Context, taskType string, handler Handl
 }
 
 func JSONHandler[Input any, Output any](execute func(Input) (Output, error)) Handler {
-	return func(_ context.Context, raw map[string]any) (map[string]any, error) {
+	return JSONHandlerContext(func(_ context.Context, input Input) (Output, error) { return execute(input) })
+}
+
+func JSONHandlerContext[Input any, Output any](execute func(context.Context, Input) (Output, error)) Handler {
+	return func(ctx context.Context, raw map[string]any) (map[string]any, error) {
 		encoded, err := json.Marshal(raw)
 		if err != nil {
 			return nil, err
@@ -89,7 +93,7 @@ func JSONHandler[Input any, Output any](execute func(Input) (Output, error)) Han
 		if err := json.Unmarshal(encoded, &input); err != nil {
 			return nil, err
 		}
-		output, err := execute(input)
+		output, err := execute(ctx, input)
 		if err != nil {
 			return nil, err
 		}

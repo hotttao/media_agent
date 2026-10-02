@@ -4,6 +4,8 @@ package generated_asset
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -11,6 +13,7 @@ import (
 	pb "media_agent/hertz_gen/model/media_materials/generated_asset"
 	domain "media_agent/media_materials/biz/domain/generated_asset"
 	gensvc "media_agent/media_materials/biz/service/generated_asset"
+	"media_agent/media_materials/biz/shared/auth"
 )
 
 var Svc *gensvc.Service
@@ -23,7 +26,7 @@ func GetGeneratedAsset(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	a, err := Svc.Get(ctx, req.GetId())
+	a, err := Svc.GetForCaller(ctx, req.GetId(), auth.CallerID(ctx), auth.TeamsFromContext(ctx), auth.OrganizationsFromContext(ctx))
 	if err != nil {
 		c.String(consts.StatusNotFound, err.Error())
 		return
@@ -48,6 +51,7 @@ func ListGeneratedAssets(ctx context.Context, c *app.RequestContext) {
 		pageSize = 50
 	}
 	items, total, err := Svc.List(ctx, gensvc.ListQuery{
+		OrganizationIDs: auth.OrganizationsFromContext(ctx), CallerID: auth.CallerID(ctx), CallerTeamIDs: auth.TeamsFromContext(ctx),
 		Scope: req.GetScope(), AssetKind: req.GetAssetKind(), Owner: req.GetOwner(),
 		JobID: req.GetJobId(), SourceVipID: req.GetSourceVirtualIpId(), SourceProdID: req.GetSourceProductId(),
 		Limit: pageSize, Offset: (page - 1) * pageSize,
@@ -76,9 +80,12 @@ func ListGeneratedAssetsBySource(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	rows := make([]*pb.GeneratedAsset, len(items))
-	for i, a := range items {
-		rows[i] = toView(a)
+	rows := make([]*pb.GeneratedAsset, 0, len(items))
+	for _, item := range items {
+		a, err := Svc.GetForCaller(ctx, item.ID, auth.CallerID(ctx), auth.TeamsFromContext(ctx), auth.OrganizationsFromContext(ctx))
+		if err == nil {
+			rows = append(rows, toView(a))
+		}
 	}
 	c.JSON(consts.StatusOK, &pb.ListGeneratedAssetsBySourceResp{Items: rows})
 }
@@ -91,9 +98,9 @@ func DeleteGeneratedAsset(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	a, err := Svc.Delete(ctx, req.GetId())
+	a, err := Svc.Delete(ctx, req.GetId(), auth.CallerID(ctx), auth.OrganizationsFromContext(ctx))
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		c.String(consts.StatusNotFound, "generated asset not found")
 		return
 	}
 	c.JSON(consts.StatusOK, toView(a))
@@ -130,6 +137,60 @@ func toView(a *domain.GeneratedAsset) *pb.GeneratedAsset {
 		JobId: a.JobID, StepRunId: a.StepRunID, TemplateId: a.TemplateID,
 		TemplateVersion:   int32(a.TemplateVersion),
 		SourceVirtualIpId: a.SourceVirtualIPID, SourceProductId: a.SourceProductID,
-		CreatedAt: a.CreatedAt.UnixNano(),
+		CreatedAt:  a.CreatedAt.UnixNano(),
+		ObjectPath: a.ObjectPath, Origin: a.Origin, SourceSystem: a.SourceSystem, SourceRecordId: a.SourceRecordID,
 	}
+}
+
+// ImportGeneratedAsset .
+// @router /api/internal/v1/generated-assets:import [POST]
+func ImportGeneratedAsset(ctx context.Context, c *app.RequestContext) {
+	var req pb.ImportGeneratedAssetReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	if req.GetSourceCreatedAt() <= 0 {
+		c.String(consts.StatusBadRequest, "source_created_at must be a positive Unix nanosecond timestamp")
+		return
+	}
+	a, err := Svc.Import(ctx, gensvc.ImportCommand{
+		OrganizationID: req.GetOrganizationId(), Scope: req.GetScope(), AssetKind: req.GetAssetKind(),
+		Name: req.GetName(), ObjectPath: req.GetObjectPath(), OwnerUserID: req.GetOwnerUserId(),
+		SourceSystem: req.GetSourceSystem(), SourceRecordID: req.GetSourceRecordId(), SourceSHA256: req.GetSourceSha256(),
+		SourceCreatedAt:   time.Unix(0, req.GetSourceCreatedAt()),
+		SourceVirtualIPID: req.GetSourceVirtualIpId(), SourceProductID: req.GetSourceProductId(),
+	})
+	if err != nil {
+		if errors.Is(err, gensvc.ErrImportConflict) {
+			c.String(consts.StatusConflict, err.Error())
+			return
+		}
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	c.JSON(consts.StatusOK, &pb.ImportGeneratedAssetResp{Id: a.ID, ObjectPath: a.ObjectPath})
+}
+
+// GetImportedGeneratedAsset .
+// @router /api/internal/v1/generated-assets/import/:id [GET]
+func GetImportedGeneratedAsset(ctx context.Context, c *app.RequestContext) {
+	var req pb.GetGeneratedAssetReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	a, resolved, err := Svc.ResolveImported(ctx, req.GetId())
+	if err != nil {
+		c.String(consts.StatusNotFound, "imported generated asset not found")
+		return
+	}
+	c.JSON(consts.StatusOK, &pb.ImportedGeneratedAsset{
+		Id: a.ID, OrganizationId: a.OrganizationID, Scope: a.Scope,
+		OwnerUserId: a.OwnerUserID, AssetKind: a.AssetKind, ObjectPath: a.ObjectPath,
+		SourceSystem: a.SourceSystem, SourceRecordId: a.SourceRecordID,
+		SourceSha256: a.SourceSHA256, SourceCreatedAt: a.SourceCreatedAt.UnixNano(),
+		SourceProductId: a.SourceProductID, SourceVirtualIpId: a.SourceVirtualIPID,
+		AccessUrl: resolved.URL, AccessExpiresAt: resolved.ExpiresAt,
+	})
 }

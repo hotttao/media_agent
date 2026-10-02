@@ -83,7 +83,8 @@ func main() {
 	vipGrantRepo := viprepo.NewGrantRepo(db)
 	vipSvc := vipsvc.NewService(vipRepo, vipGrantRepo)
 	viphandler.Svc = vipSvc
-	generatedassethandler.Svc = generatedassetsvc.NewService(generatedassetrepo.NewRepo(db), productRepo, vipRepo)
+	generatedAssetSvc := generatedassetsvc.NewService(generatedassetrepo.NewRepo(db), productRepo, vipRepo)
+	generatedassethandler.Svc = generatedAssetSvc
 
 	materialRepo := materialrepo.NewRepo(db)
 	materialSvc := materialsvc.NewService(materialRepo, nil, assetKindSvc, nil)
@@ -103,6 +104,12 @@ func main() {
 	}
 	libraryobjecthandler.Flow = uploadworkflow.New(storageClient)
 	libraryobjecthandler.Resolver = storageClient
+	generatedAssetSvc.ConfigureHistoryImport(storageClient, assetKindSvc)
+	outputOrigin := storageCfg.GetPublicEndpoint()
+	if outputOrigin == "" {
+		outputOrigin = storageCfg.GetEndpoint()
+	}
+	generatedAssetSvc.ConfigureNativeOutputStorage(outputOrigin, storageCfg.GetBucket())
 
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
 	mediaAuthURL := "http://127.0.0.1:8001"

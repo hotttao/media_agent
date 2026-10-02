@@ -35,6 +35,7 @@ var (
 	purposes = map[string]bool{
 		"material": true, "virtual_ip_avatar": true, "virtual_ip_full_body": true,
 		"virtual_ip_three_view": true, "virtual_ip_nine_view": true, "product_image": true,
+		"generated_asset_import": true,
 	}
 )
 
@@ -79,7 +80,7 @@ func (w *Workflow) Upload(ctx context.Context, command Command) (objectstorage.O
 	}
 	contentType := detectContentType(payload)
 	extension, ok := contentTypes[contentType]
-	if !ok || (strings.HasPrefix(contentType, "video/") && command.Purpose != "material") {
+	if !ok || (strings.HasPrefix(contentType, "video/") && command.Purpose != "material" && command.Purpose != "generated_asset_import") {
 		return objectstorage.ObjectInfo{}, ErrInvalid
 	}
 	digest := sha256.Sum256([]byte(strings.Join([]string{command.CallerID, command.IdempotencyKey}, "\x00")))

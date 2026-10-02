@@ -1,5 +1,16 @@
 # workflow_execution 变更记录
 
+## 2026-10-02 · 恢复输入使用稳定对象引用
+
+- 用户提供的短期签名 URL 仅用于 Resume 时校验企业命名空间和对象可读性；Job/Outbox/Conductor 输入冻结 Object Path。
+- Worker 领取历史 Capability Task 时由 media_workflow 经 media_materials 内部只读解析接口重新签发 URL；解析失败不交付，不复用过期 URL。
+
+## 2026-10-01 · 导入未完成执行与显式继续
+
+- media_ai 图片链只要上游引用完整，即使没有视频，也需按最深完成阶段恢复为未完成 Workflow Execution；用户后续可测试继续执行。
+- 明确对象摄取、导入 Job/StepRun、用户 Resume、Outbox 启动新 Conductor 实例、已完成节点受控 restore 的跨事务时序和幂等键。
+- 不用 `SubmitJob` 伪造历史、不自动重跑历史图片；真正断链记录不导入，原系统保持只读。
+
 ## 2026-09-28 · Personal/Managed Capability 执行
 
 - Capability Version 冻结 Execution Target；Job 启动分别分配 Personal User Domain 或 Managed Pool Domain。

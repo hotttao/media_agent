@@ -5,6 +5,7 @@ describe("workflowToFlowDocument", () => {
   it("derives visual edges from canonical slot bindings", () => {
     const document = workflowToFlowDocument({
       outputStepKey: "video",
+      templateNameByID: { "tpl-image": "模特图生成" },
       steps: [
         {
           key: "image",
@@ -24,18 +25,14 @@ describe("workflowToFlowDocument", () => {
       ],
     });
 
-    expect(document.nodes.map((node) => node.id)).toEqual([
-      "__workflow_input__",
-      "image",
-      "video",
-    ]);
+    expect(document.nodes.map((node) => node.id)).toEqual(["image", "video"]);
+    expect(document.nodes[0]?.data?.subtitle).toBe("模特图生成");
+    expect(document.nodes[1]?.data?.subtitle).toBe("生成节点");
     expect(document.edges).toEqual([
-      { sourceNodeID: "__workflow_input__", targetNodeID: "image" },
       { sourceNodeID: "image", targetNodeID: "video" },
-      { sourceNodeID: "__workflow_input__", targetNodeID: "video" },
     ]);
-    const imageX = document.nodes[1]?.meta?.position?.x ?? 0;
-    const videoX = document.nodes[2]?.meta?.position?.x ?? 0;
+    const imageX = document.nodes[0]?.meta?.position?.x ?? 0;
+    const videoX = document.nodes[1]?.meta?.position?.x ?? 0;
     expect(videoX).toBeGreaterThan(imageX);
   });
 });

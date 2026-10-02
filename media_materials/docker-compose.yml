@@ -12,6 +12,8 @@ services:
       MEDIA_AUTH_URL: http://media_auth:8001
       MEDIA_AUTH_INTERNAL_TOKEN: ${MEDIA_AUTH_INTERNAL_TOKEN:-dev-media-auth-internal-token}
       MEDIA_MATERIALS_INTERNAL_TOKEN: ${MEDIA_MATERIALS_INTERNAL_TOKEN:-dev-media-materials-internal-token}
+      # Empty by default: historical import is disabled unless an operator supplies a secret.
+      MEDIA_MATERIALS_MIGRATION_TOKEN: ${MEDIA_MATERIALS_MIGRATION_TOKEN:-}
       INTERNAL_JWKS_URL: http://host.docker.internal:18080/.well-known/jwks.json
       ORY_KRATOS_PUBLIC_URL: http://host.docker.internal:18080
       MEDIA_STORAGE_PROVIDER: s3

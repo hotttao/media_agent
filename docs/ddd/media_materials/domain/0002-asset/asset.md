@@ -13,7 +13,7 @@ related_workflow:
 ## 一句话职责
 asset domain 管理**两类物理资源**，分落两张表：
 - **material**（`materials` 表，resource_type=MATERIAL）：curated 原料（scene/pose/makeup/movement/music/caption），用户上传/策展，**无生成记录**；可由 Storage 对象或内联文本承载。
-- **generated_asset**（`generated_assets` 表，resource_type=ASSET）：workflow 执行产物（model_image/style_image/first_frame/ai_video），**持生成记录**（job_id / step_run_id / template_id / template_version）。
+- **generated_asset**（`generated_assets` 表，resource_type=ASSET）：workflow 执行产物（model_image/style_image/first_frame/ai_video）。原生产物持 Job/StepRun/Template 生成记录；历史导入产物持旧系统来源键、摘要与原时间，不伪造原生 Job 链接。
 
 两者都引用 [asset_kind](../0005-asset_kind/asset_kind.md) 注册表；都持 Organization、Scope、owner 和 visibility；可见性沿用 [共享资源访问语言](../../../resource_access/CONTEXT.md) 的 `private/team/public` 三档。
 
@@ -21,10 +21,11 @@ asset domain 管理**两类物理资源**，分落两张表：
 
 ### 不做什么
 - 不存素材二进制（只保存 `object_path`，文件由 `media_storage` 提供）；文本类素材可保存内联 `content`。
+- 对受信内部服务提供按企业命名空间解析 Object Path 的只读 Storage 入口；只负责对象存在性与签名，不代替资源级可达性授权。
 - 不在 CRUD 内调用 media_storage 上传或删除对象；调用方先经 [Library Object Upload](../../../workflow/0008-library-object-upload/library_object_upload.md) 取得 `object_path`，本 domain 只保存逻辑引用。
 - 不管理旧系统 `IpMaterial`；IP 专属素材已明确不在本轮迁移范围，也不得用普通 Asset Binding 冒充其派生语义。
 - 不执行 workflow / job / render（归 `media_workflow`）。
-- 不把 material 与 generated_asset 混在一张表--generated_asset 必须记录"怎么生成的"，material 不需要，字段与生命周期不同。
+- 不把 material 与 generated_asset 混在一张表--generated_asset 必须记录可信的生成或导入来源，material 不需要，字段与生命周期不同。
 - 不做跨域可达性决策（归 [reachability workflow](../../workflow/0001-reachability/reachability.md)）；本 domain 仅暴露只读查询能力供其编排。
 
 ## 边界
@@ -54,6 +55,7 @@ asset domain 管理**两类物理资源**，分落两张表：
 | ListGeneratedAssets | 按 scope/asset_kind/owner/job_id 过滤；默认 `only_mine=true` | `GET /api/v1/generated-assets?scope=&asset_kind=&job_id=&only_mine=` |
 | SoftDeleteGeneratedAsset | 软删 | `DELETE /api/v1/generated-assets/{id}` |
 | UpsertGeneratedAsset | 由 workflow_execution 经 reachability 调用，落 step 产物；带生成记录字段 | `UpsertGeneratedAsset`（跨服务 RPC） |
+| ImportGeneratedAsset | 受信迁移入口登记旧图片/视频；按源记录 ID/摘要幂等，不要求预先存在 Job | 内部迁移 API |
 
 > 跨服务可达性 RPC（`AssetReachability` / `ResolveAssetByKind` / `AssetRead` / `Check*Accessible`）归 [reachability workflow](../../workflow/0001-reachability/reachability.md)，不在本 domain 能力清单。`generated_asset` 不暴露 HTTP 给前端直接创建，仅由 `media_workflow.workflow_execution` 经 reachability workflow upsert。
 
@@ -98,17 +100,19 @@ movement 类型 Material 的稳定字段为 `metadata.applicable_clothing` 与 `
 | owner_user_id | text not null | 提交者；= job.submitted_by |
 | visibility | text not null | 可见性；默认 private（产物默认仅提交者可见） |
 | team_id | text nullable | 可见 team |
-| job_id | bigint not null | 生成 job；跨服务引用，不建外键 |
-| step_run_id | bigint not null | 生成 step；跨服务引用，不建外键；生成记录详情在 step_run |
-| template_id | bigint not null | 产出模板 |
-| template_version | int not null | 产出模板版本；不可变快照 |
+| job_id / step_run_id | text nullable | 原生产物的生成 Job/StepRun；历史导入产物为空并由 Execution StepRun 反向引用本 Asset |
+| template_id / template_version | text / int nullable | 原生产物的 Template 版本；导入产物不得伪造 |
+| origin | text not null | native / legacy_import |
+| source_system / source_record_id | text nullable | 历史导入来源键；同一源记录只对应一个 Asset |
+| source_sha256 | text nullable | 摄取对象摘要；同源 ID 不同摘要为冲突 |
+| source_created_at / imported_at | timestamptz nullable | 旧系统创建时间与目标摄取时间，不能互相覆盖 |
 | source_virtual_ip_id | bigint nullable | 源虚拟形象；job 输入里的 virtual_ip（若有），用于可达性 |
 | source_product_id | bigint nullable | 源产品；job 输入里的 product（若有） |
 | created_at / updated_at / deleted_at | timestamptz | 时间戳 |
 
 约束：UNIQUE `(organization_id, scope, asset_kind, name)` WHERE `deleted_at IS NULL`；INDEX `(organization_id, scope, asset_kind, created_at desc)`；INDEX `(job_id)`；INDEX `(source_virtual_ip_id)`；INDEX `(source_product_id)`。
 
-> **生成记录**：`generated_asset` 持 `job_id` + `step_run_id` 反向链接到 execution 域的 StepRun（StepRun 已存 resolved_inputs / rendered_prompt / template_version 等完整生成上下文）。不另建 generation_records 表，避免冗余。
+> **来源互斥**：`origin=native` 必须具有 Job/StepRun/Template 链接；`origin=legacy_import` 必须具有 source_system/source_record_id/source_sha256 和受控对象引用，不得填写伪造的 Job/Template。历史 StepRun 可引用同一 Imported Generated Asset，因此 Asset 不保存“唯一导入 Job”。
 
 ### Tables - `material_bindings`
 
@@ -158,7 +162,7 @@ generated_asset 唯一键 `(organization_id, scope, asset_kind, name) WHERE dele
 2. 创建后 scope 不可改；asset_kind 不可改。scope 校验由 service 层调 `shared/scope.IsKnownScope` 完成（见 [scope](../0001-scope-del/scope.md) 降级说明）。
 3. material_bindings 强制两端同 Organization、同 Scope；Binding 不在第一阶段 CRUD 实现范围。
 4. visibility=team 时 team_id 必填。
-5. generated_asset 的 job_id / step_run_id / template_id / template_version 在 upsert 时由 execution 填入，不可改。
+5. 原生 generated_asset 的 job_id / step_run_id / template_id / template_version 在 upsert 时由 execution 填入，不可改；历史导入产物用来源键与对象摘要幂等，不填这些生成记录字段。重复来源 ID 且摘要一致返回同一 Asset，不同摘要拒绝。
 6. SoftDelete material：不级联删 material_bindings，保留历史；可达性查询忽略已软删 material。
 7. 后续实现 Virtual IP/Product Binding 后，owner 软删必须结束有效 Binding，但不得删除 Generated Asset；第一阶段没有 Binding 写入。
 8. movement 的 `applicable_clothing` 不得写入 `scope` 字段；迁移时必须显式改名。

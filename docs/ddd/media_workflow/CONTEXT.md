@@ -140,6 +140,18 @@ _禁用替代词_：Batch、Stage（除非专指展示层）
 调用一个 Workflow 的一次实例化，落地为一个 Job；归 1 个 workflow_id + 1 个 scope（沿用 workflow.scope）+ 调用方提供的 WorkflowInput 值；同时落地一组 StepRun。归 `execution` domain。
 _禁用替代词_：run、instance、invocation。
 
+**Imported Incomplete Execution（导入的未完成执行）**:
+从旧系统有完整上游关联、但尚未产生最终视频的图片谱系恢复出的 Execution。已存在的 ModelImage、StyleImage、FirstFrame 作为带来源标记的已完成 Step Run，后继步骤等待显式继续执行；它不是一次新提交的完整运行，也不等同于断链记录。归 `execution` domain。
+_禁用替代词_：孤儿素材、已完成 Job、自动重跑。
+
+**Resume Execution（继续执行）**:
+用户对 Imported Incomplete Execution 发起的显式命令：补齐所缺 Workflow Input 后，沿已保存的图片结果从首个未完成 Step 继续，不重新调用已完成阶段的 Capability。归 `workflow_execution` application workflow。
+_禁用替代词_：Retry、重新 SubmitJob、恢复旧 Conductor 实例。
+
+**Frozen Storage Reference（冻结对象引用）**:
+历史执行在 Job 输入与 Conductor 启动命令中保存的企业命名空间内 Object Path；短期签名 URL 只在输入校验和 Worker 领取时生成，不属于持久化执行事实。
+_禁用替代词_：持久化签名 URL、Provider URL。
+
 **Job（执行任务）**:
 Execution 的持久化状态，状态机 `pending → running → (succeeded | failed | cancelled)`；携带 execution 的全部入参快照与最终产出。归 `execution` domain。
 _禁用替代词_：task（task 留给未来通用调度）、record。

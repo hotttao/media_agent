@@ -40,6 +40,8 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 | 重新生成 | 记录用户反馈并请求下游创建新 attempt | `RegenerateStepRun` |
 | 重试执行 | 重置允许重试的步骤 | `RetryStepRun/RetryJob` |
 | 取消执行 | 阻止新步骤并请求取消下游任务 | `CancelJob` |
+| 导入未完成执行 | 从完整旧图片谱系建立待继续 Job 与已完成 StepRun，不触发 Conductor | `ImportIncompleteExecution` |
+| 继续导入执行 | 补齐缺失输入，原子进入运行态并发出启动请求 | `ResumeExecution` |
 
 ## 聚合与不变量
 
@@ -57,6 +59,10 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 - WorkerDispatch 是独立聚合，避免长轮询、心跳和高频租约更新锁住 Job；它只保存 Job/StepRun ID，不直接修改 Job 内部对象。
 - 任务归属必须在 Conductor poll 前通过 Execution Domain 隔离，禁止先从共享队列领取再检查 owner。
 - Personal Domain 从 `submitted_by` 派生；Managed Domain 从受控 Worker Pool 配置派生。Capability Task 必须服从其冻结 Target，不能跨类型或回退到 `NO_DOMAIN`。
+- 导入的图片谱系只有完整上游且媒体已摄取时才能成为 `Imported Incomplete Execution`；导入写入前还须由 `media_control` 以目标用户身份核验 Workspace 可访问性及其 Organization 归属。每个历史图片 StepRun 保存原 source ID、原时间、来源归属和已登记的唯一输出，不冒充在当前 Template Version 下生成。
+- 导入 Job 初始为 `awaiting_resume`，没有 Conductor 实例；只有 `ResumeExecution` 可使其进入 running。已完成历史 StepRun 不得被普通 Retry、回调或恢复分支重新执行或覆盖。
+- `ResumeExecution` 的输入必须满足全部待运行节点；用户未补齐 pose/scene/movement 等输入时保留 `awaiting_resume`，不可派发 Capability。相同 source key 的重复导入与相同 resume idempotency key 的重复命令必须返回原结果。
+- 历史 Resume 冻结的媒体输入保存企业命名空间内稳定 Object Path；签名 URL 不进入 Job 输入、StartResume Outbox 或 Conductor 输入，交付 Worker 时才重新解析。Object Path 是技术引用，不绕过原有素材权限校验。
 
 ## 领域事件
 
@@ -81,11 +87,16 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 | workflow_id | text | Workflow ID |
 | workflow_version | bigint | 执行使用的 Workflow 版本 |
 | inputs | jsonb | 已校验的输入快照 |
-| status | text | pending/running/succeeded/failed/cancelled |
+| status | text | awaiting_resume（仅历史导入）/pending/running/succeeded/failed/cancelled |
 | submitted_by | text | 提交用户 ID |
 | idempotency_key | text | Workspace 内幂等键 |
+| origin | text | native / legacy_import；不得把历史已完成 StepRun 伪装成原生执行 |
+| source_system / source_record_id | text nullable | 旧执行谱系的稳定幂等来源键；同 Workspace 唯一 |
+| imported_at | timestamptz nullable | 导入发生时间；不覆盖原 created_at |
 | created_at | timestamptz | 创建时间 |
 | finished_at | timestamptz nullable | 终态时间 |
+
+导入执行还需保存各历史 StepRun 的 `source_system/source_record_id/source_created_at` 与媒体对象摘要；引用同一旧图片的多个 Job 可以复用同一个已登记 Asset，但各 Job 的 StepRun 身份独立。上游缺失或错配的源记录不创建 Job。`awaiting_resume -> running` 只能由当前授权用户显式触发，业务状态由 Job 聚合决定；对象搬运、Conductor 启动和结果回写由 Workflow 协调。
 
 ### `step_runs`
 

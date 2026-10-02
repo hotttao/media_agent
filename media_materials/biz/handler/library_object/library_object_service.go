@@ -5,6 +5,7 @@ package library_object
 import (
 	"context"
 	"errors"
+	"path"
 	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -84,7 +85,7 @@ func ResolveLibraryObject(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	objectPath := req.GetObjectPath()
-	if !strings.HasPrefix(objectPath, "materials/"+req.GetOrganizationId()+"/") {
+	if !validOrganizationObjectPath(req.GetOrganizationId(), objectPath) {
 		c.String(consts.StatusForbidden, "object is outside the organization namespace")
 		return
 	}
@@ -102,4 +103,41 @@ func ResolveLibraryObject(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	c.JSON(consts.StatusOK, &library_object.ResolveLibraryObjectResp{Url: resolved.URL, ExpiresAt: resolved.ExpiresAt})
+}
+
+// ResolveInternalLibraryObject .
+// @router /api/internal/v1/library-objects:resolve [GET]
+func ResolveInternalLibraryObject(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req library_object.ResolveLibraryObjectReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	if !validOrganizationObjectPath(req.GetOrganizationId(), req.GetObjectPath()) {
+		c.String(consts.StatusForbidden, "object is outside the organization namespace")
+		return
+	}
+	if Resolver == nil {
+		c.String(consts.StatusServiceUnavailable, "media storage unavailable")
+		return
+	}
+	resolved, err := Resolver.PresignGet(ctx, req.GetObjectPath())
+	if err != nil {
+		if errors.Is(err, objectstorage.ErrNotFound) {
+			c.String(consts.StatusNotFound, "object not found")
+		} else {
+			c.String(consts.StatusServiceUnavailable, "media storage unavailable")
+		}
+		return
+	}
+	c.JSON(consts.StatusOK, &library_object.ResolveLibraryObjectResp{Url: resolved.URL, ExpiresAt: resolved.ExpiresAt})
+}
+
+func validOrganizationObjectPath(organizationID, objectPath string) bool {
+	return organizationID != "" && !strings.ContainsAny(organizationID, "/\\") &&
+		strings.HasPrefix(objectPath, "materials/"+organizationID+"/") &&
+		path.Clean(objectPath) == objectPath && !strings.Contains(objectPath, "\\")
 }

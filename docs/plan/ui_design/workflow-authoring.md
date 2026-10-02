@@ -7,3 +7,6 @@
 - [x] 优化 standalone Shell、Workflow 列表、详情及暗色/窄屏布局。
 - [x] 修复 protobuf 数字状态与 Binding Source 枚举归一化。
 - [x] 通过 TypeScript、Vitest、dependency-cruiser、Vite build 和真实登录 Playwright 回归。
+- [x] 画布只显示 Step 输出依赖，输入绑定进入节点详情；编辑器提供可键盘操作的节点选择器。
+- [x] Job 列表显示 Workflow 名称与执行位置；详情在相同拓扑上标示节点状态，点击节点查看产物或审批。
+- [x] 编辑页改为全屏画布工作台，元数据移入可展开设置；Template 槽位驱动节点输入配置，并从 Workflow 详情直接运行。

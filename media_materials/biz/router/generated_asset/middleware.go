@@ -6,24 +6,33 @@ import (
 	"context"
 	"crypto/subtle"
 	"os"
-	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
 
 func rootMw() []app.HandlerFunc {
-	return []app.HandlerFunc{authorizeInternalWrite}
+	return nil
 }
 
 func authorizeInternalWrite(ctx context.Context, c *app.RequestContext) {
-	if !strings.HasPrefix(string(c.Path()), "/api/internal/v1/generated-assets:upsert") {
+	var expected string
+	var actual []byte
+	switch string(c.Path()) {
+	case "/api/internal/v1/generated-assets:upsert":
+		expected = os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN")
+		actual = c.Request.Header.Peek("X-Media-Materials-Internal-Token")
+	case "/api/internal/v1/generated-assets/import/" + string(c.Param("id")):
+		expected = os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN")
+		actual = c.Request.Header.Peek("X-Media-Materials-Internal-Token")
+	case "/api/internal/v1/generated-assets/import":
+		expected = os.Getenv("MEDIA_MATERIALS_MIGRATION_TOKEN")
+		actual = c.Request.Header.Peek("X-Media-Materials-Migration-Token")
+	default:
 		c.JSON(consts.StatusNotFound, map[string]string{"error": "route not available in this milestone"})
 		c.Abort()
 		return
 	}
-	expected := os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN")
-	actual := c.Request.Header.Peek("X-Media-Materials-Internal-Token")
 	if expected == "" || subtle.ConstantTimeCompare(actual, []byte(expected)) != 1 {
 		c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal token"})
 		c.Abort()
@@ -48,8 +57,7 @@ func _v1Mw() []app.HandlerFunc {
 }
 
 func _upsertgeneratedassetMw() []app.HandlerFunc {
-	// your code...
-	return nil
+	return []app.HandlerFunc{authorizeInternalWrite}
 }
 
 func _v10Mw() []app.HandlerFunc {
@@ -80,4 +88,22 @@ func _deletegeneratedassetMw() []app.HandlerFunc {
 func _getgeneratedassetMw() []app.HandlerFunc {
 	// your code...
 	return nil
+}
+
+func _importgeneratedassetMw() []app.HandlerFunc {
+	return []app.HandlerFunc{authorizeInternalWrite}
+}
+
+func _generated_assets0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _importMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getimportedgeneratedassetMw() []app.HandlerFunc {
+	return []app.HandlerFunc{authorizeInternalWrite}
 }

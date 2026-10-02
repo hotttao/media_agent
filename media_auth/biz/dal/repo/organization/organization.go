@@ -225,22 +225,39 @@ func enqueue(tx *gorm.DB, aggregateID string, sequence int64, eventType string, 
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	// Consume and close the cursor before issuing another statement on this
+	// transaction. pgx cannot execute while the previous result set is open.
+	type changedTeam struct {
+		id      string
+		version int64
+	}
+	changed := make([]changedTeam, 0)
 	for rows.Next() {
 		var teamID string
 		var teamVersion int64
 		if err := rows.Scan(&teamID, &teamVersion); err != nil {
+			rows.Close()
 			return err
 		}
-		teamPayload, err := json.Marshal(map[string]any{"team_id": teamID, "organization_id": aggregateID})
+		changed = append(changed, changedTeam{id: teamID, version: teamVersion})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, team := range changed {
+		teamPayload, err := json.Marshal(map[string]any{"team_id": team.id, "organization_id": aggregateID})
 		if err != nil {
 			return err
 		}
-		if err := tx.Exec("INSERT INTO media_auth.authorization_outbox (id,aggregate_type,aggregate_id,event_type,payload,sequence) VALUES (?,?,?,?,?::jsonb,?)", ids.New(), "team", teamID, "TeamOrganizationAuthorizationChanged", string(teamPayload), teamVersion).Error; err != nil {
+		if err := tx.Exec("INSERT INTO media_auth.authorization_outbox (id,aggregate_type,aggregate_id,event_type,payload,sequence) VALUES (?,?,?,?,?::jsonb,?)", ids.New(), "team", team.id, "TeamOrganizationAuthorizationChanged", string(teamPayload), team.version).Error; err != nil {
 			return err
 		}
 	}
-	return rows.Err()
+	return nil
 }
 func toDomain(r model.Organization) domain.Organization {
 	return domain.Organization{ID: r.ID, Name: r.Name, Status: r.Status, Version: r.Version, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}

@@ -29,15 +29,22 @@ type GeneratedAssetSaver interface {
 
 // Service job 用例编排（pull 模式 + NEED_CONFIRM）。
 type Service struct {
-	jobRepo      domain.JobRepo
-	stepRunRepo  domain.StepRunRepo
-	tx           dal.TxRunner
-	wfRepo       domain.WorkflowLookup
-	tplLookup    wfdomain.TemplateLookup
-	materials    GeneratedAssetSaver
-	jobCfg       *configpb.JobConfig
-	compilations wfdomain.CompilationRepo
-	engine       domain.WorkflowEngine
+	jobRepo             domain.JobRepo
+	stepRunRepo         domain.StepRunRepo
+	tx                  dal.TxRunner
+	wfRepo              domain.WorkflowLookup
+	tplLookup           wfdomain.TemplateLookup
+	materials           GeneratedAssetSaver
+	historyAssets       ImportedAssetLookup
+	historyWorkspaces   HistoricalWorkspaceLookup
+	resumeRepo          domain.ResumeRepo
+	resumeAccess        ResumeWorkspaceAccess
+	resumeLauncher      ResumeLauncher
+	resumeStorageOrigin string
+	resumeURLVerifier   func(context.Context, string) error
+	jobCfg              *configpb.JobConfig
+	compilations        wfdomain.CompilationRepo
+	engine              domain.WorkflowEngine
 }
 
 func NewService(jr domain.JobRepo, sr domain.StepRunRepo, tx dal.TxRunner, wfRepo domain.WorkflowLookup, tl wfdomain.TemplateLookup, mc GeneratedAssetSaver, jobCfg *configpb.JobConfig, compilations wfdomain.CompilationRepo, engine domain.WorkflowEngine) *Service {
@@ -581,6 +588,9 @@ func (s *Service) Retry(ctx context.Context, jobID string, reason string, inputO
 	if err != nil {
 		return nil, err
 	}
+	if job.Origin == "legacy_import" {
+		return nil, errors.New("historical execution cannot use ordinary Retry; use the resume recovery path")
+	}
 	if job.Status != domain.JobFailed {
 		return nil, fmt.Errorf("job %s status %s, expected failed", jobID, job.Status)
 	}
@@ -669,6 +679,9 @@ func (s *Service) RetryStepRun(ctx context.Context, stepRunID, reason string, in
 	job, err := s.jobRepo.Get(ctx, sr.JobID)
 	if err != nil {
 		return nil, err
+	}
+	if job.Origin == "legacy_import" {
+		return nil, errors.New("historical execution cannot use ordinary StepRun Retry")
 	}
 	if job.ConductorWorkflowID != "" && s.engine != nil {
 		execution, err := s.engine.Get(ctx, job.ConductorWorkflowID)

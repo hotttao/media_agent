@@ -10,9 +10,9 @@ RUN cd media_workflow && GOWORK=off go mod download
 COPY hertz_gen/ hertz_gen/
 COPY hertz_infra/ hertz_infra/
 COPY media_workflow/ media_workflow/
-RUN cd media_workflow && GOWORK=off CGO_ENABLED=0 go build -o /out/media_workflow .
-RUN cd media_workflow && GOWORK=off CGO_ENABLED=0 go build -o /out/media_workflow_internal_worker ./cmd/internal_worker
-RUN cd media_workflow && GOWORK=off CGO_ENABLED=0 go build -o /out/media_workflow_managed_worker ./cmd/managed_worker
+RUN --mount=type=cache,target=/root/.cache/go-build cd media_workflow && GOWORK=off CGO_ENABLED=0 go build -o /out/media_workflow .
+RUN --mount=type=cache,target=/root/.cache/go-build cd media_workflow && GOWORK=off CGO_ENABLED=0 go build -o /out/media_workflow_internal_worker ./cmd/internal_worker
+RUN --mount=type=cache,target=/root/.cache/go-build cd media_workflow && GOWORK=off CGO_ENABLED=0 go build -o /out/media_workflow_managed_worker ./cmd/managed_worker
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata

@@ -26,7 +26,8 @@ func (r *JobRepo) Save(ctx context.Context, j *domain.Job, stepRuns []*domain.St
 	inputJSON, _ := json.Marshal(j.Input)
 	jobRow := &model.Job{
 		ID: j.ID, Scope: j.Scope, WorkflowID: j.WorkflowID, WorkflowVersion: j.WorkflowVersion,
-		Input: datatypes.JSON(inputJSON), Status: string(j.Status),
+		Origin: "native",
+		Input:  datatypes.JSON(inputJSON), Status: string(j.Status),
 		SubmittedBy: j.SubmittedBy, SubmittedAt: time.Now(),
 		RetryHistory: datatypes.JSON("[]"),
 	}
@@ -36,6 +37,7 @@ func (r *JobRepo) Save(ctx context.Context, j *domain.Job, stepRuns []*domain.St
 	for _, sr := range stepRuns {
 		srRow := &model.StepRun{
 			ID: sr.ID, JobID: j.ID, StepKey: sr.StepKey, StepOrder: sr.StepOrder,
+			Origin:     "native",
 			TemplateID: sr.TemplateID, TemplateVersion: sr.TemplateVersion,
 			ApprovalPolicy: string(sr.ApprovalPolicy),
 			Status:         string(sr.Status), ResolvedInputs: datatypes.JSON("{}"),
@@ -90,6 +92,9 @@ func (r *JobRepo) GetByConductorWorkflowID(ctx context.Context, conductorWorkflo
 func (r *JobRepo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, int, error) {
 	Q := query.Use(dal.FromContext(ctx, r.db))
 	tx := Q.Job.WithContext(ctx)
+	if q.SubmittedBy != "" {
+		tx = tx.Where(Q.Job.SubmittedBy.Eq(q.SubmittedBy))
+	}
 	if q.Scope != "" {
 		tx = tx.Where(Q.Job.Scope.Eq(q.Scope))
 	}
@@ -297,6 +302,10 @@ func (r *StepRunRepo) UpdateFailure(ctx context.Context, id string, reason strin
 func jobToDomain(row *model.Job) *domain.Job {
 	j := &domain.Job{
 		ID: row.ID, Scope: row.Scope, WorkflowID: row.WorkflowID, WorkflowVersion: row.WorkflowVersion,
+		Origin: row.Origin, OrganizationID: row.OrganizationID, WorkspaceID: row.WorkspaceID,
+		SourceSystem: stringValue(row.SourceSystem), SourceRecordID: stringValue(row.SourceRecordID), ImportedAt: row.ImportedAt,
+		SourceDigest:     stringValue(row.SourceDigest),
+		ResumeGeneration: row.ResumeGeneration, ResumeIdempotencyKey: row.ResumeIdempotencyKey,
 		Status: domain.JobStatus(row.Status), RetryCount: row.RetryCount,
 		SubmittedBy: row.SubmittedBy, SubmittedAt: row.SubmittedAt,
 		StartedAt: row.StartedAt, FinishedAt: row.FinishedAt, FailureReason: row.FailureReason,
@@ -310,6 +319,8 @@ func jobToDomain(row *model.Job) *domain.Job {
 func stepRunToDomain(row *model.StepRun) *domain.StepRun {
 	sr := &domain.StepRun{
 		ID: row.ID, JobID: row.JobID, StepKey: row.StepKey, StepOrder: row.StepOrder,
+		Origin: row.Origin, SourceSystem: stringValue(row.SourceSystem), SourceRecordID: stringValue(row.SourceRecordID),
+		SourceSHA256: stringValue(row.SourceSHA256), SourceCreatedAt: row.SourceCreatedAt,
 		TemplateID: row.TemplateID, TemplateVersion: row.TemplateVersion,
 		Status: domain.StepRunStatus(row.Status), RetryCount: row.RetryCount,
 		RenderedPrompt: row.RenderedPrompt, SelectedIndex: row.SelectedIndex,

@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/foundation/lib/utils";
 import type { JobStatus, StepRunStatus } from "@/domains/jobs/types";
+import { cn } from "@/foundation/lib/utils";
 
 // Soft-tint status chips (consistent with materials/products visibility/
 // status badges). Picking distinct tints per semantic so that, e.g., running
@@ -27,10 +27,30 @@ const STEP_RUN_STATUS_STYLE: Record<StepRunStatus, string> = {
   skipped: "bg-muted/60 text-muted-foreground",
 };
 
+const JOB_STATUS_LABEL: Record<JobStatus, string> = {
+  pending: "等待执行",
+  running: "执行中",
+  need_confirm: "待确认",
+  succeeded: "已完成",
+  failed: "失败",
+  cancelled: "已取消",
+};
+
+const STEP_RUN_STATUS_LABEL: Record<StepRunStatus, string> = {
+  pending: "等待执行",
+  blocked: "等待前序",
+  running: "执行中",
+  claimed: "执行中",
+  need_confirm: "待确认",
+  succeeded: "已完成",
+  failed: "失败",
+  skipped: "已跳过",
+};
+
 export function JobStatusBadge({ status }: { status: JobStatus }) {
   return (
     <Badge className={cn("font-medium capitalize", JOB_STATUS_STYLE[status])}>
-      {status}
+      {JOB_STATUS_LABEL[status]}
     </Badge>
   );
 }
@@ -40,7 +60,7 @@ export function StepRunStatusBadge({ status }: { status: StepRunStatus }) {
     <Badge
       className={cn("font-medium capitalize", STEP_RUN_STATUS_STYLE[status])}
     >
-      {status}
+      {STEP_RUN_STATUS_LABEL[status]}
     </Badge>
   );
 }

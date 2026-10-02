@@ -21,6 +21,9 @@ Workflow App 根据已发布 Workflow 的 Input Schema 生成 Job 输入表单�
 4. required 输入未选择时禁用提交，并在对应字段显示原因；可选输入允许留空。
 5. UI 把选中对象映射为自包含 JobInput bundle；Product 输入包含业务 ID 与主图（无主图则首图）的可访问 URL。携带 Workflow 当前版本提交，成功后打开 Job 详情。
 6. Workflow 切换会清空旧选择并加载新候选，不能把前一个 Workflow 的资源静默带入。
+7. Job 详情以执行进度、输入对象摘要和按顺序排列的 Step Run 展示服务端状态；图片与视频 Candidate 直接预览。提示词按需展开，内部输入 JSON 和临时签名 URL 不作为页面正文展示。
+8. Step Run 进入 `need_confirm` 后，可选中任一 Candidate 并确认；即使只有一张图，配置要求审批时也必须能确认。用户可在审批时选择重新生成。已完成的 Step 保留候选预览与最终产物编号。
+9. Job 列表先显示 Workflow 名称、执行状态和当前进度；进入 Job 后，使用与定义页一致的节点拓扑标出运行中、等待、完成和待审批节点。点击节点查看其候选、产物与可用操作，不在画布下方无差别展开全部步骤。
 
 ## 状态与失败
 
@@ -29,3 +32,4 @@ Workflow App 根据已发布 Workflow 的 Input Schema 生成 Job 输入表单�
 - 候选查询失败保留 Workflow 选择，显示可重试错误；不降级为 JSON 编辑器。
 - 服务端返回版本冲突时重新加载 Workflow，要求用户复核输入后再提交。
 - 桌面表单最多两列；窄屏单列。标签展示业务 input name 与资源类别，选择项展示资源名称，不展示内部 Object Path。
+- Job 详情加载失败提供重试；Candidate 媒体地址失效时展示明确占位与打开媒体入口，不把加载失败误判为 Job 失败。步骤卡在窄屏单列，宽屏可并排展示候选。

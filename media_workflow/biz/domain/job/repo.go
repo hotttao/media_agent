@@ -4,6 +4,8 @@ import "context"
 
 type JobRepo interface {
 	Save(ctx context.Context, j *Job, stepRuns []*StepRun) error
+	SaveImported(ctx context.Context, j *Job, stepRuns []*StepRun) error
+	GetByLegacySource(ctx context.Context, workspaceID, sourceSystem, sourceRecordID string) (*Job, error)
 	Get(ctx context.Context, id string) (*Job, error)
 	GetWithStepRuns(ctx context.Context, id string) (*Job, []*StepRun, error)
 	GetByConductorWorkflowID(ctx context.Context, conductorWorkflowID string) (*Job, error)
@@ -74,11 +76,12 @@ type StepRunRepo interface {
 }
 
 type ListQuery struct {
-	Scope      string
-	WorkflowID string
-	Status     string
-	Limit      int
-	Offset     int
+	Scope       string
+	WorkflowID  string
+	SubmittedBy string
+	Status      string
+	Limit       int
+	Offset      int
 }
 
 type ClaimQuery struct {

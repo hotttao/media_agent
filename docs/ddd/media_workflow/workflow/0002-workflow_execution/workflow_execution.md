@@ -69,6 +69,42 @@ sequenceDiagram
 
 Product 输入在提交时冻结商品主图的可访问 URL（无主图时取首图），作为对应 Workflow Input 的 `asset_ref`；Product ID 仍保留在输入快照中供业务追溯。图片进入 Capability 的位置和顺序只由 Template Version 的 Invocation Mapping 决定，不把 URL 拼进提示词正文。
 
+## 历史图片谱系导入与继续执行
+
+旧系统的 ModelImage、StyleImage、FirstFrame 若上游引用完整而没有下游 Video，是 **Imported Incomplete Execution**，不是孤儿素材或已完成 Job。只有上游缺失、引用错配等真正断链的记录才排除。ModelImage 可被多个 StyleImage 复用；同一个已完成图片节点可被多个导入执行引用，但对象只迁移和登记一次。源 VideoTask 无 Video、VideoPush 引用不存在的 Video 不进入目标执行。
+
+```mermaid
+sequenceDiagram
+    participant M as Migration CLI
+    participant S as Source media_ai
+    participant O as Object Storage
+    participant W as media_workflow
+    participant DB as Workflow DB
+    participant C as Conductor
+    participant U as User
+    M->>S: 只读导出引用谱系与原时间/归属
+    M->>M: 校验上游、排除断链、按最深已完成阶段分组
+    M->>O: 搬运并校验图片对象（幂等 source ID + digest）
+    M->>W: ImportIncompleteExecution(source IDs, outputs, owner, inputs)
+    W->>DB: TX1: 幂等保存 Job=awaiting_resume + 已完成/待运行 StepRun + 来源映射
+    W-->>M: imported_job_id / 原记录排除清单
+    U->>W: ResumeExecution(job_id, missing inputs, idempotency key)
+    W->>W: 授权、校验输入/媒体/Workflow 版本及冻结的已完成输出
+    W->>DB: TX2: Job=running + ResumeOutbox（保留原成功 StepRun）
+    W-->>U: accepted
+    W->>C: 启动新 Conductor 实例；已完成节点走受控 restore 分支
+    C-->>W: 仅未完成 Capability Task 被派发
+    W->>DB: TX3+: 新 StepRun 结果/审批/Job 终态
+```
+
+导入不调用 `SubmitJob`，不回填或伪造旧 Conductor 执行。TX1 前先由 media_materials 将源图片摄取为 **Imported Generated Asset**：它以源 ID/摘要幂等，尚无 Job/StepRun 链接；TX1 再保存各历史 StepRun 对该 Asset 的引用。同一 Asset 可被多个导入执行复用，不能为了满足原生 Generated Asset 的必填生成记录而伪造一个 Job。中断后可按 `(source_system, source_record_id)` 重试，不产生重复 Job/Asset。原始创建时间与实际导入时间分别保存，缺失的旧模板版本不可猜测为当前版本；导入的已完成 StepRun 标记历史来源。导入时不自动运行，用户可先在 UI 检查已完成图片并补齐后续 pose/scene/movement 等输入。
+
+`ResumeExecution` 仅允许 `awaiting_resume` Job，校验所有待执行节点需要的输入；不改变已完成图片、原时间和来源 ID。TX2 与 Outbox 同事务，结果不明确时按 Job ID 和 resume idempotency key 查询。启动的是**新的** Conductor 实例，编译后的恢复分支把已完成 StepRun 的可信输出还原为正常 `finalize.output_resource` 形状，跳过这些节点的 Render/Capability/Approval/Finalize 副作用；只执行首个未完成节点及其后继。恢复分支必须校验对象仍可访问且属于目标 Workspace，禁止浏览器自行提交任意已完成输出。重复继续执行返回同一实例；取消、晚到源迁移或旧 attempt 不能覆盖恢复后的状态。某图片被多个执行复用时，每个 Job 分别授权，Asset 只登记一次。
+
+Resume 接收调用方经 Materials 授权取得的短期 URL 时，先限制其为本企业 Storage 命名空间并做有界读取；TX2 只冻结相应 Object Path，不能把签名 URL 写入 Job 或 Outbox。Conductor 启动允许晚于 URL 过期；Capability 在领取时由 media_workflow 携服务凭证向 media_materials 换取新的 URL，并在交付前复核企业命名空间和有效期。解析失败不交付任务，待下次领取重试；不能回退到旧 URL、外部 Provider URL 或其他企业路径。历史 Generated Asset ID 同样在领取时复验来源和归属后重新签发 URL。
+
+目前代码已有导入 API、`awaiting_resume` 状态、恢复分支与 StartResume Outbox；单组真实 Job 已通过 API 导入，但 Resume→Conductor→Personal Worker→结果登记的完整样本联调尚未通过。任何历史图片都不得通过普通 `SubmitJob` 冒充已恢复执行。
+
 ## 状态流转
 
 ```mermaid

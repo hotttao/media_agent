@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -142,4 +143,88 @@ func (c *MaterialsClient) UpsertGeneratedAsset(ctx context.Context, req *UpsertG
 		return "", fmt.Errorf("decode UpsertGeneratedAsset resp: %w", err)
 	}
 	return out.ID, nil
+}
+
+type ImportedGeneratedAsset struct {
+	ID                string `json:"id"`
+	OrganizationID    string `json:"organization_id"`
+	Scope             string `json:"scope"`
+	OwnerUserID       string `json:"owner_user_id"`
+	AssetKind         string `json:"asset_kind"`
+	ObjectPath        string `json:"object_path"`
+	SourceSystem      string `json:"source_system"`
+	SourceRecordID    string `json:"source_record_id"`
+	SourceSHA256      string `json:"source_sha256"`
+	SourceCreatedAt   int64  `json:"source_created_at"`
+	SourceProductID   string `json:"source_product_id"`
+	SourceVirtualIPID string `json:"source_virtual_ip_id"`
+	AccessURL         string `json:"access_url"`
+	AccessExpiresAt   int64  `json:"access_expires_at"`
+}
+
+type ResolvedStorageObject struct {
+	URL       string `json:"url"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
+// ResolveInternalObject exchanges a stable, organization-scoped Object Path
+// for a short-lived storage URL. Caller authorization must have happened before
+// this service-to-service storage lookup.
+func (c *MaterialsClient) ResolveInternalObject(ctx context.Context, organizationID, objectPath string) (ResolvedStorageObject, error) {
+	if organizationID == "" || objectPath == "" || os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN") == "" {
+		return ResolvedStorageObject{}, fmt.Errorf("object lookup requires organization, object path and internal token")
+	}
+	query := url.Values{"organization_id": {organizationID}, "object_path": {objectPath}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/internal/v1/library-objects:resolve?"+query.Encode(), nil)
+	if err != nil {
+		return ResolvedStorageObject{}, err
+	}
+	req.Header.Set("X-Media-Materials-Internal-Token", os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN"))
+	ctx, span := startDownstreamRequest(ctx, req, "media_materials.ResolveInternalObject")
+	defer span.End()
+	resp, err := c.http.Do(req.WithContext(ctx))
+	if err != nil {
+		return ResolvedStorageObject{}, fmt.Errorf("resolve object: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ResolvedStorageObject{}, fmt.Errorf("resolve object: HTTP %d", resp.StatusCode)
+	}
+	var resolved ResolvedStorageObject
+	if err := json.NewDecoder(resp.Body).Decode(&resolved); err != nil {
+		return ResolvedStorageObject{}, fmt.Errorf("decode resolved object: %w", err)
+	}
+	if resolved.URL == "" || resolved.ExpiresAt <= time.Now().Unix() {
+		return ResolvedStorageObject{}, fmt.Errorf("invalid resolved object response")
+	}
+	return resolved, nil
+}
+
+func (c *MaterialsClient) GetImportedGeneratedAsset(ctx context.Context, id string) (*ImportedGeneratedAsset, error) {
+	if id == "" || os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN") == "" {
+		return nil, fmt.Errorf("imported asset lookup requires an ID and internal token")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/internal/v1/generated-assets/import/"+url.PathEscape(id), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Media-Materials-Internal-Token", os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN"))
+	ctx, span := startDownstreamRequest(ctx, req, "media_materials.GetImportedGeneratedAsset")
+	defer span.End()
+	resp, err := c.http.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("get imported generated asset: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get imported generated asset: HTTP %d", resp.StatusCode)
+	}
+	var asset ImportedGeneratedAsset
+	if err := json.NewDecoder(resp.Body).Decode(&asset); err != nil {
+		return nil, fmt.Errorf("decode imported generated asset: %w", err)
+	}
+	if asset.ID != id || asset.SourceSystem == "" || asset.SourceRecordID == "" {
+		return nil, fmt.Errorf("invalid imported generated asset response")
+	}
+	return &asset, nil
 }

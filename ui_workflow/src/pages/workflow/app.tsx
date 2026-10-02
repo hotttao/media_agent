@@ -5,6 +5,7 @@
  */
 
 import { Plus } from "lucide-react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,6 +32,7 @@ const RESOURCES: { id: Resource; labelKey: string }[] = [
 ];
 
 export function WorkflowApp({ instanceId }: { instanceId: string }) {
+  const [launchWorkflowID, setLaunchWorkflowID] = useState<string>();
   const { t } = useTranslation();
   const {
     useAppHeaderSlot,
@@ -56,6 +58,7 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
   );
 
   function changeResource(r: Resource) {
+    setLaunchWorkflowID(undefined);
     setResource(r);
     setSelectedId(null);
     setView("list");
@@ -75,6 +78,7 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
             label={t("common.new")}
             title={t("common.new")}
             onClick={() => {
+              setLaunchWorkflowID(undefined);
               setSelectedId(null);
               setView("create");
             }}
@@ -125,6 +129,17 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
               id={selectedId}
               onBack={() => setView("list")}
               onEdit={() => setView("edit")}
+              onOpenJob={(jobId) => {
+                setResource("job");
+                setSelectedId(jobId);
+                setView("show");
+              }}
+              onRun={() => {
+                setLaunchWorkflowID(selectedId);
+                setResource("job");
+                setSelectedId(null);
+                setView("create");
+              }}
             />
           )}
           {resource === "workflow" && view === "create" && (
@@ -142,6 +157,7 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
           )}
           {resource === "job" && view === "create" && (
             <JobCreate
+              preferredWorkflowId={launchWorkflowID}
               onDone={() => setView("list")}
               onSubmitted={(jobId) => {
                 setSelectedId(jobId);

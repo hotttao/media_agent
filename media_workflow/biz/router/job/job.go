@@ -20,20 +20,31 @@ func Register(r *server.Hertz) {
 	{
 		_api := root.Group("/api", _apiMw()...)
 		{
-			_v1 := _api.Group("/v1", _v1Mw()...)
-			_v1.GET("/jobs", append(_listjobsMw(), job.ListJobs)...)
-			_v1.POST("/jobs", append(_submitjobMw(), job.SubmitJob)...)
+			_internal := _api.Group("/internal", _internalMw()...)
 			{
-				_jobs := _v1.Group("/jobs", _jobsMw()...)
-				_jobs.GET("/:id", append(_getjobMw(), job.GetJob)...)
+				_v1 := _internal.Group("/v1", _v1Mw()...)
 				{
-					_id := _jobs.Group("/:id", _idMw()...)
+					_jobs := _v1.Group("/jobs", _jobsMw()...)
+					_jobs.POST("/import-incomplete", append(_importincompleteexecutionMw(), job.ImportIncompleteExecution)...)
+				}
+			}
+		}
+		{
+			_v10 := _api.Group("/v1", _v10Mw()...)
+			_v10.GET("/jobs", append(_listjobsMw(), job.ListJobs)...)
+			_v10.POST("/jobs", append(_submitjobMw(), job.SubmitJob)...)
+			{
+				_jobs0 := _v10.Group("/jobs", _jobs0Mw()...)
+				_jobs0.GET("/:id", append(_getjobMw(), job.GetJob)...)
+				{
+					_id := _jobs0.Group("/:id", _idMw()...)
 					_id.POST("/cancel", append(_canceljobMw(), job.CancelJob)...)
+					_id.POST("/resume", append(_resumejobMw(), job.ResumeJob)...)
 					_id.POST("/retry", append(_retryjobMw(), job.RetryJob)...)
 				}
 			}
 			{
-				_step_runs := _v1.Group("/step-runs", _step_runsMw()...)
+				_step_runs := _v10.Group("/step-runs", _step_runsMw()...)
 				_step_runs.POST("/claim", append(_claimsteprunMw(), job.ClaimStepRun)...)
 				_step_runs.GET("/:step_run_id", append(_getsteprunMw(), job.GetStepRun)...)
 				{

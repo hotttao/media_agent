@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { StepRunStatusBadge } from "@/domains/jobs/components/status-badge";
 import {
@@ -12,6 +11,42 @@ import { cn } from "@/foundation/lib/utils";
 
 function isVideoURL(url: string) {
   return /\.(mp4|webm|mov|m4v)(?:$|[?#])/i.test(url);
+}
+
+function CandidatePreview({ url, index }: { url: string; index: number }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <p
+        className="rounded-lg bg-muted p-4 text-sm text-muted-foreground"
+        role="status"
+      >
+        媒体暂时无法预览，请检查资源地址。
+      </p>
+    );
+  }
+  if (isVideoURL(url)) {
+    return (
+      // biome-ignore lint/a11y/useMediaCaption: generated videos do not provide caption tracks.
+      <video
+        src={url}
+        controls
+        preload="metadata"
+        onError={() => setFailed(true)}
+        className="aspect-video max-h-80 w-full rounded-lg bg-muted object-contain"
+        aria-label={`候选视频 ${index + 1}`}
+      />
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt={`候选图片 ${index + 1}`}
+      onError={() => setFailed(true)}
+      className="aspect-video max-h-80 w-full rounded-lg bg-muted object-contain"
+      loading="lazy"
+    />
+  );
 }
 
 /**
@@ -38,10 +73,12 @@ export function StepRunCard({
   const canRegenerate = stepRun.status === "need_confirm";
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-foreground/[0.06] p-3">
+    <article className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-card/80 p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="font-medium">{stepRun.step_key}</span>
+          <h3 className="font-semibold">
+            {stepRun.step_key.replaceAll("_", " ")}
+          </h3>
           <span className="text-xs text-muted-foreground">
             #{stepRun.step_order}
           </span>
@@ -56,11 +93,7 @@ export function StepRunCard({
           {needsConfirm ? (
             <Button
               size="sm"
-              disabled={
-                confirm.isPending ||
-                picked === null ||
-                picked === stepRun.selected_index
-              }
+              disabled={confirm.isPending || picked === null}
               onClick={() =>
                 confirm.mutate({
                   jobId,
@@ -89,29 +122,19 @@ export function StepRunCard({
         </div>
       </div>
 
-      <dl className="grid grid-cols-3 gap-1 text-xs">
-        <dt className="text-muted-foreground">Template</dt>
-        <dd className="col-span-2">
-          {stepRun.template_id}
-          <span className="text-muted-foreground">
-            {" "}
-            (v{stepRun.template_version})
-          </span>
-        </dd>
-        <dt className="text-muted-foreground">Step Run ID</dt>
-        <dd className="col-span-2 break-all text-muted-foreground">
-          {stepRun.id}
-        </dd>
+      <dl className="grid gap-x-3 gap-y-1 text-xs sm:grid-cols-[8rem_1fr]">
+        <dt className="text-muted-foreground">模板版本</dt>
+        <dd>v{stepRun.template_version}</dd>
         {stepRun.output_asset_id ? (
           <>
-            <dt className="text-muted-foreground">Output Asset</dt>
-            <dd className="col-span-2 break-all">{stepRun.output_asset_id}</dd>
+            <dt className="text-muted-foreground">产物编号</dt>
+            <dd className="break-all">{stepRun.output_asset_id}</dd>
           </>
         ) : null}
         {stepRun.failure_reason ? (
           <>
-            <dt className="text-muted-foreground">Failure</dt>
-            <dd className="col-span-2 break-words text-destructive">
+            <dt className="text-muted-foreground">失败原因</dt>
+            <dd className="break-words text-destructive">
               {stepRun.failure_reason}
             </dd>
           </>
@@ -119,22 +142,22 @@ export function StepRunCard({
       </dl>
 
       {stepRun.rendered_prompt ? (
-        <div className="flex flex-col gap-1">
-          <Label className="text-xs uppercase text-muted-foreground">
-            Rendered Prompt
-          </Label>
-          <pre className="max-h-60 overflow-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap">
+        <details className="text-sm">
+          <summary className="cursor-pointer font-medium">
+            查看生成提示词
+          </summary>
+          <p className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/60 p-3 leading-6">
             {stepRun.rendered_prompt}
-          </pre>
-        </div>
+          </p>
+        </details>
       ) : null}
 
       {stepRun.candidates.length > 0 ? (
         <div className="flex flex-col gap-1">
-          <Label className="text-xs uppercase text-muted-foreground">
-            Candidates
-          </Label>
-          <ul className="flex flex-col gap-1">
+          <p className="text-sm font-medium">
+            {needsConfirm ? "请选择要使用的结果" : "生成结果"}
+          </p>
+          <ul className="grid gap-3 sm:grid-cols-2">
             {stepRun.candidates.map((c) => {
               const isPicked = picked === c.index;
               const isSelected = stepRun.selected_index === c.index;
@@ -142,7 +165,7 @@ export function StepRunCard({
                 <li
                   key={c.index}
                   className={cn(
-                    "flex items-start gap-2 rounded border p-2 text-xs",
+                    "flex min-w-0 items-start gap-2 rounded-xl border p-3 text-xs",
                     isPicked
                       ? "border-info bg-info/10"
                       : "border-border bg-card",
@@ -162,42 +185,27 @@ export function StepRunCard({
                       {c.is_primary ? (
                         <span className="text-muted-foreground">primary</span>
                       ) : null}
-                      {isSelected ? (
+                      {isSelected && !needsConfirm ? (
                         <span className="text-success">selected</span>
                       ) : null}
                     </div>
                     {c.url ? (
                       <>
-                        {isVideoURL(c.url) ? (
-                          // biome-ignore lint/a11y/useMediaCaption: generated preview videos do not have caption tracks.
-                          <video
-                            src={c.url}
-                            controls
-                            preload="metadata"
-                            className="max-h-56 w-full rounded-md bg-muted object-contain"
-                          />
-                        ) : (
-                          <img
-                            src={c.url}
-                            alt={`候选结果 ${c.index + 1}`}
-                            className="max-h-56 w-full rounded-md bg-muted object-contain"
-                            loading="lazy"
-                          />
-                        )}
+                        <CandidatePreview url={c.url} index={c.index} />
                         <a
                           href={c.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="break-all text-info hover:underline"
+                          className="text-info hover:underline"
                         >
-                          打开原图
+                          打开媒体
                         </a>
                       </>
                     ) : null}
                     {c.content ? (
-                      <pre className="max-h-40 overflow-auto rounded bg-muted p-1 text-xs whitespace-pre-wrap">
+                      <p className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 text-xs">
                         {c.content}
-                      </pre>
+                      </p>
                     ) : null}
                   </div>
                 </li>
@@ -206,17 +214,6 @@ export function StepRunCard({
           </ul>
         </div>
       ) : null}
-
-      {Object.keys(stepRun.resolved_inputs).length > 0 ? (
-        <details className="text-xs">
-          <summary className="cursor-pointer text-muted-foreground">
-            Resolved Inputs
-          </summary>
-          <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted p-2 text-xs">
-            {JSON.stringify(stepRun.resolved_inputs, null, 2)}
-          </pre>
-        </details>
-      ) : null}
-    </div>
+    </article>
   );
 }

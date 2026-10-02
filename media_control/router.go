@@ -7,5 +7,5 @@ import (
 )
 
 func customizedRegister(r *server.Hertz) {
-	r.POST("/internal/workspaces:check", middleware.RequireInternal(), workspacehandler.CheckWorkspaceAccess)
+	r.POST("/internal/workspaces:check", middleware.Session(), middleware.RequireInternal(), workspacehandler.CheckWorkspaceAccess)
 }

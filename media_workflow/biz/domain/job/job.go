@@ -9,12 +9,13 @@ import (
 type JobStatus string
 
 const (
-	JobPending     JobStatus = "pending"
-	JobRunning     JobStatus = "running"
-	JobNeedConfirm JobStatus = "need_confirm"
-	JobSucceeded   JobStatus = "succeeded"
-	JobFailed      JobStatus = "failed"
-	JobCancelled   JobStatus = "cancelled"
+	JobAwaitingResume JobStatus = "awaiting_resume"
+	JobPending        JobStatus = "pending"
+	JobRunning        JobStatus = "running"
+	JobNeedConfirm    JobStatus = "need_confirm"
+	JobSucceeded      JobStatus = "succeeded"
+	JobFailed         JobStatus = "failed"
+	JobCancelled      JobStatus = "cancelled"
 )
 
 func (s JobStatus) IsTerminal() bool {
@@ -114,21 +115,30 @@ type Candidate struct {
 }
 
 type Job struct {
-	ID                  string
-	Scope               string
-	WorkflowID          string
-	WorkflowVersion     int
-	Input               JobInput
-	Status              JobStatus
-	RetryCount          int
-	RetryHistory        []RetryRecord
-	SubmittedBy         string
-	SubmittedAt         time.Time
-	StartedAt           *time.Time
-	FinishedAt          *time.Time
-	FailureReason       string
-	ConductorWorkflowID string
-	CompilationHash     string
+	ID                   string
+	Origin               string
+	OrganizationID       string
+	WorkspaceID          string
+	SourceSystem         string
+	SourceRecordID       string
+	SourceDigest         string
+	ImportedAt           *time.Time
+	ResumeGeneration     int
+	ResumeIdempotencyKey string
+	Scope                string
+	WorkflowID           string
+	WorkflowVersion      int
+	Input                JobInput
+	Status               JobStatus
+	RetryCount           int
+	RetryHistory         []RetryRecord
+	SubmittedBy          string
+	SubmittedAt          time.Time
+	StartedAt            *time.Time
+	FinishedAt           *time.Time
+	FailureReason        string
+	ConductorWorkflowID  string
+	CompilationHash      string
 }
 
 type RetryRecord struct {
@@ -139,6 +149,11 @@ type RetryRecord struct {
 
 type StepRun struct {
 	ID              string
+	Origin          string
+	SourceSystem    string
+	SourceRecordID  string
+	SourceSHA256    string
+	SourceCreatedAt *time.Time
 	JobID           string
 	StepKey         string
 	StepOrder       int

@@ -16,6 +16,10 @@ service LibraryObjectService {
     option (google.api.http) = { get: "/api/v1/library-objects:resolve" };
     option (api.get) = "/api/v1/library-objects:resolve";
   }
+  rpc ResolveInternalLibraryObject(ResolveLibraryObjectReq) returns (ResolveLibraryObjectResp) {
+    option (google.api.http) = { get: "/api/internal/v1/library-objects:resolve" };
+    option (api.get) = "/api/internal/v1/library-objects:resolve";
+  }
 }
 
 message ResolveLibraryObjectReq {

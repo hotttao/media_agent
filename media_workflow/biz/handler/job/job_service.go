@@ -5,6 +5,7 @@ package job
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -47,6 +48,10 @@ func GetJob(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusNotFound, err.Error())
 		return
 	}
+	if j.SubmittedBy != auth.CallerID(ctx) || j.SubmittedBy == "" {
+		c.String(consts.StatusNotFound, "job not found")
+		return
+	}
 	stepRuns := make([]*pb.StepRun, len(srs))
 	for i, sr := range srs {
 		stepRuns[i] = stepRunToPB(sr)
@@ -60,6 +65,10 @@ func ListJobs(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
+	if auth.CallerID(ctx) == "" {
+		c.String(consts.StatusUnauthorized, "authentication required")
+		return
+	}
 	page := int(req.GetPage())
 	if page <= 0 {
 		page = 1
@@ -69,7 +78,7 @@ func ListJobs(ctx context.Context, c *app.RequestContext) {
 		pageSize = 50
 	}
 	items, total, err := Svc.List(ctx, domain.ListQuery{
-		Scope: req.GetScope(), WorkflowID: req.GetWorkflowId(), Status: req.GetStatus(),
+		Scope: req.GetScope(), WorkflowID: req.GetWorkflowId(), SubmittedBy: auth.CallerID(ctx), Status: req.GetStatus(),
 		Limit: pageSize, Offset: (page - 1) * pageSize,
 	})
 	if err != nil {
@@ -89,6 +98,10 @@ func CancelJob(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
+	if !ownsJob(ctx, req.GetId()) {
+		c.String(consts.StatusNotFound, "job not found")
+		return
+	}
 	j, err := Svc.Cancel(ctx, req.GetId())
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
@@ -101,6 +114,10 @@ func RetryJob(ctx context.Context, c *app.RequestContext) {
 	var req pb.RetryJobReq
 	if err := c.BindAndValidate(&req); err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	if !ownsJob(ctx, req.GetId()) {
+		c.String(consts.StatusNotFound, "job not found")
 		return
 	}
 	var override *domain.JobInput
@@ -122,6 +139,10 @@ func ConfirmStepRun(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
+	if !ownsStepRun(ctx, req.GetStepRunId()) {
+		c.String(consts.StatusNotFound, "step run not found")
+		return
+	}
 	sr, err := Svc.Confirm(ctx, req.GetStepRunId(), int(req.GetSelectedIndex()))
 	if err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
@@ -134,6 +155,10 @@ func RegenerateStepRun(ctx context.Context, c *app.RequestContext) {
 	var req pb.RegenerateStepRunReq
 	if err := c.BindAndValidate(&req); err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	if !ownsStepRun(ctx, req.GetStepRunId()) {
+		c.String(consts.StatusNotFound, "step run not found")
 		return
 	}
 	sr, err := Svc.Regenerate(ctx, req.GetStepRunId())
@@ -245,6 +270,8 @@ func jobInputToPB(ji domain.JobInput) *pb.JobInput {
 
 func jobStatusToPB(s domain.JobStatus) pb.JobStatus {
 	switch s {
+	case domain.JobAwaitingResume:
+		return pb.JobStatus_AWAITING_RESUME
 	case domain.JobPending:
 		return pb.JobStatus_PENDING
 	case domain.JobRunning:
@@ -283,12 +310,18 @@ func srStatusToPB(s domain.StepRunStatus) pb.StepRunStatus {
 
 func jobToPB(j *domain.Job) *pb.Job {
 	retryHist, _ := json.Marshal(j.RetryHistory)
-	return &pb.Job{
+	out := &pb.Job{
 		Id: j.ID, Scope: j.Scope, WorkflowId: j.WorkflowID, WorkflowVersion: int32(j.WorkflowVersion),
 		Input: jobInputToPB(j.Input), Status: jobStatusToPB(j.Status), RetryCount: int32(j.RetryCount),
 		RetryHistory: string(retryHist), SubmittedBy: j.SubmittedBy,
-		SubmittedAt: j.SubmittedAt.UnixNano(),
+		SubmittedAt: j.SubmittedAt.UnixNano(), Origin: j.Origin,
+		OrganizationId: j.OrganizationID, WorkspaceId: j.WorkspaceID,
+		SourceSystem: j.SourceSystem, SourceRecordId: j.SourceRecordID,
 	}
+	if j.ImportedAt != nil {
+		out.ImportedAt = j.ImportedAt.UnixNano()
+	}
+	return out
 }
 
 func stepRunToPB(sr *domain.StepRun) *pb.StepRun {
@@ -301,14 +334,19 @@ func stepRunToPB(sr *domain.StepRun) *pb.StepRun {
 	if sr.SelectedIndex != nil {
 		selIdx = int32(*sr.SelectedIndex)
 	}
-	return &pb.StepRun{
+	out := &pb.StepRun{
 		Id: sr.ID, JobId: sr.JobID, StepKey: sr.StepKey, StepOrder: int32(sr.StepOrder),
 		TemplateId: sr.TemplateID, TemplateVersion: int32(sr.TemplateVersion),
 		Status: srStatusToPB(sr.Status), RetryCount: int32(sr.RetryCount),
 		ResolvedInputs: string(ri), RenderedPrompt: sr.RenderedPrompt,
 		Candidates: cands, SelectedIndex: selIdx, OutputAssetId: sr.OutputAssetID,
 		FailureReason: sr.FailureReason, ClaimedBy: sr.ClaimedBy,
+		Origin: sr.Origin, SourceSystem: sr.SourceSystem, SourceRecordId: sr.SourceRecordID,
 	}
+	if sr.SourceCreatedAt != nil {
+		out.SourceCreatedAt = sr.SourceCreatedAt.UnixNano()
+	}
+	return out
 }
 
 // RetryStepRun .
@@ -317,6 +355,10 @@ func RetryStepRun(ctx context.Context, c *app.RequestContext) {
 	var req pb.RetryStepRunReq
 	if err := c.BindAndValidate(&req); err != nil {
 		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	if !ownsStepRun(ctx, req.GetStepRunId()) {
+		c.String(consts.StatusNotFound, "step run not found")
 		return
 	}
 	var override *domain.JobInput
@@ -345,5 +387,83 @@ func GetStepRun(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusNotFound, err.Error())
 		return
 	}
+	if !ownsJob(ctx, sr.JobID) {
+		c.String(consts.StatusNotFound, "step run not found")
+		return
+	}
 	c.JSON(consts.StatusOK, stepRunToPB(sr))
+}
+
+func ownsJob(ctx context.Context, jobID string) bool {
+	callerID := auth.CallerID(ctx)
+	if callerID == "" {
+		return false
+	}
+	job, _, err := Svc.Get(ctx, jobID)
+	return err == nil && job.SubmittedBy == callerID
+}
+
+func ownsStepRun(ctx context.Context, stepRunID string) bool {
+	sr, err := Svc.GetStepRun(ctx, stepRunID)
+	return err == nil && ownsJob(ctx, sr.JobID)
+}
+
+// ImportIncompleteExecution .
+// @router /api/internal/v1/jobs/import-incomplete [POST]
+func ImportIncompleteExecution(ctx context.Context, c *app.RequestContext) {
+	var req pb.ImportIncompleteExecutionReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	completed := make([]jobsvc.HistoricalStep, 0, len(req.GetCompleted()))
+	for _, item := range req.GetCompleted() {
+		completed = append(completed, jobsvc.HistoricalStep{
+			StepKey: item.GetStepKey(), SourceRecordID: item.GetSourceRecordId(), AssetID: item.GetAssetId(),
+		})
+	}
+	j, err := Svc.ImportIncomplete(ctx, jobsvc.ImportIncompleteCommand{
+		SourceGroupID: req.GetSourceGroupId(), OrganizationID: req.GetOrganizationId(), WorkspaceID: req.GetWorkspaceId(),
+		OwnerUserID: req.GetOwnerUserId(), WorkflowID: req.GetWorkflowId(), WorkflowVersion: int(req.GetWorkflowVersion()),
+		Input: jobInputFromPB(req.GetInput()), Completed: completed,
+	})
+	if err != nil {
+		if errors.Is(err, jobsvc.ErrHistoryImportConflict) {
+			c.String(consts.StatusConflict, err.Error())
+			return
+		}
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	c.JSON(consts.StatusOK, &pb.ImportIncompleteExecutionResp{JobId: j.ID, Status: jobStatusToPB(j.Status)})
+}
+
+// ResumeJob .
+// @router /api/v1/jobs/:id/resume [POST]
+func ResumeJob(ctx context.Context, c *app.RequestContext) {
+	var req pb.ResumeJobReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	if auth.CallerID(ctx) == "" {
+		c.String(consts.StatusUnauthorized, "authentication required")
+		return
+	}
+	j, err := Svc.Resume(ctx, jobsvc.ResumeCommand{
+		JobID: req.GetId(), UserID: auth.CallerID(ctx), IdempotencyKey: req.GetIdempotencyKey(),
+		InputPatch: jobInputFromPB(req.GetInputPatch()),
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, jobsvc.ErrResumeForbidden):
+			c.String(consts.StatusForbidden, err.Error())
+		case errors.Is(err, jobsvc.ErrResumeConflict):
+			c.String(consts.StatusConflict, err.Error())
+		default:
+			c.String(consts.StatusBadRequest, err.Error())
+		}
+		return
+	}
+	c.JSON(consts.StatusAccepted, jobToPB(j))
 }

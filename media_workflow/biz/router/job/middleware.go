@@ -3,7 +3,12 @@
 package job
 
 import (
+	"context"
+	"crypto/subtle"
+	"os"
+
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
 
 func rootMw() []app.HandlerFunc {
@@ -97,6 +102,38 @@ func _getsteprunMw() []app.HandlerFunc {
 }
 
 func _retrysteprunMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _internalMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _importincompleteexecutionMw() []app.HandlerFunc {
+	return []app.HandlerFunc{func(ctx context.Context, c *app.RequestContext) {
+		expected := os.Getenv("MEDIA_WORKFLOW_MIGRATION_TOKEN")
+		if expected == "" || subtle.ConstantTimeCompare(c.Request.Header.Peek("X-Media-Workflow-Migration-Token"), []byte(expected)) != 1 {
+			c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid migration token"})
+			c.Abort()
+			return
+		}
+		c.Next(ctx)
+	}}
+}
+
+func _v10Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _jobs0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _resumejobMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }

@@ -43,3 +43,23 @@ func TestFixtureRejectsInvalidOrSensitiveAssetBase(t *testing.T) {
 		}
 	}
 }
+
+func TestFixtureCanReturnPreuploadedVideoResult(t *testing.T) {
+	executor, err := NewExecutor("https://legacy.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []string{"file:///tmp/video.mp4", "https://user:pass@example.test/video.mp4", "https://example.test/video.mp4#fragment"} {
+		if err := executor.SetVideoResultURL(invalid); err == nil {
+			t.Fatalf("unsafe fixture video URL accepted: %q", invalid)
+		}
+	}
+	videoURL := "https://storage.example/media/materials/org/ai_clothing/generated_asset_import/video.mp4?signature=short-lived"
+	if err := executor.SetVideoResultURL(videoURL); err != nil {
+		t.Fatal(err)
+	}
+	output, err := executor.Execute(gateway.Task{CapabilityKey: "media.video.generate", CapabilityVersion: 1})
+	if err != nil || output["candidates"].([]map[string]any)[0]["url"] != videoURL {
+		t.Fatalf("fixture did not return controlled video: output=%+v err=%v", output, err)
+	}
+}

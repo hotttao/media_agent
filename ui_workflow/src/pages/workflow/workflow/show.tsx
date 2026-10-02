@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useQueries } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Boxes,
@@ -11,16 +11,22 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { JobStatusBadge } from "@/domains/jobs/components/status-badge";
+import { useJobsList } from "@/domains/jobs/hooks/use-jobs-list";
+import { getJob } from "@/domains/jobs/lib/api";
+import { CANCELABLE_JOB_STATUS } from "@/domains/jobs/types";
+import { useTemplatesList } from "@/domains/templates/hooks/use-templates-list";
 import { WorkflowGraph } from "@/domains/workflows/components/workflow-graph";
 import { useWorkflow } from "@/domains/workflows/hooks/use-workflow";
 import {
   useArchiveWorkflow,
   usePublishWorkflow,
 } from "@/domains/workflows/hooks/use-workflow-mutations";
-import { cn } from "@/foundation/lib/utils";
 import type { WorkflowStep } from "@/domains/workflows/types";
+import { cn } from "@/foundation/lib/utils";
 
 const statusLabel = {
   draft: "草稿",
@@ -37,12 +43,31 @@ export function WorkflowShow({
   id,
   onBack,
   onEdit,
+  onOpenJob,
+  onRun,
 }: {
   id: string;
   onBack: () => void;
   onEdit: () => void;
+  onOpenJob: (jobId: string) => void;
+  onRun: () => void;
 }) {
   const { data: workflow, isLoading } = useWorkflow(id);
+  const { data: templates } = useTemplatesList({
+    scope: workflow?.scope,
+    page_size: 200,
+  });
+  const { data: jobsPage } = useJobsList({ workflow_id: id, page_size: 100 });
+  const activeJobs = (jobsPage?.items ?? []).filter((job) =>
+    CANCELABLE_JOB_STATUS.has(job.status),
+  );
+  const activeDetails = useQueries({
+    queries: activeJobs.map((job) => ({
+      queryKey: ["job", job.id],
+      queryFn: () => getJob(job.id),
+      refetchInterval: 2000,
+    })),
+  });
   const archiveWorkflow = useArchiveWorkflow();
   const publishWorkflow = usePublishWorkflow();
   const [selectedStepKey, setSelectedStepKey] = useState<string>();
@@ -100,6 +125,12 @@ export function WorkflowShow({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {workflow.status === "published" ? (
+              <Button onClick={onRun}>
+                <Play className="mr-2 h-4 w-4" />
+                运行工作流
+              </Button>
+            ) : null}
             {workflow.status === "draft" ? (
               <Button
                 onClick={() => publishWorkflow.mutate(id)}
@@ -139,6 +170,49 @@ export function WorkflowShow({
           />
         </section>
 
+        {activeJobs.length > 0 ? (
+          <section className="rounded-2xl border border-border/70 bg-card p-5">
+            <h2 className="font-semibold">正在执行 · {activeJobs.length}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              打开执行记录，查看每个节点的位置、结果和待确认事项。
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {activeJobs.map((job, index) => {
+                const stepRuns = activeDetails[index]?.data?.step_runs ?? [];
+                const focus =
+                  stepRuns.find((step) => step.status === "need_confirm") ??
+                  stepRuns.find(
+                    (step) =>
+                      step.status === "running" || step.status === "claimed",
+                  ) ??
+                  stepRuns.find((step) => step.status === "pending");
+                return (
+                  <button
+                    key={job.id}
+                    type="button"
+                    onClick={() => onOpenJob(job.id)}
+                    className="rounded-xl border border-border p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+                  >
+                    <JobStatusBadge status={job.status} />
+                    <span className="mt-2 block text-sm font-medium">
+                      {focus
+                        ? `${focus.step_key} · ${focus.status === "need_confirm" ? "待确认" : focus.status === "pending" ? "等待执行" : "执行中"}`
+                        : "正在获取节点状态…"}
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {
+                        stepRuns.filter((step) => step.status === "succeeded")
+                          .length
+                      }
+                      /{stepRuns.length} 个节点已完成
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
         <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
             <div>
@@ -157,6 +231,12 @@ export function WorkflowShow({
               model={{
                 steps: workflow.steps,
                 outputStepKey: workflow.output_step_key,
+                templateNameByID: Object.fromEntries(
+                  (templates?.items ?? []).map((template) => [
+                    template.id,
+                    template.name,
+                  ]),
+                ),
               }}
               className="h-[540px]"
               selectedNodeId={selectedStepKey}

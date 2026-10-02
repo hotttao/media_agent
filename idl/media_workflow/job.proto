@@ -9,6 +9,11 @@ option go_package = "media_workflow/job";
 
 // JobService —— job 提交 + 查询 + cancel + retry + 用户确认 + worker pull。
 service JobService {
+  // 可信迁移工具：仅导入已完成的历史图片前缀，不启动 Conductor。
+  rpc ImportIncompleteExecution(ImportIncompleteExecutionReq) returns (ImportIncompleteExecutionResp) {
+    option (google.api.http) = { post: "/api/internal/v1/jobs/import-incomplete" body: "*" };
+    option (api.post) = "/api/internal/v1/jobs/import-incomplete";
+  }
   // —— 用户 / 前端 ——
   rpc SubmitJob(SubmitJobReq) returns (SubmitJobResp) {
     option (google.api.http) = { post: "/api/v1/jobs" body: "*" };
@@ -29,6 +34,10 @@ service JobService {
   rpc RetryJob(RetryJobReq) returns (Job) {
     option (google.api.http) = { post: "/api/v1/jobs/{id}/retry" body: "*" };
     option (api.post) = "/api/v1/jobs/:id/retry";
+  }
+  rpc ResumeJob(ResumeJobReq) returns (Job) {
+    option (google.api.http) = { post: "/api/v1/jobs/{id}/resume" body: "*" };
+    option (api.post) = "/api/v1/jobs/:id/resume";
   }
   rpc ConfirmStepRun(ConfirmStepRunReq) returns (StepRun) {
     option (google.api.http) = { post: "/api/v1/step-runs/{step_run_id}/confirm" body: "*" };
@@ -83,7 +92,7 @@ message JobInput {
 
 enum JobStatus {
   JOB_STATUS_UNSPECIFIED = 0; PENDING = 1; RUNNING = 2; NEED_CONFIRM = 3;
-  SUCCEEDED = 4; FAILED = 5; CANCELLED = 6;
+  SUCCEEDED = 4; FAILED = 5; CANCELLED = 6; AWAITING_RESUME = 7;
 }
 enum StepRunStatus {
   SR_UNSPECIFIED = 0; SR_BLOCKED = 1; SR_PENDING = 2; SR_CLAIMED = 3;
@@ -116,6 +125,10 @@ message StepRun {
   int64 claimed_at = 16;
   int64 started_at = 17;
   int64 finished_at = 18;
+  string origin = 19;
+  string source_system = 20;
+  string source_record_id = 21;
+  int64 source_created_at = 22;
 }
 
 message Job {
@@ -132,7 +145,30 @@ message Job {
   int64 started_at = 11;
   int64 finished_at = 12;
   string failure_reason = 13;
+  string origin = 14;
+  string organization_id = 15;
+  string workspace_id = 16;
+  string source_system = 17;
+  string source_record_id = 18;
+  int64 imported_at = 19;
 }
+
+message HistoricalStepOutput {
+  string step_key = 1;
+  string source_record_id = 2;
+  string asset_id = 3;
+}
+message ImportIncompleteExecutionReq {
+  string source_group_id = 1;
+  string organization_id = 2;
+  string workspace_id = 3;
+  string owner_user_id = 4;
+  string workflow_id = 5;
+  int32 workflow_version = 6;
+  JobInput input = 7;
+  repeated HistoricalStepOutput completed = 8;
+}
+message ImportIncompleteExecutionResp { string job_id = 1; JobStatus status = 2; }
 
 // —— SubmitJob ——
 message SubmitJobReq {
@@ -199,6 +235,11 @@ message RetryJobReq {
   string id = 1 [(api.path) = "id"];
   string reason = 2 [(api.body) = "reason"];
   JobInput input_override = 3 [(api.body) = "input_override"];
+}
+message ResumeJobReq {
+  string id = 1 [(api.path) = "id"];
+  JobInput input_patch = 2 [(api.body) = "input_patch"];
+  string idempotency_key = 3 [(api.body) = "idempotency_key"];
 }
 
 // -- 单步 retry + 单步读 --

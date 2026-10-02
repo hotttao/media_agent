@@ -10,7 +10,7 @@ RUN cd media_materials && GOWORK=off go mod download
 COPY hertz_gen/ hertz_gen/
 COPY hertz_infra/ hertz_infra/
 COPY media_materials/ media_materials/
-RUN cd media_materials && GOWORK=off CGO_ENABLED=0 go build -o /out/media_materials .
+RUN --mount=type=cache,target=/root/.cache/go-build cd media_materials && GOWORK=off CGO_ENABLED=0 go build -o /out/media_materials .
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata

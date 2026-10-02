@@ -32,14 +32,16 @@ function inputLabel(entry: WorkflowInputSchemaEntry) {
 export function JobCreate({
   onDone,
   onSubmitted,
+  preferredWorkflowId,
 }: {
   onDone: () => void;
   onSubmitted: (jobId: string) => void;
+  preferredWorkflowId?: string;
 }) {
   const shell = hostShim.useShellContext();
   const submitJob = useSubmitJob();
   const { data: workflows, isLoading: workflowsLoading } = useWorkflowsList();
-  const [workflowId, setWorkflowId] = useState("");
+  const [workflowId, setWorkflowId] = useState(preferredWorkflowId ?? "");
   const [selectedIds, setSelectedIds] = useState<Record<string, string>>({});
   const selectedWorkflow = workflows?.find((item) => item.id === workflowId);
   const optionsQuery = useJobInputOptions(

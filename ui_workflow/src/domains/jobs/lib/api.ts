@@ -25,8 +25,8 @@ import { api } from "@/foundation/lib/api-client";
 import type {
   GetJobResponse,
   Job,
-  JobStatus,
   JobListParams,
+  JobStatus,
   JobsPage,
   RetryJobInput,
   StepRun,
@@ -37,10 +37,23 @@ import type {
 } from "../types";
 
 const JOB_STATUSES: JobStatus[] = [
-  "pending", "pending", "running", "need_confirm", "succeeded", "failed", "cancelled",
+  "pending",
+  "pending",
+  "running",
+  "need_confirm",
+  "succeeded",
+  "failed",
+  "cancelled",
 ];
 const STEP_STATUSES: StepRunStatus[] = [
-  "blocked", "blocked", "pending", "claimed", "need_confirm", "succeeded", "failed", "skipped",
+  "blocked",
+  "blocked",
+  "pending",
+  "claimed",
+  "need_confirm",
+  "succeeded",
+  "failed",
+  "skipped",
 ];
 
 type WireJob = Omit<Job, "status" | "retry_history"> & {
@@ -54,13 +67,20 @@ type WireStepRun = Omit<StepRun, "status" | "resolved_inputs"> & {
 
 function parseJSON<T>(value: string | T | undefined, fallback: T): T {
   if (typeof value !== "string") return value ?? fallback;
-  try { return JSON.parse(value) as T; } catch { return fallback; }
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
 }
 
 function normalizeJob(job: WireJob): Job {
   return {
     ...job,
-    status: typeof job.status === "number" ? JOB_STATUSES[job.status] ?? "pending" : job.status,
+    status:
+      typeof job.status === "number"
+        ? (JOB_STATUSES[job.status] ?? "pending")
+        : job.status,
     retry_history: parseJSON(job.retry_history, []),
   };
 }
@@ -68,9 +88,16 @@ function normalizeJob(job: WireJob): Job {
 function normalizeStepRun(stepRun: WireStepRun): StepRun {
   return {
     ...stepRun,
-    status: typeof stepRun.status === "number" ? STEP_STATUSES[stepRun.status] ?? "blocked" : stepRun.status,
+    status:
+      typeof stepRun.status === "number"
+        ? (STEP_STATUSES[stepRun.status] ?? "blocked")
+        : stepRun.status,
     resolved_inputs: parseJSON(stepRun.resolved_inputs, {}),
-    candidates: stepRun.candidates ?? [],
+    selected_index: stepRun.selected_index ?? 0,
+    candidates: (stepRun.candidates ?? []).map((candidate, index) => ({
+      ...candidate,
+      index: candidate.index ?? index,
+    })),
   };
 }
 
@@ -86,16 +113,25 @@ function buildQuery(params: object): string {
 // ── Job ─────────────────────────────────────────────────────────────────
 
 export async function listJobs(params: JobListParams = {}): Promise<JobsPage> {
-  const result = await api.request<{ items?: WireJob[]; total: number }>(`/jobs${buildQuery(params)}`);
+  const result = await api.request<{ items?: WireJob[]; total: number }>(
+    `/jobs${buildQuery(params)}`,
+  );
   return { ...result, items: (result.items ?? []).map(normalizeJob) };
 }
 
 export async function getJob(id: string): Promise<GetJobResponse> {
-  const result = await api.request<{ job: WireJob; step_runs?: WireStepRun[] }>(`/jobs/${encodeURIComponent(id)}`);
-  return { job: normalizeJob(result.job), step_runs: (result.step_runs ?? []).map(normalizeStepRun) };
+  const result = await api.request<{ job: WireJob; step_runs?: WireStepRun[] }>(
+    `/jobs/${encodeURIComponent(id)}`,
+  );
+  return {
+    job: normalizeJob(result.job),
+    step_runs: (result.step_runs ?? []).map(normalizeStepRun),
+  };
 }
 
-export async function submitJob(input: SubmitJobInput): Promise<{ id: string }> {
+export async function submitJob(
+  input: SubmitJobInput,
+): Promise<{ id: string }> {
   const result = await api.request<{ job_id: string }>("/jobs", {
     method: "POST",
     body: JSON.stringify(input),
@@ -104,9 +140,12 @@ export async function submitJob(input: SubmitJobInput): Promise<{ id: string }> 
 }
 
 export async function cancelJob(id: string): Promise<Job> {
-  const result = await api.request<WireJob>(`/jobs/${encodeURIComponent(id)}/cancel`, {
-    method: "POST",
-  });
+  const result = await api.request<WireJob>(
+    `/jobs/${encodeURIComponent(id)}/cancel`,
+    {
+      method: "POST",
+    },
+  );
   return normalizeJob(result);
 }
 
@@ -114,10 +153,13 @@ export async function retryJob(
   id: string,
   body: RetryJobInput = {},
 ): Promise<Job> {
-  const result = await api.request<WireJob>(`/jobs/${encodeURIComponent(id)}/retry`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  const result = await api.request<WireJob>(
+    `/jobs/${encodeURIComponent(id)}/retry`,
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    },
+  );
   return normalizeJob(result);
 }
 

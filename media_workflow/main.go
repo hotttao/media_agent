@@ -146,11 +146,31 @@ func main() {
 	stepRunRepo := jobrepo.NewStepRunRepo(db)
 	executionEngine := &conductor.ExecutionEngine{Client: conductorClient}
 	jobSvc := jobsvc.NewService(jobRepo, stepRunRepo, txRunner, wfRepo, tplLookup, materialsClient, cfg.GetJob(), compilationRepo, executionEngine)
+	jobSvc.ConfigureHistoryAssets(materialsClient)
+	controlClient := client.NewControlClient(os.Getenv("MEDIA_CONTROL_URL"), os.Getenv("CONTROL_INTERNAL_TOKEN"))
+	jobSvc.ConfigureHistoryWorkspaces(controlClient)
+	jobSvc.ConfigureResume(jobRepo, controlClient, conductorClient, os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"))
 	jobhandler.Svc = jobSvc
+	resumeCtx, resumeCancel := context.WithCancel(context.Background())
+	defer resumeCancel()
+	go func() {
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+		for {
+			if err := jobSvc.DispatchPendingResume(resumeCtx); err != nil && resumeCtx.Err() == nil {
+				log.Printf("historical resume dispatch: %v", err)
+			}
+			select {
+			case <-resumeCtx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 	dispatchRepo := jobrepo.NewDispatchRepo(db)
 	workerFlow := &workergateway.Flow{
 		Dispatches: dispatchRepo, Jobs: jobRepo, StepRuns: stepRunRepo,
-		Capabilities: capabilityRepo, Engine: executionEngine,
+		Capabilities: capabilityRepo, Engine: executionEngine, ImportedAssets: materialsClient,
 	}
 	workerhandler.Flow = workerFlow
 	workerSubmitterCtx, workerSubmitterCancel := context.WithCancel(context.Background())

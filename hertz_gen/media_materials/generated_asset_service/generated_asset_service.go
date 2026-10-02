@@ -26,6 +26,10 @@ type Client interface {
 	DeleteGeneratedAsset(context context.Context, req *generated_asset.GetGeneratedAssetReq, reqOpt ...config.RequestOption) (resp *generated_asset.GeneratedAsset, rawResponse *protocol.Response, err error)
 
 	UpsertGeneratedAsset(context context.Context, req *generated_asset.UpsertGeneratedAssetReq, reqOpt ...config.RequestOption) (resp *generated_asset.UpsertGeneratedAssetResp, rawResponse *protocol.Response, err error)
+
+	ImportGeneratedAsset(context context.Context, req *generated_asset.ImportGeneratedAssetReq, reqOpt ...config.RequestOption) (resp *generated_asset.ImportGeneratedAssetResp, rawResponse *protocol.Response, err error)
+
+	GetImportedGeneratedAsset(context context.Context, req *generated_asset.GetGeneratedAssetReq, reqOpt ...config.RequestOption) (resp *generated_asset.ImportedGeneratedAsset, rawResponse *protocol.Response, err error)
 }
 
 type GeneratedAssetServiceClient struct {
@@ -169,6 +173,52 @@ func (s *GeneratedAssetServiceClient) UpsertGeneratedAsset(context context.Conte
 	return resp, rawResponse, nil
 }
 
+func (s *GeneratedAssetServiceClient) ImportGeneratedAsset(context context.Context, req *generated_asset.ImportGeneratedAssetReq, reqOpt ...config.RequestOption) (resp *generated_asset.ImportGeneratedAssetResp, rawResponse *protocol.Response, err error) {
+	httpResp := &generated_asset.ImportGeneratedAssetResp{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/api/internal/v1/generated-assets/import")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *GeneratedAssetServiceClient) GetImportedGeneratedAsset(context context.Context, req *generated_asset.GetGeneratedAssetReq, reqOpt ...config.RequestOption) (resp *generated_asset.ImportedGeneratedAsset, rawResponse *protocol.Response, err error) {
+	httpResp := &generated_asset.ImportedGeneratedAsset{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"id": req.GetId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/internal/v1/generated-assets/import/:id")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
 var defaultClient, _ = NewGeneratedAssetServiceClient("")
 
 func ConfigDefaultClient(ops ...Option) (err error) {
@@ -194,4 +244,12 @@ func DeleteGeneratedAsset(context context.Context, req *generated_asset.GetGener
 
 func UpsertGeneratedAsset(context context.Context, req *generated_asset.UpsertGeneratedAssetReq, reqOpt ...config.RequestOption) (resp *generated_asset.UpsertGeneratedAssetResp, rawResponse *protocol.Response, err error) {
 	return defaultClient.UpsertGeneratedAsset(context, req, reqOpt...)
+}
+
+func ImportGeneratedAsset(context context.Context, req *generated_asset.ImportGeneratedAssetReq, reqOpt ...config.RequestOption) (resp *generated_asset.ImportGeneratedAssetResp, rawResponse *protocol.Response, err error) {
+	return defaultClient.ImportGeneratedAsset(context, req, reqOpt...)
+}
+
+func GetImportedGeneratedAsset(context context.Context, req *generated_asset.GetGeneratedAssetReq, reqOpt ...config.RequestOption) (resp *generated_asset.ImportedGeneratedAsset, rawResponse *protocol.Response, err error) {
+	return defaultClient.GetImportedGeneratedAsset(context, req, reqOpt...)
 }

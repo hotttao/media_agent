@@ -11,14 +11,21 @@ type GeneratedAsset struct {
 	Name              string     `gorm:"column:name;not null"`
 	AssetKind         string     `gorm:"column:asset_kind;not null"`
 	URL               string     `gorm:"column:url"`
+	ObjectPath        string     `gorm:"column:object_path"`
 	Content           string     `gorm:"column:content"`
 	OwnerUserID       string     `gorm:"column:owner_user_id;not null"`
 	Visibility        string     `gorm:"column:visibility;not null;default:private"`
 	TeamID            string     `gorm:"column:team_id"`
-	JobID             string     `gorm:"column:job_id;not null"`
-	StepRunID         string     `gorm:"column:step_run_id;not null"`
-	TemplateID        string     `gorm:"column:template_id;not null"`
-	TemplateVersion   int        `gorm:"column:template_version;not null"`
+	JobID             *string    `gorm:"column:job_id"`
+	StepRunID         *string    `gorm:"column:step_run_id"`
+	TemplateID        *string    `gorm:"column:template_id"`
+	TemplateVersion   *int       `gorm:"column:template_version"`
+	Origin            string     `gorm:"column:origin;not null;default:native"`
+	SourceSystem      *string    `gorm:"column:source_system"`
+	SourceRecordID    *string    `gorm:"column:source_record_id"`
+	SourceSHA256      *string    `gorm:"column:source_sha256"`
+	SourceCreatedAt   *time.Time `gorm:"column:source_created_at"`
+	ImportedAt        *time.Time `gorm:"column:imported_at"`
 	SourceVirtualIPID string     `gorm:"column:source_virtual_ip_id"`
 	SourceProductID   string     `gorm:"column:source_product_id"`
 	CreatedAt         time.Time  `gorm:"column:created_at;not null"`

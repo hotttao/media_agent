@@ -32,6 +32,16 @@ service GeneratedAssetService {
     option (google.api.http) = { post: "/api/internal/v1/generated-assets:upsert" body: "*" };
     option (api.post) = "/api/internal/v1/generated-assets:upsert";
   }
+  // ImportGeneratedAsset —— 迁移专用内部接口，历史产物不伪造 Job/StepRun。
+  rpc ImportGeneratedAsset(ImportGeneratedAssetReq) returns (ImportGeneratedAssetResp) {
+    option (google.api.http) = { post: "/api/internal/v1/generated-assets/import" body: "*" };
+    option (api.post) = "/api/internal/v1/generated-assets/import";
+  }
+  // GetImportedGeneratedAsset —— 供 media_workflow 校验历史 StepRun 所引用的真实资产。
+  rpc GetImportedGeneratedAsset(GetGeneratedAssetReq) returns (ImportedGeneratedAsset) {
+    option (google.api.http) = { get: "/api/internal/v1/generated-assets/import/{id}" };
+    option (api.get) = "/api/internal/v1/generated-assets/import/:id";
+  }
 }
 
 message GeneratedAsset {
@@ -51,6 +61,10 @@ message GeneratedAsset {
   string source_virtual_ip_id = 14;
   string source_product_id = 15;
   int64 created_at = 16;
+  string object_path = 17;
+  string origin = 18;
+  string source_system = 19;
+  string source_record_id = 20;
 }
 
 message GetGeneratedAssetReq {
@@ -101,4 +115,41 @@ message UpsertGeneratedAssetReq {
 
 message UpsertGeneratedAssetResp {
   string id = 1;
+}
+
+message ImportGeneratedAssetReq {
+  string organization_id = 1;
+  string scope = 2;
+  string asset_kind = 3;
+  string name = 4;
+  string object_path = 5;
+  string owner_user_id = 6;
+  string source_system = 7;
+  string source_record_id = 8;
+  string source_sha256 = 9;
+  int64 source_created_at = 10; // Unix nanoseconds
+  string source_virtual_ip_id = 11;
+  string source_product_id = 12;
+}
+
+message ImportGeneratedAssetResp {
+  string id = 1;
+  string object_path = 2;
+}
+
+message ImportedGeneratedAsset {
+  string id = 1;
+  string organization_id = 2;
+  string scope = 3;
+  string owner_user_id = 4;
+  string asset_kind = 5;
+  string object_path = 6;
+  string source_system = 7;
+  string source_record_id = 8;
+  string source_sha256 = 9;
+  int64 source_created_at = 10;
+  string source_product_id = 11;
+  string source_virtual_ip_id = 12;
+  string access_url = 13; // Short-lived; resolve again when a Worker claims the task.
+  int64 access_expires_at = 14;
 }

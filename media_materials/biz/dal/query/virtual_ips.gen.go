@@ -29,13 +29,15 @@ func newVirtualIp(db *gorm.DB, opts ...gen.DOOption) virtualIp {
 	tableName := _virtualIp.virtualIpDo.TableName()
 	_virtualIp.ALL = field.NewAsterisk(tableName)
 	_virtualIp.ID = field.NewString(tableName, "id")
+	_virtualIp.OrganizationID = field.NewString(tableName, "organization_id")
 	_virtualIp.Scope = field.NewString(tableName, "scope")
 	_virtualIp.Name = field.NewString(tableName, "name")
 	_virtualIp.Description = field.NewString(tableName, "description")
-	_virtualIp.AvatarURL = field.NewString(tableName, "avatar_url")
-	_virtualIp.FullBodyURL = field.NewString(tableName, "full_body_url")
-	_virtualIp.ThreeViewURL = field.NewString(tableName, "three_view_url")
-	_virtualIp.NineViewURL = field.NewString(tableName, "nine_view_url")
+	_virtualIp.AvatarObjectPath = field.NewString(tableName, "avatar_object_path")
+	_virtualIp.FullBodyObjectPath = field.NewString(tableName, "full_body_object_path")
+	_virtualIp.ThreeViewObjectPath = field.NewString(tableName, "three_view_object_path")
+	_virtualIp.NineViewObjectPath = field.NewString(tableName, "nine_view_object_path")
+	_virtualIp.PersonaProfile = field.NewString(tableName, "persona_profile")
 	_virtualIp.Status = field.NewString(tableName, "status")
 	_virtualIp.Visibility = field.NewString(tableName, "visibility")
 	_virtualIp.OwnerUserID = field.NewString(tableName, "owner_user_id")
@@ -51,21 +53,23 @@ func newVirtualIp(db *gorm.DB, opts ...gen.DOOption) virtualIp {
 type virtualIp struct {
 	virtualIpDo virtualIpDo
 
-	ALL          field.Asterisk
-	ID           field.String
-	Scope        field.String
-	Name         field.String
-	Description  field.String
-	AvatarURL    field.String
-	FullBodyURL  field.String
-	ThreeViewURL field.String
-	NineViewURL  field.String
-	Status       field.String
-	Visibility   field.String
-	OwnerUserID  field.String
-	CreatedAt    field.Time
-	UpdatedAt    field.Time
-	DeletedAt    field.Time
+	ALL                 field.Asterisk
+	ID                  field.String
+	OrganizationID      field.String
+	Scope               field.String
+	Name                field.String
+	Description         field.String
+	AvatarObjectPath    field.String
+	FullBodyObjectPath  field.String
+	ThreeViewObjectPath field.String
+	NineViewObjectPath  field.String
+	PersonaProfile      field.String
+	Status              field.String
+	Visibility          field.String
+	OwnerUserID         field.String
+	CreatedAt           field.Time
+	UpdatedAt           field.Time
+	DeletedAt           field.Time
 
 	fieldMap map[string]field.Expr
 }
@@ -83,13 +87,15 @@ func (v virtualIp) As(alias string) *virtualIp {
 func (v *virtualIp) updateTableName(table string) *virtualIp {
 	v.ALL = field.NewAsterisk(table)
 	v.ID = field.NewString(table, "id")
+	v.OrganizationID = field.NewString(table, "organization_id")
 	v.Scope = field.NewString(table, "scope")
 	v.Name = field.NewString(table, "name")
 	v.Description = field.NewString(table, "description")
-	v.AvatarURL = field.NewString(table, "avatar_url")
-	v.FullBodyURL = field.NewString(table, "full_body_url")
-	v.ThreeViewURL = field.NewString(table, "three_view_url")
-	v.NineViewURL = field.NewString(table, "nine_view_url")
+	v.AvatarObjectPath = field.NewString(table, "avatar_object_path")
+	v.FullBodyObjectPath = field.NewString(table, "full_body_object_path")
+	v.ThreeViewObjectPath = field.NewString(table, "three_view_object_path")
+	v.NineViewObjectPath = field.NewString(table, "nine_view_object_path")
+	v.PersonaProfile = field.NewString(table, "persona_profile")
 	v.Status = field.NewString(table, "status")
 	v.Visibility = field.NewString(table, "visibility")
 	v.OwnerUserID = field.NewString(table, "owner_user_id")
@@ -122,15 +128,17 @@ func (v *virtualIp) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (v *virtualIp) fillFieldMap() {
-	v.fieldMap = make(map[string]field.Expr, 14)
+	v.fieldMap = make(map[string]field.Expr, 16)
 	v.fieldMap["id"] = v.ID
+	v.fieldMap["organization_id"] = v.OrganizationID
 	v.fieldMap["scope"] = v.Scope
 	v.fieldMap["name"] = v.Name
 	v.fieldMap["description"] = v.Description
-	v.fieldMap["avatar_url"] = v.AvatarURL
-	v.fieldMap["full_body_url"] = v.FullBodyURL
-	v.fieldMap["three_view_url"] = v.ThreeViewURL
-	v.fieldMap["nine_view_url"] = v.NineViewURL
+	v.fieldMap["avatar_object_path"] = v.AvatarObjectPath
+	v.fieldMap["full_body_object_path"] = v.FullBodyObjectPath
+	v.fieldMap["three_view_object_path"] = v.ThreeViewObjectPath
+	v.fieldMap["nine_view_object_path"] = v.NineViewObjectPath
+	v.fieldMap["persona_profile"] = v.PersonaProfile
 	v.fieldMap["status"] = v.Status
 	v.fieldMap["visibility"] = v.Visibility
 	v.fieldMap["owner_user_id"] = v.OwnerUserID

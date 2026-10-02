@@ -33,6 +33,7 @@ func newMaterialBinding(db *gorm.DB, opts ...gen.DOOption) materialBinding {
 	_materialBinding.OwnerID = field.NewString(tableName, "owner_id")
 	_materialBinding.BoundBy = field.NewString(tableName, "bound_by")
 	_materialBinding.BoundAt = field.NewTime(tableName, "bound_at")
+	_materialBinding.BindingsEndAt = field.NewTime(tableName, "bindings_end_at")
 
 	_materialBinding.fillFieldMap()
 
@@ -42,12 +43,13 @@ func newMaterialBinding(db *gorm.DB, opts ...gen.DOOption) materialBinding {
 type materialBinding struct {
 	materialBindingDo materialBindingDo
 
-	ALL        field.Asterisk
-	MaterialID field.String
-	OwnerKind  field.String
-	OwnerID    field.String
-	BoundBy    field.String
-	BoundAt    field.Time
+	ALL           field.Asterisk
+	MaterialID    field.String
+	OwnerKind     field.String
+	OwnerID       field.String
+	BoundBy       field.String
+	BoundAt       field.Time
+	BindingsEndAt field.Time
 
 	fieldMap map[string]field.Expr
 }
@@ -69,6 +71,7 @@ func (m *materialBinding) updateTableName(table string) *materialBinding {
 	m.OwnerID = field.NewString(table, "owner_id")
 	m.BoundBy = field.NewString(table, "bound_by")
 	m.BoundAt = field.NewTime(table, "bound_at")
+	m.BindingsEndAt = field.NewTime(table, "bindings_end_at")
 
 	m.fillFieldMap()
 
@@ -97,12 +100,13 @@ func (m *materialBinding) GetFieldByName(fieldName string) (field.OrderExpr, boo
 }
 
 func (m *materialBinding) fillFieldMap() {
-	m.fieldMap = make(map[string]field.Expr, 5)
+	m.fieldMap = make(map[string]field.Expr, 6)
 	m.fieldMap["material_id"] = m.MaterialID
 	m.fieldMap["owner_kind"] = m.OwnerKind
 	m.fieldMap["owner_id"] = m.OwnerID
 	m.fieldMap["bound_by"] = m.BoundBy
 	m.fieldMap["bound_at"] = m.BoundAt
+	m.fieldMap["bindings_end_at"] = m.BindingsEndAt
 }
 
 func (m materialBinding) clone(db *gorm.DB) materialBinding {

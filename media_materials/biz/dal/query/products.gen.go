@@ -29,12 +29,16 @@ func newProduct(db *gorm.DB, opts ...gen.DOOption) product {
 	tableName := _product.productDo.TableName()
 	_product.ALL = field.NewAsterisk(tableName)
 	_product.ID = field.NewString(tableName, "id")
+	_product.OrganizationID = field.NewString(tableName, "organization_id")
 	_product.Scope = field.NewString(tableName, "scope")
 	_product.Name = field.NewString(tableName, "name")
 	_product.Description = field.NewString(tableName, "description")
 	_product.TargetAudience = field.NewString(tableName, "target_audience")
 	_product.ProductDetails = field.NewString(tableName, "product_details")
 	_product.DisplayActions = field.NewString(tableName, "display_actions")
+	_product.Tags = field.NewString(tableName, "tags")
+	_product.ExternalCommerce = field.NewString(tableName, "external_commerce")
+	_product.Metadata = field.NewString(tableName, "metadata")
 	_product.Status = field.NewString(tableName, "status")
 	_product.CreatedBy = field.NewString(tableName, "created_by")
 	_product.UpdatedBy = field.NewString(tableName, "updated_by")
@@ -50,20 +54,24 @@ func newProduct(db *gorm.DB, opts ...gen.DOOption) product {
 type product struct {
 	productDo productDo
 
-	ALL            field.Asterisk
-	ID             field.String
-	Scope          field.String
-	Name           field.String
-	Description    field.String
-	TargetAudience field.String
-	ProductDetails field.String
-	DisplayActions field.String
-	Status         field.String
-	CreatedBy      field.String
-	UpdatedBy      field.String
-	CreatedAt      field.Time
-	UpdatedAt      field.Time
-	DeletedAt      field.Time
+	ALL              field.Asterisk
+	ID               field.String
+	OrganizationID   field.String
+	Scope            field.String
+	Name             field.String
+	Description      field.String
+	TargetAudience   field.String
+	ProductDetails   field.String
+	DisplayActions   field.String
+	Tags             field.String
+	ExternalCommerce field.String
+	Metadata         field.String
+	Status           field.String
+	CreatedBy        field.String
+	UpdatedBy        field.String
+	CreatedAt        field.Time
+	UpdatedAt        field.Time
+	DeletedAt        field.Time
 
 	fieldMap map[string]field.Expr
 }
@@ -81,12 +89,16 @@ func (p product) As(alias string) *product {
 func (p *product) updateTableName(table string) *product {
 	p.ALL = field.NewAsterisk(table)
 	p.ID = field.NewString(table, "id")
+	p.OrganizationID = field.NewString(table, "organization_id")
 	p.Scope = field.NewString(table, "scope")
 	p.Name = field.NewString(table, "name")
 	p.Description = field.NewString(table, "description")
 	p.TargetAudience = field.NewString(table, "target_audience")
 	p.ProductDetails = field.NewString(table, "product_details")
 	p.DisplayActions = field.NewString(table, "display_actions")
+	p.Tags = field.NewString(table, "tags")
+	p.ExternalCommerce = field.NewString(table, "external_commerce")
+	p.Metadata = field.NewString(table, "metadata")
 	p.Status = field.NewString(table, "status")
 	p.CreatedBy = field.NewString(table, "created_by")
 	p.UpdatedBy = field.NewString(table, "updated_by")
@@ -117,14 +129,18 @@ func (p *product) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (p *product) fillFieldMap() {
-	p.fieldMap = make(map[string]field.Expr, 13)
+	p.fieldMap = make(map[string]field.Expr, 17)
 	p.fieldMap["id"] = p.ID
+	p.fieldMap["organization_id"] = p.OrganizationID
 	p.fieldMap["scope"] = p.Scope
 	p.fieldMap["name"] = p.Name
 	p.fieldMap["description"] = p.Description
 	p.fieldMap["target_audience"] = p.TargetAudience
 	p.fieldMap["product_details"] = p.ProductDetails
 	p.fieldMap["display_actions"] = p.DisplayActions
+	p.fieldMap["tags"] = p.Tags
+	p.fieldMap["external_commerce"] = p.ExternalCommerce
+	p.fieldMap["metadata"] = p.Metadata
 	p.fieldMap["status"] = p.Status
 	p.fieldMap["created_by"] = p.CreatedBy
 	p.fieldMap["updated_by"] = p.UpdatedBy

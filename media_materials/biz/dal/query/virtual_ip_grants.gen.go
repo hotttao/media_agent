@@ -28,6 +28,7 @@ func newVirtualIpGrant(db *gorm.DB, opts ...gen.DOOption) virtualIpGrant {
 
 	tableName := _virtualIpGrant.virtualIpGrantDo.TableName()
 	_virtualIpGrant.ALL = field.NewAsterisk(tableName)
+	_virtualIpGrant.OrganizationID = field.NewString(tableName, "organization_id")
 	_virtualIpGrant.VirtualIPID = field.NewString(tableName, "virtual_ip_id")
 	_virtualIpGrant.TeamID = field.NewString(tableName, "team_id")
 	_virtualIpGrant.Permission = field.NewString(tableName, "permission")
@@ -42,12 +43,13 @@ func newVirtualIpGrant(db *gorm.DB, opts ...gen.DOOption) virtualIpGrant {
 type virtualIpGrant struct {
 	virtualIpGrantDo virtualIpGrantDo
 
-	ALL         field.Asterisk
-	VirtualIPID field.String
-	TeamID      field.String
-	Permission  field.String
-	GrantedBy   field.String
-	GrantedAt   field.Time
+	ALL            field.Asterisk
+	OrganizationID field.String
+	VirtualIPID    field.String
+	TeamID         field.String
+	Permission     field.String
+	GrantedBy      field.String
+	GrantedAt      field.Time
 
 	fieldMap map[string]field.Expr
 }
@@ -64,6 +66,7 @@ func (v virtualIpGrant) As(alias string) *virtualIpGrant {
 
 func (v *virtualIpGrant) updateTableName(table string) *virtualIpGrant {
 	v.ALL = field.NewAsterisk(table)
+	v.OrganizationID = field.NewString(table, "organization_id")
 	v.VirtualIPID = field.NewString(table, "virtual_ip_id")
 	v.TeamID = field.NewString(table, "team_id")
 	v.Permission = field.NewString(table, "permission")
@@ -97,7 +100,8 @@ func (v *virtualIpGrant) GetFieldByName(fieldName string) (field.OrderExpr, bool
 }
 
 func (v *virtualIpGrant) fillFieldMap() {
-	v.fieldMap = make(map[string]field.Expr, 5)
+	v.fieldMap = make(map[string]field.Expr, 6)
+	v.fieldMap["organization_id"] = v.OrganizationID
 	v.fieldMap["virtual_ip_id"] = v.VirtualIPID
 	v.fieldMap["team_id"] = v.TeamID
 	v.fieldMap["permission"] = v.Permission

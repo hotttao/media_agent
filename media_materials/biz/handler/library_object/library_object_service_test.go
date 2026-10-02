@@ -66,3 +66,24 @@ func TestResolveLibraryObjectAuthorizationAndErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestResolveInternalLibraryObjectIsOrganizationScoped(t *testing.T) {
+	previous := Resolver
+	t.Cleanup(func() { Resolver = previous })
+	Resolver = fakeResolver{result: objectstorage.ResolvedObject{URL: "http://storage.test/media/materials/org-1/image.png?fresh=1", ExpiresAt: 42}}
+	h := server.Default()
+	h.GET("/api/internal/v1/library-objects:resolve", ResolveInternalLibraryObject)
+	for _, test := range []struct {
+		path string
+		want int
+	}{
+		{"materials/org-1/ai_clothing/material/image.png", 200},
+		{"materials/org-2/ai_clothing/material/image.png", 403},
+		{"materials/org-1/../org-2/image.png", 403},
+	} {
+		response := ut.PerformRequest(h.Engine, "GET", "/api/internal/v1/library-objects:resolve?organization_id=org-1&object_path="+test.path, nil)
+		if got := response.Result().StatusCode(); got != test.want {
+			t.Fatalf("path=%q status=%d want=%d", test.path, got, test.want)
+		}
+	}
+}

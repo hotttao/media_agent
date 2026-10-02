@@ -34,8 +34,16 @@ _禁用替代词_：raw asset、input asset。
 _禁用替代词_：movement scope、pose mapping。
 
 **Generated Asset（生成产物）**:
-workflow 执行产出的资源（model_image/style_image/first_frame/ai_video 等），落 `generated_assets` 表（asset_kind.resource_type=ASSET）；持生成记录（job_id / step_run_id / template_id / template_version / source_virtual_ip_id / source_product_id）；可见性同 Material 三档。由 `media_workflow.workflow_execution` upsert，不开放前端直接创建。
+workflow 执行产出的资源（model_image/style_image/first_frame/ai_video 等），落 `generated_assets` 表（asset_kind.resource_type=ASSET）；原生产物持 Job/StepRun/Template 来源，历史导入产物持源系统记录 ID 与原时间，且可被多个 Imported Incomplete Execution 复用。两类均须有可信来源、受控媒体对象与 Organization/Scope/owner；可见性同 Material 三档，不开放前端直接创建。
 _禁用替代词_：output asset、result、generation（generation 留给 generation_record 语义）。
+
+**Imported Generated Asset（导入生成产物）**:
+由受信迁移流程从旧系统图片/视频记录摄取的 Generated Asset，以 `(source_system, source_record_id)` 幂等标识并保存对象摘要；它保留历史来源，不伪造当前 Job/StepRun 或 Template 生成记录，可供多个导入的未完成执行引用。归 [asset](domain/0002-asset/asset.md) domain。
+_禁用替代词_：Material、临时上传、无来源 Generated Asset。
+
+**Storage Object Resolution（对象引用解析）**:
+受信服务凭证在指定 Organization 命名空间内把稳定 Object Path 换成短期可访问 URL 的只读能力；它不替代 Material/Generated Asset 的资源授权。
+_禁用替代词_：素材可达性校验、持久化 URL。
 
 **Asset（资源）**:
 Material 与 Generated Asset 的统称，作为跨域引用与可达性校验的对象。两类分落 `materials` / `generated_assets` 表，由所属 Asset Kind 的 `resource_type` 区分；跨服务引用统一用 `(resource_type, id)` 二元组定位，**不直读对方库**。归 [asset](domain/0002-asset/asset.md) domain。

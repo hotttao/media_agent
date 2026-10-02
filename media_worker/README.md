@@ -22,6 +22,8 @@ export MEDIA_WORKER_API_TOKEN="$MEDIA_API_TOKEN"
 export MEDIA_GATEWAY_URL=http://192.168.2.41:18080
 export MEDIA_WORKER_PROFILE=media_ai_fixture
 export MEDIA_WORKER_FIXTURE_ASSETS_URL=http://192.168.2.38
+export MEDIA_WORKER_FIXTURE_VIDEO_RESULT_URL='<本企业目标对象存储中已上传视频的短期 URL>'
+export MEDIA_WORKER_CAPABILITIES=media.video.generate@1
 go -C media_worker run ./cmd/media_worker
 ```
 
@@ -44,4 +46,4 @@ Worker 启动后先注册能力，再按 Capability 并发轮询。任务只使�
 `dispatch_id` 回报心跳、完成或失败；结果回报发生暂时性网络错误时，会使用同一个
 幂等键重试，不会重新执行 Provider。
 
-`MEDIA_WORKER_FIXTURE_ASSETS_URL`（或 `--fixture-assets-url`）仅指定 Mock 样本的旧资源服务根地址，默认与素材迁移工具一致为 `http://192.168.2.38`。冻结结果文件路径与 provenance 不变；启动前需确认样本图片/视频可访问。它不替代生产 Worker 的对象上传机制，也不会修改已完成 Job 中保存的旧 URL。
+`MEDIA_WORKER_FIXTURE_ASSETS_URL`（或 `--fixture-assets-url`）仅指定 Mock 样本的旧资源服务根地址，默认与素材迁移工具一致为 `http://192.168.2.38`。历史单视频联调先经 Library Object Upload 把一份真实旧视频摄取到目标对象存储，再把该对象的短期 URL 交给 `MEDIA_WORKER_FIXTURE_VIDEO_RESULT_URL`；Worker 只返回已确定的测试结果，不持有 User 上传凭证。`media_materials` 在登记原生 Generated Asset 时复核对象位于本企业/Scope 且媒体类型正确，只持久化 Object Path。生产 Worker 的对象上传协议仍需单独实现。

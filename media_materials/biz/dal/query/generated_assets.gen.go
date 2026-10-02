@@ -29,10 +29,12 @@ func newGeneratedAsset(db *gorm.DB, opts ...gen.DOOption) generatedAsset {
 	tableName := _generatedAsset.generatedAssetDo.TableName()
 	_generatedAsset.ALL = field.NewAsterisk(tableName)
 	_generatedAsset.ID = field.NewString(tableName, "id")
+	_generatedAsset.OrganizationID = field.NewString(tableName, "organization_id")
 	_generatedAsset.Scope = field.NewString(tableName, "scope")
 	_generatedAsset.Name = field.NewString(tableName, "name")
 	_generatedAsset.AssetKind = field.NewString(tableName, "asset_kind")
 	_generatedAsset.URL = field.NewString(tableName, "url")
+	_generatedAsset.ObjectPath = field.NewString(tableName, "object_path")
 	_generatedAsset.Content = field.NewString(tableName, "content")
 	_generatedAsset.OwnerUserID = field.NewString(tableName, "owner_user_id")
 	_generatedAsset.Visibility = field.NewString(tableName, "visibility")
@@ -41,6 +43,12 @@ func newGeneratedAsset(db *gorm.DB, opts ...gen.DOOption) generatedAsset {
 	_generatedAsset.StepRunID = field.NewString(tableName, "step_run_id")
 	_generatedAsset.TemplateID = field.NewString(tableName, "template_id")
 	_generatedAsset.TemplateVersion = field.NewInt(tableName, "template_version")
+	_generatedAsset.Origin = field.NewString(tableName, "origin")
+	_generatedAsset.SourceSystem = field.NewString(tableName, "source_system")
+	_generatedAsset.SourceRecordID = field.NewString(tableName, "source_record_id")
+	_generatedAsset.SourceSHA256 = field.NewString(tableName, "source_sha256")
+	_generatedAsset.SourceCreatedAt = field.NewTime(tableName, "source_created_at")
+	_generatedAsset.ImportedAt = field.NewTime(tableName, "imported_at")
 	_generatedAsset.SourceVirtualIPID = field.NewString(tableName, "source_virtual_ip_id")
 	_generatedAsset.SourceProductID = field.NewString(tableName, "source_product_id")
 	_generatedAsset.CreatedAt = field.NewTime(tableName, "created_at")
@@ -57,10 +65,12 @@ type generatedAsset struct {
 
 	ALL               field.Asterisk
 	ID                field.String
+	OrganizationID    field.String
 	Scope             field.String
 	Name              field.String
 	AssetKind         field.String
 	URL               field.String
+	ObjectPath        field.String
 	Content           field.String
 	OwnerUserID       field.String
 	Visibility        field.String
@@ -69,6 +79,12 @@ type generatedAsset struct {
 	StepRunID         field.String
 	TemplateID        field.String
 	TemplateVersion   field.Int
+	Origin            field.String
+	SourceSystem      field.String
+	SourceRecordID    field.String
+	SourceSHA256      field.String
+	SourceCreatedAt   field.Time
+	ImportedAt        field.Time
 	SourceVirtualIPID field.String
 	SourceProductID   field.String
 	CreatedAt         field.Time
@@ -91,10 +107,12 @@ func (g generatedAsset) As(alias string) *generatedAsset {
 func (g *generatedAsset) updateTableName(table string) *generatedAsset {
 	g.ALL = field.NewAsterisk(table)
 	g.ID = field.NewString(table, "id")
+	g.OrganizationID = field.NewString(table, "organization_id")
 	g.Scope = field.NewString(table, "scope")
 	g.Name = field.NewString(table, "name")
 	g.AssetKind = field.NewString(table, "asset_kind")
 	g.URL = field.NewString(table, "url")
+	g.ObjectPath = field.NewString(table, "object_path")
 	g.Content = field.NewString(table, "content")
 	g.OwnerUserID = field.NewString(table, "owner_user_id")
 	g.Visibility = field.NewString(table, "visibility")
@@ -103,6 +121,12 @@ func (g *generatedAsset) updateTableName(table string) *generatedAsset {
 	g.StepRunID = field.NewString(table, "step_run_id")
 	g.TemplateID = field.NewString(table, "template_id")
 	g.TemplateVersion = field.NewInt(table, "template_version")
+	g.Origin = field.NewString(table, "origin")
+	g.SourceSystem = field.NewString(table, "source_system")
+	g.SourceRecordID = field.NewString(table, "source_record_id")
+	g.SourceSHA256 = field.NewString(table, "source_sha256")
+	g.SourceCreatedAt = field.NewTime(table, "source_created_at")
+	g.ImportedAt = field.NewTime(table, "imported_at")
 	g.SourceVirtualIPID = field.NewString(table, "source_virtual_ip_id")
 	g.SourceProductID = field.NewString(table, "source_product_id")
 	g.CreatedAt = field.NewTime(table, "created_at")
@@ -136,12 +160,14 @@ func (g *generatedAsset) GetFieldByName(fieldName string) (field.OrderExpr, bool
 }
 
 func (g *generatedAsset) fillFieldMap() {
-	g.fieldMap = make(map[string]field.Expr, 18)
+	g.fieldMap = make(map[string]field.Expr, 26)
 	g.fieldMap["id"] = g.ID
+	g.fieldMap["organization_id"] = g.OrganizationID
 	g.fieldMap["scope"] = g.Scope
 	g.fieldMap["name"] = g.Name
 	g.fieldMap["asset_kind"] = g.AssetKind
 	g.fieldMap["url"] = g.URL
+	g.fieldMap["object_path"] = g.ObjectPath
 	g.fieldMap["content"] = g.Content
 	g.fieldMap["owner_user_id"] = g.OwnerUserID
 	g.fieldMap["visibility"] = g.Visibility
@@ -150,6 +176,12 @@ func (g *generatedAsset) fillFieldMap() {
 	g.fieldMap["step_run_id"] = g.StepRunID
 	g.fieldMap["template_id"] = g.TemplateID
 	g.fieldMap["template_version"] = g.TemplateVersion
+	g.fieldMap["origin"] = g.Origin
+	g.fieldMap["source_system"] = g.SourceSystem
+	g.fieldMap["source_record_id"] = g.SourceRecordID
+	g.fieldMap["source_sha256"] = g.SourceSHA256
+	g.fieldMap["source_created_at"] = g.SourceCreatedAt
+	g.fieldMap["imported_at"] = g.ImportedAt
 	g.fieldMap["source_virtual_ip_id"] = g.SourceVirtualIPID
 	g.fieldMap["source_product_id"] = g.SourceProductID
 	g.fieldMap["created_at"] = g.CreatedAt

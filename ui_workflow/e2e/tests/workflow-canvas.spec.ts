@@ -18,7 +18,7 @@ test("renders the workflow as a FlowGram canvas instead of JSON", async ({
 
   await expect(page.getByText("FlowGram", { exact: true })).toBeVisible();
   await expect(page.locator(".workflow-graph")).toBeVisible();
-  await expect(page.locator(".workflow-node-card")).toHaveCount(5);
+  await expect(page.locator(".workflow-node-card")).toHaveCount(4);
   await expect(page.locator("pre")).toHaveCount(0);
   await expect(page.getByText("选择一个节点")).toBeVisible();
 
@@ -54,4 +54,6 @@ test("renders the workflow as a FlowGram canvas instead of JSON", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "选择节点 style_image" }).click();
   await expect(page.getByLabel("节点标识")).toHaveValue("style_image");
+  await page.getByLabel("当前节点", { exact: true }).selectOption({ label: "model_image" });
+  await expect(page.getByLabel("节点标识")).toHaveValue("model_image");
 });

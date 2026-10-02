@@ -8,21 +8,30 @@ import (
 
 // Job 对应 PG media_workflow.jobs 表。
 type Job struct {
-	ID                  string         `gorm:"column:id;primaryKey"`
-	Scope               string         `gorm:"column:scope;not null"`
-	WorkflowID          string         `gorm:"column:workflow_id;not null"`
-	WorkflowVersion     int            `gorm:"column:workflow_version;not null"`
-	Input               datatypes.JSON `gorm:"column:input;type:jsonb;not null"`
-	Status              string         `gorm:"column:status;not null;default:pending"`
-	RetryCount          int            `gorm:"column:retry_count;not null;default:0"`
-	RetryHistory        datatypes.JSON `gorm:"column:retry_history;type:jsonb;not null;default:[]"`
-	SubmittedBy         string         `gorm:"column:submitted_by;not null"`
-	SubmittedAt         time.Time      `gorm:"column:submitted_at;not null"`
-	StartedAt           *time.Time     `gorm:"column:started_at"`
-	FinishedAt          *time.Time     `gorm:"column:finished_at"`
-	FailureReason       string         `gorm:"column:failure_reason"`
-	ConductorWorkflowID string         `gorm:"column:conductor_workflow_id"`
-	CompilationHash     string         `gorm:"column:compilation_hash"`
+	ID                   string         `gorm:"column:id;primaryKey"`
+	Origin               string         `gorm:"column:origin;not null;default:native"`
+	OrganizationID       string         `gorm:"column:organization_id"`
+	WorkspaceID          string         `gorm:"column:workspace_id"`
+	SourceSystem         *string        `gorm:"column:source_system"`
+	SourceRecordID       *string        `gorm:"column:source_record_id"`
+	SourceDigest         *string        `gorm:"column:source_digest"`
+	ImportedAt           *time.Time     `gorm:"column:imported_at"`
+	ResumeGeneration     int            `gorm:"column:resume_generation;not null;default:0"`
+	ResumeIdempotencyKey string         `gorm:"column:resume_idempotency_key"`
+	Scope                string         `gorm:"column:scope;not null"`
+	WorkflowID           string         `gorm:"column:workflow_id;not null"`
+	WorkflowVersion      int            `gorm:"column:workflow_version;not null"`
+	Input                datatypes.JSON `gorm:"column:input;type:jsonb;not null"`
+	Status               string         `gorm:"column:status;not null;default:pending"`
+	RetryCount           int            `gorm:"column:retry_count;not null;default:0"`
+	RetryHistory         datatypes.JSON `gorm:"column:retry_history;type:jsonb;not null;default:[]"`
+	SubmittedBy          string         `gorm:"column:submitted_by;not null"`
+	SubmittedAt          time.Time      `gorm:"column:submitted_at;not null"`
+	StartedAt            *time.Time     `gorm:"column:started_at"`
+	FinishedAt           *time.Time     `gorm:"column:finished_at"`
+	FailureReason        string         `gorm:"column:failure_reason"`
+	ConductorWorkflowID  string         `gorm:"column:conductor_workflow_id"`
+	CompilationHash      string         `gorm:"column:compilation_hash"`
 }
 
 func (Job) TableName() string { return "media_workflow.jobs" }
@@ -30,6 +39,11 @@ func (Job) TableName() string { return "media_workflow.jobs" }
 // StepRun 对应 media_workflow.step_runs 表。
 type StepRun struct {
 	ID              string         `gorm:"column:id;primaryKey"`
+	Origin          string         `gorm:"column:origin;not null;default:native"`
+	SourceSystem    *string        `gorm:"column:source_system"`
+	SourceRecordID  *string        `gorm:"column:source_record_id"`
+	SourceSHA256    *string        `gorm:"column:source_sha256"`
+	SourceCreatedAt *time.Time     `gorm:"column:source_created_at"`
 	JobID           string         `gorm:"column:job_id;not null"`
 	StepKey         string         `gorm:"column:step_key;not null"`
 	StepOrder       int            `gorm:"column:step_order;not null"`

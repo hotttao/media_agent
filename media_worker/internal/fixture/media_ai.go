@@ -19,7 +19,10 @@ var capabilities = []gateway.Capability{
 
 func Capabilities() []gateway.Capability { return append([]gateway.Capability(nil), capabilities...) }
 
-type Executor struct{ baseURL string }
+type Executor struct {
+	baseURL        string
+	videoResultURL string
+}
 
 func NewExecutor(baseURL string) (*Executor, error) {
 	u, err := url.Parse(baseURL)
@@ -27,6 +30,21 @@ func NewExecutor(baseURL string) (*Executor, error) {
 		return nil, fmt.Errorf("fixture asset base must be an HTTP(S) URL without credentials, query or fragment")
 	}
 	return &Executor{baseURL: strings.TrimRight(baseURL, "/")}, nil
+}
+
+// SetVideoResultURL points the historical video fixture at a pre-uploaded
+// object in the target storage. The Mock Worker never writes to storage or
+// uses a User token; it only returns this known result for one video task.
+func (e *Executor) SetVideoResultURL(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.Fragment != "" {
+		return fmt.Errorf("fixture video result must be an HTTP(S) storage URL")
+	}
+	e.videoResultURL = raw
+	return nil
 }
 
 func (e *Executor) Execute(task gateway.Task) (map[string]any, error) {
@@ -53,6 +71,9 @@ func (e *Executor) fixtureResult(task gateway.Task) (string, string) {
 	case "media.image.first_frame":
 		return base + "/uploads/teams/cf88f650-a530-4356-81db-391b62522778/first-frame-images/result-01_659b03f1-91e8-4dc5-b051-e10becc6e810.png", ""
 	case "media.video.generate":
+		if e.videoResultURL != "" {
+			return e.videoResultURL, ""
+		}
 		stepKey, _ := task.Input["step_key"].(string)
 		if strings.Contains(stepKey, "video_b") {
 			return base + "/uploads/teams/cf88f650-a530-4356-81db-391b62522778/videos/video-01_1a74ce8a-9e5f-4678-a62b-427dfcb7758e.mp4", ""

@@ -82,6 +82,12 @@ func TestUploadAcceptsMaterialVideoOnly(t *testing.T) {
 	if _, err := New(&fakeStorage{}).Upload(context.Background(), command); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("product image accepted video: %v", err)
 	}
+	command.Purpose = "generated_asset_import"
+	command.Body = bytes.NewReader(mp4)
+	result, err = New(&fakeStorage{}).Upload(context.Background(), command)
+	if err != nil || result.ContentType != "video/mp4" || !strings.Contains(result.ObjectPath, "/generated_asset_import/") {
+		t.Fatalf("historical video import: result=%+v err=%v", result, err)
+	}
 }
 
 func TestUploadRejectsInvalidInputsBeforeStorage(t *testing.T) {

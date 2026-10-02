@@ -8,7 +8,9 @@ test("creates a typed job form from the published workflow contract", async ({
   await page.getByRole("tab", { name: /Jobs|任务/ }).click();
   await page.getByRole("button", { name: /New|新建/ }).click();
 
-  await expect(page.getByRole("heading", { name: "创建生成任务" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "创建生成任务" }),
+  ).toBeVisible();
   await expect(page.getByText("Input (JSON)")).toHaveCount(0);
 
   await page.getByText("选择已发布的工作流").click();
@@ -33,7 +35,11 @@ test("creates a typed job form from the published workflow contract", async ({
   ]) {
     await page.getByText(`选择${label}`, { exact: true }).click();
     await expect(page.getByRole("option").first()).toBeVisible();
-    await page.getByRole("option").filter({ hasNotText: "孤儿" }).first().click();
+    await page
+      .getByRole("option")
+      .filter({ hasNotText: "孤儿" })
+      .first()
+      .click();
   }
 
   await expect(submit).toBeEnabled();
@@ -45,4 +51,28 @@ test("creates a typed job form from the published workflow contract", async ({
     await expect(jobId).toHaveText(/^job_/);
     console.log(`Created sample job: ${await jobId.textContent()}`);
   }
+});
+
+test("runs a published workflow from its detail page with that workflow preselected", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Workflow|工作流/ }).click();
+  await page.getByRole("tab", { name: /^(Workflows|工作流)$/ }).click();
+  const workflowCard = page
+    .getByRole("article")
+    .filter({ hasText: "Worker API Token 联调" });
+  await expect(workflowCard).toBeVisible();
+  await workflowCard
+    .getByRole("button")
+    .filter({ has: page.locator("h2") })
+    .click();
+  await page.getByRole("button", { name: "运行工作流" }).click();
+  await expect(
+    page.getByRole("heading", { name: "创建生成任务" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "Worker API Token 联调" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "提交任务" })).toBeDisabled();
 });

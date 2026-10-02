@@ -29,11 +29,15 @@ func newMaterial(db *gorm.DB, opts ...gen.DOOption) material {
 	tableName := _material.materialDo.TableName()
 	_material.ALL = field.NewAsterisk(tableName)
 	_material.ID = field.NewString(tableName, "id")
+	_material.OrganizationID = field.NewString(tableName, "organization_id")
 	_material.Scope = field.NewString(tableName, "scope")
 	_material.Name = field.NewString(tableName, "name")
+	_material.Description = field.NewString(tableName, "description")
+	_material.Prompt = field.NewString(tableName, "prompt")
 	_material.AssetKind = field.NewString(tableName, "asset_kind")
-	_material.URL = field.NewString(tableName, "url")
+	_material.ObjectPath = field.NewString(tableName, "object_path")
 	_material.Content = field.NewString(tableName, "content")
+	_material.Metadata = field.NewString(tableName, "metadata")
 	_material.OwnerUserID = field.NewString(tableName, "owner_user_id")
 	_material.Visibility = field.NewString(tableName, "visibility")
 	_material.TeamID = field.NewString(tableName, "team_id")
@@ -49,19 +53,23 @@ func newMaterial(db *gorm.DB, opts ...gen.DOOption) material {
 type material struct {
 	materialDo materialDo
 
-	ALL         field.Asterisk
-	ID          field.String
-	Scope       field.String
-	Name        field.String
-	AssetKind   field.String
-	URL         field.String
-	Content     field.String
-	OwnerUserID field.String
-	Visibility  field.String
-	TeamID      field.String
-	CreatedAt   field.Time
-	UpdatedAt   field.Time
-	DeletedAt   field.Time
+	ALL            field.Asterisk
+	ID             field.String
+	OrganizationID field.String
+	Scope          field.String
+	Name           field.String
+	Description    field.String
+	Prompt         field.String
+	AssetKind      field.String
+	ObjectPath     field.String
+	Content        field.String
+	Metadata       field.String
+	OwnerUserID    field.String
+	Visibility     field.String
+	TeamID         field.String
+	CreatedAt      field.Time
+	UpdatedAt      field.Time
+	DeletedAt      field.Time
 
 	fieldMap map[string]field.Expr
 }
@@ -79,11 +87,15 @@ func (m material) As(alias string) *material {
 func (m *material) updateTableName(table string) *material {
 	m.ALL = field.NewAsterisk(table)
 	m.ID = field.NewString(table, "id")
+	m.OrganizationID = field.NewString(table, "organization_id")
 	m.Scope = field.NewString(table, "scope")
 	m.Name = field.NewString(table, "name")
+	m.Description = field.NewString(table, "description")
+	m.Prompt = field.NewString(table, "prompt")
 	m.AssetKind = field.NewString(table, "asset_kind")
-	m.URL = field.NewString(table, "url")
+	m.ObjectPath = field.NewString(table, "object_path")
 	m.Content = field.NewString(table, "content")
+	m.Metadata = field.NewString(table, "metadata")
 	m.OwnerUserID = field.NewString(table, "owner_user_id")
 	m.Visibility = field.NewString(table, "visibility")
 	m.TeamID = field.NewString(table, "team_id")
@@ -114,13 +126,17 @@ func (m *material) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (m *material) fillFieldMap() {
-	m.fieldMap = make(map[string]field.Expr, 12)
+	m.fieldMap = make(map[string]field.Expr, 16)
 	m.fieldMap["id"] = m.ID
+	m.fieldMap["organization_id"] = m.OrganizationID
 	m.fieldMap["scope"] = m.Scope
 	m.fieldMap["name"] = m.Name
+	m.fieldMap["description"] = m.Description
+	m.fieldMap["prompt"] = m.Prompt
 	m.fieldMap["asset_kind"] = m.AssetKind
-	m.fieldMap["url"] = m.URL
+	m.fieldMap["object_path"] = m.ObjectPath
 	m.fieldMap["content"] = m.Content
+	m.fieldMap["metadata"] = m.Metadata
 	m.fieldMap["owner_user_id"] = m.OwnerUserID
 	m.fieldMap["visibility"] = m.Visibility
 	m.fieldMap["team_id"] = m.TeamID

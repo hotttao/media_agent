@@ -18,6 +18,10 @@ var (
 
 type Client interface {
 	UploadLibraryObject(context context.Context, req *library_object.UploadLibraryObjectReq, reqOpt ...config.RequestOption) (resp *library_object.UploadLibraryObjectResp, rawResponse *protocol.Response, err error)
+
+	ResolveLibraryObject(context context.Context, req *library_object.ResolveLibraryObjectReq, reqOpt ...config.RequestOption) (resp *library_object.ResolveLibraryObjectResp, rawResponse *protocol.Response, err error)
+
+	ResolveInternalLibraryObject(context context.Context, req *library_object.ResolveLibraryObjectReq, reqOpt ...config.RequestOption) (resp *library_object.ResolveLibraryObjectResp, rawResponse *protocol.Response, err error)
 }
 
 type LibraryObjectServiceClient struct {
@@ -63,6 +67,56 @@ func (s *LibraryObjectServiceClient) UploadLibraryObject(context context.Context
 	return resp, rawResponse, nil
 }
 
+func (s *LibraryObjectServiceClient) ResolveLibraryObject(context context.Context, req *library_object.ResolveLibraryObjectReq, reqOpt ...config.RequestOption) (resp *library_object.ResolveLibraryObjectResp, rawResponse *protocol.Response, err error) {
+	httpResp := &library_object.ResolveLibraryObjectResp{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+			"object_path":     req.GetObjectPath(),
+		}).
+		setPathParams(map[string]string{}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/v1/library-objects:resolve")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *LibraryObjectServiceClient) ResolveInternalLibraryObject(context context.Context, req *library_object.ResolveLibraryObjectReq, reqOpt ...config.RequestOption) (resp *library_object.ResolveLibraryObjectResp, rawResponse *protocol.Response, err error) {
+	httpResp := &library_object.ResolveLibraryObjectResp{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{
+			"organization_id": req.GetOrganizationId(),
+			"object_path":     req.GetObjectPath(),
+		}).
+		setPathParams(map[string]string{}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/internal/v1/library-objects:resolve")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
 var defaultClient, _ = NewLibraryObjectServiceClient("")
 
 func ConfigDefaultClient(ops ...Option) (err error) {
@@ -72,4 +126,12 @@ func ConfigDefaultClient(ops ...Option) (err error) {
 
 func UploadLibraryObject(context context.Context, req *library_object.UploadLibraryObjectReq, reqOpt ...config.RequestOption) (resp *library_object.UploadLibraryObjectResp, rawResponse *protocol.Response, err error) {
 	return defaultClient.UploadLibraryObject(context, req, reqOpt...)
+}
+
+func ResolveLibraryObject(context context.Context, req *library_object.ResolveLibraryObjectReq, reqOpt ...config.RequestOption) (resp *library_object.ResolveLibraryObjectResp, rawResponse *protocol.Response, err error) {
+	return defaultClient.ResolveLibraryObject(context, req, reqOpt...)
+}
+
+func ResolveInternalLibraryObject(context context.Context, req *library_object.ResolveLibraryObjectReq, reqOpt ...config.RequestOption) (resp *library_object.ResolveLibraryObjectResp, rawResponse *protocol.Response, err error) {
+	return defaultClient.ResolveInternalLibraryObject(context, req, reqOpt...)
 }

@@ -67,11 +67,13 @@ func (c *Client) RegisterWorkflow(ctx context.Context, definition compiler.Defin
 }
 
 type StartWorkflowRequest struct {
-	Name          string            `json:"name"`
-	Version       int               `json:"version"`
-	CorrelationID string            `json:"correlationId,omitempty"`
-	Input         map[string]any    `json:"input"`
-	TaskToDomain  map[string]string `json:"taskToDomain,omitempty"`
+	Name                string            `json:"name"`
+	Version             int               `json:"version"`
+	CorrelationID       string            `json:"correlationId,omitempty"`
+	IdempotencyKey      string            `json:"idempotencyKey,omitempty"`
+	IdempotencyStrategy string            `json:"idempotencyStrategy,omitempty"`
+	Input               map[string]any    `json:"input"`
+	TaskToDomain        map[string]string `json:"taskToDomain,omitempty"`
 }
 
 func (c *Client) StartWorkflow(ctx context.Context, request StartWorkflowRequest) (string, error) {
@@ -165,10 +167,31 @@ func (c *Client) TerminateWorkflow(ctx context.Context, workflowID, reason strin
 }
 
 type WorkflowExecution struct {
-	WorkflowID string         `json:"workflowId"`
-	Status     string         `json:"status"`
-	Output     map[string]any `json:"output"`
-	Tasks      []Task         `json:"tasks"`
+	WorkflowID     string         `json:"workflowId"`
+	CorrelationID  string         `json:"correlationId"`
+	IdempotencyKey string         `json:"idempotencyKey"`
+	Status         string         `json:"status"`
+	Output         map[string]any `json:"output"`
+	Tasks          []Task         `json:"tasks"`
+}
+
+func (c *Client) GetByCorrelation(ctx context.Context, name, correlationID string) (string, error) {
+	path := "/api/workflow/" + url.PathEscape(name) + "/correlated/" + url.PathEscape(correlationID) + "?includeClosed=true"
+	var executions []WorkflowExecution
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &executions); err != nil {
+		return "", err
+	}
+	var found string
+	for _, execution := range executions {
+		if execution.CorrelationID != correlationID || execution.WorkflowID == "" {
+			continue
+		}
+		if found != "" && found != execution.WorkflowID {
+			return "", fmt.Errorf("multiple Conductor executions share resume correlation %q", correlationID)
+		}
+		found = execution.WorkflowID
+	}
+	return found, nil
 }
 
 func (c *Client) GetWorkflow(ctx context.Context, id string) (*WorkflowExecution, error) {

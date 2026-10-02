@@ -7,23 +7,27 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/ut"
 )
 
-func TestDeferredRoutesAreUnavailableInOrganizationLibraryMilestone(t *testing.T) {
+func TestGeneratedAssetRoutesAreRegisteredAndDeferredReachabilityIsUnavailable(t *testing.T) {
 	h := server.Default()
 	register(h)
-
-	tests := []struct {
-		method string
-		path   string
-	}{
-		{method: "GET", path: "/api/v1/generated-assets"},
-		{method: "POST", path: "/api/internal/v1/reachability/asset"},
+	want := map[string]bool{
+		"GET /api/v1/generated-assets":                  false,
+		"GET /api/v1/generated-assets/:id":              false,
+		"POST /api/internal/v1/generated-assets:upsert": false,
 	}
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			response := ut.PerformRequest(h.Engine, tt.method, tt.path, nil)
-			if got := response.Result().StatusCode(); got != 404 {
-				t.Fatalf("status = %d, want 404", got)
-			}
-		})
+	for _, route := range h.Engine.Routes() {
+		key := route.Method + " " + route.Path
+		if _, ok := want[key]; ok {
+			want[key] = true
+		}
+	}
+	for route, registered := range want {
+		if !registered {
+			t.Fatalf("route %s was not registered", route)
+		}
+	}
+	response := ut.PerformRequest(h.Engine, "POST", "/api/internal/v1/reachability/asset", nil)
+	if got := response.Result().StatusCode(); got != 404 {
+		t.Fatalf("deferred reachability status = %d, want 404", got)
 	}
 }

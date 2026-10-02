@@ -24,16 +24,24 @@ func Register(r *server.Hertz) {
 			{
 				_v1 := _internal.Group("/v1", _v1Mw()...)
 				_v1.POST("/generated-assets:upsert", append(_upsertgeneratedassetMw(), generated_asset.UpsertGeneratedAsset)...)
+				{
+					_generated_assets := _v1.Group("/generated-assets", _generated_assetsMw()...)
+					_generated_assets.POST("/import", append(_importgeneratedassetMw(), generated_asset.ImportGeneratedAsset)...)
+					{
+						_import := _generated_assets.Group("/import", _importMw()...)
+						_import.GET("/:id", append(_getimportedgeneratedassetMw(), generated_asset.GetImportedGeneratedAsset)...)
+					}
+				}
 			}
 		}
 		{
 			_v10 := _api.Group("/v1", _v10Mw()...)
 			_v10.GET("/generated-assets", append(_listgeneratedassetsMw(), generated_asset.ListGeneratedAssets)...)
 			{
-				_generated_assets := _v10.Group("/generated-assets", _generated_assetsMw()...)
-				_generated_assets.GET("/by-source", append(_listgeneratedassetsbysourceMw(), generated_asset.ListGeneratedAssetsBySource)...)
-				_generated_assets.DELETE("/:id", append(_deletegeneratedassetMw(), generated_asset.DeleteGeneratedAsset)...)
-				_generated_assets.GET("/:id", append(_getgeneratedassetMw(), generated_asset.GetGeneratedAsset)...)
+				_generated_assets0 := _v10.Group("/generated-assets", _generated_assets0Mw()...)
+				_generated_assets0.GET("/by-source", append(_listgeneratedassetsbysourceMw(), generated_asset.ListGeneratedAssetsBySource)...)
+				_generated_assets0.DELETE("/:id", append(_deletegeneratedassetMw(), generated_asset.DeleteGeneratedAsset)...)
+				_generated_assets0.GET("/:id", append(_getgeneratedassetMw(), generated_asset.GetGeneratedAsset)...)
 			}
 		}
 	}

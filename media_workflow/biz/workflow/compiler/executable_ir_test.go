@@ -82,6 +82,34 @@ func TestCompileExecutableIRInsertsHumanApprovalBeforeFinalize(t *testing.T) {
 	require.Equal(t, "${step__image__approval.output.selected_candidate}", definition.Tasks[3].InputParameters["selected_candidate"])
 }
 
+func TestCompileResumeRestoresSuccessfulPrefixWithoutCapabilitySideEffects(t *testing.T) {
+	video := minimalIRStep("video", 4, []string{"first_frame"})
+	video.Context = map[string]executable.ValueRef{"frame": {Source: executable.ValueStepOutput, Ref: "first_frame"}}
+	video.Invocation["images"] = template.InvocationExpression{Op: template.InvocationAssetRef, Slot: "frame"}
+	ir := executable.ExecutableWorkflowIR{
+		SchemaVersion: executable.SchemaVersion, WorkflowID: "legacy-video", WorkflowVersion: 1, OutputStepKey: "video",
+		Steps: []executable.ExecutableStepIR{
+			minimalIRStep("model_image", 1, nil),
+			minimalIRStep("style_image", 2, []string{"model_image"}),
+			minimalIRStep("first_frame", 3, []string{"style_image"}),
+			video,
+		},
+	}
+	definition, err := CompileResumeExecutableIR(ir, map[string]bool{"model_image": true, "style_image": true, "first_frame": true})
+	require.NoError(t, err)
+	require.Len(t, definition.Tasks, 6)
+	for i, key := range []string{"model_image", "style_image", "first_frame"} {
+		require.Equal(t, RestoreStepTaskName, definition.Tasks[i].Name)
+		require.Equal(t, finalizeRef(key), definition.Tasks[i].TaskReferenceName)
+		require.Equal(t, "${workflow.input.job_id}", definition.Tasks[i].InputParameters["job_id"])
+	}
+	require.Equal(t, RenderTemplateTaskName, definition.Tasks[3].Name)
+	require.Equal(t, "${step__first_frame__finalize.output.output_resource.asset_ref}", definition.Tasks[4].InputParameters["images"])
+	require.Equal(t, "${step__video__finalize.output.output_resource_id}", definition.OutputParameters["output_resource_id"])
+	_, err = CompileResumeExecutableIR(ir, map[string]bool{"style_image": true})
+	require.ErrorContains(t, err, "uncompleted predecessor")
+}
+
 func minimalIRStep(key string, order int, dependencies []string) executable.ExecutableStepIR {
 	return executable.ExecutableStepIR{
 		Key: key, Order: order, DependsOn: dependencies,

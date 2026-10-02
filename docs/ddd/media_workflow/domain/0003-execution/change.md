@@ -1,5 +1,15 @@
 # execution domain 变更记录
 
+## 2026-10-02 · Resume 输入引用的生命周期
+
+- 历史 Job 与 Outbox 仅持久化受控 Object Path，不保存可能在队列等待时过期的签名 URL；交付时解析失败不产生 Worker Dispatch。
+
+## 2026-10-01 · 历史未完成图片谱系可继续执行
+
+- 完整上游但无下游 Video 的 ModelImage、StyleImage、FirstFrame 不再仅按普通 Generated Asset 处理；导入为 `awaiting_resume` Job，已有图片对应成功且标记来源的 StepRun。
+- 明确历史时间/归属/来源 ID 与实际导入事实分离；断链源记录排除，重复导入按来源键幂等。
+- 用户显式补齐输入后才能继续；历史成功 StepRun 不重做，新的 Conductor 实例只派发未完成阶段。导入接口与 Workspace 归属校验已实现；显式 Resume、持久化 Outbox 和完整联调仍待完成。
+
 ## 2026-09-28 · Personal 与 Managed Worker 路由
 
 - WorkerDispatch 增加 `execution_target`、`actor_id`、`auth_source`；Managed Worker 的 `credential_id` 为空。
