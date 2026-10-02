@@ -112,6 +112,17 @@ func TestResumeFreezesOnlyPendingVideoAndIsIdempotent(t *testing.T) {
 	svc.ConfigureResume(outbox, fakeResumeAccess{allowed: true}, fakeResumeLauncher{}, "http://media-storage.example")
 	svc.resumeURLVerifier = func(context.Context, string) error { return nil }
 	cmd := ResumeCommand{JobID: job.ID, UserID: "owner", IdempotencyKey: "continue-once"}
+	foreign := cmd
+	foreign.UserID = "another-user"
+	if _, err := svc.Resume(context.Background(), foreign); !errors.Is(err, ErrResumeForbidden) || outbox.accepted != nil {
+		t.Fatalf("foreign account reached historical resume: err=%v", err)
+	}
+	svc.ConfigureResume(outbox, fakeResumeAccess{allowed: false}, fakeResumeLauncher{}, "http://media-storage.example")
+	if _, err := svc.Resume(context.Background(), cmd); !errors.Is(err, ErrResumeForbidden) || outbox.accepted != nil {
+		t.Fatalf("workspace permission was bypassed: err=%v", err)
+	}
+	svc.ConfigureResume(outbox, fakeResumeAccess{allowed: true}, fakeResumeLauncher{}, "http://media-storage.example")
+	svc.resumeURLVerifier = func(context.Context, string) error { return nil }
 	if _, err := svc.Resume(context.Background(), cmd); err == nil || !strings.Contains(err.Error(), "movement") {
 		t.Fatalf("missing movement not rejected: %v", err)
 	}
@@ -119,6 +130,11 @@ func TestResumeFreezesOnlyPendingVideoAndIsIdempotent(t *testing.T) {
 		t.Fatal("outbox written before input validation")
 	}
 	cmd.InputPatch.Materials = []domain.MaterialData{{Name: "movement", AssetKind: "movement", URL: "http://media-storage.example/media/materials/org/movement.mp4", Content: "walk"}}
+	svc.resumeURLVerifier = func(context.Context, string) error { return errors.New("temporary object storage outage") }
+	if _, err := svc.Resume(context.Background(), cmd); err == nil || !strings.Contains(err.Error(), "temporary object storage outage") || outbox.accepted != nil || repo.jobs[job.ID].Status != domain.JobAwaitingResume {
+		t.Fatalf("storage outage changed historical Job: err=%v job=%+v", err, repo.jobs[job.ID])
+	}
+	svc.resumeURLVerifier = func(context.Context, string) error { return nil }
 	resumed, err := svc.Resume(context.Background(), cmd)
 	if err != nil || resumed.Status != domain.JobRunning || outbox.accepted == nil || outbox.accepted.CorrelationID != "resume:"+job.ID+":1" {
 		t.Fatalf("resume was not enqueued: job=%+v start=%+v err=%v", resumed, outbox.accepted, err)
@@ -172,15 +188,16 @@ func TestVerifyResumeURLReachableUsesBoundedGetWithoutRedirect(t *testing.T) {
 }
 
 func TestDispatchPendingResumeRecordsOrReleasesClaim(t *testing.T) {
-	repo := &fakeResumeRepo{pending: &domain.ResumeStart{ID: "outbox-1", JobID: "job-1"}}
-	svc := &Service{resumeRepo: repo, resumeLauncher: fakeResumeLauncher{}}
-	if err := svc.DispatchPendingResume(context.Background()); err != nil || repo.started != "conductor-1" || repo.released != "" {
-		t.Fatalf("successful resume was not recorded: err=%v repo=%+v", err, repo)
-	}
-	repo.pending = &domain.ResumeStart{ID: "outbox-2", JobID: "job-2"}
-	svc.resumeLauncher = fakeResumeLauncher{err: errors.New("conductor unavailable")}
+	start := &domain.ResumeStart{ID: "outbox-1", JobID: "job-1"}
+	repo := &fakeResumeRepo{pending: start}
+	svc := &Service{resumeRepo: repo, resumeLauncher: fakeResumeLauncher{err: errors.New("conductor unavailable")}}
 	if err := svc.DispatchPendingResume(context.Background()); err == nil || !strings.Contains(repo.released, "conductor unavailable") {
 		t.Fatalf("failed resume claim was not released: err=%v repo=%+v", err, repo)
+	}
+	repo.pending = start // repository scheduler makes the released row claimable again
+	svc.resumeLauncher = fakeResumeLauncher{}
+	if err := svc.DispatchPendingResume(context.Background()); err != nil || repo.started != "conductor-1" {
+		t.Fatalf("released resume was not started after Conductor recovery: err=%v repo=%+v", err, repo)
 	}
 }
 

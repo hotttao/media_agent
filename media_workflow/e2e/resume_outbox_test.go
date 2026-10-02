@@ -73,6 +73,16 @@ func TestResumeOutboxTransactionAndReplay(t *testing.T) {
 	if err != nil || claimed == nil || claimed.ID != start.ID || !json.Valid(claimed.DefinitionJSON) {
 		t.Fatalf("frozen start was not claimed: start=%+v err=%v", claimed, err)
 	}
+	if err := repo.ReleaseResumeClaim(ctx, start.ID, "temporary Conductor outage"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("UPDATE media_workflow.resume_outbox SET next_attempt_at=now()-interval '1 second' WHERE id=?", start.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	claimed, err = repo.ClaimPendingResume(ctx)
+	if err != nil || claimed == nil || claimed.ID != start.ID {
+		t.Fatalf("released command was not reclaimed after outage: start=%+v err=%v", claimed, err)
+	}
 	if err := repo.MarkResumeStarted(ctx, *claimed, "conductor_e2e", "hash_e2e"); err != nil {
 		t.Fatal(err)
 	}

@@ -7,7 +7,7 @@
 - [x] 从旧表关系重建 ModelImage → StyleImage → FirstFrame → Video → VideoPush；不把旧 `workflows.config` 当作生成链。
 - [x] 输出完整 Video 分组和停在图片节点的未完成分组；逐记录排除真正断链项。
 - [x] 用只读源库运行清点，并测试重复引用、缺失引用和合法阶段性成果。
-- [ ] 核对 Product/VirtualIp/pose/scene/movement 旧 ID 与目标素材映射，以及源媒体文件可取性。
+- [x] 核对 Product/VirtualIp/pose/scene/movement 旧 ID 与目标素材映射，以及源媒体文件可取性。只读全量审计见 [核对记录](../human/research/007_media_ai_readiness.md)：来源 ID 均可映射；438 个媒体引用中 7 个 movement 源 URL 与目标 Object Path 均为空，影响 59 个分组的媒体完整性，须在全量门禁中单独处理。
 
 ## P2 · 历史资产摄取
 
@@ -34,9 +34,9 @@
 
 - [x] 按 [E2E 规范](../../harness/contributing/e2e.md) 经统一网关/API Token 导入并继续**一条**停在 FirstFrame 的历史链；启动 `media_worker` fixture，验证只执行 video、旧图片不重复生成和结果媒体可访问。`TestHistoricalResumeSingleFixture` 已通过；fixture Worker 验收后停止，其他后端服务继续运行。
 - [ ] 用户确认样本后才执行全量导入；按来源 ID 对账所有纳入/排除/失败项，可重跑且不污染源库。
-- [ ] 验证断链样本被排除、合法中间图片保留、重复导入/Resume、跨账户拒绝、Conductor/对象存储暂时失败恢复。已覆盖单样本断链清点、合法 FirstFrame 导入、同键 Resume 完成后重放（202、实例不变）、异键冲突（409）和隔离数据库 Outbox 并发；其余错误分支仍待验证。
+- [x] 验证断链样本被排除、合法中间图片保留、重复导入/Resume、跨账户拒绝、Conductor/对象存储暂时失败恢复。源清单排除 50 条；单元测试、隔离 PostgreSQL Outbox 测试及真实网关跨账户拒绝均通过。暂时故障通过注入失败并重试验证，不停止用户正在使用的服务。
 
-风险：源模板未必能匹配所有旧产物；导入成功前缀应保留真实来源而不是冒充当前 Template Version 的历史运行。尚未清点全量素材映射和执行全量导入；样本的 mock 成功不等于生产 Provider 已验证。
+风险：源模板未必能匹配所有旧产物；导入成功前缀应保留真实来源而不是冒充当前 Template Version 的历史运行。7 个 movement 的媒体缺失需要明确“文本动作”或“视频动作”契约；尚未执行全量导入。样本的 mock 成功不等于生产 Provider 已验证。
 
 ## 迁移能力覆盖矩阵（样本门禁）
 

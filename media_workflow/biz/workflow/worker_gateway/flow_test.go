@@ -15,6 +15,7 @@ import (
 type importedAssetStub struct {
 	asset  *client.ImportedGeneratedAsset
 	object client.ResolvedStorageObject
+	err    error
 }
 
 func (s importedAssetStub) GetImportedGeneratedAsset(context.Context, string) (*client.ImportedGeneratedAsset, error) {
@@ -22,6 +23,9 @@ func (s importedAssetStub) GetImportedGeneratedAsset(context.Context, string) (*
 }
 
 func (s importedAssetStub) ResolveInternalObject(context.Context, string, string) (client.ResolvedStorageObject, error) {
+	if s.err != nil {
+		return client.ResolvedStorageObject{}, s.err
+	}
 	return s.object, nil
 }
 
@@ -47,10 +51,17 @@ func TestResolveImportedInputRefsRefreshesURLAndEnforcesOrganization(t *testing.
 
 func TestResolveImportedInputRefsRefreshesStableStorageReference(t *testing.T) {
 	job := &jobdomain.Job{Origin: "legacy_import", OrganizationID: "org", Scope: "ai_clothing", SubmittedBy: "owner"}
-	flow := &Flow{ImportedAssets: importedAssetStub{object: client.ResolvedStorageObject{
-		URL: "https://storage.example/media/materials/org/movement.mp4?fresh=1", ExpiresAt: time.Now().Add(time.Minute).Unix(),
-	}}}
 	input := map[string]any{"inputs": map[string]any{"movement": map[string]any{"asset_ref": "object_path:materials/org/movement.mp4"}}}
+	flow := &Flow{ImportedAssets: importedAssetStub{err: errors.New("temporary object storage outage")}}
+	if _, err := flow.resolveImportedInputRefs(context.Background(), job, input); err == nil {
+		t.Fatal("unavailable storage was treated as a deliverable Worker input")
+	}
+	if got := input["inputs"].(map[string]any)["movement"].(map[string]any)["asset_ref"]; got != "object_path:materials/org/movement.mp4" {
+		t.Fatalf("failed storage lookup mutated durable input: %v", got)
+	}
+	flow.ImportedAssets = importedAssetStub{object: client.ResolvedStorageObject{
+		URL: "https://storage.example/media/materials/org/movement.mp4?fresh=1", ExpiresAt: time.Now().Add(time.Minute).Unix(),
+	}}
 	result, err := flow.resolveImportedInputRefs(context.Background(), job, input)
 	if err != nil {
 		t.Fatal(err)

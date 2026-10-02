@@ -7,9 +7,14 @@ export MEDIA_AI_DATABASE_URL='mysql://user:password@host:3306/media_ai'
 go run ./tools/media_ai_history_migrate                  # 全量统计，不写文件
 go run ./tools/media_ai_history_migrate --only-task ID   # 单条检查
 go run ./tools/media_ai_history_migrate --out /secure/media-ai-history.json
+MEDIA_MATERIALS_BEARER_TOKEN='<目标账户 API Token>' \
+  go run ./tools/media_ai_history_migrate --audit-readiness \
+  --organization-id '<目标 Organization ID>'
 ```
 
 从 `media_workflow` 目录运行。`--out` 只允许新文件，权限为 0600；内容包含旧用户 ID、任务参数和结果地址，须按敏感数据保管。再次运行请给新文件名，避免覆盖上次审计清单。
+
+`--audit-readiness` 只读旧库、目标网关的素材列表和旧媒体服务；按全部候选分组核对 Product/Virtual IP/pose/scene/movement 来源 ID，并用 Range GET 实际读取候选图片、视频和输入素材的首字节。报告只输出来源 ID 与失败原因，不输出 API Token 或媒体 URL。`ready_groups` 表示来源媒体齐全的分组，不等同于已经导入或能够直接执行；`media_blocked_groups` 列出缺少来源媒体的分组。缺失的源对象不会被工具猜测或伪造。
 
 已核对当前源库：1 个 `workflows`（`Manual Upload`，无 DSL config）、1 个 `workflow_templates`、153 个 `video_tasks`（均为 `params.source=manual_upload`）、127 个 `videos`。`VideoTask` 的 `source` 标识单次视频任务的入口，不等同于业务流程类别；它可以处于完整链路中。旧七阶段流程由 `scripts/workflow-cli` 沿资源关系恢复与推进，而非读取 `workflows.config`。当前 [media_ai_workflow_migrate](../media_ai_workflow_migrate/main.go) 只负责四节点定义和联调样本。
 
@@ -42,6 +47,6 @@ go run ./tools/media_ai_history_migrate \
 
 已通过真实 API 验证的样本：`frame:00273837-74d3-4f60-9d30-5976f21c48c3` 的 ModelImage、StyleImage、FirstFrame 分别登记为 `gen_f4b9d262-d262-4a88-ac29-46628207be2d`、`gen_b5f75ae4-9cdf-43bd-92f4-0d86f42836c8`、`gen_4013aeee-f7a9-4bbb-83a2-2f8da63a4266`。导入密钥已在测试后从运行服务移除。
 
-2026-10-02 已通过真实 API 在测试 Workspace `2e6c5e63-b343-47c4-9f4e-64eb3c7855ce` 导入 Job `job_9f225df6-e1a6-4627-9a40-24487720ccd8`：前三个 StepRun 为 `succeeded`，`video` 为 `blocked`，Job 为 `awaiting_resume` 且无 Conductor ID。迁移密钥随后移除；这不是视频恢复执行成功的证据。
+2026-10-02 已通过真实 API 在测试 Workspace `2e6c5e63-b343-47c4-9f4e-64eb3c7855ce` 导入 Job `job_9f225df6-e1a6-4627-9a40-24487720ccd8`；后来显式 Resume 经客户端 fixture Worker 只执行 video，Job 已成功，前三个历史图片 StepRun 未重跑。迁移密钥随后移除；此验证仅覆盖一条样本，并非全量迁移。
 
 同一条样本的 fixture 视频已预先摄取到目标对象存储：`materials/8afeb26b9df643952f4f816576eb2504/ai_clothing/generated_asset_import/44b88deddf04f9c22b89e477fe88854e.mp4`，SHA-256 `d637fcd907e98ac7882ec54b78782bfa8c8699420f76c99fcccd0f25c3965dcc`，4,272,298 字节；目标解析 API 和 Range GET 已验证。执行前须重新签发短期 URL 并传给 `MEDIA_WORKER_FIXTURE_VIDEO_RESULT_URL`，不要把 URL 写入文档或持久配置。

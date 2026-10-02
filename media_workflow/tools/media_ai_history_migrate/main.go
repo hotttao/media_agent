@@ -96,12 +96,14 @@ type manifest struct {
 
 func main() {
 	var sourceDSN, outputPath, onlyTask, importGroup, inspectGroup string
+	var auditReadiness bool
 	var importCfg importConfig
 	flag.StringVar(&sourceDSN, "source-dsn", os.Getenv("MEDIA_AI_DATABASE_URL"), "media_ai MySQL DSN; prefer environment variable")
 	flag.StringVar(&outputPath, "out", "", "write private JSON manifest to a new file (0600)")
 	flag.StringVar(&onlyTask, "only-task", "", "export one legacy video_task; omit for all data")
 	flag.StringVar(&importGroup, "import-group", "", "import one intact image-only lineage group through target APIs")
 	flag.StringVar(&inspectGroup, "inspect-group", "", "inspect one source lineage and its pose/scene dependencies without importing")
+	flag.BoolVar(&auditReadiness, "audit-readiness", false, "read-only audit of all candidate input mappings and source media")
 	flag.StringVar(&importCfg.SourceAssetsURL, "source-assets-url", envOr("MEDIA_AI_ASSETS_URL", "http://192.168.2.38"), "legacy media origin")
 	flag.StringVar(&importCfg.GatewayURL, "target-gateway", envOr("MEDIA_GATEWAY_ADDR", "http://192.168.2.41:18080"), "target public gateway")
 	flag.StringVar(&importCfg.MaterialsURL, "materials-internal-url", envOr("MEDIA_MATERIALS_INTERNAL_URL", "http://127.0.0.1:8003"), "trusted materials API")
@@ -124,6 +126,9 @@ func main() {
 	if inspectGroup != "" && (importGroup != "" || onlyTask != "") {
 		fail(errors.New("--inspect-group cannot be combined with --import-group or --only-task"))
 	}
+	if auditReadiness && (importGroup != "" || inspectGroup != "" || onlyTask != "") {
+		fail(errors.New("--audit-readiness requires the full source inventory and cannot import"))
+	}
 	if importCfg.ImportJob && importGroup == "" {
 		fail(errors.New("--import-job requires --import-group"))
 	}
@@ -141,7 +146,7 @@ func main() {
 	defer db.Close()
 	db.SetMaxOpenConns(2)
 	timeout := 2 * time.Minute
-	if importGroup != "" {
+	if importGroup != "" || auditReadiness {
 		timeout = 10 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -181,6 +186,11 @@ func main() {
 	fmt.Printf("migration candidates: unique_videos=%d group_kinds=%v exclusion_reasons=%v\n", len(groupedVideos), groupKinds, exclusionReasons)
 	if inspectGroup != "" {
 		if err := inspectLineageGroup(m, inspectGroup); err != nil {
+			fail(err)
+		}
+	}
+	if auditReadiness {
+		if err := auditMigrationReadiness(ctx, db, m, importCfg); err != nil {
 			fail(err)
 		}
 	}
