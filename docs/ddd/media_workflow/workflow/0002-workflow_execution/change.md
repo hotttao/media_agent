@@ -71,3 +71,7 @@
 - 一个业务 Step 编译为 `media_step_execution_v1` 子工作流，内部以 DO_WHILE 承载带反馈重新生成。
 - 多节点拓扑波次使用动态 fork + JOIN；后继从 StepRun 读取前驱唯一输出，不依赖 fork 输出结构。
 - 外部 Worker 不再直接领取 StepRun，而是经受控 Worker Gateway 执行 Capability Task。
+# 2026-10-02 · 纯文本动作输入分支
+
+- Resume 的 movement 输入分为媒体型和纯文本型。前者验证企业对象并冻结 Object Path；后者仅冻结已授权素材内容，不调用对象存储，也不生成虚构的媒体引用。
+- 运行时仍依据已发布 Template Invocation Mapping 组装 Capability 输入；冻结版本若要求 movement 资源引用，拒绝纯文本输入而非隐式改写旧版本。

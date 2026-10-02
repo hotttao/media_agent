@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	domain "media_agent/media_workflow/biz/domain/job"
+	templatedomain "media_agent/media_workflow/biz/domain/template"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
 	"media_agent/media_workflow/biz/workflow/compiler"
 	"media_agent/media_workflow/biz/workflow/executable"
@@ -119,6 +120,12 @@ func (s *Service) Resume(ctx context.Context, cmd ResumeCommand) (*domain.Job, e
 		return nil, err
 	}
 	for _, material := range cmd.InputPatch.Materials {
+		if material.URL == "" {
+			if textOnlyInputUsesAssetRef(ir, restored, material.Name) {
+				return nil, fmt.Errorf("text-only material %q is used as a Capability asset_ref by the frozen Workflow", material.Name)
+			}
+			continue
+		}
 		if !validTrustedResumeAssetURL(material.URL, s.resumeStorageOrigin, job.OrganizationID) {
 			return nil, fmt.Errorf("material %q is not a storage object in the Job organization", material.Name)
 		}
@@ -230,7 +237,8 @@ func mergeResumeInputs(original, patch domain.JobInput, needed map[string]wfdoma
 	}
 	for _, item := range patch.Materials {
 		slot, allowed := needed[item.Name]
-		if !allowed || slot.ResourceType != "MATERIAL" || slot.AssetKind != item.AssetKind || seen[item.Name] || item.Name == "" || !validResumeAssetURL(item.URL) {
+		validValue := validResumeAssetURL(item.URL) || item.URL == "" && item.AssetKind == "movement" && strings.TrimSpace(item.Content) != ""
+		if !allowed || slot.ResourceType != "MATERIAL" || slot.AssetKind != item.AssetKind || seen[item.Name] || item.Name == "" || !validValue {
 			return domain.JobInput{}, fmt.Errorf("invalid or duplicate resumed material %q", item.Name)
 		}
 		seen[item.Name] = true
@@ -256,6 +264,37 @@ func mergeResumeInputs(original, patch domain.JobInput, needed map[string]wfdoma
 		return domain.JobInput{}, fmt.Errorf("missing inputs for pending steps: %s", strings.Join(missing, ", "))
 	}
 	return merged, nil
+}
+
+func textOnlyInputUsesAssetRef(ir executable.ExecutableWorkflowIR, restored map[string]bool, inputName string) bool {
+	for _, step := range ir.Steps {
+		if restored[step.Key] {
+			continue
+		}
+		for slot, ref := range step.Context {
+			if ref.Source != executable.ValueWorkflowInput || ref.Ref != inputName {
+				continue
+			}
+			for _, expression := range step.Invocation {
+				if invocationUsesAssetRef(expression, slot) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func invocationUsesAssetRef(expression templatedomain.InvocationExpression, slot string) bool {
+	if expression.Op == templatedomain.InvocationAssetRef && expression.Slot == slot {
+		return true
+	}
+	for _, item := range expression.Items {
+		if invocationUsesAssetRef(item, slot) {
+			return true
+		}
+	}
+	return false
 }
 
 func validResumeAssetURL(raw string) bool {

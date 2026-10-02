@@ -216,6 +216,16 @@ func TestMergeResumeInputsOnlyRequiresPendingSlots(t *testing.T) {
 	if err != nil || len(merged.Materials) != 1 || merged.Product.ID != "prd" {
 		t.Fatalf("pending input not merged: input=%+v err=%v", merged, err)
 	}
+	patch.Materials[0].URL = ""
+	merged, err = mergeResumeInputs(original, patch, needed)
+	if err != nil || len(merged.Materials) != 1 || merged.Materials[0].Content != "walk" {
+		t.Fatalf("text-only movement not merged: input=%+v err=%v", merged, err)
+	}
+	patch.Materials[0].Content = "  "
+	if _, err := mergeResumeInputs(original, patch, needed); err == nil {
+		t.Fatal("empty text-only movement accepted")
+	}
+	patch.Materials[0].Content = "walk"
 	patch.Materials[0].AssetKind = "pose"
 	if _, err := mergeResumeInputs(original, patch, needed); err == nil {
 		t.Fatal("wrong frozen asset kind accepted")
@@ -229,6 +239,68 @@ func TestMergeResumeInputsOnlyRequiresPendingSlots(t *testing.T) {
 	patch.Materials[0].Name = "pose"
 	if _, err := mergeResumeInputs(original, patch, needed); err == nil {
 		t.Fatal("input used only by restored steps accepted")
+	}
+}
+
+func TestResumeTextOnlyMovementRequiresFrozenPromptOnlyInvocation(t *testing.T) {
+	svc, repo, importCmd := historyImportFixture(t)
+	job, err := svc.ImportIncomplete(context.Background(), importCmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lookup := svc.historyAssets.(historyAssetLookup)
+	for _, asset := range lookup.assets {
+		asset.AccessURL = "http://media-storage.example/media/historical.png"
+		asset.AccessExpiresAt = time.Now().Add(5 * time.Minute).Unix()
+	}
+	keys := []string{"model_image", "style_image", "first_frame", "video"}
+	ir := executable.ExecutableWorkflowIR{SchemaVersion: executable.SchemaVersion, WorkflowID: "wf", WorkflowVersion: 1, OutputStepKey: "video"}
+	for i, key := range keys {
+		step := executable.ExecutableStepIR{
+			Key: key, Order: i + 1, Template: executable.TemplateIR{ID: "tpl-" + key, Version: 1, Body: "{{.movement.content}}"},
+			Capability:      executable.CapabilityIR{Key: key, Version: 1, ConductorTaskDef: "cap_" + key, ExecutionTarget: "personal_worker"},
+			OutputAssetKind: []string{"model_image", "style_image", "first_frame", "ai_video"}[i],
+		}
+		if i > 0 {
+			step.DependsOn = []string{keys[i-1]}
+		}
+		if key == "video" {
+			step.Context = map[string]executable.ValueRef{"movement": {Source: executable.ValueWorkflowInput, Ref: "movement"}}
+			step.Invocation = templatedomain.InvocationMapping{
+				"prompt": {Op: templatedomain.InvocationRenderTemplate},
+				"images": {Op: templatedomain.InvocationList, Items: []templatedomain.InvocationExpression{{Op: templatedomain.InvocationAssetRef, Slot: "movement"}}},
+			}
+		}
+		ir.Steps = append(ir.Steps, step)
+	}
+	setCompilation := func() {
+		t.Helper()
+		encoded, err := json.Marshal(ir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		svc.compilations = historyCompilationRepo{ir: encoded}
+	}
+	setCompilation()
+	svc.tplLookup = fakeResumeTemplates{}
+	outbox := &fakeResumeRepo{job: repo.jobs[job.ID]}
+	svc.ConfigureResume(outbox, fakeResumeAccess{allowed: true}, fakeResumeLauncher{}, "http://media-storage.example")
+	svc.resumeURLVerifier = func(context.Context, string) error { t.Fatal("text-only material caused a URL probe"); return nil }
+	cmd := ResumeCommand{JobID: job.ID, UserID: "owner", IdempotencyKey: "text-only-movement", InputPatch: domain.JobInput{Materials: []domain.MaterialData{{Name: "movement", AssetKind: "movement", Content: "walk slowly"}}}}
+	if _, err := svc.Resume(context.Background(), cmd); err == nil || !strings.Contains(err.Error(), "asset_ref") || outbox.accepted != nil {
+		t.Fatalf("frozen asset_ref invocation accepted text-only movement: %v", err)
+	}
+	ir.Steps[3].Invocation = templatedomain.InvocationMapping{"prompt": {Op: templatedomain.InvocationRenderTemplate}}
+	setCompilation()
+	resumed, err := svc.Resume(context.Background(), cmd)
+	if err != nil || resumed.Status != domain.JobRunning || outbox.accepted == nil {
+		t.Fatalf("prompt-only text movement not resumed: job=%+v err=%v", resumed, err)
+	}
+	if len(outbox.input.Materials) != 1 || outbox.input.Materials[0].URL != "" || outbox.input.Materials[0].Content != "walk slowly" {
+		t.Fatalf("text-only movement was not preserved: %+v", outbox.input.Materials)
+	}
+	if strings.Contains(string(outbox.accepted.WorkflowInputJSON), "object_path:") || !strings.Contains(string(outbox.accepted.WorkflowInputJSON), "walk slowly") {
+		t.Fatalf("text-only movement produced invalid Conductor input: %s", outbox.accepted.WorkflowInputJSON)
 	}
 }
 

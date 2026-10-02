@@ -84,6 +84,8 @@ asset domain 管理**两类物理资源**，分落两张表：
 
 movement 类型 Material 的稳定字段为 `metadata.applicable_clothing` 与 `metadata.is_general`。`applicable_clothing` 对应旧系统同名为 `scope` 的服装适用范围，**不是业务 Scope**；`is_general=false` 时至少存在一个 pose → movement Compatibility，`is_general=true` 时不保留 Compatibility。
 
+Text-only Movement 以非空 `content` 承载动作描述，允许 `object_path=NULL`；这与媒体型 movement 同属 Material 聚合、共用 `asset_kind=movement`，不是待修复的缺失文件。调用方若选择它作为 Workflow 输入，只能取得内容而不能请求不存在的对象 URL。旧系统同一记录没有 URL 时按此语义迁移，保留来源 ID 和原文字，不伪造媒体。
+
 实现状态：现有服务尚未落地 `material_compatibilities` 表和 ReplacePoseCompatibilities 接口。旧动作素材迁移时先将来源 `pose_id` 列表暂存于 `metadata.legacy_pose_ids`；这只是迁移追溯信息，不是可达性或工作流可用的兼容关系。正式关联与 `is_general=false` 校验须待该能力实现后补齐。
 
 ### Tables - `generated_assets`

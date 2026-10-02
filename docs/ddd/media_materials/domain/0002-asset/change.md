@@ -68,3 +68,6 @@
 
 - Material 与 Generated Asset 增加 `workspace_id`。
 - 文件位置由完整 URL 改为 Storage `object_path`；job/step 引用不再声明跨服务外键。
+# 2026-10-02 · 纯文本动作素材
+
+- 明确源 movement 没有 URL 但有非空内容时是有效的 Text-only Movement，不当成断链或自动生成假对象。Material 聚合原有的 `object_path OR content` 不变量保持不变。

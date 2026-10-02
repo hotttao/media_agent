@@ -152,6 +152,10 @@ _禁用替代词_：Retry、重新 SubmitJob、恢复旧 Conductor 实例。
 历史执行在 Job 输入与 Conductor 启动命令中保存的企业命名空间内 Object Path；短期签名 URL 只在输入校验和 Worker 领取时生成，不属于持久化执行事实。
 _禁用替代词_：持久化签名 URL、Provider URL。
 
+**Text-only Movement Input（纯文本动作输入）**:
+从用户有权访问的 Text-only Movement 冻结非空动作内容、且不带媒体引用的 Workflow Material Input；模板可渲染其内容，Capability 图片或视频引用不得从空 URL 推断生成。
+_禁用替代词_：缺失输入、虚构动作视频、空 Object Path。
+
 **Job（执行任务）**:
 Execution 的持久化状态，状态机 `pending → running → (succeeded | failed | cancelled)`；携带 execution 的全部入参快照与最终产出。归 `execution` domain。
 _禁用替代词_：task（task 留给未来通用调度）、record。

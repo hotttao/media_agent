@@ -63,6 +63,7 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 - 导入 Job 初始为 `awaiting_resume`，没有 Conductor 实例；只有 `ResumeExecution` 可使其进入 running。已完成历史 StepRun 不得被普通 Retry、回调或恢复分支重新执行或覆盖。
 - `ResumeExecution` 的输入必须满足全部待运行节点；用户未补齐 pose/scene/movement 等输入时保留 `awaiting_resume`，不可派发 Capability。相同 source key 的重复导入与相同 resume idempotency key 的重复命令必须返回原结果。
 - 历史 Resume 冻结的媒体输入保存企业命名空间内稳定 Object Path；签名 URL 不进入 Job 输入、StartResume Outbox 或 Conductor 输入，交付 Worker 时才重新解析。Object Path 是技术引用，不绕过原有素材权限校验。
+- Text-only Movement Input 冻结非空 `content`、`asset_kind=movement` 与空 `url`，不得制造 Object Path；它仅能用于未把 movement 槽位映射为 Capability `asset_ref` 的已发布 Workflow Version。已有媒体型输入仍按原对象校验与重签规则处理。
 
 ## 领域事件
 

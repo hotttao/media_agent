@@ -29,6 +29,10 @@ _禁用替代词_：Public Image URL、Storage Proxy、Permanent URL
 一份 curated 可复用资源实体（scene/pose/makeup/movement/music/caption 等），以 `material_id` 标识；归属一个 Organization、Scope 和 owner，声明一个 Asset Kind；可由 Storage `object_path` 或内联 `content` 承载，至少存在一个；可见性遵循 [共享资源访问语言](../resource_access/CONTEXT.md)。
 _禁用替代词_：raw asset、input asset。
 
+**Text-only Movement（纯文本动作素材）**:
+以非空 `content` 描述动作、没有媒体对象的 movement Material；它是有效素材，不因缺少 `object_path` 被视为断链或待补文件。
+_禁用替代词_：丢失视频的动作、空素材、孤儿动作。
+
 **Material Compatibility（素材兼容关系）**:
 两个 Material 之间的定向兼容事实，当前只允许 `pose -> movement`；两端必须属于相同 Organization 和 Scope。旧系统 Movement Material 的 `scope` 表示服装适用范围，迁移后统一命名为 `applicable_clothing`，不得与业务 Scope 混用。
 _禁用替代词_：movement scope、pose mapping。

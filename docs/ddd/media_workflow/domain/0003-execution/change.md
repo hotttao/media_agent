@@ -92,3 +92,7 @@
 
 - SubmitJob 的 material / asset bundle 必须与冻结 Input Schema 的 `asset_kind` 对齐。
 - Job 创建界面消费服务端 Input Schema 生成资源选择器，不再要求业务用户手写 bundle JSON。
+# 2026-10-02 · 纯文本动作作为历史继续执行输入
+
+- Job Input 可冻结 `asset_kind=movement`、非空内容和空 URL；该模式不生成 Object Path，也不通过对象存储解析。
+- 只有冻结的 Template Invocation 不引用 movement 的 `asset_ref` 时才接受纯文本动作，避免运行时把空媒体引用交给 Capability。

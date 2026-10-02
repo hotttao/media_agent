@@ -16,6 +16,8 @@ import (
 	"strings"
 	texttemplate "text/template"
 	"time"
+
+	templatedomain "media_agent/media_workflow/biz/domain/template"
 )
 
 const workflowName = "media_ai · 图片与动作视频生成（联调样本）"
@@ -44,11 +46,12 @@ type resourceRef struct {
 
 type templateRecord struct {
 	resourceRef
-	Name            string `json:"name"`
-	PromptBody      string `json:"prompt_body"`
-	OutputAssetKind string `json:"output_asset_kind"`
-	CapabilityKey   string `json:"capability_key"`
-	Status          int    `json:"status"`
+	Name              string                           `json:"name"`
+	PromptBody        string                           `json:"prompt_body"`
+	OutputAssetKind   string                           `json:"output_asset_kind"`
+	CapabilityKey     string                           `json:"capability_key"`
+	InvocationMapping templatedomain.InvocationMapping `json:"invocation_mapping"`
+	Status            int                              `json:"status"`
 }
 
 type templateSpec struct {
@@ -203,7 +206,7 @@ func fixtureTemplates(promptDir string) ([]templateSpec, error) {
 		{Key: "model", Name: "media_ai · 生成模特图", Prompt: modelPrompt, OutputAssetKind: "model_image", CapabilityKey: "media.image.model", Slots: []map[string]any{container("virtual_ip", "VIRTUAL_IP", "virtual_ip"), container("product", "PRODUCT", "product")}, Invocation: invocation("virtual_ip", "product")},
 		{Key: "style", Name: "media_ai · 生成定妆图", Prompt: stylePrompt, OutputAssetKind: "style_image", CapabilityKey: "media.image.style", Slots: []map[string]any{asset("model", "model_image"), material("pose", "pose")}, Invocation: invocation("model", "pose")},
 		{Key: "first_frame", Name: "media_ai · 生成首帧", Prompt: firstFramePrompt, OutputAssetKind: "first_frame", CapabilityKey: "media.image.first_frame", Slots: []map[string]any{asset("style", "style_image"), material("scene", "scene")}, Invocation: invocation("style", "scene")},
-		{Key: "video", Name: "media_ai · 生成动作视频", Prompt: videoPrompt, OutputAssetKind: "ai_video", CapabilityKey: "media.video.generate", Slots: []map[string]any{asset("first_frame", "first_frame"), material("movement", "movement")}, Invocation: invocation("first_frame", "movement")},
+		{Key: "video", Name: "media_ai · 生成动作视频", Prompt: videoPrompt, OutputAssetKind: "ai_video", CapabilityKey: "media.video.generate", Slots: []map[string]any{asset("first_frame", "first_frame"), material("movement", "movement")}, Invocation: invocation("first_frame")},
 	}, nil
 }
 
@@ -229,7 +232,7 @@ func (c *client) createAndPublishTemplate(ctx context.Context, spec templateSpec
 		if existing.Status == 3 {
 			return resourceRef{}, fmt.Errorf("Template %q 已归档，不能复用", spec.Name)
 		}
-		if existing.PromptBody == spec.Prompt && existing.OutputAssetKind == spec.OutputAssetKind && existing.CapabilityKey == spec.CapabilityKey {
+		if existing.PromptBody == spec.Prompt && existing.OutputAssetKind == spec.OutputAssetKind && existing.CapabilityKey == spec.CapabilityKey && sameInvocationMapping(existing.InvocationMapping, spec.Invocation) {
 			if existing.Status == 1 {
 				if err := c.json(ctx, http.MethodPost, "/api/v1/templates/"+url.PathEscape(existing.ID)+"/publish", nil, nil); err != nil {
 					return resourceRef{}, err
@@ -263,6 +266,23 @@ func (c *client) createAndPublishTemplate(ctx context.Context, spec templateSpec
 		return resourceRef{}, err
 	}
 	return created, nil
+}
+
+func sameInvocationMapping(current templatedomain.InvocationMapping, proposed map[string]any) bool {
+	encoded, err := json.Marshal(proposed)
+	if err != nil {
+		return false
+	}
+	var want templatedomain.InvocationMapping
+	if err := json.Unmarshal(encoded, &want); err != nil {
+		return false
+	}
+	gotJSON, err := json.Marshal(current)
+	if err != nil {
+		return false
+	}
+	wantJSON, err := json.Marshal(want)
+	return err == nil && bytes.Equal(gotJSON, wantJSON)
 }
 
 func (c *client) createAndPublishWorkflow(ctx context.Context, templates map[string]resourceRef) (resourceRef, error) {

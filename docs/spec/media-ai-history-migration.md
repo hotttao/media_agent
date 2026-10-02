@@ -2,7 +2,7 @@
 
 ## 范围与现状
 
-源事实是 `Product/VirtualIp -> ModelImage -> StyleImage -> FirstFrame -> Video[] -> VideoPush` 的关联，不是旧 `workflows.config`。本文约束 `media_workflow`、`media_materials` 和对象存储的迁移接口。只读源清单、单组图片摄取、历史 Generated Asset 登记、未完成 Job 导入、显式 Resume 与 Outbox 均已实现；**仅一条真实历史链完成了端到端恢复验收，全量迁移尚未获准**。旧库全程只读。发布文案、飞书发布不进入当前四节点生成 Workflow，历史 VideoPush 信息仍需保留来源审计。UI 相关工作按用户要求暂停，等待新的设计。
+源事实是 `Product/VirtualIp -> ModelImage -> StyleImage -> FirstFrame -> Video[] -> VideoPush` 的关联，不是旧 `workflows.config`。本文约束 `media_workflow`、`media_materials` 和对象存储的迁移接口。只读源清单、单组图片摄取、历史 Generated Asset 登记、未完成 Job 导入、显式 Resume 与 Outbox 均已实现；**仅一条真实历史链完成了端到端恢复验收，现有导入器仍仅支持未完成图片链，不能声称具备全量迁移能力**。用户已允许在所有功能完备后执行全量迁移；功能门禁未满足前不得启动全量写入。旧库全程只读。发布文案、飞书发布不进入当前四节点生成 Workflow，历史 VideoPush 信息仍需保留来源审计。UI 相关工作按用户要求暂停，等待新的设计。
 
 ## 源清单与纳入规则
 
@@ -21,6 +21,8 @@
 
 `ResumeExecution(job_id, input_patch, idempotency_key)` 由当前 User 调用，授权 Job 所属 Workspace，校验待执行节点所需的 pose/scene/movement 等输入、素材可达性、媒体对象与冻结 Workflow Version；缺失则保留 `awaiting_resume` 并返回字段级错误。成功时事务内冻结补齐输入、置 Job 为 running、写 StartResume Outbox；重复 key 返回原执行，其他并发 Resume 返回冲突。恢复不可覆写已成功的历史 StepRun。
 
+对于来源 `movement_materials.url` 为空而 `content` 非空的记录，目标 Material 按 Text-only Movement 保留内容并允许无 Object Path。Resume 的 `movement` 输入可携带空 URL 与非空内容，但仅在冻结 Template Invocation 没有把 movement 槽位用于 `asset_ref` 时成立；内容进入 `movement.content` 渲染，Capability 的资源数组只能由其他有媒体对象的槽位组成。若冻结版本仍要求 movement 媒体引用，必须拒绝而非隐式改变旧版本；新发布的 video Template 应仅将 `first_frame` 映射为资源引用。媒体型 movement 仍按下段对象校验处理。纯文本输入不得生成伪 Object Path 或伪签名 URL。
+
 输入中的短期签名 URL 只用于 Resume 当下验证对象属于本企业 Storage 命名空间且可读；Job、Outbox 与 Conductor 启动输入必须冻结不含凭证的 Object Path。Personal/Managed Worker 领取历史 Capability Task 时由 `media_workflow` 使用内部凭证向 `media_materials` 重新解析受控 Object Path，检查归属与剩余有效期后才交付短期 URL。内部解析接口不能绕过用户提交时的资源可达性决策；解析失败不交付任务、不回退旧 URL。
 
 Conductor Backend Compiler 必须为可恢复版本提供受控恢复分支：按 Job 中服务端校验的成功前缀，把已登记 Asset 还原为与普通 Finalize 相同的 `output_resource` 结构；不调已完成节点的 Render、Capability、HUMAN 或 Finalize，不把旧 Conductor ID 当作可恢复实例。之后从首个未完成节点执行，沿现有 `taskToDomain`、Worker Gateway、审批与结果登记链路。恢复分支读取业务数据库且只接受当前 Job/StepRun 的受控 Asset；新 Conductor correlation ID 由 `job_id + resume_generation` 派生，Outbox 结果不确定时按该 ID 查询。
@@ -32,6 +34,18 @@ Conductor Backend Compiler 必须为可恢复版本提供受控恢复分支：�
 - E2E 先选一个完整上游但无下游 Video 的 FirstFrame：经 API 导入后 UI 显示前三个已完成节点和视频待运行；补 Movement 后 Resume，使用 `media_worker` fixture 只领取 video Capability，完成并显示可访问结果。重复导入/Resume 不得新增 Job 或重复视频；断链样本不得进入目标。
 - Mock 视频结果须先摄取到目标对象存储，再由 fixture Worker 返回该受控对象的短期 URL；`media_materials` 对原生 Generated Asset 复核企业/Scope 命名空间、存在性与媒体类型，只保存 Object Path。不能把旧系统 URL 或过期签名 URL 当作最终资产事实。
 - 公开 Generated Asset 读取须先按企业成员关系及 private/team/public 可见性过滤，然后对持有 Object Path 的产物按请求签发临时 URL；内部来源查询和迁移写入继续使用独立服务凭证。列表计数不得包含当前用户不可见的记录。
+
+## 全量能力覆盖门禁
+
+| 旧事实 | 目标边界 / 聚合或读模型 / Workflow | 状态 |
+|:---|:---|:---|
+| URL 为空、内容非空的 Movement | media_materials asset/Material；media_workflow execution/Job Input 与 workflow_execution/Resume | covered（纯文本，不伪造对象） |
+| 未完成 Model/Style/FirstFrame 链 | media_materials Imported Generated Asset；media_workflow Execution/Job + Resume | covered（单组 API/CLI，批量对账待实现） |
+| 已完成 Video 与独立 VideoTask | media_materials Imported Generated Asset；media_workflow 历史 Execution/StepRun | missing（现有导入 API 限制为最多 3 个已完成图片步骤） |
+| VideoPush 多视频成员、剪辑/文案/发布事实 | 非本轮四节点 Workflow；需独立来源读模型或明确 external-owner | missing（不能塞进单输出 video Step） |
+| 断链排除 | 迁移 CLI 排除清单；不创建目标聚合 | covered |
+
+存在 `missing`，不能宣称领域迁移能力或全量写入门禁完成。
 
 ## 单样本验收记录（2026-10-02）
 

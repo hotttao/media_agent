@@ -40,6 +40,10 @@ func TestFixtureTemplatesUseSourcePromptsAndOrderedResources(t *testing.T) {
 	if resources[0]["slot"] != "virtual_ip" || resources[1]["slot"] != "product" {
 		t.Fatalf("model image order = %v", resources)
 	}
+	videoResources := specs[3].Invocation["resources"].(map[string]any)["items"].([]map[string]any)
+	if len(videoResources) != 1 || videoResources[0]["slot"] != "first_frame" {
+		t.Fatalf("text-only movement must not become a Capability resource: %v", videoResources)
+	}
 }
 
 func TestWorkflowMigrationStopsAtVideo(t *testing.T) {
@@ -104,5 +108,31 @@ func TestTemplateMigrationUpdatesPublishedVersionWithoutDuplicating(t *testing.T
 	})
 	if err != nil || ref.ID != "tpl-1" || ref.Version != 2 || updates != 1 {
 		t.Fatalf("ref = %+v, updates = %d, error = %v", ref, updates, err)
+	}
+}
+
+func TestInvocationChangePublishesNewTemplateVersion(t *testing.T) {
+	updates := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/templates":
+			_, _ = w.Write([]byte(`{"items":[{"id":"tpl-video","version":1,"name":"video","prompt_body":"{{.movement.content}}","output_asset_kind":"ai_video","capability_key":"media.video.generate","status":2,"invocation_mapping":{"prompt":{"op":"render_template"},"resources":{"op":"list","items":[{"op":"asset_ref","slot":"first_frame"},{"op":"asset_ref","slot":"movement"}]}}}]}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/templates/tpl-video":
+			updates++
+			_, _ = w.Write([]byte(`{"id":"tpl-video","version":2}`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	c := &client{config: config{baseURL: server.URL, scope: "ai_clothing"}, http: server.Client()}
+	ref, err := c.createAndPublishTemplate(context.Background(), templateSpec{
+		Name: "video", Prompt: "{{.movement.content}}", OutputAssetKind: "ai_video", CapabilityKey: "media.video.generate",
+		Invocation: map[string]any{"prompt": map[string]any{"op": "render_template"}, "resources": map[string]any{"op": "list", "items": []map[string]any{{"op": "asset_ref", "slot": "first_frame"}}}},
+	})
+	if err != nil || ref.Version != 2 || updates != 1 {
+		t.Fatalf("changed invocation was silently reused: ref=%+v updates=%d err=%v", ref, updates, err)
 	}
 }

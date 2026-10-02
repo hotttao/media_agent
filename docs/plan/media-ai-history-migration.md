@@ -36,7 +36,19 @@
 - [ ] 用户确认样本后才执行全量导入；按来源 ID 对账所有纳入/排除/失败项，可重跑且不污染源库。
 - [x] 验证断链样本被排除、合法中间图片保留、重复导入/Resume、跨账户拒绝、Conductor/对象存储暂时失败恢复。源清单排除 50 条；单元测试、隔离 PostgreSQL Outbox 测试及真实网关跨账户拒绝均通过。暂时故障通过注入失败并重试验证，不停止用户正在使用的服务。
 
-风险：源模板未必能匹配所有旧产物；导入成功前缀应保留真实来源而不是冒充当前 Template Version 的历史运行。7 个 movement 的媒体缺失需要明确“文本动作”或“视频动作”契约；尚未执行全量导入。样本的 mock 成功不等于生产 Provider 已验证。
+## P6 · Text-only Movement
+
+- [x] Resume 对 `movement` 支持空 URL、非空内容；校验冻结 Invocation 不引用 movement `asset_ref`。媒体型 movement 路径保持原校验；单元测试已通过。
+- [ ] 发布只将 FirstFrame 映射为视频 Capability 资源、将 movement 内容渲染进提示词的新 Template/Workflow Version；旧版本保持不可变。
+- [ ] 以无对象的现存 movement 做 API 验收，确认 Job/Outbox 无伪 Object Path，Worker 收到的资源数组不含空引用。
+
+## P7 · 完成历史与全量写入
+
+- [ ] 为已有 Video 建受控、幂等的历史完成 Execution/StepRun 导入，不伪造 Conductor 运行；图片/视频对象按源 ID 去重与核对。
+- [ ] 明确 VideoPush 多视频成员和发布事实的目标读模型或外部所有者；不能把它们压成四节点 Workflow 的单输出。
+- [ ] 实现可重跑的全量批处理与来源 ID 对账：纳入、排除、失败、目标 ID、Object Path 和校验摘要。仅在能力与测试全部通过后按用户授权执行，不对旧库写入。
+
+风险：源模板未必能匹配所有旧产物；导入成功前缀应保留真实来源而不是冒充当前 Template Version 的历史运行。7 个 movement 已按纯文本契约处理，但真实 API 验收和新 Workflow 发布未完成；尚未执行全量导入。样本的 mock 成功不等于生产 Provider 已验证。
 
 ## 迁移能力覆盖矩阵（样本门禁）
 
