@@ -136,9 +136,14 @@ MEDIA_E2E_TALOS_URL="http://${worker_talos_ip}:4420" \
 
 ```bash
 go -C media-cli test ./e2e -run '^TestWorkerIdentityGateway$' -count=1 -v
+
+# Worker Gateway 注册、scope 与撤销边界；不领取已有任务
+go -C media-cli test ./e2e -run '^TestWorkflowWorkerGatewayAPIToken$' -count=1 -v
 ```
 
 环境变量同上方User API Token网关测试。CLI另用`media_auth worker-identity create/list/get/create-token/disable/delete`验收，Token Secret用`--env-out`新文件0600交付，禁止输出；完整命令链和HTTP断言是两道独立门禁。
+
+Worker Gateway 边界测试为现有企业创建临时稳定 Worker 身份和 poll-only API Token，通过网关验证有效注册、User 不能冒充 Worker、scope 不足拒绝，以及撤销后注册/轮询立即拒绝。只清理本次创建的身份和凭据；不模拟登录，不调用旧 Service Token 接口，不用有效 Token 领取队列任务，不替代完整 Worker 执行门禁。
 
 ### Personal Worker 单样本执行门禁
 

@@ -1,104 +1,84 @@
-// workflow_worker_gateway_e2e_test.go verifies the client Worker authentication
-// boundary over the unified Gateway. The tested servers are started externally;
-// this package only sends HTTP requests, as required by harness/contributing/e2e.md.
-//
-// Run with:
-//
-//	MEDIA_AUTH_ADDR=http://127.0.0.1:8001 \
-//	MEDIA_GATEWAY_ADDR=http://192.168.2.41:18080 \
-//	MEDIA_AUTH_E2E_USER=1556824234@qq.com \
-//	MEDIA_AUTH_E2E_PASS=st123456 \
-//	go test ./e2e -run TestWorkflowWorkerGatewayServiceToken -v
 package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"testing"
 	"time"
 )
 
-func TestWorkflowWorkerGatewayServiceToken(t *testing.T) {
-	authAddr := skipIfNoServer(t)
-	gatewayAddr := os.Getenv("MEDIA_GATEWAY_ADDR")
-	if gatewayAddr == "" {
-		t.Skip("MEDIA_GATEWAY_ADDR 未设，跳过 Worker Gateway HTTP e2e（需先启动统一网关）")
+// TestWorkflowWorkerGatewayAPIToken exercises the public Worker boundary without
+// logging in, submitting Jobs, polling queues or altering existing credentials.
+// The servers are started externally, per harness/contributing/e2e.md.
+func TestWorkflowWorkerGatewayAPIToken(t *testing.T) {
+	addr, user, org := os.Getenv("MEDIA_GATEWAY_ADDR"), os.Getenv("MEDIA_API_TOKEN"), os.Getenv("MEDIA_E2E_ORGANIZATION_ID")
+	if addr == "" || user == "" || org == "" {
+		t.Skip("set MEDIA_GATEWAY_ADDR, MEDIA_API_TOKEN and MEDIA_E2E_ORGANIZATION_ID")
 	}
-
-	user := envOr("MEDIA_AUTH_E2E_USER", "1556824234@qq.com")
-	pass := envOr("MEDIA_AUTH_E2E_PASS", "st123456")
-	authClient := httpClient(t)
-	login(t, authClient, authAddr, user, pass)
-
-	status, body := doJSON(t, authClient, http.MethodPost, authAddr+"/api/organizations", map[string]string{
-		"name": "Worker Gateway E2E " + time.Now().Format("20060102-150405.000000000"),
-	})
-	if status != http.StatusCreated {
-		t.Fatalf("create organization: status=%d body=%s", status, body)
+	request := func(method, path, credential string, body any, want int) []byte {
+		t.Helper()
+		status, result := doJSONBearer(t, addr, method, path, credential, body)
+		if status != want {
+			t.Fatalf("%s %s: status=%d want=%d", method, path, status, want)
+		}
+		return result
 	}
-	var organization struct {
-		ID string `json:"id"`
+	var identity struct {
+		Worker struct {
+			ID           string `json:"id"`
+			Actor        string `json:"actor_id"`
+			Organization string `json:"organization_id"`
+		} `json:"worker_identity"`
 	}
-	if err := json.Unmarshal(body, &organization); err != nil || organization.ID == "" {
-		t.Fatalf("decode organization: err=%v body=%s", err, body)
+	name := fmt.Sprintf("worker-boundary-%d", time.Now().UnixNano())
+	if err := json.Unmarshal(request("POST", "/api/worker-identities", user, map[string]any{
+		"name": name, "organization_id": org,
+	}, http.StatusCreated), &identity); err != nil || identity.Worker.ID == "" || identity.Worker.Actor != "Worker:"+identity.Worker.ID || identity.Worker.Organization != org {
+		t.Fatal("created Worker identity authority mismatch")
 	}
-
-	expiresAt := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
-	status, body = doJSON(t, authClient, http.MethodPost, authAddr+"/api/service-tokens", map[string]any{
-		"name":            "worker_gateway_e2e_" + time.Now().Format("150405"),
-		"organization_id": organization.ID,
-		"scopes": []string{
-			"workflow.worker.poll",
-			"workflow.worker.heartbeat",
-			"workflow.worker.complete",
-			"workflow.worker.fail",
-		},
-		"expires_at": expiresAt,
-	})
-	if status != http.StatusCreated {
-		t.Fatalf("create worker service token: status=%d body=%s", status, body)
+	path := "/api/worker-identities/" + identity.Worker.ID
+	t.Cleanup(func() { request("POST", path+"/delete", user, nil, http.StatusOK) })
+	var credential struct {
+		Secret string `json:"secret"`
+		Token  struct {
+			ID    string `json:"id"`
+			Actor string `json:"actor_id"`
+		} `json:"api_token"`
 	}
-	var tokenResponse struct {
-		ID    string `json:"id"`
-		Token string `json:"token"`
+	if err := json.Unmarshal(request("POST", path+"/api-tokens", user, map[string]any{
+		"name": name, "idempotency_key": name,
+		"scopes":     []string{"workflow.worker.poll"},
+		"expires_at": time.Now().UTC().Add(time.Hour).Format(time.RFC3339),
+	}, http.StatusCreated), &credential); err != nil || credential.Secret == "" || credential.Token.ID == "" || credential.Token.Actor != identity.Worker.Actor {
+		t.Fatal("issued Worker API Token authority mismatch")
 	}
-	if err := json.Unmarshal(body, &tokenResponse); err != nil || tokenResponse.ID == "" || tokenResponse.Token == "" {
-		t.Fatalf("decode worker service token: err=%v body=%s", err, body)
-	}
-
-	workerID := "worker-e2e-" + time.Now().Format("150405.000000000")
-	registerBody := map[string]any{
-		"worker_instance_id": workerID,
+	t.Cleanup(func() { request("POST", "/api/api-tokens/"+credential.Token.ID+"/revoke", user, nil, http.StatusOK) })
+	instance := name + "-instance"
+	registration := map[string]any{
+		"worker_instance_id": instance,
 		"capabilities": []map[string]any{{
-			"capability_key":     "media.image.model",
-			"capability_version": 1,
-			"concurrency":        1,
+			"capability_key": "media.image.model", "capability_version": 1, "concurrency": 1,
 		}},
 	}
-	status, body = doJSONBearer(t, gatewayAddr, http.MethodPost, "/api/worker/v1/registrations", tokenResponse.Token, registerBody)
-	if status != http.StatusOK {
-		t.Fatalf("register worker through gateway: status=%d body=%s", status, body)
+	var registered struct {
+		Instance string `json:"worker_instance_id"`
+		At       int64  `json:"registered_at"`
 	}
-
-	// With no workflow submitted for this fresh worker, the long poll must end
-	// cleanly instead of exposing a Conductor-specific response or error.
-	status, body = doJSONBearer(t, gatewayAddr, http.MethodPost, "/api/worker/v1/tasks:poll", tokenResponse.Token, map[string]any{
-		"worker_instance_id": workerID,
-		"capability_key":     "media.image.model",
-		"capability_version": 1,
-	})
-	if status != http.StatusNoContent {
-		t.Fatalf("poll empty worker queue through gateway: status=%d body=%s", status, body)
+	if err := json.Unmarshal(request("POST", "/api/worker/v1/registrations", credential.Secret, registration, http.StatusOK), &registered); err != nil || registered.Instance != instance || registered.At == 0 {
+		t.Fatal("valid Worker registration was not acknowledged")
 	}
-
-	status, body = doJSON(t, authClient, http.MethodDelete, authAddr+"/api/service-tokens/"+tokenResponse.ID, nil)
-	if status != http.StatusOK {
-		t.Fatalf("revoke worker service token: status=%d body=%s", status, body)
-	}
-
-	status, body = doJSONBearer(t, gatewayAddr, http.MethodPost, "/api/worker/v1/registrations", tokenResponse.Token, registerBody)
-	if status != http.StatusUnauthorized {
-		t.Fatalf("revoked token must be rejected by gateway: status=%d body=%s", status, body)
-	}
+	// User credentials cannot impersonate a Worker; poll-only credentials
+	// cannot heartbeat a task even after passing edge identity exchange.
+	request("POST", "/api/worker/v1/registrations", user, registration, http.StatusUnauthorized)
+	request("POST", "/api/worker/v1/registrations", "invalid-api-token", registration, http.StatusUnauthorized)
+	request("POST", "/api/worker/v1/tasks/unknown/heartbeat", credential.Secret, map[string]any{
+		"worker_instance_id": instance, "attempt": 1,
+	}, http.StatusForbidden)
+	request("POST", "/api/api-tokens/"+credential.Token.ID+"/revoke", user, nil, http.StatusOK)
+	request("POST", "/api/worker/v1/registrations", credential.Secret, registration, http.StatusUnauthorized)
+	request("POST", "/api/worker/v1/tasks:poll", credential.Secret, map[string]any{
+		"worker_instance_id": instance, "capability_key": "media.image.model", "capability_version": 1,
+	}, http.StatusUnauthorized)
 }

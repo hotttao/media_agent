@@ -150,3 +150,12 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 样本结果原地址192.168.2.89:3000不可达；已验证192.168.2.38上相同三张图片与视频均HTTP200，Worker改为可配置资源根地址。已完成Job仍保留原URL，页面结果预览与生产对象上传尚未验收，不能用状态成功替代可见结果验收。用户确认前不迁移其他Workflow。
 - P5撤销/跨组织/trace_id整体门禁、P6/P7和Workflow UI整体验收继续保留未完成。
 - 默认未启用可观测性时工作流访问日志的trace_id/span_id目前为null；尚未证明跨网关/服务/Worker关联，不能宣称关联日志门禁通过。
+
+## 2026-10-03 后端剩余门禁复核
+
+- 将过期 `TestWorkflowWorkerGatewayServiceToken` 替换为 `TestWorkflowWorkerGatewayAPIToken`，不再创建旧凭据或模拟登录。真实统一网关验证临时稳定 Worker 注册成功、User 冒充拒绝、缺少 heartbeat scope 拒绝、Token 撤销后注册及轮询均 401；不领取既有任务，只清理本测试创建的身份/Token。
+- `TestAPITokenGateway`、`TestWorkerIdentityGateway` 和新 Worker Gateway 边界测试均通过；停用后的即时拒绝及后台 Token revoked 收敛已复验。仅证明这些认证边界，不勾选 trace_id 或跨企业 Dispatch 整体门禁。
+- 历史恢复门禁已在 [历史迁移 Plan](media-ai-history-migration.md) 完成真实 API/Fixture Worker 续跑、受控媒体摄取与全量对账；这不等于生产 Provider 上传或 UI 预览验收。
+- 当前 Worker API 路径只接受 Worker Internal JWT，不经过本地 Hash 验证；普通服务认证及 `media_auth` 仍存在旧 Service Token 实现，P7 尚未完成。Platform Token 仍需与其存储/调用方拆分，不能直接删除共用代码导致现有登录/OAuth 失效。
+- Agent API Token 申请、身份权威/撤销以及代理入口仍未实现，P6 保持未完成；已有 Agent Session/内部服务凭据不作为该功能的证据。
+- 按最新用户指令，全部 UI 工作等待新设计，本轮不实现；后端 trace_id 关联及剩余认证迁移继续保留在范围内。
