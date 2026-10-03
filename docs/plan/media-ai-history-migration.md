@@ -46,9 +46,9 @@
 
 - [x] 为已有 Video 建受控、幂等的历史完成 Execution/StepRun API，不伪造 Conductor 运行；四资产与 Workspace 校验的单元测试已通过。
 - [ ] 完成每条 Video 的真实 API 验收；CLI 单条导入、来源 ID/关系校验、图片/视频对象按源 ID 摄取及 256 MiB 有界上传代码和单元测试已完成，仍需真实数据验证摘要与时间对账。
-- [ ] 建立独立 HistoricalVideoPush 聚合、迁移 API 与公开 Get/List；保留有序成员、发布字段和原时间，关联已完成 Video Job，不触发剪辑/发布。
-- [ ] 摄取 VideoPush 非空成片、缩略图和手工剪辑媒体为目标 Object Path；逐字段校验摘要，空字段保持空值，不留旧系统 URL。
-- [ ] 实现可重跑的全量批处理与来源 ID 对账：纳入、排除、失败、目标 ID、Object Path 和校验摘要。仅在能力与测试全部通过后按用户授权执行，不对旧库写入。
+- [x] 建立独立 HistoricalVideoPush 聚合、迁移 API 与公开 Get/List；保留有序成员、发布字段和原时间，关联已完成 Video Job，不触发剪辑/发布。
+- [ ] 摄取 VideoPush 非空成片、缩略图和手工剪辑媒体为目标 Object Path；逐字段校验摘要，空字段保持空值，不留旧系统 URL（单条命令与单测已实现，待真实来源媒体和目标 API 验证）。
+- [ ] 实现可重跑的全量批处理与来源 ID 对账：纳入、排除、失败、目标 ID、Object Path 和校验摘要。批处理、唯一映射、逐条私有报告已实现；媒体路径/摘要对账和真实 API 验收未完成。仅在能力与测试全部通过后按用户授权执行，不对旧库写入。
 
 风险：源模板未必能匹配所有旧产物；导入成功前缀应保留真实来源而不是冒充当前 Template Version 的历史运行。7 个 movement 已按纯文本契约处理，但真实 API 验收和新 Workflow 发布未完成；尚未执行全量导入。样本的 mock 成功不等于生产 Provider 已验证。
 
@@ -60,5 +60,5 @@
 | ModelImage、StyleImage、FirstFrame | Imported Generated Asset + 成功 StepRun | 一条 FirstFrame 谱系已通过 API 导入 | 按源 ID 去重、摘要与时间对账 |
 | 无视频的完整图片谱系 | `awaiting_resume` Job | 一条真实 Job 已导入且 Resume 后 succeeded，原三个 Asset ID 未变 | 只执行缺失后缀、重复命令幂等 |
 | Video | 每条源 Video 一个终态 Job + 四个历史 StepRun | 终态 API 单元测试通过；真实源 Video 未导入 | 视频媒体摄取、真实 API 验收和逐源 ID 对账 |
-| VideoPush | 独立 HistoricalVideoPush 聚合，关联有序成员 Video Job | 目标聚合与媒体迁移尚未实现 | 原字段/成员/媒体全部对账，不触发剪辑/发布 |
+| VideoPush | 独立 HistoricalVideoPush 聚合，关联有序成员 Video Job | 聚合、接口与单条迁移命令的单元测试通过，真实 API 对账未完成 | 原字段/成员/媒体全部对账，不触发剪辑/发布 |
 | 断链记录 | 排除报告 | CLI 已输出排除原因 | 不创建目标 Job/Asset，逐条对账 |

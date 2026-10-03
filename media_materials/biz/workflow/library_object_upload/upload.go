@@ -38,7 +38,7 @@ var (
 	purposes = map[string]bool{
 		"material": true, "virtual_ip_avatar": true, "virtual_ip_full_body": true,
 		"virtual_ip_three_view": true, "virtual_ip_nine_view": true, "product_image": true,
-		"generated_asset_import": true,
+		"generated_asset_import": true, "historical_publication_import": true,
 	}
 )
 
@@ -97,7 +97,7 @@ func (w *Workflow) Upload(ctx context.Context, command Command) (objectstorage.O
 	}
 	contentType := detectContentType(header[:headerSize])
 	extension, ok := contentTypes[contentType]
-	if !ok || (strings.HasPrefix(contentType, "video/") && command.Purpose != "material" && command.Purpose != "generated_asset_import") {
+	if !ok || (strings.HasPrefix(contentType, "video/") && command.Purpose != "material" && command.Purpose != "generated_asset_import" && command.Purpose != "historical_publication_import") {
 		return objectstorage.ObjectInfo{}, ErrInvalid
 	}
 	if !strings.HasPrefix(contentType, "video/") && size > MaxImageUploadBytes {

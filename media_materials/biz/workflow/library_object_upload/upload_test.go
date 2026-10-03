@@ -88,6 +88,12 @@ func TestUploadAcceptsMaterialVideoOnly(t *testing.T) {
 	if err != nil || result.ContentType != "video/mp4" || !strings.Contains(result.ObjectPath, "/generated_asset_import/") {
 		t.Fatalf("historical video import: result=%+v err=%v", result, err)
 	}
+	command.Purpose = "historical_publication_import"
+	command.Body = bytes.NewReader(mp4)
+	result, err = New(&fakeStorage{}).Upload(context.Background(), command)
+	if err != nil || result.ContentType != "video/mp4" || !strings.Contains(result.ObjectPath, "/historical_publication_import/") {
+		t.Fatalf("historical publication media import: result=%+v err=%v", result, err)
+	}
 }
 
 func TestUploadSpoolsVideoLargerThanFormerSixteenMiBLimit(t *testing.T) {

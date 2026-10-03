@@ -27,7 +27,7 @@
 `POST /api/v1/library-objects:upload?organization_id=&scope=&purpose=`，`multipart/form-data` 的文件字段固定为 `file`，请求头必须包含 `Idempotency-Key`。
 
 - `purpose` 闭集合：`material`、`virtual_ip_avatar`、`virtual_ip_full_body`、`virtual_ip_three_view`、`virtual_ip_nine_view`、`product_image`。
-- 资源图片接受 `image/jpeg`、`image/png`、`image/webp`、`image/gif`，最大 16 MiB；空文件拒绝。`material` 和 `generated_asset_import` 用途还接受 `video/mp4`、`video/webm`，视频最大 256 MiB。媒体在服务端有界落盘和校验，不整文件载入内存。
+- 资源图片接受 `image/jpeg`、`image/png`、`image/webp`、`image/gif`，最大 16 MiB；空文件拒绝。`material`、`generated_asset_import` 和仅供迁移使用的 `historical_publication_import` 用途还接受 `video/mp4`、`video/webm`，视频最大 256 MiB。媒体在服务端有界落盘和校验，不整文件载入内存。
 - Hertz `server.max_request_body_bytes` 至少为 270 MiB，为 256 MiB 视频保留 multipart envelope 空间；业务 workflow 仍按媒体类型分别执行 16/256 MiB 硬边界。
 - Object Path 格式：`materials/{organization_id}/{scope}/{purpose}/{sha256(caller_id + idempotency_key)[0:32]}.{ext}`。Organization、Scope、purpose 先按安全段规则校验，文件原名不进入目录。
 - 同一 caller + Idempotency Key + 上传语义产生稳定路径；同内容重试成功，不同内容返回 409。

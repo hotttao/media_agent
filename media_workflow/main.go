@@ -14,15 +14,18 @@ import (
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_workflow/biz/dal"
 	capabilityrepo "media_agent/media_workflow/biz/dal/repo/capability"
+	historypushrepo "media_agent/media_workflow/biz/dal/repo/historical_publication"
 	jobrepo "media_agent/media_workflow/biz/dal/repo/job"
 	tplrepo "media_agent/media_workflow/biz/dal/repo/template"
 	wfrepo "media_agent/media_workflow/biz/dal/repo/workflow"
 	templatedomain "media_agent/media_workflow/biz/domain/template"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
+	historypushhandler "media_agent/media_workflow/biz/handler/historical_publication"
 	jobhandler "media_agent/media_workflow/biz/handler/job"
 	tplhandler "media_agent/media_workflow/biz/handler/template"
 	workerhandler "media_agent/media_workflow/biz/handler/worker"
 	wfhandler "media_agent/media_workflow/biz/handler/workflow"
+	historypushsvc "media_agent/media_workflow/biz/service/historical_publication"
 	jobsvc "media_agent/media_workflow/biz/service/job"
 	tplsvc "media_agent/media_workflow/biz/service/template"
 	wfsvc "media_agent/media_workflow/biz/service/workflow"
@@ -151,6 +154,7 @@ func main() {
 	jobSvc.ConfigureHistoryWorkspaces(controlClient)
 	jobSvc.ConfigureResume(jobRepo, controlClient, conductorClient, os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"))
 	jobhandler.Svc = jobSvc
+	historypushhandler.Svc = historypushsvc.New(historypushrepo.New(db), jobRepo, controlClient, materialsClient)
 	resumeCtx, resumeCancel := context.WithCancel(context.Background())
 	defer resumeCancel()
 	go func() {

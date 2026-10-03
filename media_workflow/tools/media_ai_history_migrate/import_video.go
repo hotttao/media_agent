@@ -72,22 +72,27 @@ func completedVideoSource(m *manifest, videoID string) (videoLineage, video, sou
 }
 
 func importCompletedVideo(ctx context.Context, db *sql.DB, m *manifest, videoID string, cfg importConfig) error {
+	_, err := importCompletedVideoID(ctx, db, m, videoID, cfg)
+	return err
+}
+
+func importCompletedVideoID(ctx context.Context, db *sql.DB, m *manifest, videoID string, cfg importConfig) (string, error) {
 	if err := validateImportConfig(cfg); err != nil {
-		return err
+		return "", err
 	}
 	if cfg.WorkflowURL == "" || cfg.WorkflowToken == "" || cfg.WorkflowID == "" || cfg.WorkflowVersion <= 0 || cfg.WorkspaceID == "" {
-		return errors.New("--import-video requires target workflow URL, migration token, published workflow ID/version, and target Workspace ID")
+		return "", errors.New("--import-video requires target workflow URL, migration token, published workflow ID/version, and target Workspace ID")
 	}
 	if err := validateOrigin("workflow-internal-url", cfg.WorkflowURL); err != nil {
-		return err
+		return "", err
 	}
 	lineage, source, model, style, frame, err := completedVideoSource(m, videoID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	importer := newHistoryImporter(cfg)
 	if err := importer.verifyInputMappings(ctx, db, lineageGroup{ProductID: lineage.ProductID, VirtualIPID: lineage.VirtualIPID}); err != nil {
-		return err
+		return "", err
 	}
 	images := []struct {
 		kind  string
@@ -97,21 +102,21 @@ func importCompletedVideo(ctx context.Context, db *sql.DB, m *manifest, videoID 
 	for _, item := range images {
 		assetID, err := importer.importImage(ctx, item.kind, item.image)
 		if err != nil {
-			return fmt.Errorf("%s %s: %w", item.kind, item.image.ID, err)
+			return "", fmt.Errorf("%s %s: %w", item.kind, item.image.ID, err)
 		}
 		completed = append(completed, map[string]string{"step_key": item.kind, "source_record_id": item.image.ID, "asset_id": assetID})
 		fmt.Printf("imported historical asset: kind=%s source_id=%s target_id=%s\n", item.kind, item.image.ID, assetID)
 	}
 	assetID, err := importer.importMedia(ctx, "ai_video", source.ID, source.URL, source.CreatedAt, "video/")
 	if err != nil {
-		return fmt.Errorf("video %s: %w", source.ID, err)
+		return "", fmt.Errorf("video %s: %w", source.ID, err)
 	}
 	completed = append(completed, map[string]string{"step_key": "video", "source_record_id": source.ID, "asset_id": assetID})
 	fmt.Printf("imported historical asset: kind=ai_video source_id=%s target_id=%s\n", source.ID, assetID)
 	jobID, err := importer.importHistoricalJob(ctx, "/api/internal/v1/jobs/import-completed", "video:"+source.ID, completed, 4)
 	if err != nil {
-		return fmt.Errorf("historical assets imported, but completed Job import failed: %w", err)
+		return "", fmt.Errorf("historical assets imported, but completed Job import failed: %w", err)
 	}
 	fmt.Printf("imported completed Job: video_id=%s job_id=%s status=succeeded\n", source.ID, jobID)
-	return nil
+	return jobID, nil
 }

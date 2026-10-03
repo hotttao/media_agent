@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package media_workflow.historical_publication;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_workflow/historical_publication";
+
+service HistoricalPublicationService {
+  rpc ImportHistoricalVideoPush(ImportHistoricalVideoPushReq) returns (HistoricalVideoPushResp) {
+    option (google.api.http) = { post: "/api/internal/v1/historical-video-pushes/import" body: "*" };
+    option (api.post) = "/api/internal/v1/historical-video-pushes/import";
+  }
+  rpc GetHistoricalVideoPush(GetHistoricalVideoPushReq) returns (HistoricalVideoPushResp) {
+    option (google.api.http) = { get: "/api/v1/historical-video-pushes/{id}" };
+    option (api.get) = "/api/v1/historical-video-pushes/:id";
+  }
+  rpc ListHistoricalVideoPushes(ListHistoricalVideoPushesReq) returns (ListHistoricalVideoPushesResp) {
+    option (google.api.http) = { get: "/api/v1/historical-video-pushes" };
+    option (api.get) = "/api/v1/historical-video-pushes";
+  }
+}
+
+message HistoricalMediaObject { string object_path = 1; string sha256 = 2; string access_url = 3; }
+message HistoricalVideoPushMember { int32 ordinal = 1; string source_video_id = 2; string job_id = 3; }
+
+message ImportHistoricalVideoPushReq {
+  string organization_id = 1;
+  string workspace_id = 2;
+  string owner_user_id = 3;
+  string source_record_id = 4;
+  string product_id = 5;
+  string virtual_ip_id = 6;
+  string source_scene_id = 7;
+  string template_name = 8;
+  string title = 9;
+  string content = 10;
+  string source_status = 11;
+  bool is_qualified = 12;
+  bool is_published = 13;
+  HistoricalMediaObject video = 14;
+  HistoricalMediaObject thumbnail = 15;
+  HistoricalMediaObject manual_clip = 16;
+  string source_created_at = 17;
+  string source_updated_at = 18;
+  repeated HistoricalVideoPushMember members = 19;
+}
+
+message HistoricalVideoPush {
+  string id = 1;
+  string organization_id = 2;
+  string workspace_id = 3;
+  string owner_user_id = 4;
+  string source_record_id = 5;
+  string product_id = 6;
+  string virtual_ip_id = 7;
+  string source_scene_id = 8;
+  string template_name = 9;
+  string title = 10;
+  string content = 11;
+  string source_status = 12;
+  bool is_qualified = 13;
+  bool is_published = 14;
+  HistoricalMediaObject video = 15;
+  HistoricalMediaObject thumbnail = 16;
+  HistoricalMediaObject manual_clip = 17;
+  string source_created_at = 18;
+  string source_updated_at = 19;
+  string imported_at = 20;
+  repeated HistoricalVideoPushMember members = 21;
+}
+
+message HistoricalVideoPushResp { HistoricalVideoPush item = 1; }
+message GetHistoricalVideoPushReq { string id = 1 [(api.path) = "id"]; }
+message ListHistoricalVideoPushesReq {
+  string workspace_id = 1 [(api.query) = "workspace_id"];
+  int32 page = 2 [(api.query) = "page"];
+  int32 page_size = 3 [(api.query) = "page_size"];
+}
+message ListHistoricalVideoPushesResp { repeated HistoricalVideoPush items = 1; int64 total = 2; }

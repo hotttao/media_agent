@@ -20,6 +20,7 @@ type readinessAudit struct {
 	Groups              int                 `json:"groups"`
 	ReadyGroups         int                 `json:"ready_groups"`
 	MediaBlockedGroups  []string            `json:"media_blocked_groups,omitempty"`
+	MediaBlockedPushes  []string            `json:"media_blocked_pushes,omitempty"`
 	Required            map[string]int      `json:"required"`
 	Mapped              map[string]int      `json:"mapped"`
 	Missing             map[string][]string `json:"missing"`
@@ -151,6 +152,26 @@ func auditMigrationReadiness(ctx context.Context, db *sql.DB, m manifest, cfg im
 	}
 	report := readinessAudit{Groups: len(m.Groups), Required: map[string]int{}, Mapped: map[string]int{}, Missing: map[string][]string{}, TargetObjectMissing: targetObjectMissing}
 	media := make([]auditMedia, 0)
+	intactPushes := map[string]bool{}
+	for _, group := range m.Groups {
+		if group.Kind == "video_push" {
+			intactPushes[group.VideoPushID] = true
+		}
+	}
+	for _, push := range m.VideoPushes {
+		if !intactPushes[push.ID] {
+			continue
+		}
+		for _, item := range []struct{ kind, rawURL string }{
+			{"video_push_video", push.URL},
+			{"video_push_thumbnail", push.Thumbnail},
+			{"video_push_manual_clip", push.ManualClipURL},
+		} {
+			if item.rawURL != "" {
+				media = append(media, auditMedia{item.kind, push.ID, item.rawURL})
+			}
+		}
+	}
 	for kind, ids := range required {
 		report.Required[kind] = len(ids)
 		for id := range ids {
@@ -210,6 +231,12 @@ func auditMigrationReadiness(ctx context.Context, db *sql.DB, m manifest, cfg im
 	for _, item := range report.MediaFailed {
 		failedMedia[item.Kind+":"+item.ID] = true
 	}
+	for _, push := range m.VideoPushes {
+		if intactPushes[push.ID] && (failedMedia["video_push_video:"+push.ID] || failedMedia["video_push_thumbnail:"+push.ID] || failedMedia["video_push_manual_clip:"+push.ID]) {
+			report.MediaBlockedPushes = append(report.MediaBlockedPushes, push.ID)
+		}
+	}
+	sort.Strings(report.MediaBlockedPushes)
 	for _, group := range m.Groups {
 		blocked := failedMedia["model_image:"+group.ModelImageID] || failedMedia["style_image:"+group.StyleImageID] || failedMedia["first_frame:"+group.FirstFrameID]
 		if style, ok := styleByID[group.StyleImageID]; ok {

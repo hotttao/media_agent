@@ -48,7 +48,7 @@ Conductor Backend Compiler 必须为可恢复版本提供受控恢复分支：�
 | URL 为空、内容非空的 Movement | media_materials asset/Material；media_workflow execution/Job Input 与 workflow_execution/Resume | covered（纯文本，不伪造对象） |
 | 未完成 Model/Style/FirstFrame 链 | media_materials Imported Generated Asset；media_workflow Execution/Job + Resume | covered（单组 API/CLI，批量对账待实现） |
 | 已完成 Video 与独立 VideoTask | media_materials Imported Generated Asset；media_workflow 历史 Execution/StepRun | missing（终态 Job API 已实现，视频资产摄取、CLI 和真实验收未完成） |
-| VideoPush 多视频成员与原发布事实 | media_workflow historical_publication/HistoricalVideoPush；historical_video_push_import | missing（聚合、接口、媒体摄取和真实对账待实现；剪辑/重新发布流程不在本轮范围） |
+| VideoPush 多视频成员与原发布事实 | media_workflow historical_publication/HistoricalVideoPush；historical_video_push_import | partial（聚合、接口和单条媒体摄取已实现；批量迁移、真实 API 验证及对账待完成；剪辑/重新发布流程不在本轮范围） |
 | 断链排除 | 迁移 CLI 排除清单；不创建目标聚合 | covered |
 
 存在 `missing`，不能宣称领域迁移能力或全量写入门禁完成。

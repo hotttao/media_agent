@@ -28,8 +28,8 @@ Historical Publication 保存 VideoPush 的来源身份、文字、原状态、�
 
 | 能力 | 说明 | 对外接口/函数 |
 |:---|:---|:---|
-| 导入历史发布记录 | 校验全部成员及媒体事实后原子保存 | `ImportHistoricalVideoPush`（待 IDL 定义） |
-| 查询历史发布记录 | 按 Workspace 与来源 ID/目标 ID 读取成员及原事实 | `GetHistoricalVideoPush/ListHistoricalVideoPush`（待 IDL 定义） |
+| 导入历史发布记录 | 校验全部成员及媒体事实后原子保存 | `ImportHistoricalVideoPush` |
+| 查询历史发布记录 | 按 Workspace 读取成员及原事实 | `GetHistoricalVideoPush/ListHistoricalVideoPush` |
 
 ## 聚合与不变量
 

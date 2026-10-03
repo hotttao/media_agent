@@ -57,8 +57,13 @@ func newHistoryImporter(cfg importConfig) historyImporter {
 }
 
 func importImageGroup(ctx context.Context, db *sql.DB, m *manifest, groupID string, cfg importConfig) error {
+	_, err := importImageGroupID(ctx, db, m, groupID, cfg)
+	return err
+}
+
+func importImageGroupID(ctx context.Context, db *sql.DB, m *manifest, groupID string, cfg importConfig) (string, error) {
 	if err := validateImportConfig(cfg); err != nil {
-		return err
+		return "", err
 	}
 	var group *lineageGroup
 	for i := range m.Groups {
@@ -68,29 +73,29 @@ func importImageGroup(ctx context.Context, db *sql.DB, m *manifest, groupID stri
 		}
 	}
 	if group == nil {
-		return fmt.Errorf("lineage group %q not found", groupID)
+		return "", fmt.Errorf("lineage group %q not found", groupID)
 	}
 	if cfg.ImportJob {
 		if cfg.WorkflowURL == "" || cfg.WorkflowToken == "" || cfg.WorkflowID == "" || cfg.WorkflowVersion <= 0 || cfg.WorkspaceID == "" {
-			return errors.New("--import-job requires target workflow URL, migration token, published workflow ID/version, and target Workspace ID")
+			return "", errors.New("--import-job requires target workflow URL, migration token, published workflow ID/version, and target Workspace ID")
 		}
 		if err := validateOrigin("workflow-internal-url", cfg.WorkflowURL); err != nil {
-			return err
+			return "", err
 		}
 	}
 	if group.ExecutionState != "awaiting_resume" || group.Kind != "partial_model_image" && group.Kind != "partial_style_image" && group.Kind != "partial_first_frame" {
-		return fmt.Errorf("group %q is not an intact unfinished image workflow", groupID)
+		return "", fmt.Errorf("group %q is not an intact unfinished image workflow", groupID)
 	}
 	importer := newHistoryImporter(cfg)
 	if err := importer.verifyInputMappings(ctx, db, *group); err != nil {
-		return err
+		return "", err
 	}
 	model, ok := findSourceImage(m.ModelImages, group.ModelImageID)
 	if !ok {
-		return fmt.Errorf("model image %q missing from source group", group.ModelImageID)
+		return "", fmt.Errorf("model image %q missing from source group", group.ModelImageID)
 	}
 	if model.ProductID != group.ProductID || model.VirtualIPID != group.VirtualIPID {
-		return errors.New("model image product or virtual IP differs from source group")
+		return "", errors.New("model image product or virtual IP differs from source group")
 	}
 	images := []struct {
 		kind  string
@@ -99,7 +104,7 @@ func importImageGroup(ctx context.Context, db *sql.DB, m *manifest, groupID stri
 	if group.StyleImageID != "" {
 		style, found := findSourceImage(m.StyleImages, group.StyleImageID)
 		if !found || style.ParentID != model.ID || style.ProductID != group.ProductID || style.VirtualIPID != group.VirtualIPID {
-			return errors.New("source group style image is disconnected")
+			return "", errors.New("source group style image is disconnected")
 		}
 		images = append(images, struct {
 			kind  string
@@ -109,7 +114,7 @@ func importImageGroup(ctx context.Context, db *sql.DB, m *manifest, groupID stri
 	if group.FirstFrameID != "" {
 		frame, found := findSourceImage(m.FirstFrames, group.FirstFrameID)
 		if !found || frame.ParentID != group.StyleImageID || frame.ProductID != group.ProductID || frame.VirtualIPID != group.VirtualIPID {
-			return errors.New("source group first frame is disconnected")
+			return "", errors.New("source group first frame is disconnected")
 		}
 		images = append(images, struct {
 			kind  string
@@ -120,7 +125,7 @@ func importImageGroup(ctx context.Context, db *sql.DB, m *manifest, groupID stri
 	for _, item := range images {
 		id, err := importer.importImage(ctx, item.kind, item.image)
 		if err != nil {
-			return fmt.Errorf("%s %s: %w", item.kind, item.image.ID, err)
+			return "", fmt.Errorf("%s %s: %w", item.kind, item.image.ID, err)
 		}
 		fmt.Printf("imported historical asset: kind=%s source_id=%s target_id=%s\n", item.kind, item.image.ID, id)
 		completed = append(completed, map[string]string{"step_key": item.kind, "source_record_id": item.image.ID, "asset_id": id})
@@ -128,13 +133,14 @@ func importImageGroup(ctx context.Context, db *sql.DB, m *manifest, groupID stri
 	if cfg.ImportJob {
 		jobID, err := importer.importIncompleteJob(ctx, group.ID, completed)
 		if err != nil {
-			return fmt.Errorf("historical assets were imported, but Job import failed: %w", err)
+			return "", fmt.Errorf("historical assets were imported, but Job import failed: %w", err)
 		}
 		fmt.Printf("imported incomplete Job: group=%s job_id=%s status=awaiting_resume next_step=%s\n", group.ID, jobID, group.NextStepKey)
+		return jobID, nil
 	} else {
 		fmt.Printf("image group %s assets imported; pass --import-job after Workspace/Workflow mapping, next_step=%s\n", group.ID, group.NextStepKey)
 	}
-	return nil
+	return "", nil
 }
 
 func validateImportConfig(cfg importConfig) error {
@@ -363,6 +369,10 @@ func resolveSourceMediaURL(origin, raw string) (string, error) {
 }
 
 func (h historyImporter) upload(ctx context.Context, kind, sourceID, filename string, source *os.File, checksum string) (string, error) {
+	return h.uploadWithPurpose(ctx, "generated_asset_import", kind, sourceID, filename, source, checksum)
+}
+
+func (h historyImporter) uploadWithPurpose(ctx context.Context, purpose, kind, sourceID, filename string, source *os.File, checksum string) (string, error) {
 	body, err := os.CreateTemp("", "media-ai-multipart-*")
 	if err != nil {
 		return "", fmt.Errorf("create multipart spool: %w", err)
@@ -386,7 +396,7 @@ func (h historyImporter) upload(ctx context.Context, kind, sourceID, filename st
 	if _, err := body.Seek(0, io.SeekStart); err != nil {
 		return "", err
 	}
-	query := url.Values{"organization_id": {h.cfg.OrganizationID}, "scope": {"ai_clothing"}, "purpose": {"generated_asset_import"}}
+	query := url.Values{"organization_id": {h.cfg.OrganizationID}, "scope": {"ai_clothing"}, "purpose": {purpose}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.GatewayURL+"/api/v1/library-objects:upload?"+query.Encode(), body)
 	if err != nil {
 		return "", err
