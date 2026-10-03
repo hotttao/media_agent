@@ -22,7 +22,8 @@ func InitLogger(app *configpb.AppConfig, log *configpb.LogConfig) error {
 }
 
 // InitOTel 初始化进程级 OTel tracing provider，返回 shutdown closure。
-// otel.enabled=false / nil → no-op。幂等（server/client 共用，sync.Once 只构造一次）。
+// otel.enabled=false / nil → 仅启用 W3C 传播，不创建 provider/exporter，shutdown 为 no-op。
+// provider 幂等（server/client 共用，sync.Once 只构造一次）。
 func InitOTel(app *configpb.AppConfig, otel *configpb.OtelConfig) func(context.Context) error {
 	return initOTel(app, otel)
 }

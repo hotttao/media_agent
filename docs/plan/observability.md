@@ -41,7 +41,7 @@ media_example / media-cli serve (host)
 
 - 服务端 Hertz OTel middleware 从 W3C `traceparent` 创建/继续 server span；业务日志必须使用带请求 context 的 `hlog.Ctx*` API，zapotel 才会写入 `trace_id`/`span_id`。
 - 下游 HTTP client 必须在发请求前从同一 context 创建 child span，并通过 W3C propagator 注入 `traceparent`。Workflow → Materials 的内部 client 已遵循该约束。
-- OTel 默认关闭时，`X-Request-ID` 仍由 server middleware 生成并返回，作为低成本请求关联键；它不冒充 OTel `trace_id`。联调时显式设置 `OTEL_ENABLED=true` 并启动观测后端，才能在日志与 Jaeger 间按真正 trace_id 查询。
+- 当前低成本请求关联契约见 [请求关联规格](../spec/request-correlation.md)：关闭 OTel 导出时仍保留不采样的 W3C trace context 与结构化日志 trace_id，`X-Request-ID` 不冒充 trace_id。只有显式开启 OTel 导出及观测后端后，才能关联 Jaeger；普通编码测试不启动这些后端。
   - server.md §7："具体的日志 / 追踪 SDK 留在 `hertz_infra/observability`"——结构化 app 日志收口 `hertz_infra/observability`。
 - 现有 `access_log`（AccessLogConfig）只管访问日志中间件格式，与结构化 app 日志职责不同，**保留分离**。
 

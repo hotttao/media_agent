@@ -19,7 +19,9 @@ import (
 	"sync"
 
 	"github.com/hertz-contrib/obs-opentelemetry/provider"
+	otelapi "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/semconv/v1.21.0"
 
@@ -34,6 +36,9 @@ var (
 
 func initOTel(app *configpb.AppConfig, otel *configpb.OtelConfig) func(context.Context) error {
 	if otel == nil || !otel.GetEnabled() {
+		// Raw HTTP adapters also use the global propagator. Correlation remains
+		// available without starting a tracing provider or exporter.
+		otelapi.SetTextMapPropagator(propagation.TraceContext{})
 		return func(context.Context) error { return nil }
 	}
 

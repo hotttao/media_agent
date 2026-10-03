@@ -3,8 +3,8 @@
 // 顺序原则（外层 → 内层），对齐 server.md §5.2：
 //
 //	recovery   ─ 兜底 panic
-//	requestid  ─ 注入 trace id
-//	tracing    ─ otel span 起点
+//	requestid  ─ 注入 request id
+//	tracing    ─ trace context 起点（OTel 导出关闭时仍可关联日志）
 //	metrics    ─ prometheus 计数
 //	accesslog  ─ 写访问日志（拿到 status / latency 后写）
 //	ratelimit  ─ 限流（在业务前）

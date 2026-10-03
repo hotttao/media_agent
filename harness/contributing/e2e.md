@@ -174,6 +174,14 @@ go -C media-cli run . media_workflow historical-publication list --workspace-id 
 
 全量迁移工具的 `--verify-report` 是单独的只读对账门禁，须覆盖每个来源/目标及存储对象，不以本单样本测试代替。
 
+### 关闭观测后端的 HTTP 请求关联
+
+`TestRequestCorrelationGateway` 使用同一套网关/User API Token 配置，只读验证 Workflow/Materials API 保留合法 W3C trace ID，无父上下文时返回新的 `X-Trace-ID`。测试不启动观测后端；落盘日志对应关系另以服务日志核对，不用本测试证明异步 Worker/Outbox/Conductor 链路。
+
+```bash
+go -C media-cli test ./e2e -run '^TestRequestCorrelationGateway$' -count=1 -v
+```
+
 ### API Token 轮换恢复集成测试
 
 `media_auth/e2e/api_token_rotation_test.go` 使用 testcontainers 的隔离 PostgreSQL；设置 `MEDIA_E2E_TALOS_URL` 后还会连接已由仓库启动的 Talos Admin API。测试为唯一临时 User Actor 创建 Key，不使用测试账号的既有凭据；结束后撤销自己创建的 Key。

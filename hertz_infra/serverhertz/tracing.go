@@ -9,22 +9,41 @@
 package serverhertz
 
 import (
+	"context"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	hertzconfig "github.com/cloudwego/hertz/pkg/common/config"
 	hertztracing "github.com/hertz-contrib/obs-opentelemetry/tracing"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
 	configpb "media_agent/hertz_gen/config"
+	"media_agent/hertz_infra/tracecontext"
 )
 
 // newTracingMiddleware 返回 server-side tracing middleware。
-// otel 未启用时返回 nil（buildMiddlewareChain 自动跳过）。
+// otel 未启用时仅创建不采样、不导出的本地关联上下文。
 func newTracingMiddleware(cfg *configpb.Config) app.HandlerFunc {
 	otel := cfg.GetOtel()
 	if otel == nil || !otel.GetEnabled() {
-		return nil
+		return localTracingMiddleware()
 	}
 	_, tracerCfg := hertztracing.NewServerTracer()
 	return hertztracing.ServerMiddleware(tracerCfg)
+}
+
+func localTracingMiddleware() app.HandlerFunc {
+	return func(ctx context.Context, c *app.RequestContext) {
+		carrier := propagation.MapCarrier{
+			"traceparent": string(c.Request.Header.Peek("traceparent")),
+			"tracestate":  string(c.Request.Header.Peek("tracestate")),
+		}
+		ctx = tracecontext.Extract(ctx, carrier)
+		ctx, span := tracecontext.Start(ctx, string(c.Request.Method()), trace.SpanKindServer)
+		defer span.End()
+		c.Response.Header.Set("X-Trace-ID", span.SpanContext().TraceID().String())
+		c.Next(ctx)
+	}
 }
 
 // buildTracerOptions 把 OTel server tracer（+ Prometheus metrics tracer）拼成 server options。

@@ -159,3 +159,10 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 当前 Worker API 路径只接受 Worker Internal JWT，不经过本地 Hash 验证；普通服务认证及 `media_auth` 仍存在旧 Service Token 实现，P7 尚未完成。Platform Token 仍需与其存储/调用方拆分，不能直接删除共用代码导致现有登录/OAuth 失效。
 - Agent API Token 申请、身份权威/撤销以及代理入口仍未实现，P6 保持未完成；已有 Agent Session/内部服务凭据不作为该功能的证据。
 - 按最新用户指令，全部 UI 工作等待新设计，本轮不实现；后端 trace_id 关联及剩余认证迁移继续保留在范围内。
+
+### 默认关闭观测后端的请求关联
+
+- 按 [请求关联规格](../spec/request-correlation.md) 增加不采样、不导出的 server/client 本地上下文及 W3C 传播；未启动观测后端，也未替换全局 TracerProvider。请求 ID 与 trace ID 保持区分。
+- `hertz_infra` 独立模块 race 单测覆盖有效/非法父上下文、sampled 父级不触发采样、client span/header/错误及裸 HTTP propagator；模块不在 go.work use 中，门禁使用 `GOWORK=off go test -p 1 -race ./...`。
+- 部署 Workflow/Materials 后，两者经真实统一网关返回 200，响应 `X-Trace-ID` 与各自落盘访问日志 `trace_id` 一致，span ID 各自不同且 trace_flags=00；5173 返回200。该验证不是异步 Worker/Outbox/Conductor 全链路 trace_id 门禁，P5 对应总项保持未完成。
+- 只读 `TestRequestCorrelationGateway`、API Token 生命周期和 Worker Gateway 撤销门禁均通过；Workflow/Materials 全量 Go 测试及各服务 `make arch-check` 通过。根 Makefile 无 arch-check 目标，使用服务级已有目标，没有以根命令失败宣称通过。

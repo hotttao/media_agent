@@ -1,4 +1,4 @@
-// requestid.go：请求级 trace id（X-Request-ID）。
+// requestid.go：请求级 request id（X-Request-ID），不同于 W3C trace_id。
 //
 // 走 hertz-contrib/requestid，自动写入 response header；缺省生成 UUID。
 package serverhertz
