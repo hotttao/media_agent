@@ -55,3 +55,5 @@ Token 的 Secret 生命周期归 Talos；Token 管理元数据和 Actor Binding 
 - Gateway 必须删除外部提交的 `Authorization`、`X-User-ID`、`X-Actor-ID`、`X-Organization-ID` 和 scope Header，再写入可信 JWT。
 - JWT audience 绑定目标服务，TTL 为 1 至 5 分钟；嵌套历史 Actor 只用于审计，授权只考虑顶层 Subject 和当前 `act`。
 - Managed Worker 位于 media_workflow 内部，不经过本流程。
+
+Agent Gateway 的委托代理使用独立签名 issuer/public JWKS，audience 精确绑定目标业务服务，有效期60秒并签入 method、Request URI及body摘要。业务服务只在独立 Agent 信任链上接受 `auth_source=agent_api_token`，保留当前 Actor，不能通过普通 User或Worker分支降级授权。具体边界及未知业务结果恢复见 [Agent API Proxy](../media_agent_gateway/workflow/0006-agent_api_proxy/agent_api_proxy.md)。

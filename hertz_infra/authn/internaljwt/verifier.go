@@ -28,6 +28,9 @@ type Claims struct {
 	Name           string `json:"name,omitempty"`
 	Role           string `json:"role,omitempty"`
 	Actor          *Actor `json:"act,omitempty"`
+	RequestMethod  string `json:"request_method,omitempty"`
+	RequestURI     string `json:"request_uri,omitempty"`
+	RequestDigest  string `json:"request_digest,omitempty"`
 	jwt.RegisteredClaims
 }
 

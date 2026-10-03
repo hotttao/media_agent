@@ -243,6 +243,16 @@ Agent 创建成功而 Token 申请失败时保留 Agent，返回 `token_provisio
 
 Agent 运行时只调用 Agent Gateway。Gateway 验证 API Token、重新检查委托关系，再用 `sub=User + act.sub=Agent` 的内部身份代理目标服务。
 
+### 6.3 Agent 代理的委托断言
+
+共享 `hertz_infra/authn/internaljwt` 增加 Gateway 委托签名能力及请求验证契约。Signer读取仅Gateway持有的RSA≥2048私钥，kid由公钥摘要生成；Public JWKS只包含RSA公钥。issuer固定配置、audience单值精确绑定目标服务，TTL60秒。Claims使用 `sub=User:<owner>,act.sub=Agent:<configuration_id>,principal_type=user,auth_source=agent_api_token,credential_id,organization_id,scope=agent.gateway,role=user,iat,nbf,exp,jti,request_method,request_uri,request_digest`。
+
+request_digest是 `SHA256(method + NUL + RequestURI + NUL + rawBody)`；目标以实际请求重算，拒绝不同方法、路径、query或body，也拒绝缺少iat/nbf/exp/jti、超过60秒TTL、错误Actor/owner/企业/scope或空credential。保留请求上下文中的Actor/credential/org，不将Act改为User。请求绑定不提供相同请求的重放屏障，业务写入口仍使用已有幂等契约。
+
+Materials/Workflow分别配置独立 `AGENT_JWKS_URL,AGENT_JWT_ISSUER` 与精确 audience（`media-materials-agent`、`media-workflow-agent`）；未配置不接受Agent断言。普通Internal JWT及Worker分支不变；原始opaqueToken不交给业务服务，JWT错误不能退回Cookie/Hash。Gateway公钥发布、验证Auth/Control、固定路由代理及真实HTTP/CLI门禁必须另行验收，不以共享签名测试冒充完整代理链路。
+
+密钥只允许单个未加密RSA PKCS8/PKCS1 PEM，文件必须是regular、至多64KiB且无group/other读写权限；错误不包含文件路径或密钥内容。kid使用公钥PKIX DER的SHA-256前128位，JWKS只发布kty/use/alg/kid/n/e，不发布私钥参数。请求URI上限4096、body上限8MiB；拒绝CONNECT/TRACE、非业务API、外部URL、fragment、转义路径、路径穿越和换行。共享签名器不等于业务路由allowlist，后者必须在代理调用前独立校验。
+
 ## 7. 迁移与兼容
 
 1. 先部署 Capability Target 字段和双 Domain 运行逻辑，不改变现有 Personal Worker API。

@@ -80,6 +80,9 @@
   - [x] 现有配置的显式申请 IDL/Workflow/服务端身份接入、企业限制、公开路由及一次性 Secret 交付，HTTP与CLI门禁。
 - [ ] Gateway 只回传一次 Secret，不持久化 Secret。
 - [ ] Gateway 验证 Agent Token、校验 owner 委托并代理内部服务。
+  - [x] 共享独立Gateway委托JWT签名/公钥JWKS、60秒精确audience、方法/URI/body摘要绑定与私有密钥加载，单元/race测试。
+  - [ ] Gateway密钥装配/公钥发布、目标服务Agent信任链和身份保留门禁。
+  - [ ] Auth/Control实时校验、固定服务/路由代理、公开接入与业务资源权限检查，真实HTTP/CLI与撤销后拒绝门禁。
 - [ ] Agent disabled/deleted/owner 解绑触发 Token 撤销。
 - [ ] E2E 覆盖申请失败重试、代理调用和撤销。
 
@@ -185,6 +188,7 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 | Agent 创建后申请/一次性回传 | Agent Gateway | Agent API Token Provisioning 的客户端编排 | missing |
 | 已有配置显式申请/一次性回传 | Agent Gateway | 公开管理入口、Control 企业限制、Auth 私有签发、CLI 0600文件 | covered |
 | Agent 委托代理 | Agent Gateway | 受限内部身份代理，不能开放任意 URL | missing |
+| Agent 委托断言签名与请求绑定 | hertz_infra / Internal Identity JWT | 独立RSA/JWKS、精确audience、60秒TTL、方法/URI/body摘要及私有密钥读取 | covered |
 | Agent disabled/deleted/owner 解绑撤销 | Control + Auth | 权威生命周期事实、持久撤销意图/恢复 | missing |
 
 ### Auth Agent 校验接线
@@ -208,3 +212,10 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 真实网关 `TestAgentTokenGatewayProvisioning` 通过：未认证拒绝、未知配置404、非法请求400、签发201/no-store、伪造身份/scope无效、重复409且不重放Secret、Agent Token不能访问管理入口、列表与撤销。既有 User/Worker网关测试回归通过；企业限制由 Workflow 单测覆盖，尚不冒充多企业真实数据验收。
 - CLI 实际签发到新文件0600，公开管理列表验证 active Agent 与 scope 后撤销成功；5173首页HTTP200。Traefik配置watch=false，新增路由通过重启加载。Gateway保留运行；UI未修改。
 - 自动配置创建后的申请编排、运行时代理、生命周期持久撤销、P7旧ServiceToken删除与P5整体门禁仍未完成。
+
+### Agent 委托签名契约
+
+- domain-modeling 增加 Agent API Proxy 工作流，明确实时Auth/Control授权、单次固定目标代理、写请求不自动重试和未知结果恢复；共享签名能力不拥有Token或业务事实。
+- `internaljwt.AgentSigner` 使用独立RSA≥2048私钥、单服务audience及60秒TTL，携带User/Agent/企业/凭据ID，方法/URI/query/body全量绑定。私有PEM文件校验权限/大小/regular形态，JWKS仅公钥。
+- 新增单测/race覆盖跨服务/issuer拒绝、过期、修改方法/路径/query/body、Agent/Worker/User身份混用、缺少关键claims、扩大scope/role、过长TTL、外部URL/路径穿越/转义/fragment/换行、弱密钥及公开可读文件；`GOWORK=off go test -p 1 ./...` 通过。未创建持久测试签名密钥、未改运行服务信任链，5173首页仍HTTP200。
+- Gateway装配/公钥发布、目标服务Agent授权和真实代理HTTP/CLI尚未完成；不以签名/验证单测冒充整条代理链路。P6保持未完成，UI未修改。
