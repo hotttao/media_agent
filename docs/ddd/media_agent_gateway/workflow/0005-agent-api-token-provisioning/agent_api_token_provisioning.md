@@ -21,24 +21,28 @@ sequenceDiagram
     participant DB as Auth DB
     U->>G: Create Agent + request API Token (Web Session)
     G->>C: Create/Get Agent Configuration
-    C-->>G: agent_id + owner_user_id + organization_id
+    C-->>G: agent_configuration_id + owner_user_id + organization_id
     G->>A: CreateActorAPIToken(agent facts, scopes, idempotency key)
-    A->>C: Verify Agent active + owner/org
+    A->>C: ResolveAgentIdentity(agent_configuration_id), verify owner/org
     C-->>A: authoritative relationship
-    A->>T: Create API Key(actor_id=Agent:id)
+    A->>DB: TX: issuing metadata + stable issuance intent
+    A->>T: Create API Key(actor_id=Agent:configuration_id, request_id=token_id)
     T-->>A: talos_key_id + one-time Secret
-    A->>DB: TX: API Token metadata + Actor Binding + audit
+    A->>DB: TX: CAS issuing to active + key metadata + audit
     alt Auth TX committed
         A-->>G: token metadata + one-time Secret
         G-->>U: Agent + one-time Secret
     else Auth TX failed
-        A->>T: revoke talos_key_id (compensation)
+        A->>DB: TX: issuance_cleanup intent
+        A->>T: revoke key; persistent issuance recovery if uncertain
         A-->>G: creation failed; Secret discarded
         G-->>U: Agent created, Token provisioning requires retry
     end
 ```
 
 Agent Configuration 由 media_control 持有，API Token Metadata 由 media_auth 持有，Talos 持有 Secret。Gateway 只协调，不保存 Secret。Agent 创建成功但 Token 创建失败时不回滚 Agent；返回明确的 `token_provisioning_failed`，用户可以对同一 Agent 使用稳定幂等键重试。
+
+稳定 Actor 是 `Agent:<AgentConfiguration.id>`，现有 `agent_id` 是 Runtime 类型标签。Auth 通过 Control 内部身份只读投影取得 Workspace/owner/企业/部门及当前授权，不能通过 Runtime Context 获取 Provider Secret。停止运行不等于身份删除；独立停用/解绑及所有 Token 的撤销必须由生命周期 Workflow 保证。签发直接复用已有 API Token Issuance 的持久意图、CAS 与未知结果恢复，禁止另建“先签发、再写库”的易丢失补偿路径。
 
 ## 幂等、恢复与生命周期
 

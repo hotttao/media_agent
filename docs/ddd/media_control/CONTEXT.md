@@ -28,6 +28,10 @@ _禁用替代词_：Runtime State、Session Config
 决定 Workspace 使用哪一种 Agent Runtime 实现的受控枚举；当前支持 Codex 与 Claude Code。
 _禁用替代词_：Model、Provider、Agent ID
 
+**Agent Identity（Agent 身份）**:
+由一个 Agent Configuration 代表的稳定委托身份，属于该配置的 Workspace 和创建者 User；不同配置即使采用相同 Agent Type 也具有不同身份。
+_禁用替代词_：Agent Type、Agent Session、Provider API Key
+
 **Provider API Key（Provider API 密钥）**:
 Workspace 为当前 Agent Configuration 提交、由控制面加密托管并仅在运行调用链中解密传递的模型服务秘密。
 _禁用替代词_：Platform Token、Credential Reference、Session Token

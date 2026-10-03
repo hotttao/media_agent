@@ -182,6 +182,16 @@ go -C media-cli run . media_workflow historical-publication list --workspace-id 
 go -C media-cli test ./e2e -run '^TestRequestCorrelationGateway$' -count=1 -v
 ```
 
+### Agent 稳定身份只读查询
+
+`TestAgentIdentityControl` 使用网关 User API Token 读取现有 Workspace，再直连 Control 内部身份入口核对稳定配置 ID/Actor/归属、服务身份保护和秘密字段不泄露；不创建 Workspace/Agent/Token，不启动 Runtime。需要额外设置 `MEDIA_E2E_WORKSPACE_ID`、`MEDIA_CONTROL_ADDR`（Control 内部地址）及 `MEDIA_CONTROL_INTERNAL_TOKEN`（从私有环境配置取得，禁止输出）。该内部入口不应暴露在公开 Traefik 路由中。
+
+```bash
+go -C media-cli test ./e2e -run '^TestAgentIdentityControl$' -count=1 -v
+```
+
+公开 CLI `media_control workspace get --workspace-id <id>` 单独验证稳定 `agent_configuration_id` 引用。该门禁不证明 Agent Token 签发、代理或撤销已经实现。
+
 ### API Token 轮换恢复集成测试
 
 `media_auth/e2e/api_token_rotation_test.go` 使用 testcontainers 的隔离 PostgreSQL；设置 `MEDIA_E2E_TALOS_URL` 后还会连接已由仓库启动的 Talos Admin API。测试为唯一临时 User Actor 创建 Key，不使用测试账号的既有凭据；结束后撤销自己创建的 Key。

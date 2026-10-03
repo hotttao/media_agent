@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package media_control.agent_identity;
+
+import "api.proto";
+import "google/api/annotations.proto";
+
+option go_package = "media_control/agent_identity";
+
+service AgentIdentityService {
+  rpc ResolveAgentIdentity(ResolveAgentIdentityRequest) returns (AgentIdentityResponse) {
+    option (api.get) = "/internal/v1/agent-identities/:agent_configuration_id";
+    option (google.api.http) = { get: "/internal/v1/agent-identities/{agent_configuration_id}" };
+  }
+}
+
+message ResolveAgentIdentityRequest {
+  string agent_configuration_id = 1 [(api.path) = "agent_configuration_id"];
+}
+
+message AgentIdentityResponse {
+  string agent_configuration_id = 1;
+  string actor_id = 2;
+  string workspace_id = 3;
+  string owner_user_id = 4;
+  string organization_id = 5;
+  string team_id = 6;
+  string workspace_state = 7;
+  bool owner_authorized = 8;
+}

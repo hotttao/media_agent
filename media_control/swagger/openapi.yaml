@@ -2520,6 +2520,30 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /internal/v1/agent-identities/{agent_configuration_id}:
+        get:
+            tags:
+                - AgentIdentityService
+            operationId: AgentIdentityService_ResolveAgentIdentity
+            parameters:
+                - name: agent_configuration_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentIdentityResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
 components:
     schemas:
         AddMemberRequest:
@@ -2558,6 +2582,25 @@ components:
                     type: string
                 updated_at:
                     type: string
+        AgentIdentityResponse:
+            type: object
+            properties:
+                agent_configuration_id:
+                    type: string
+                actor_id:
+                    type: string
+                workspace_id:
+                    type: string
+                owner_user_id:
+                    type: string
+                organization_id:
+                    type: string
+                team_id:
+                    type: string
+                workspace_state:
+                    type: string
+                owner_authorized:
+                    type: boolean
         AgentTemplateResponse:
             type: object
             properties:
@@ -3726,6 +3769,7 @@ components:
                     type: string
 tags:
     - name: AfsBindingService
+    - name: AgentIdentityService
     - name: AgentScheduleService
     - name: AgentTemplateService
     - name: CredentialReferenceService

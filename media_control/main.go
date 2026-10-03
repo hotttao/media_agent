@@ -28,6 +28,7 @@ import (
 	repo "media_agent/media_control/biz/dal/repo/workspace"
 	metadaterepo "media_agent/media_control/biz/dal/repo/workspace_metadata"
 	afshandler "media_agent/media_control/biz/handler/afs_binding"
+	agentidentityhandler "media_agent/media_control/biz/handler/agent_identity"
 	templatehandler "media_agent/media_control/biz/handler/agent_template"
 	credentialhandler "media_agent/media_control/biz/handler/credential_reference"
 	granthandler "media_agent/media_control/biz/handler/environment_grant"
@@ -45,6 +46,7 @@ import (
 	metadatahandler "media_agent/media_control/biz/handler/workspace_metadata"
 	"media_agent/media_control/biz/middleware"
 	afsservice "media_agent/media_control/biz/service/afs_binding"
+	agentidentityservice "media_agent/media_control/biz/service/agent_identity"
 	templateservice "media_agent/media_control/biz/service/agent_template"
 	credentialservice "media_agent/media_control/biz/service/credential_reference"
 	grantservice "media_agent/media_control/biz/service/environment_grant"
@@ -113,6 +115,7 @@ func main() {
 		middleware.ConfigureOry(internaljwt.NewVerifier(jwksURL, os.Getenv("INTERNAL_JWT_ISSUER"), "internal-api", nil), os.Getenv("ORY_KRATOS_PUBLIC_URL"), mediaAuthURL, mediaAuthInternalToken)
 	}
 	teamAccess := mediaauthclient.New(mediaAuthURL, mediaAuthInternalToken, nil)
+	agentidentityhandler.Configure(agentidentityservice.New(repo.New(db), teamAccess))
 	workspacehandler.Configure(
 		workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())), teamAccess),
 		internalToken,

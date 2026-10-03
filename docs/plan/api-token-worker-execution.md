@@ -72,6 +72,7 @@
 
 ## P6 · Agent Token 申请与代理
 
+- [x] Control 稳定 Agent Identity 内部解析：按 Configuration ID 定位，只读投影归属/当前 owner 授权，服务身份保护、无 Provider Secret；单测与真实 HTTP 门禁。
 - [ ] 定义 Agent API Client/代理 IDL，不与 Agent Session Token 混用。
 - [ ] Agent 创建后由 Gateway 幂等调用 media_auth 创建 Actor Token。
 - [ ] Gateway 只回传一次 Secret，不持久化 Secret。
@@ -166,3 +167,17 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - `hertz_infra` 独立模块 race 单测覆盖有效/非法父上下文、sampled 父级不触发采样、client span/header/错误及裸 HTTP propagator；模块不在 go.work use 中，门禁使用 `GOWORK=off go test -p 1 -race ./...`。
 - 部署 Workflow/Materials 后，两者经真实统一网关返回 200，响应 `X-Trace-ID` 与各自落盘访问日志 `trace_id` 一致，span ID 各自不同且 trace_flags=00；5173 返回200。该验证不是异步 Worker/Outbox/Conductor 全链路 trace_id 门禁，P5 对应总项保持未完成。
 - 只读 `TestRequestCorrelationGateway`、API Token 生命周期和 Worker Gateway 撤销门禁均通过；Workflow/Materials 全量 Go 测试及各服务 `make arch-check` 通过。根 Makefile 无 arch-check 目标，使用服务级已有目标，没有以根命令失败宣称通过。
+
+### Agent 身份事实入口
+
+- domain-modeling 对齐 Agent Type 与稳定身份：Actor 使用 Configuration 记录 ID；运行类型切换不改变 Actor，停止运行不隐式删除身份。Control 增加内部只读解析 IDL/生成客户端/路由/薄 handler，单次 join 只查询身份字段，回查 owner 当前部门授权。
+- Service/handler race 测试、Control 全量 Go 测试及架构检查通过；真实 `TestAgentIdentityControl` 通过，核对 Workspace/owner/Organization/Team/Actor、未知 ID404、缺少/错误服务凭证401、非system403和无Provider Secret。公开 CLI `media_control workspace get` 实际执行通过；内部查询不新增危险公开CLI，网关未暴露此内部路径。
+- Control 新镜像已部署且保持运行；此项只是 P6 的权威身份前置能力。Auth ActorValidator 尚未接入 Agent、Gateway 申请/代理以及停用/解绑撤销均未完成，未以身份查询上线冒充整项完成。
+
+| 既有需求能力 | 目标上下文/Domain | 实现/流程 | 状态 |
+|:---|:---|:---|:---|
+| Agent 稳定身份/归属解析 | Control / agent_configuration | 内部只读投影、当前 Team 授权；无需写 Workflow | covered |
+| Token Secret 生命周期 | Talos | API Token Issuance/Rotation/Revocation Adapter | external-owner（Talos） |
+| Agent Token 签发/幂等 | Auth + Agent Gateway / api_token | Agent API Token Provisioning | missing |
+| Agent 委托代理 | Agent Gateway | 受限内部身份代理，不能开放任意 URL | missing |
+| Agent disabled/deleted/owner 解绑撤销 | Control + Auth | 权威生命周期事实、持久撤销意图/恢复 | missing |

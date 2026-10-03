@@ -34,6 +34,7 @@ Agent Configuration 负责 Workspace 中 Agent 的期望配置，并从控制面
 | 更新配置 | 原子替换配置并递增版本；API Key 留空表示保留 | `UpdateConfig` |
 | 管理表现配置 | 维护 Commands、Profile 和 Layout | `UpdateCommands/UpdateProfile/UpdateLayout` |
 | 生成运行上下文 | 汇总配置、目录资源和 Placement | `GetRuntimeContext` |
+| 解析委托身份 | 只读返回稳定 Agent 身份及真实 Workspace、owner、企业和部门归属，不返回 Provider 秘密 | `ResolveAgentIdentity` |
 
 ## 数据模型
 
@@ -43,7 +44,7 @@ Agent Configuration 负责 Workspace 中 Agent 的期望配置，并从控制面
 |:---|:---|:---|
 | id | text PK | Agent Configuration ID |
 | workspace_id | text | 所属 Workspace |
-| agent_id | text | Agent 稳定标识，Workspace 内唯一 |
+| agent_id | text | 历史运行时类型标签，与 agent_type 相同，不是跨服务委托身份 |
 | agent_type | text | `codex` 或 `claude-code` |
 | encrypted_api_key | bytea nullable | Provider API Key 的认证加密密文 |
 | configuration | jsonb | 模型、工具及 Catalog 资源 ID 快照 |
@@ -64,6 +65,12 @@ Agent Configuration 负责 Workspace 中 Agent 的期望配置，并从控制面
 - 公开读模型只能暴露 `api_key_configured`，任何响应、日志和事件不得包含密钥；
 - Agent Type 或 API Key 实际改变时递增配置版本；既有 Session 固定原 Agent Type，新 Session 使用新配置；
 - 切换 Agent Type 复用 Workspace Runtime Directory，但两个 Runtime 不得同时写入。
+
+### 稳定委托身份
+
+`Agent:<agent_configurations.id>` 是 API Token 的 Actor；不得使用类型标签 `agent_id`、Workspace ID、Session ID 或 Token ID。类型切换和配置版本递增不改变配置记录 ID。该事实由 Control 持有，Auth 不复制 Agent 配置表，也不信任签发请求提交的 owner/企业。
+
+内部身份解析仅返回配置 ID、Workspace ID、Workspace 的 owner/Organization/Team、desired_state 及当前 owner 的部门可见权限。身份解析是只读投影，不解密 Provider API Key、不获取 Runtime Context，也不签发 Token。已删除 Workspace 或未知配置返回 NotFound；上游 Team 授权服务错误返回不可用，不能当作授权成功。stopped 只表示运行环境停止，不等于身份删除；是否可执行业务仍由目标资源的 Workspace/action 授权决定。独立 Agent disabled 及 owner 解绑的撤销编排仍须在生命周期入口落实。
 
 ## 能力详细说明
 

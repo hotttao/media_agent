@@ -211,6 +211,16 @@ Traefik认证服务路由与Oathkeeper普通认证API规则同时包含`/api/wor
 
 ## 6. Agent API Token
 
+### 6.1 Control 身份事实源
+
+Agent Actor 使用 `Agent:<agent_configurations.id>`，不是现有 `agent_id` 类型标签。`GET /internal/v1/agent-identities/{agent_configuration_id}` 为 Control 内部只读入口，要求内部 Service Token、system role 和非空受信 acting-service ID；不加入公开网关路由。
+
+响应字段为 `agent_configuration_id, actor_id, workspace_id, owner_user_id, organization_id, team_id, workspace_state, owner_authorized`。owner/企业/部门来自 Workspace 数据库事实，owner_authorized 按当前 Team view 权限回查；不返回或解密 encrypted_api_key，不返回 Runtime Context。未知配置或 deleted Workspace 为404，权限服务错误为503，空 ID 为400。停止运行的 Workspace 不等于身份删除，业务执行仍须进行 Workspace/action 授权。该查询自身无写入和跨事务副作用，不新建 Workflow。
+
+实现映射：`media_control/biz/domain/workspace` 身份读模型与查询接口、`biz/dal/repo/workspace` 单次 join 查询、`biz/service/agent_identity` 只读用例、IDL/generated router/薄 handler、main 装配。Auth 接入、Gateway 申请/代理和 disabled/解绑撤销是独立后续门禁，不以该查询上线代表 P6 完成。
+
+### 6.2 签发与代理
+
 创建 Agent 后，`media_agent_gateway` 使用稳定幂等键请求 `media_auth.CreateActorAPIToken`。`media_auth` 必须回查 Agent 的 owner、Organization 和状态；Gateway 不接受请求体覆盖 owner，也不保存 Secret。
 
 Agent 创建成功而 Token 申请失败时保留 Agent，返回 `token_provisioning_failed`，允许针对同一 Agent 重试。Agent disabled/deleted 或 owner 关系解除时撤销关联 Token。
