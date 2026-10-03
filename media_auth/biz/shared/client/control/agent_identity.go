@@ -20,6 +20,7 @@ import (
 )
 
 var ErrUnavailable = errors.New("Control agent identity unavailable")
+var ErrNotFound = errors.New("Control agent identity not found")
 var ErrInvalid = errors.New("invalid Control agent identity configuration")
 
 type AgentIdentity struct {
@@ -43,7 +44,8 @@ func New(baseURL, internalToken string, timeout time.Duration) (*Client, error) 
 	client, err := agent_identity_service.NewAgentIdentityServiceClient(strings.TrimRight(baseURL, "/"),
 		agent_identity_service.WithHeader(http.Header{
 			"X-Control-Service-Token": []string{internalToken}, "X-Control-Acting-User-Id": []string{"media-auth"}, "X-Control-Acting-Role": []string{"system"},
-		}), agent_identity_service.WithHertzClientMiddleware(propagateIdentityTrace()))
+		}), agent_identity_service.WithHertzClientMiddleware(propagateIdentityTrace()),
+		agent_identity_service.WithResponseResultDecider(func(int, *protocol.Response) bool { return false }))
 	if err != nil {
 		return nil, ErrInvalid
 	}
@@ -63,6 +65,9 @@ func (c *Client) ResolveAgentIdentity(ctx context.Context, id string) (AgentIden
 	}
 	result, response, err := c.client.ResolveAgentIdentity(ctx, &pb.ResolveAgentIdentityRequest{AgentConfigurationId: id}, hconfig.WithRequestTimeout(remaining))
 	// Generated client errors may contain upstream bodies. Never return them.
+	if err == nil && ctx.Err() == nil && response != nil && response.StatusCode() == http.StatusNotFound {
+		return AgentIdentity{}, ErrNotFound
+	}
 	if err != nil || ctx.Err() != nil || response == nil || response.StatusCode() != http.StatusOK || result == nil {
 		return AgentIdentity{}, ErrUnavailable
 	}

@@ -21,6 +21,8 @@ services:
       TALOS_URL: http://talos:4420
       MEDIA_CONTROL_URL: http://host.docker.internal:8007
       CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
+      # Dedicated write credential, disabled unless explicitly configured.
+      MEDIA_AUTH_AGENT_GATEWAY_TOKEN: ${MEDIA_AUTH_AGENT_GATEWAY_TOKEN:-}
       LOG_DIR: /media_logs/media-auth
     volumes:
     - ../media_logs/media-auth:/media_logs/media-auth

@@ -74,6 +74,7 @@
 
 - [x] Control 稳定 Agent Identity 内部解析：按 Configuration ID 定位，只读投影归属/当前 owner 授权，服务身份保护、无 Provider Secret；单测与真实 HTTP 门禁。
 - [x] Auth Agent ActorValidator：非缓存查询 Control，Create/Verify/Rotate 精确校验归属及当前授权；单测、部署后既有 User/Worker 链路回归。
+- [x] Auth 内部 Agent Token Provisioning：专用 Gateway 服务凭证、owner事实派生、仅 agent.gateway scope、持久签发与重复命令拒绝重放Secret；单测/真实Talos接口门禁。
 - [ ] 定义 Agent API Client/代理 IDL，不与 Agent Session Token 混用。
 - [ ] Agent 创建后由 Gateway 幂等调用 media_auth 创建 Actor Token。
 - [ ] Gateway 只回传一次 Secret，不持久化 Secret。
@@ -179,7 +180,8 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 |:---|:---|:---|:---|
 | Agent 稳定身份/归属解析 | Control / agent_configuration | 内部只读投影、当前 Team 授权；无需写 Workflow | covered |
 | Token Secret 生命周期 | Talos | API Token Issuance/Rotation/Revocation Adapter | external-owner（Talos） |
-| Agent Token 签发/幂等 | Auth + Agent Gateway / api_token | Agent API Token Provisioning | missing |
+| Agent Token 私有签发/幂等 | Auth / api_token | 专用凭据入口、Control 权威校验、复用 API Token Issuance | covered |
+| Agent 创建后申请/一次性回传 | Agent Gateway | Agent API Token Provisioning 的客户端编排 | missing |
 | Agent 委托代理 | Agent Gateway | 受限内部身份代理，不能开放任意 URL | missing |
 | Agent disabled/deleted/owner 解绑撤销 | Control + Auth | 权威生命周期事实、持久撤销意图/恢复 | missing |
 
@@ -189,3 +191,10 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - `AgentActorValidator` 精确核对配置 ID、Actor、owner、企业、Workspace/Team和当前 owner 授权；Create/Verify/Rotate 共用此判定。Worker 权威保持独立，未知 Actor 拒绝；缺少 Control 配置时 Agent 不可用，不能退回本地 Hash。
 - Client/Service race 测试覆盖跨 owner/企业、归属错配、失去授权、删除/未知状态、上游失败/超时/取消和敏感错误屏蔽；Auth 全量 Go 测试、架构检查通过，新镜像已部署。容器内只读查询验证 Auth→Control 网络/凭证配置，既有 User/Worker 生命周期、Agent Identity查询和请求关联的5项真实 HTTP门禁及CLI auth me通过。
 - 没有通过真实 Agent Token 执行完整签发/代理/撤销：当前尚无新 Agent 签发入口，不用上述单测或容器探测替代该验收项。P6 其余项和能力矩阵中的 missing 保持未完成，UI未修改。
+
+### Auth Agent 私有签发门禁
+
+- 新增内部签发 IDL/生成模型/client/router/OpenAPI、薄 handler 与 AgentTokenProvisioning；专用 Gateway 凭据未配置即拒绝。身份字段只从 Control 派生，不接受请求体覆盖，scope 固定为 `agent.gateway`。
+- Workflow/handler/Control client race 测试和 Auth 全量测试、架构检查通过。新 Auth 镜像已部署；`TestAgentTokenInternalProvisioning` 真实连接 Control/Talos，验证签发201、专用身份401、非owner403、未知配置404、重复409且不重放Secret、公开列表无Secret、撤销后inactive及普通API/Worker入口隔离。
+- 既有 `TestAPITokenGateway`、`TestWorkflowWorkerGatewayAPIToken` 回归通过；公开 CLI 读取本次 Agent Token 元数据并重复撤销通过。仅清理测试自己创建的凭据，不启动 Agent Runtime，不领取任务。
+- domain-modeling 同步重复请求、一次性响应和信任边界。上述覆盖 Auth 私有签发，不代表 Gateway 创建/代理、身份停用/解绑的持久撤销或 P6 整体完成；UI不在当前实施范围。

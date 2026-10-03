@@ -38,6 +38,7 @@ API Token 负责长期 opaque API 凭证的管理元数据、Actor 绑定、Orga
 | 能力 | 说明 | 对外接口/函数 |
 |:---|:---|:---|
 | 创建令牌 | 校验 Actor 委托后调用 Talos，Secret 仅本次返回 | `CreateAPIToken` |
+| 受信 Agent 签发 | 由 Gateway 提交配置引用，按 Control 当前事实派生身份 | `CreateActorAPIToken` |
 | 列出令牌 | 返回调用者可管理的 Token 元数据，不返回 Secret | `ListAPITokens` |
 | 轮换令牌 | 调 Talos 生成新 Secret 并撤销旧 Secret | `RotateAPIToken` |
 | 撤销令牌 | 撤销 Talos Key 并提交本地状态 | `RevokeAPIToken` |
@@ -123,6 +124,12 @@ issuing/issuance_cleanup 保存聚合内的持久创建意图，并使用按 ID 
 3. 校验 scope 不超过创建者可委托范围，过期时间在策略上限内。
 4. 先保存 issuing 意图和期限，成功激活必须同时满足 issuing、期限内以及完整 Key 映射；持久提交后才返回一次性 Secret。
 5. 失败/取消/撤销进入 issuance_cleanup，清理状态禁止激活；所有本次 Key 确认撤销后才进入 revoked。外部副作用、幂等屏障与恢复见 [API Token Issuance](../../workflow/0010-api-token-issuance/api_token_issuance.md)。
+
+### CreateActorAPIToken
+
+专用 Gateway 服务凭据与可信调用者 User 是签发前提；普通查询凭据不可替代。配置引用通过 Control 权威身份投影解析为 `Agent:<AgentConfiguration.id>`，精确核对当前 owner、Organization、Workspace/Team 及授权；这些字段不可由请求体覆盖。第一阶段仅允许 `agent.gateway` scope，不授予普通 API 或 Worker 访问权限。
+
+签发委托给既有 API Token Issuance，复用持久意图、期限和 CAS，不增加另一套 Token 表或 Secret 副本。配置 ID、固定 purpose 和请求键生成有界幂等摘要；重复有效意图返回 conflict，不重放 Secret。签发的跨服务时序与失败语义见 [Agent API Token Provisioning](../../../media_agent_gateway/workflow/0005-agent-api-token-provisioning/agent_api_token_provisioning.md)。
 
 ### VerifyAPIToken
 

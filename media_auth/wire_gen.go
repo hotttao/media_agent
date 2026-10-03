@@ -31,6 +31,7 @@ import (
 	dalworkeridentity "media_agent/media_auth/biz/dal/repo/worker_identity"
 	domainapitoken "media_agent/media_auth/biz/domain/api_token"
 	domainwecom "media_agent/media_auth/biz/domain/wecom"
+	agenttokenhandler "media_agent/media_auth/biz/handler/agent_token"
 	apitokenhandler "media_agent/media_auth/biz/handler/api_token"
 	authhandler "media_agent/media_auth/biz/handler/auth"
 	identityhandler "media_agent/media_auth/biz/handler/identity"
@@ -194,6 +195,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 				log.Fatal("init di: invalid Control identity configuration")
 			}
 			agentValidator = apitokenservice.NewAgentActorValidator(authority)
+			agenttokenhandler.Configure(workflow.NewAgentTokenProvisioning(authority, apiTokenSvc), os.Getenv("MEDIA_AUTH_AGENT_GATEWAY_TOKEN"))
 		}
 		apiTokenSvc.SetActorValidator(func(ctx context.Context, actorType domainapitoken.ActorType, actorID, userID, organizationID string) bool {
 			switch actorType {

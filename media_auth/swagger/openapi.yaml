@@ -1837,6 +1837,30 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /internal/v1/agent-api-tokens:
+        post:
+            tags:
+                - AgentTokenService
+            operationId: AgentTokenService_CreateActorAPIToken
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateAgentTokenRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateApiTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
 components:
     schemas:
         AcceptInviteResponse:
@@ -2079,6 +2103,21 @@ components:
                     type: boolean
                 expires_at:
                     type: string
+        CreateAgentTokenRequest:
+            type: object
+            properties:
+                agent_configuration_id:
+                    type: string
+                name:
+                    type: string
+                expires_at:
+                    type: string
+                idempotency_key:
+                    type: string
+                scopes:
+                    type: array
+                    items:
+                        type: string
         CreateApiTokenRequest:
             type: object
             properties:
@@ -2711,6 +2750,7 @@ components:
                 success:
                     type: boolean
 tags:
+    - name: AgentTokenService
     - name: ApiTokenService
     - name: AuthService
       description: |-

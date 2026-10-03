@@ -48,7 +48,11 @@ func TestIdentityClientErrorsAreSafe(t *testing.T) {
 				t.Fatal(err)
 			}
 			_, err = client.ResolveAgentIdentity(t.Context(), "config")
-			if !errors.Is(err, ErrUnavailable) || strings.Contains(err.Error(), "private-control-secret") || strings.Contains(err.Error(), "unsafe-db-body") {
+			want := ErrUnavailable
+			if status == 404 {
+				want = ErrNotFound
+			}
+			if !errors.Is(err, want) || strings.Contains(err.Error(), "private-control-secret") || strings.Contains(err.Error(), "unsafe-db-body") {
 				t.Fatalf("unsafe error: %v", err)
 			}
 		})

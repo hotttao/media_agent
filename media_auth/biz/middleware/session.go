@@ -79,6 +79,8 @@ var skipAllPaths = map[string]bool{
 	"/internal/token/platform":         true,
 	"/internal/token/session":          true,
 	"/internal/token/api-token:verify": true,
+	// Dedicated Agent Gateway credential is checked by this handler, fail closed.
+	"/internal/v1/agent-api-tokens": true,
 	// internal teams 查询：供下游服务 fetchTeams 调用。
 	"/internal/teams:byUser":              true,
 	"/internal/organizations:byUser":      true,

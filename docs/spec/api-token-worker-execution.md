@@ -225,6 +225,12 @@ Auth 的 `biz/shared/client/control` 封装生成的 AgentIdentityService client
 
 ### 6.2 签发与代理
 
+Auth 提供 `POST /internal/v1/agent-api-tokens`（CreateActorAPIToken）：内部请求体仅含 `agent_configuration_id,name,expires_at,idempotency_key,scopes[]`。可信调用者 User 从 `X-Media-Auth-Acting-User-ID` 取得，调用方必须提供专用 `X-Agent-Gateway-Internal-Token`，与 `MEDIA_AUTH_AGENT_GATEWAY_TOKEN` 常量时间比较；未配置时拒绝，不复用一般内部查询凭证。
+
+AgentTokenProvisioning 回查 Control，检查 stable Actor/config ID、当前 owner/企业/部门权限和未删除配置，要求可信 User 等于事实 owner。Subject/Actor/Organization 只由权威事实派生；第一阶段 scope 只允许 `agent.gateway`（空数组默认该 scope），拒绝 Worker 和直接 `api.access` scope。幂等键由配置 ID、固定 purpose 和调用方请求键构成有界摘要，调用方请求键必须非空且不超过200字符。
+
+成功复用 API Token Issuance，返回201 ApiToken Metadata和仅一次 Secret；非法参数400，归属/授权不符403，未知配置404，重复签发409且不重放Secret，服务未装配/来源不明/持久签发失败503。成功后连接丢失不能重交付Secret，也不能以同一命令自动轮换；用户通过显式轮换/重新申请恢复。Gateway 侧申请/回传与运行时代理另行实现，Auth 内部接口不加入公开网关路由。
+
 创建 Agent 后，`media_agent_gateway` 使用稳定幂等键请求 `media_auth.CreateActorAPIToken`。`media_auth` 必须回查 Agent 的 owner、Organization 和状态；Gateway 不接受请求体覆盖 owner，也不保存 Secret。
 
 Agent 创建成功而 Token 申请失败时保留 Agent，返回 `token_provisioning_failed`，允许针对同一 Agent 重试。Agent disabled/deleted 或 owner 关系解除时撤销关联 Token。

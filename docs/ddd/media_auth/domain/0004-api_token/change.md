@@ -39,6 +39,11 @@
 - Agent API Token 由 media_agent_gateway 在创建 Agent 流程中请求，Secret 只返回一次；Managed Worker 不使用 API Token。
 - `VerifyAPIToken` 组合 Talos 结果与当前 User、Actor、Organization 和 scope，替代 `IntrospectServiceToken`。
 
+## 2026-10-03 · Agent 私有签发
+
+- 采用专用 Gateway 凭据、Control 权威归属和 `agent.gateway` scope；幂等创建复用 Issuance，重复请求不交付 Secret。
+- Gateway 代理及停用撤销不因该接口完成而视为已实现。
+
 ## 2026-08-06 · Platform Token 拆分
 
 - Platform Token 从通用客户端凭证中拆出；它继续作为独立加密托管凭证，不纳入 Talos API Token 生命周期。

@@ -192,6 +192,22 @@ go -C media-cli test ./e2e -run '^TestAgentIdentityControl$' -count=1 -v
 
 公开 CLI `media_control workspace get --workspace-id <id>` 单独验证稳定 `agent_configuration_id` 引用。该门禁不证明 Agent Token 签发、代理或撤销已经实现。
 
+### Agent API Token 私有签发
+
+`TestAgentTokenInternalProvisioning` 通过真实 Auth/Control/Talos 签发临时 Agent Token，检查归属派生、专用服务身份、scope、重复请求不重放 Secret、公开列表及撤销后的验证。测试只创建/撤销自己的凭据，不启动 Agent Runtime、不修改 owner，也不消费 Conductor 队列。
+
+除上文 User API Token/网关/Workspace 配置外，需要 `MEDIA_AUTH_INTERNAL_ADDR`（Auth 私有地址）、`MEDIA_AUTH_AGENT_GATEWAY_TOKEN`（专用签发凭据）和 `MEDIA_E2E_AUTH_INTERNAL_TOKEN`（内部验证凭据）。秘密只从私有环境文件加载，不输出、不提交；该内部签发路径不能暴露到公开 Traefik。当前专用本地文件为 `media_auth/.env.agent-gateway.local`，已被 Git 和 Docker 构建上下文排除，权限为 0600。
+
+```bash
+go -C media-cli test ./e2e -run '^TestAgentTokenInternalProvisioning$' -count=1 -v
+
+# 独立 CLI 管理门禁；仅使用本次测试创建的 Token ID
+go -C media-cli run . media_auth api-token list
+go -C media-cli run . media_auth api-token revoke --id <test_token_id>
+```
+
+此门禁不证明 Agent Gateway 的申请/代理或停用/删除/解绑触发的批量持久撤销已经完成；不为内部签发增加公开 CLI 绕过 Gateway。
+
 ### API Token 轮换恢复集成测试
 
 `media_auth/e2e/api_token_rotation_test.go` 使用 testcontainers 的隔离 PostgreSQL；设置 `MEDIA_E2E_TALOS_URL` 后还会连接已由仓库启动的 Talos Admin API。测试为唯一临时 User Actor 创建 Key，不使用测试账号的既有凭据；结束后撤销自己创建的 Key。

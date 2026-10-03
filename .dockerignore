@@ -1,4 +1,5 @@
 .git
+media_auth/.env.agent-gateway.local
 media_workflow/.env*
 media_materials/.env*
 media_workflow/.migration_reports
