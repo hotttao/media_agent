@@ -18,6 +18,5 @@ WORKDIR /app
 COPY --from=builder /out/media_materials /app/media_materials
 COPY media_materials/migrations/ /app/migrations/
 COPY media_materials/conf/ /app/conf/
-COPY media_materials/.env /app/.env
 EXPOSE 8003
 ENTRYPOINT ["/app/media_materials"]

@@ -95,7 +95,7 @@ type manifest struct {
 }
 
 func main() {
-	var sourceDSN, outputPath, onlyTask, importGroup, importVideo, importPush, importAllReport, inspectGroup string
+	var sourceDSN, outputPath, onlyTask, importGroup, importVideo, importPush, importAllReport, verifyReport, inspectGroup string
 	var auditReadiness bool
 	var importCfg importConfig
 	flag.StringVar(&sourceDSN, "source-dsn", os.Getenv("MEDIA_AI_DATABASE_URL"), "media_ai MySQL DSN; prefer environment variable")
@@ -105,6 +105,7 @@ func main() {
 	flag.StringVar(&importVideo, "import-video", "", "import one completed Video and its intact upstream lineage through target APIs")
 	flag.StringVar(&importPush, "import-push", "", "import one intact VideoPush with all member Videos and media through target APIs")
 	flag.StringVar(&importAllReport, "import-all-report", "", "import all intact candidates and write a new private JSONL reconciliation report")
+	flag.StringVar(&verifyReport, "verify-report", "", "read-only reconciliation of all source IDs, target records and object checksums in a batch report")
 	flag.StringVar(&inspectGroup, "inspect-group", "", "inspect one source lineage and its pose/scene dependencies without importing")
 	flag.BoolVar(&auditReadiness, "audit-readiness", false, "read-only audit of all candidate input mappings and source media")
 	flag.StringVar(&importCfg.SourceAssetsURL, "source-assets-url", envOr("MEDIA_AI_ASSETS_URL", "http://192.168.2.38"), "legacy media origin")
@@ -123,6 +124,9 @@ func main() {
 	flag.IntVar(&importCfg.WorkflowVersion, "workflow-version", 1, "published workflow version")
 	flag.StringVar(&importCfg.WorkspaceID, "workspace-id", "", "target Workspace owned by the organization")
 	flag.Parse()
+	if verifyReport != "" && (onlyTask != "" || importGroup != "" || importVideo != "" || importPush != "" || importAllReport != "" || inspectGroup != "" || auditReadiness) {
+		fail(errors.New("--verify-report requires the full inventory and cannot be combined with another mode"))
+	}
 	if (importGroup != "" || importVideo != "" || importPush != "" || importAllReport != "") && onlyTask != "" {
 		fail(errors.New("import mode and --only-task cannot be combined"))
 	}
@@ -160,6 +164,9 @@ func main() {
 	}
 	if importAllReport != "" {
 		timeout = 24 * time.Hour
+	}
+	if verifyReport != "" {
+		timeout = 30 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -223,6 +230,11 @@ func main() {
 	}
 	if importAllReport != "" {
 		if err := importAllHistory(ctx, db, &m, importCfg, importAllReport); err != nil {
+			fail(err)
+		}
+	}
+	if verifyReport != "" {
+		if err := reconcileHistory(ctx, &m, importCfg, verifyReport); err != nil {
 			fail(err)
 		}
 	}

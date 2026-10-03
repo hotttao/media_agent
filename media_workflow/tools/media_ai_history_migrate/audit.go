@@ -44,6 +44,7 @@ type auditTarget struct {
 	Scope          string          `json:"scope"`
 	Metadata       json.RawMessage `json:"metadata"`
 	ObjectPath     string          `json:"object_path"`
+	Content        string          `json:"content"`
 }
 
 type auditMedia struct{ kind, id, rawURL string }
@@ -70,7 +71,7 @@ func auditMigrationReadiness(ctx context.Context, db *sql.DB, m manifest, cfg im
 	if err != nil {
 		return err
 	}
-	sourceMovements, err := sourceAuditPairs(ctx, db, "SELECT id, COALESCE(url,'') FROM movement_materials")
+	sourceMovements, err := sourceAuditTriples(ctx, db, "SELECT id, COALESCE(url,''), COALESCE(content,'') FROM movement_materials")
 	if err != nil {
 		return err
 	}
@@ -121,6 +122,15 @@ func auditMigrationReadiness(ctx context.Context, db *sql.DB, m manifest, cfg im
 			markRequired(required, "video", id)
 			if item, ok := videoByID[id]; ok {
 				markRequired(required, "movement", item.MovementID)
+				markRequired(required, "model_image", item.ModelImageID)
+				markRequired(required, "style_image", item.StyleImageID)
+				markRequired(required, "first_frame", item.FirstFrameID)
+				if style, exists := styleByID[item.StyleImageID]; exists {
+					markRequired(required, "pose", style.PoseID)
+				}
+				if frame, exists := frameByID[item.FirstFrameID]; exists {
+					markRequired(required, "scene", frame.SceneID)
+				}
 			}
 		}
 	}
@@ -135,13 +145,18 @@ func auditMigrationReadiness(ctx context.Context, db *sql.DB, m manifest, cfg im
 		vipNames[item.Name]++
 	}
 	materialTargets := map[string]map[string]int{"pose": {}, "scene": {}, "movement": {}}
+	targetMovements := map[string]auditTarget{}
 	targetObjectMissing := map[string][]string{}
 	for _, item := range materials {
 		kind := strings.ToLower(item.AssetKind)
 		if bucket := materialTargets[kind]; bucket != nil {
 			if id := auditSourceID(item.Metadata); id != "" {
 				bucket[id]++
-				if required[kind][id] && item.ObjectPath == "" {
+				if kind == "movement" {
+					targetMovements[id] = item
+				}
+				needsObject := kind != "movement" || sourceMovements[id][0] != ""
+				if required[kind][id] && needsObject && item.ObjectPath == "" {
 					targetObjectMissing[kind] = append(targetObjectMissing[kind], id)
 				}
 			}
@@ -189,9 +204,10 @@ func auditMigrationReadiness(ctx context.Context, db *sql.DB, m manifest, cfg im
 				}
 			case "movement":
 				value, exists := sourceMovements[id]
-				found = exists && materialTargets[kind][id] == 1
-				if exists {
-					media = append(media, auditMedia{kind, id, value})
+				target := targetMovements[id]
+				found = exists && materialTargets[kind][id] == 1 && movementAuditReady(value[0], value[1], target)
+				if exists && value[0] != "" {
+					media = append(media, auditMedia{kind, id, value[0]})
 				}
 			case "model_image":
 				item, exists := modelByID[id]
@@ -249,7 +265,18 @@ func auditMigrationReadiness(ctx context.Context, db *sql.DB, m manifest, cfg im
 			blocked = blocked || failedMedia["video:"+id]
 			if item, ok := videoByID[id]; ok {
 				blocked = blocked || failedMedia["movement:"+item.MovementID]
+				blocked = blocked || failedMedia["model_image:"+item.ModelImageID] || failedMedia["style_image:"+item.StyleImageID] || failedMedia["first_frame:"+item.FirstFrameID]
+				if style, exists := styleByID[item.StyleImageID]; exists {
+					blocked = blocked || failedMedia["pose:"+style.PoseID]
+				}
+				if frame, exists := frameByID[item.FirstFrameID]; exists {
+					blocked = blocked || failedMedia["scene:"+frame.SceneID]
+				}
 			}
+		}
+		if group.Kind == "video_push" {
+			blocked = blocked || failedMedia["video_push_video:"+group.VideoPushID] ||
+				failedMedia["video_push_thumbnail:"+group.VideoPushID] || failedMedia["video_push_manual_clip:"+group.VideoPushID]
 		}
 		if blocked {
 			report.MediaBlockedGroups = append(report.MediaBlockedGroups, group.ID)
@@ -269,6 +296,16 @@ func markRequired(required map[string]map[string]bool, kind, id string) {
 	if id != "" {
 		required[kind][id] = true
 	}
+}
+
+func movementAuditReady(sourceURL, sourceContent string, target auditTarget) bool {
+	if sourceContent == "" || target.Content != sourceContent {
+		return false
+	}
+	if sourceURL == "" {
+		return target.ObjectPath == ""
+	}
+	return target.ObjectPath != ""
 }
 
 func auditSourceID(raw json.RawMessage) string {

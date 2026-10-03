@@ -1,0 +1,5 @@
+.git
+media_workflow/.env*
+media_materials/.env*
+media_workflow/.migration_reports
+**/node_modules

@@ -7,7 +7,7 @@
 - [x] 从旧表关系重建 ModelImage → StyleImage → FirstFrame → Video → VideoPush；不把旧 `workflows.config` 当作生成链。
 - [x] 输出完整 Video 分组和停在图片节点的未完成分组；逐记录排除真正断链项。
 - [x] 用只读源库运行清点，并测试重复引用、缺失引用和合法阶段性成果。
-- [x] 核对 Product/VirtualIp/pose/scene/movement 旧 ID 与目标素材映射，以及源媒体文件可取性。只读全量审计见 [核对记录](../human/research/007_media_ai_readiness.md)：来源 ID 均可映射；438 个媒体引用中 7 个 movement 源 URL 与目标 Object Path 均为空，影响 59 个分组的媒体完整性，须在全量门禁中单独处理。
+- [x] 核对 Product/VirtualIp/pose/scene/movement 旧 ID 与目标素材映射，以及源媒体文件可取性。2026-10-03 最终只读复核：全部来源 ID 均有唯一目标映射；7 条纯文本 movement 的内容与目标记录一致，不需要 Object Path。完整纳入视频链上游后，需要 97 个 ModelImage、179 个 StyleImage、83 个 FirstFrame、125 个 Video、3 个 pose、4 个 scene、8 个 movement。547 个需读取的媒体字段中 546 个可读；1 条完整 VideoPush 的成片 URL 返回 404，故 182 个候选组中 181 个可完整摄取。旧 [核对记录](../human/research/007_media_ai_readiness.md) 的统计口径保留作历史记录。
 
 ## P2 · 历史资产摄取
 
@@ -33,24 +33,24 @@
 ## P5 · 联调与全量迁移门禁
 
 - [x] 按 [E2E 规范](../../harness/contributing/e2e.md) 经统一网关/API Token 导入并继续**一条**停在 FirstFrame 的历史链；启动 `media_worker` fixture，验证只执行 video、旧图片不重复生成和结果媒体可访问。`TestHistoricalResumeSingleFixture` 已通过；fixture Worker 验收后停止，其他后端服务继续运行。
-- [ ] 用户确认样本后才执行全量导入；按来源 ID 对账所有纳入/排除/失败项，可重跑且不污染源库。
+- [x] 按用户既有全量迁移授权执行批次，并按来源 ID 对账所有纳入/排除/失败项；121 个未完成组、125 个 Video、52 个 VideoPush 已导入并由公开 API 逐项核对，50 条断链排除，1 个缺成片 VideoPush 失败隔离。该异常待用户选择或来源文件恢复，不能声称所有记录完整迁移。
 - [x] 验证断链样本被排除、合法中间图片保留、重复导入/Resume、跨账户拒绝、Conductor/对象存储暂时失败恢复。源清单排除 50 条；单元测试、隔离 PostgreSQL Outbox 测试及真实网关跨账户拒绝均通过。暂时故障通过注入失败并重试验证，不停止用户正在使用的服务。
 
 ## P6 · Text-only Movement
 
 - [x] Resume 对 `movement` 支持空 URL、非空内容；校验冻结 Invocation 不引用 movement `asset_ref`。媒体型 movement 路径保持原校验；单元测试已通过。
-- [ ] 发布只将 FirstFrame 映射为视频 Capability 资源、将 movement 内容渲染进提示词的新 Template/Workflow Version；旧版本保持不可变。
-- [ ] 以无对象的现存 movement 做 API 验收，确认 Job/Outbox 无伪 Object Path，Worker 收到的资源数组不含空引用。
+- [x] 发布只将 FirstFrame 映射为视频 Capability 资源、将 movement 内容渲染进提示词的新 Template/Workflow 定义；新 Workflow `wf_793446b8-c078-4735-8a18-3b40a579f2f5@1` 已发布，视频 Template `tpl_995bf505-f75f-4b70-9934-f327ef3e5684@3` 的 Invocation 仅含 FirstFrame asset_ref，旧冻结定义不变。
+- [x] 以无对象的现存 movement 做真实 API/Worker 验收：`job_f90ede43-8bd6-45a5-bc6a-445e2402f33d` 从 `awaiting_resume` 仅运行 video 到 `succeeded`，前三张历史图片 Asset ID 未变；Job movement 有内容、无 URL，Fixture Worker 完成 video。冻结 Invocation 不含 movement asset_ref，Outbox/Conductor 输入不需要伪 Object Path。此次所选来源 movement 内容是旧系统已有占位文本，仅验证纯文本输入契约，不代表提示词质量。
 
 ## P7 · 完成历史与全量写入
 
 - [x] 为已有 Video 建受控、幂等的历史完成 Execution/StepRun API，不伪造 Conductor 运行；四资产与 Workspace 校验的单元测试已通过。
-- [ ] 完成每条 Video 的真实 API 验收；CLI 单条导入、来源 ID/关系校验、图片/视频对象按源 ID 摄取及 256 MiB 有界上传代码和单元测试已完成，仍需真实数据验证摘要与时间对账。
+- [x] 完成单条 Video 的真实 API 验收；样本 VideoPush 的 2 条成员 Video 分别建立终态四节点 Job `job_6c2d2684-3ec8-4c65-acdc-e9f417edb804`、`job_3e7c1bda-76df-4b08-9c8d-87069ecbcb16`，共享上游图片按源 ID 复用，原视频媒体转存目标对象。全量逐 ID 对账仍在批处理门禁。
 - [x] 建立独立 HistoricalVideoPush 聚合、迁移 API 与公开 Get/List；保留有序成员、发布字段和原时间，关联已完成 Video Job，不触发剪辑/发布。
-- [ ] 摄取 VideoPush 非空成片、缩略图和手工剪辑媒体为目标 Object Path；逐字段校验摘要，空字段保持空值，不留旧系统 URL（单条命令与单测已实现，待真实来源媒体和目标 API 验证）。
-- [ ] 实现可重跑的全量批处理与来源 ID 对账：纳入、排除、失败、目标 ID、Object Path 和校验摘要。批处理、唯一映射、逐条私有报告已实现；媒体路径/摘要对账和真实 API 验收未完成。仅在能力与测试全部通过后按用户授权执行，不对旧库写入。
+- [x] 摄取 VideoPush 非空成片、缩略图和手工剪辑媒体为目标 Object Path；全量成功记录含 52 个成片、1 个缩略图、1 个手工剪辑对象，已通过源字段/API/存储摘要对账，空字段保持为空且旧 URL 未持久化。另 1 条来源成片缺失明确隔离。
+- [x] 实现可重跑的全量批处理与来源 ID 对账：纳入、排除、失败、目标 ID、Object Path 和校验摘要；保留已导入 Job 原冻结 Workflow，接受续跑后的当前状态。已完成真实全量批次和 `--verify-report`：298 个目标记录、50 个排除项及 538 个目标对象的实际可读性/存储摘要均核对通过；唯一来源缺失项保持隔离，源库只读。
 
-风险：源模板未必能匹配所有旧产物；导入成功前缀应保留真实来源而不是冒充当前 Template Version 的历史运行。7 个 movement 已按纯文本契约处理，但真实 API 验收和新 Workflow 发布未完成；尚未执行全量导入。样本的 mock 成功不等于生产 Provider 已验证。
+风险：源模板未必能匹配所有旧产物；导入成功前缀保留真实来源而不冒充当前 Template Version 的历史运行。7 个 movement 已按纯文本契约处理并完成一条真实 API/Fixture Worker 续跑。VideoPush `d8ef3ac8-32c9-414b-bc5d-1c1eeadca214` 的来源成片返回 404，本地 `/data` 未找到同名文件；成员 Video 已导入，该发布记录仍隔离。样本 mock 成功不等于生产 Provider 已验证。
 
 ## 迁移能力覆盖矩阵（样本门禁）
 
@@ -59,6 +59,6 @@
 | Product、VirtualIp、pose、scene、movement 映射 | 目标 Organization 内素材与 JobInput | 样本 Product/VIP 及 movement 对象已定位；其余映射待清点 | 每条纳入组可解析或列明隔离原因 |
 | ModelImage、StyleImage、FirstFrame | Imported Generated Asset + 成功 StepRun | 一条 FirstFrame 谱系已通过 API 导入 | 按源 ID 去重、摘要与时间对账 |
 | 无视频的完整图片谱系 | `awaiting_resume` Job | 一条真实 Job 已导入且 Resume 后 succeeded，原三个 Asset ID 未变 | 只执行缺失后缀、重复命令幂等 |
-| Video | 每条源 Video 一个终态 Job + 四个历史 StepRun | 终态 API 单元测试通过；真实源 Video 未导入 | 视频媒体摄取、真实 API 验收和逐源 ID 对账 |
-| VideoPush | 独立 HistoricalVideoPush 聚合，关联有序成员 Video Job | 聚合、接口与单条迁移命令的单元测试通过，真实 API 对账未完成 | 原字段/成员/媒体全部对账，不触发剪辑/发布 |
+| Video | 每条源 Video 一个终态 Job + 四个历史 StepRun | 125 条真实 Video 已导入；API 逐项核对来源、原时间、四节点结果与对象摘要 | 已通过 |
+| VideoPush | 独立 HistoricalVideoPush 聚合，关联有序成员 Video Job | 52 条导入并逐项核对原字段/时间/有序成员/媒体，HTTP 和 CLI Get/List 验收通过 | 1 条来源成片 404 单独隔离，待处理选择 |
 | 断链记录 | 排除报告 | CLI 已输出排除原因 | 不创建目标 Job/Asset，逐条对账 |

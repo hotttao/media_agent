@@ -26,6 +26,17 @@ func TestAuditSourceIDOnlyAcceptsMediaAIProvenance(t *testing.T) {
 	}
 }
 
+func TestMovementAuditAcceptsExactTextOnlySource(t *testing.T) {
+	if !movementAuditReady("", "turn left", auditTarget{Content: "turn left"}) {
+		t.Fatal("text-only Movement was rejected")
+	}
+	if movementAuditReady("", "turn left", auditTarget{Content: "turn right"}) ||
+		movementAuditReady("", "turn left", auditTarget{Content: "turn left", ObjectPath: "unexpected"}) ||
+		movementAuditReady("/uploads/move.mp4", "turn left", auditTarget{Content: "turn left"}) {
+		t.Fatal("movement mapping accepted mismatched facts")
+	}
+}
+
 func TestAuditMediaProbeIsReadOnlyAndRejectsBadResponses(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.Header.Get("Range") != "bytes=0-0" {

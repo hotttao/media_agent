@@ -317,6 +317,13 @@ func jobToPB(j *domain.Job) *pb.Job {
 		SubmittedAt: j.SubmittedAt.UnixNano(), Origin: j.Origin,
 		OrganizationId: j.OrganizationID, WorkspaceId: j.WorkspaceID,
 		SourceSystem: j.SourceSystem, SourceRecordId: j.SourceRecordID,
+		FailureReason: j.FailureReason,
+	}
+	if j.StartedAt != nil {
+		out.StartedAt = j.StartedAt.UnixNano()
+	}
+	if j.FinishedAt != nil {
+		out.FinishedAt = j.FinishedAt.UnixNano()
 	}
 	if j.ImportedAt != nil {
 		out.ImportedAt = j.ImportedAt.UnixNano()
@@ -345,6 +352,15 @@ func stepRunToPB(sr *domain.StepRun) *pb.StepRun {
 	}
 	if sr.SourceCreatedAt != nil {
 		out.SourceCreatedAt = sr.SourceCreatedAt.UnixNano()
+	}
+	if sr.ClaimedAt != nil {
+		out.ClaimedAt = sr.ClaimedAt.UnixNano()
+	}
+	if sr.StartedAt != nil {
+		out.StartedAt = sr.StartedAt.UnixNano()
+	}
+	if sr.FinishedAt != nil {
+		out.FinishedAt = sr.FinishedAt.UnixNano()
 	}
 	return out
 }

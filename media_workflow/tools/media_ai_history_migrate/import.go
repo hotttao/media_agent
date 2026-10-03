@@ -40,6 +40,15 @@ type importConfig struct {
 	WorkflowVersion int
 	WorkspaceID     string
 	ImportJob       bool
+	OnImportedMedia func(mediaArtifact)
+}
+
+type mediaArtifact struct {
+	Kind       string `json:"kind"`
+	SourceID   string `json:"source_id"`
+	TargetID   string `json:"target_id,omitempty"`
+	ObjectPath string `json:"object_path"`
+	SHA256     string `json:"sha256"`
 }
 
 type historyImporter struct {
@@ -135,7 +144,7 @@ func importImageGroupID(ctx context.Context, db *sql.DB, m *manifest, groupID st
 		if err != nil {
 			return "", fmt.Errorf("historical assets were imported, but Job import failed: %w", err)
 		}
-		fmt.Printf("imported incomplete Job: group=%s job_id=%s status=awaiting_resume next_step=%s\n", group.ID, jobID, group.NextStepKey)
+		fmt.Printf("confirmed historical Job: group=%s job_id=%s source_next_step=%s\n", group.ID, jobID, group.NextStepKey)
 		return jobID, nil
 	} else {
 		fmt.Printf("image group %s assets imported; pass --import-job after Workspace/Workflow mapping, next_step=%s\n", group.ID, group.NextStepKey)
@@ -188,7 +197,13 @@ func (h historyImporter) importHistoricalJob(ctx context.Context, endpoint, grou
 	if err := h.do(req, &result); err != nil {
 		return "", err
 	}
-	if result.JobID == "" || result.Status != expectedStatus {
+	statusValid := result.Status == expectedStatus
+	// Replayed incomplete imports return the existing Job's current state,
+	// including a Job the user already resumed and completed.
+	if expectedStatus == 7 {
+		statusValid = result.Status >= 1 && result.Status <= 7
+	}
+	if result.JobID == "" || !statusValid {
 		return "", fmt.Errorf("target did not confirm historical Job status %d", expectedStatus)
 	}
 	return result.JobID, nil
@@ -336,6 +351,9 @@ func (h historyImporter) importMedia(ctx context.Context, kind, sourceID, rawURL
 	}
 	if result.ID == "" || result.ObjectPath != objectPath {
 		return "", errors.New("target import response did not confirm object")
+	}
+	if h.cfg.OnImportedMedia != nil {
+		h.cfg.OnImportedMedia(mediaArtifact{Kind: kind, SourceID: sourceID, TargetID: result.ID, ObjectPath: objectPath, SHA256: checksum})
 	}
 	return result.ID, nil
 }

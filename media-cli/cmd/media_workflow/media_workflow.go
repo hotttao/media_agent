@@ -2,6 +2,7 @@ package media_workflow
 
 import (
 	"github.com/spf13/cobra"
+	rootcmd "media_agent/media_cli/cmd"
 )
 
 // Cmd media_workflow 一级命令（caller 编排：组装 bundle + SubmitJob + job 查询）。
@@ -12,4 +13,5 @@ var Cmd = &cobra.Command{
 
 func init() {
 	Cmd.AddCommand(submitJobCmd)
+	rootcmd.RegisterCmd(Cmd)
 }

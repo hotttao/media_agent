@@ -7,19 +7,23 @@ import (
 	prodsvc "media_agent/hertz_gen/media_materials/product_service"
 	reachsvc "media_agent/hertz_gen/media_materials/reachability_service"
 	vipsvc "media_agent/hertz_gen/media_materials/virtual_ip_service"
+	historysvc "media_agent/hertz_gen/media_workflow/historical_publication_service"
 	jobsvc "media_agent/hertz_gen/media_workflow/job_service"
 	wfsvc "media_agent/hertz_gen/media_workflow/workflow_service"
 	"media_agent/hertz_infra/clienthertz"
+	rootcmd "media_agent/media_cli/cmd"
+	"media_agent/media_cli/cmd/cookie"
 )
 
 // caller 侧 typed client（reachability + product + vip + workflow job）。
 // 装配参照 cmd/media_auth/user/client.go 的 clienthertz 套件模式。
 var (
-	ReachCli reachsvc.Client
-	ProdCli  prodsvc.Client
-	VipCli   vipsvc.Client
-	JobCli   jobsvc.Client
-	WfCli    wfsvc.Client
+	ReachCli   reachsvc.Client
+	ProdCli    prodsvc.Client
+	VipCli     vipsvc.Client
+	JobCli     jobsvc.Client
+	WfCli      wfsvc.Client
+	HistoryCli historysvc.Client
 )
 
 // Init 装配 media_materials + media_workflow 的 typed client。
@@ -69,6 +73,10 @@ func Init(cfg *configpb.Config) {
 		log.Fatalf("media_workflow shared client: %v", err)
 	}
 	wfHost := wfCfg.GetBaseDomain()
+	HistoryCli, err = historysvc.NewHistoricalPublicationServiceClient(wfHost, historysvc.WithHertzClient(wfShared), historysvc.WithHertzClientMiddleware(cookie.New(rootcmd.CookiesDir).Middleware(wfHost)))
+	if err != nil {
+		log.Fatalf("historical publication client: %v", err)
+	}
 	JobCli, err = jobsvc.NewJobServiceClient(wfHost, jobsvc.WithHertzClient(wfShared))
 	if err != nil {
 		log.Fatalf("job client: %v", err)

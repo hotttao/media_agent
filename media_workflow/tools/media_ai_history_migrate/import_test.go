@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -72,16 +73,21 @@ func TestImportImageThroughGatewayAndInternalAPI(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"id": "gen-1", "object_path": objectPath})
 	}))
 	defer internal.Close()
+	var recorded []mediaArtifact
 	importer := historyImporter{cfg: importConfig{
 		SourceAssetsURL: source.URL, GatewayURL: gateway.URL, MaterialsURL: internal.URL,
 		OrganizationID: "org", OwnerUserID: "user", ProductID: "product", VirtualIPID: "vip",
 		BearerToken: "public-token", MigrationToken: "migration-token",
+		OnImportedMedia: func(item mediaArtifact) { recorded = append(recorded, item) },
 	}, client: http.DefaultClient}
 	assetID, err := importer.importImage(context.Background(), "first_frame", sourceImage{
 		ID: "frame-1", URL: "/uploads/frame.png", CreatedAt: time.Date(2026, 5, 27, 4, 51, 30, 0, time.UTC),
 	})
 	if err != nil || assetID != "gen-1" {
 		t.Fatalf("importImage: id=%s err=%v", assetID, err)
+	}
+	if len(recorded) != 1 || recorded[0].TargetID != assetID || recorded[0].ObjectPath != objectPath || recorded[0].SHA256 != checksum {
+		t.Fatalf("reconciliation artifact = %+v", recorded)
 	}
 }
 
@@ -115,5 +121,24 @@ func TestImportImageDoesNotFollowSourceRedirect(t *testing.T) {
 	})
 	if err == nil || redirected {
 		t.Fatalf("source redirect accepted or followed: err=%v redirected=%v", err, redirected)
+	}
+}
+
+func TestIncompleteImportReplayAcceptsAdvancedJobState(t *testing.T) {
+	for _, status := range []int{2, 4, 7, 8} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]any{"job_id": "existing-job", "status": status})
+			}))
+			defer server.Close()
+			h := newHistoryImporter(importConfig{WorkflowURL: server.URL})
+			id, err := h.importHistoricalJob(context.Background(), "/import", "frame:sample", nil, 7)
+			if status <= 7 && (err != nil || id != "existing-job") {
+				t.Fatalf("existing Job state %d rejected: %v", status, err)
+			}
+			if status > 7 && err == nil {
+				t.Fatal("invalid Job state accepted")
+			}
+		})
 	}
 }

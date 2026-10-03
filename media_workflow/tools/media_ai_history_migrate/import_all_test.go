@@ -23,3 +23,16 @@ func TestBuildBatchMappingsRequiresUniqueTargetFacts(t *testing.T) {
 		t.Fatalf("ambiguous Virtual IP mapping was accepted: %v", err)
 	}
 }
+
+func TestBatchPreservesPreviouslyImportedWorkflow(t *testing.T) {
+	cfg := importConfig{WorkflowID: "new-workflow", WorkflowVersion: 2}
+	existing := map[string]existingHistoryJob{"frame:sample": {WorkflowID: "original-workflow", WorkflowVersion: 1}}
+	got := preserveExistingWorkflow(cfg, "frame:sample", existing)
+	if got.WorkflowID != "original-workflow" || got.WorkflowVersion != 1 {
+		t.Fatalf("existing frozen Workflow was replaced: %+v", got)
+	}
+	got = preserveExistingWorkflow(cfg, "frame:new", existing)
+	if got.WorkflowID != cfg.WorkflowID || got.WorkflowVersion != cfg.WorkflowVersion {
+		t.Fatal("new source did not use configured Workflow")
+	}
+}

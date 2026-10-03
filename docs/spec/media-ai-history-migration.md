@@ -2,7 +2,7 @@
 
 ## 范围与现状
 
-源事实是 `Product/VirtualIp -> ModelImage -> StyleImage -> FirstFrame -> Video[] -> VideoPush` 的关联，不是旧 `workflows.config`。本文约束 `media_workflow`、`media_materials` 和对象存储的迁移接口。**本轮迁移纳入素材、图片链、单条 Video、未完成执行及 VideoPush 的独立历史记录；不实现多视频剪辑或重新发布流程。**只读源清单、单组图片摄取、历史 Generated Asset 登记、未完成 Job 导入、显式 Resume 与 Outbox 均已实现；仅一条真实历史链完成了端到端恢复验收，不能声称具备全量迁移能力。用户已允许在所有功能完备后执行全量迁移；功能门禁未满足前不得启动全量写入。旧库全程只读。UI 相关工作按用户要求暂停，等待新的设计。
+源事实是 `Product/VirtualIp -> ModelImage -> StyleImage -> FirstFrame -> Video[] -> VideoPush` 的关联，不是旧 `workflows.config`。本文约束 `media_workflow`、`media_materials` 和对象存储的迁移接口。**本轮迁移纳入素材、图片链、单条 Video、未完成执行及 VideoPush 的独立历史记录；不实现多视频剪辑或重新发布流程。**导入、Resume、Outbox、完整历史 Job 与独立历史发布接口均已实现并验证。按用户授权已执行全量批次：121 个图片中间组、125 个 Video、52 个 VideoPush 迁入并逐项对账，50 个断链记录排除；1 个 VideoPush 的来源成片 HTTP 404，保持隔离，不能声称全部来源记录完整迁移。旧库全程只读。UI 相关工作按用户要求暂停，等待新的设计。
 
 ## 源清单与纳入规则
 
@@ -46,13 +46,19 @@ Conductor Backend Compiler 必须为可恢复版本提供受控恢复分支：�
 | 旧事实 | 目标边界 / 聚合或读模型 / Workflow | 状态 |
 |:---|:---|:---|
 | URL 为空、内容非空的 Movement | media_materials asset/Material；media_workflow execution/Job Input 与 workflow_execution/Resume | covered（纯文本，不伪造对象） |
-| 未完成 Model/Style/FirstFrame 链 | media_materials Imported Generated Asset；media_workflow Execution/Job + Resume | covered（单组 API/CLI，批量对账待实现） |
-| 已完成 Video 与独立 VideoTask | media_materials Imported Generated Asset；media_workflow 历史 Execution/StepRun | missing（终态 Job API 已实现，视频资产摄取、CLI 和真实验收未完成） |
-| VideoPush 多视频成员与原发布事实 | media_workflow historical_publication/HistoricalVideoPush；historical_video_push_import | partial（聚合、接口和单条媒体摄取已实现；批量迁移、真实 API 验证及对账待完成；剪辑/重新发布流程不在本轮范围） |
+| 未完成 Model/Style/FirstFrame 链 | media_materials Imported Generated Asset；media_workflow Execution/Job + Resume | covered（121 个组导入并 API/来源/资产对账，已续跑样本保留当前状态） |
+| 已完成 Video 与独立 VideoTask | media_materials Imported Generated Asset；media_workflow 历史 Execution/StepRun | covered（125 条真实 Video 转存媒体、导入终态 Job 并逐项对账） |
+| VideoPush 多视频成员与原发布事实 | media_workflow historical_publication/HistoricalVideoPush；historical_video_push_import | partial（52 条原字段/时间/有序成员/媒体已逐项对账，另 1 条来源成片 HTTP 404 隔离；剪辑/重新发布流程不在本轮范围） |
 | 断链排除 | 迁移 CLI 排除清单；不创建目标聚合 | covered |
 
-存在 `missing`，不能宣称领域迁移能力或全量写入门禁完成。
+仍有 `partial`，不能宣称全量写入门禁完成。
 
 ## 单样本验收记录（2026-10-02）
 
 测试企业 `8afeb26b9df643952f4f816576eb2504` 已为联调启用 `workspace` 和 `workflow` 功能。通过统一网关和测试 User API Token，恢复已导入的 `job_9f225df6-e1a6-4627-9a40-24487720ccd8`：恢复前 3 个历史图片 StepRun 均为 succeeded，video 为 blocked；只启动允许 `media.video.generate@1` 的客户端 fixture Worker，补入已摄取的 movement 对象后，Job 成为 succeeded。历史图片的 Asset ID 保持不变；video 新产物为 `gen_0a286716-6d67-4f75-b0d7-54109a63ce9e`，其持久化 Object Path 与预摄取视频一致，公开读取签发 URL 且 Range GET 可访问。测试实现见 `media-cli/e2e/workflow_history_resume_e2e_test.go`。完成后相同幂等键重放返回 202 且 Conductor 实例不变，不同键返回 409；隔离 PostgreSQL 的 Outbox 并发与完成后重放测试也通过。该 fixture Worker 已在验收后停止，后端服务保持运行；本记录不代表其余来源组已经导入或 UI 已验收。
+
+## 历史发布与纯文本动作验收（2026-10-03）
+
+来源 VideoPush `040b99c4-346b-4c33-948e-f262aa8aa092` 的 2 条成员 Video 经迁移 API 分别成为终态 Job；目标记录 `hvp_7e4bb02a-2345-4d9f-b861-38582c8784db` 保留原成员顺序、文字和发布标志，成片转存至目标 Object Path 并保存 SHA-256，Get/List 经统一网关可读，新签发媒体 URL 的 Range GET 返回 206。重复导入返回同一记录 ID；未认证读取返回 401。该样本的缩略图与手工剪辑字段原本为空，其他非空字段仍需真实样本验证。来源另有 1 条完整 VideoPush 的成片 HTTP 404，必须在全量报告中隔离或恢复来源文件，不伪造媒体。
+
+新发布的纯文本动作 Workflow `wf_793446b8-c078-4735-8a18-3b40a579f2f5@1` 的视频 Invocation 仅引用 FirstFrame 媒体；movement 内容进入提示词。以旧 FirstFrame 组导入 `awaiting_resume` Job `job_f90ede43-8bd6-45a5-bc6a-445e2402f33d` 后，经公开 Resume API 补入无 URL 的 movement 文本并启动客户端 fixture Worker，Job 到达 succeeded，前三个历史图片资产不变且仅 video 为新原生产物。此验收仅证明运行契约，所选文本为源数据已有占位内容，不代表提示词质量。UI 仍按用户要求不在当前开发范围。

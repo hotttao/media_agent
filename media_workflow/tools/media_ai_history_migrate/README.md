@@ -14,7 +14,7 @@ MEDIA_MATERIALS_BEARER_TOKEN='<目标账户 API Token>' \
 
 从 `media_workflow` 目录运行。`--out` 只允许新文件，权限为 0600；内容包含旧用户 ID、任务参数和结果地址，须按敏感数据保管。再次运行请给新文件名，避免覆盖上次审计清单。
 
-`--audit-readiness` 只读旧库、目标网关的素材列表和旧媒体服务；按全部候选分组核对 Product/Virtual IP/pose/scene/movement 来源 ID，并用 Range GET 实际读取候选图片、视频、输入素材及完整 VideoPush 的非空媒体字段首字节。报告只输出来源 ID 与失败原因，不输出 API Token 或媒体 URL。`ready_groups` 表示来源媒体齐全的分组，不等同于已经导入或能够直接执行；`media_blocked_groups` 和 `media_blocked_pushes` 分别列出缺少来源媒体的分组及历史发布记录。缺失的源对象不会被工具猜测或伪造。
+`--audit-readiness` 只读旧库、目标网关的素材列表和旧媒体服务；按全部候选分组核对 Product/Virtual IP/pose/scene/movement 来源 ID，并用 Range GET 实际读取候选图片、视频、输入素材及完整 VideoPush 的非空媒体字段首字节。纯文本 movement 要求来源和目标内容一致、双方都没有媒体 Object Path，不发起无意义的 URL 探测。报告只输出来源 ID 与失败原因，不输出 API Token 或媒体 URL。`ready_groups` 表示来源媒体齐全的分组，不等同于已经导入或能够直接执行；`media_blocked_groups` 和 `media_blocked_pushes` 分别列出缺少来源媒体的分组及历史发布记录。缺失的源对象不会被工具猜测或伪造。
 
 已核对当前源库：1 个 `workflows`（`Manual Upload`，无 DSL config）、1 个 `workflow_templates`、153 个 `video_tasks`（均为 `params.source=manual_upload`）、127 个 `videos`。`VideoTask` 的 `source` 标识单次视频任务的入口，不等同于业务流程类别；它可以处于完整链路中。旧七阶段流程由 `scripts/workflow-cli` 沿资源关系恢复与推进，而非读取 `workflows.config`。当前 [media_ai_workflow_migrate](../media_ai_workflow_migrate/main.go) 只负责四节点定义和联调样本。
 
@@ -35,7 +35,11 @@ go run ./tools/media_ai_history_migrate \
 
 单条已完成视频使用相同目标身份与映射配置，增加 `--import-video '<源 Video ID>'`、`--workflow-id`、`--workflow-version` 和 `--workspace-id`；无需 `--import-job`。工具先检查该 Video 属于完整候选链且未被断链清单排除，再按来源 ID/摘要复用三张上游图片、摄取视频，最后导入四个已完成 StepRun。历史发布记录使用相同参数但指定 `--import-push '<源 VideoPush ID>'`。媒体在迁移工具和目标上传服务均有界落盘；图片上限 16 MiB，视频上限 256 MiB。超过上限明确失败，不截断也不误记完成。
 
-批量入口 `--import-all-report /secure/new-report.jsonl` 不接受单条 `--product-id` / `--virtual-ip-id`；它先从目标 Product 的迁移来源 ID 和目标 Virtual IP 的唯一昵称建立映射，任何歧义立即停止。随后导入未完成组、去重后的单条 Video，以及独立 VideoPush。新建的 0600 JSONL 报告逐条记录排除原因、导入结果、目标 Job/发布记录 ID 或失败原因并同步落盘。失败后用**新的**报告路径重跑；目标 API 按来源事实幂等。批量入口目前尚未经过真实来源媒体和目标服务的完整 API 验收，不能仅凭单元测试启动全量写入。
+批量入口 `--import-all-report /secure/new-report.jsonl` 不接受单条 `--product-id` / `--virtual-ip-id`；它先从目标 Product 的迁移来源 ID 和目标 Virtual IP 的唯一昵称建立映射，任何歧义立即停止。随后导入未完成组、去重后的单条 Video，以及独立 VideoPush。新建的 0600 JSONL 报告逐条记录排除原因、导入结果、目标 Job/发布记录 ID、每个已上传媒体的 Object Path/SHA-256 或失败原因并同步落盘。失败后用**新的**报告路径重跑；目标 API 按来源事实幂等。来源成片 404 的发布记录报告失败并使最终命令返回非零，不得伪造完成。
+
+2026-10-03 已完成真实全量批次：121 个未完成组、125 个 Video、52 个 VideoPush 成功；50 个断链记录排除，1 个来源成片 404 的 VideoPush 隔离。重跑会从目标公开 Job 列表取得已导入来源的原 Workflow 版本，保留旧冻结定义；原未完成 Job 若已续跑成功，幂等确认返回当前状态。
+
+只读对账使用 `--verify-report /secure/report.jsonl`，同样提供目标 Organization、Owner、Workspace 与 User API Token；不需要迁移密钥。它核对源记录集合是否完整、目标 Job 与资产来源/归属/原时间、VideoPush 原字段和有序成员，并逐个读取目标媒体首字节及 S3 SHA-256 元数据。存在隔离项时保留验证结果并返回非零。实际全量对账核对了 298 个成功记录、50 个排除项、1 个隔离项及 538 个唯一对象。
 
 内部 API 默认禁用，需让 `media_materials` 进程配置相同的 `MEDIA_MATERIALS_MIGRATION_TOKEN`；`--import-job` 还需让 `media_workflow` 配置 `MEDIA_WORKFLOW_MIGRATION_TOKEN`，并传入 `--workflow-id`、`--workflow-version` 和 `--workspace-id`。完成后移除密钥并重启。密钥和 API Token 只经环境变量传入，不写在命令行或清单中。工具会逐张校验来源路径、图片类型、SHA-256、上传返回摘要和目标 Product/Virtual IP 对应关系。重复执行使用稳定上传幂等键与来源 ID 唯一约束；同来源不同内容会报冲突。Job 导入还会向 `media_control` 校验目标 Workspace、所有者和企业归属。
 

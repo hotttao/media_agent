@@ -22,6 +22,5 @@ COPY --from=builder /out/media_workflow_internal_worker /app/media_workflow_inte
 COPY --from=builder /out/media_workflow_managed_worker /app/media_workflow_managed_worker
 COPY media_workflow/migrations/ /app/migrations/
 COPY media_workflow/conf/ /app/conf/
-COPY media_workflow/.env /app/.env
 EXPOSE 8002
 ENTRYPOINT ["/app/media_workflow"]

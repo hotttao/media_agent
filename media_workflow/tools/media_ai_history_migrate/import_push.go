@@ -72,6 +72,9 @@ func (h historyImporter) importPublicationMedia(ctx context.Context, pushID, fie
 	if err != nil {
 		return importedPushMedia{}, err
 	}
+	if h.cfg.OnImportedMedia != nil {
+		h.cfg.OnImportedMedia(mediaArtifact{Kind: "video_push_" + field, SourceID: pushID, ObjectPath: objectPath, SHA256: checksum})
+	}
 	return importedPushMedia{ObjectPath: objectPath, SHA256: checksum}, nil
 }
 

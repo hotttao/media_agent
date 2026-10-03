@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"sort"
 	"time"
@@ -16,6 +17,57 @@ import (
 type batchMappings struct {
 	products map[string]string
 	vips     map[string]string
+}
+
+type existingHistoryJob struct {
+	ID              string `json:"id"`
+	WorkflowID      string `json:"workflow_id"`
+	WorkflowVersion int    `json:"workflow_version"`
+	Origin          string `json:"origin"`
+	SourceSystem    string `json:"source_system"`
+	SourceRecordID  string `json:"source_record_id"`
+	OrganizationID  string `json:"organization_id"`
+	WorkspaceID     string `json:"workspace_id"`
+	SubmittedBy     string `json:"submitted_by"`
+}
+
+func listExistingHistoryJobs(ctx context.Context, cfg importConfig) (map[string]existingHistoryJob, error) {
+	items := map[string]existingHistoryJob{}
+	h := newHistoryImporter(cfg)
+	count := 0
+	for page := 1; ; page++ {
+		var response struct {
+			Items []existingHistoryJob `json:"items"`
+			Total int                  `json:"total"`
+		}
+		query := url.Values{"workspace_id": {cfg.WorkspaceID}, "page": {fmt.Sprint(page)}, "page_size": {"100"}}
+		if err := h.getTarget(ctx, "/api/v1/jobs?"+query.Encode(), &response); err != nil {
+			return nil, err
+		}
+		for _, item := range response.Items {
+			if item.Origin != "legacy_import" || item.SourceSystem != "media_ai" {
+				continue
+			}
+			if item.OrganizationID != cfg.OrganizationID || item.WorkspaceID != cfg.WorkspaceID || item.SubmittedBy != cfg.OwnerUserID || item.WorkflowID == "" || item.WorkflowVersion <= 0 {
+				return nil, errors.New("existing historical Job has foreign ownership or invalid Workflow")
+			}
+			if _, exists := items[item.SourceRecordID]; exists {
+				return nil, fmt.Errorf("duplicate historical Job source %s", item.SourceRecordID)
+			}
+			items[item.SourceRecordID] = item
+		}
+		count += len(response.Items)
+		if len(response.Items) == 0 || count >= response.Total {
+			return items, nil
+		}
+	}
+}
+
+func preserveExistingWorkflow(cfg importConfig, sourceID string, existing map[string]existingHistoryJob) importConfig {
+	if job, found := existing[sourceID]; found {
+		cfg.WorkflowID, cfg.WorkflowVersion = job.WorkflowID, job.WorkflowVersion
+	}
+	return cfg
 }
 
 func buildBatchMappings(required []lineageGroup, sourceProducts map[string]bool, sourceVIPs map[string]string, targetsProducts, targetsVIPs []auditTarget) (batchMappings, error) {
@@ -65,12 +117,13 @@ func readBatchMappings(ctx context.Context, db *sql.DB, m manifest, cfg importCo
 }
 
 type batchResult struct {
-	Kind       string `json:"kind"`
-	SourceID   string `json:"source_id"`
-	TargetID   string `json:"target_id,omitempty"`
-	Status     string `json:"status"`
-	Error      string `json:"error,omitempty"`
-	FinishedAt string `json:"finished_at"`
+	Kind       string          `json:"kind"`
+	SourceID   string          `json:"source_id"`
+	TargetID   string          `json:"target_id,omitempty"`
+	Status     string          `json:"status"`
+	Error      string          `json:"error,omitempty"`
+	Artifacts  []mediaArtifact `json:"artifacts,omitempty"`
+	FinishedAt string          `json:"finished_at"`
 }
 
 func importAllHistory(ctx context.Context, db *sql.DB, m *manifest, cfg importConfig, reportPath string) error {
@@ -92,13 +145,17 @@ func importAllHistory(ctx context.Context, db *sql.DB, m *manifest, cfg importCo
 	if err != nil {
 		return fmt.Errorf("batch mapping preflight: %w", err)
 	}
+	existing, err := listExistingHistoryJobs(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("existing historical Job preflight: %w", err)
+	}
 	report, err := os.OpenFile(reportPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return fmt.Errorf("create private report: %w", err)
 	}
 	defer report.Close()
-	record := func(kind, sourceID, targetID string, itemErr error) error {
-		item := batchResult{Kind: kind, SourceID: sourceID, TargetID: targetID, Status: "imported", FinishedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	record := func(kind, sourceID, targetID string, artifacts []mediaArtifact, itemErr error) error {
+		item := batchResult{Kind: kind, SourceID: sourceID, TargetID: targetID, Artifacts: artifacts, Status: "imported", FinishedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 		if itemErr != nil {
 			item.Status, item.Error = "failed", itemErr.Error()
 		}
@@ -145,10 +202,12 @@ func importAllHistory(ctx context.Context, db *sql.DB, m *manifest, cfg importCo
 			continue
 		}
 		incompleteGroups++
-		itemCfg := cfg
+		itemCfg := preserveExistingWorkflow(cfg, group.ID, existing)
 		itemCfg.ProductID, itemCfg.VirtualIPID, itemCfg.ImportJob = mappings.products[group.ProductID], mappings.vips[group.VirtualIPID], true
+		var artifacts []mediaArtifact
+		itemCfg.OnImportedMedia = func(item mediaArtifact) { artifacts = append(artifacts, item) }
 		jobID, err := importImageGroupID(ctx, db, m, group.ID, itemCfg)
-		if writeErr := record("incomplete_group", group.ID, jobID, err); writeErr != nil {
+		if writeErr := record("incomplete_group", group.ID, jobID, artifacts, err); writeErr != nil {
 			return writeErr
 		}
 		if err != nil {
@@ -163,10 +222,12 @@ func importAllHistory(ctx context.Context, db *sql.DB, m *manifest, cfg importCo
 	jobIDs := map[string]string{}
 	for _, videoID := range videoIDs {
 		group := videoGroups[videoID]
-		itemCfg := cfg
+		itemCfg := preserveExistingWorkflow(cfg, "video:"+videoID, existing)
 		itemCfg.ProductID, itemCfg.VirtualIPID = mappings.products[group.ProductID], mappings.vips[group.VirtualIPID]
+		var artifacts []mediaArtifact
+		itemCfg.OnImportedMedia = func(item mediaArtifact) { artifacts = append(artifacts, item) }
 		jobID, err := importCompletedVideoID(ctx, db, m, videoID, itemCfg)
-		if writeErr := record("video", videoID, jobID, err); writeErr != nil {
+		if writeErr := record("video", videoID, jobID, artifacts, err); writeErr != nil {
 			return writeErr
 		}
 		if err != nil {
@@ -184,6 +245,8 @@ func importAllHistory(ctx context.Context, db *sql.DB, m *manifest, cfg importCo
 		group := groupByPush[pushID]
 		itemCfg := cfg
 		itemCfg.ProductID, itemCfg.VirtualIPID = mappings.products[group.ProductID], mappings.vips[group.VirtualIPID]
+		var artifacts []mediaArtifact
+		itemCfg.OnImportedMedia = func(item mediaArtifact) { artifacts = append(artifacts, item) }
 		// Do not re-upload a failed member while recording the publication.
 		var err error
 		for _, memberID := range group.VideoIDs {
@@ -196,7 +259,7 @@ func importAllHistory(ctx context.Context, db *sql.DB, m *manifest, cfg importCo
 		if err == nil {
 			targetID, err = importHistoricalVideoPushWithJobs(ctx, db, m, pushID, itemCfg, jobIDs)
 		}
-		if writeErr := record("video_push", pushID, targetID, err); writeErr != nil {
+		if writeErr := record("video_push", pushID, targetID, artifacts, err); writeErr != nil {
 			return writeErr
 		}
 		if err != nil {
