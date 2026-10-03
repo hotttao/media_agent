@@ -13,12 +13,16 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"time"
 )
 
-const maxImportMediaBytes int64 = 16 << 20
+const (
+	maxImportMediaBytes int64 = 256 << 20
+	maxImportImageBytes int64 = 16 << 20
+)
 
 type importConfig struct {
 	SourceAssetsURL string
@@ -45,7 +49,7 @@ type historyImporter struct {
 
 func newHistoryImporter(cfg importConfig) historyImporter {
 	return historyImporter{cfg: cfg, client: &http.Client{
-		Timeout: 60 * time.Second,
+		Timeout: 10 * time.Minute,
 		// Source and target origins are explicitly configured. A redirect may
 		// escape those origins or silently switch the API authentication path.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -154,6 +158,10 @@ func validateOrigin(label, raw string) error {
 }
 
 func (h historyImporter) importIncompleteJob(ctx context.Context, groupID string, completed []map[string]string) (string, error) {
+	return h.importHistoricalJob(ctx, "/api/internal/v1/jobs/import-incomplete", groupID, completed, 7)
+}
+
+func (h historyImporter) importHistoricalJob(ctx context.Context, endpoint, groupID string, completed []map[string]string, expectedStatus int) (string, error) {
 	request := map[string]any{
 		"source_group_id": groupID, "organization_id": h.cfg.OrganizationID, "workspace_id": h.cfg.WorkspaceID,
 		"owner_user_id": h.cfg.OwnerUserID, "workflow_id": h.cfg.WorkflowID, "workflow_version": h.cfg.WorkflowVersion,
@@ -161,7 +169,7 @@ func (h historyImporter) importIncompleteJob(ctx context.Context, groupID string
 		"completed": completed,
 	}
 	encoded, _ := json.Marshal(request)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.WorkflowURL+"/api/internal/v1/jobs/import-incomplete", bytes.NewReader(encoded))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.WorkflowURL+endpoint, bytes.NewReader(encoded))
 	if err != nil {
 		return "", err
 	}
@@ -174,8 +182,8 @@ func (h historyImporter) importIncompleteJob(ctx context.Context, groupID string
 	if err := h.do(req, &result); err != nil {
 		return "", err
 	}
-	if result.JobID == "" || result.Status != 7 {
-		return "", errors.New("target did not confirm awaiting_resume Job")
+	if result.JobID == "" || result.Status != expectedStatus {
+		return "", fmt.Errorf("target did not confirm historical Job status %d", expectedStatus)
 	}
 	return result.JobID, nil
 }
@@ -243,10 +251,14 @@ func (h historyImporter) getTarget(ctx context.Context, endpoint string, result 
 }
 
 func (h historyImporter) importImage(ctx context.Context, kind string, image sourceImage) (string, error) {
-	if image.CreatedAt.IsZero() {
-		return "", errors.New("source image creation time is missing")
+	return h.importMedia(ctx, kind, image.ID, image.URL, image.CreatedAt, "image/")
+}
+
+func (h historyImporter) importMedia(ctx context.Context, kind, sourceID, rawURL string, createdAt time.Time, mediaPrefix string) (string, error) {
+	if createdAt.IsZero() || sourceID == "" {
+		return "", errors.New("source media identity or creation time is missing")
 	}
-	sourceURL, err := resolveSourceMediaURL(h.cfg.SourceAssetsURL, image.URL)
+	sourceURL, err := resolveSourceMediaURL(h.cfg.SourceAssetsURL, rawURL)
 	if err != nil {
 		return "", err
 	}
@@ -262,25 +274,44 @@ func (h historyImporter) importImage(ctx context.Context, kind string, image sou
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("source media HTTP %d", resp.StatusCode)
 	}
-	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxImportMediaBytes+1))
-	if err != nil || len(payload) == 0 || int64(len(payload)) > maxImportMediaBytes {
-		return "", errors.New("source media unreadable, empty, or exceeds 16 MiB")
+	tmp, err := os.CreateTemp("", "media-ai-source-*")
+	if err != nil {
+		return "", fmt.Errorf("create source media spool: %w", err)
 	}
-	mediaType := http.DetectContentType(payload)
-	if !strings.HasPrefix(mediaType, "image/") {
-		return "", fmt.Errorf("%s source is not an image: %s", kind, mediaType)
+	defer func() { _ = tmp.Close(); _ = os.Remove(tmp.Name()) }()
+	hash := sha256.New()
+	size, err := io.Copy(io.MultiWriter(tmp, hash), io.LimitReader(resp.Body, maxImportMediaBytes+1))
+	if err != nil || size == 0 || size > maxImportMediaBytes {
+		return "", errors.New("source media unreadable, empty, or exceeds 256 MiB")
 	}
-	digest := sha256.Sum256(payload)
-	checksum := hex.EncodeToString(digest[:])
-	objectPath, err := h.upload(ctx, kind, image.ID, path.Base(image.URL), payload, checksum)
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return "", fmt.Errorf("rewind source media: %w", err)
+	}
+	header := make([]byte, 512)
+	headerSize, err := io.ReadFull(tmp, header)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return "", fmt.Errorf("inspect source media: %w", err)
+	}
+	mediaType := detectSourceMediaType(header[:headerSize])
+	if !strings.HasPrefix(mediaType, mediaPrefix) {
+		return "", fmt.Errorf("%s source media type %s does not match %s", kind, mediaType, mediaPrefix)
+	}
+	if mediaPrefix == "image/" && size > maxImportImageBytes {
+		return "", errors.New("source image exceeds 16 MiB")
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return "", fmt.Errorf("rewind source media: %w", err)
+	}
+	checksum := hex.EncodeToString(hash.Sum(nil))
+	objectPath, err := h.upload(ctx, kind, sourceID, path.Base(rawURL), tmp, checksum)
 	if err != nil {
 		return "", err
 	}
 	request := map[string]any{
 		"organization_id": h.cfg.OrganizationID, "scope": "ai_clothing", "asset_kind": kind,
-		"name": "media_ai:" + kind + ":" + image.ID, "object_path": objectPath,
-		"owner_user_id": h.cfg.OwnerUserID, "source_system": "media_ai", "source_record_id": image.ID,
-		"source_sha256": checksum, "source_created_at": image.CreatedAt.UnixNano(),
+		"name": "media_ai:" + kind + ":" + sourceID, "object_path": objectPath,
+		"owner_user_id": h.cfg.OwnerUserID, "source_system": "media_ai", "source_record_id": sourceID,
+		"source_sha256": checksum, "source_created_at": createdAt.UnixNano(),
 		"source_virtual_ip_id": h.cfg.VirtualIPID, "source_product_id": h.cfg.ProductID,
 	}
 	encoded, _ := json.Marshal(request)
@@ -303,6 +334,16 @@ func (h historyImporter) importImage(ctx context.Context, kind string, image sou
 	return result.ID, nil
 }
 
+func detectSourceMediaType(payload []byte) string {
+	if len(payload) >= 12 && string(payload[4:8]) == "ftyp" {
+		return "video/mp4"
+	}
+	if len(payload) >= 4 && payload[0] == 0x1a && payload[1] == 0x45 && payload[2] == 0xdf && payload[3] == 0xa3 {
+		return "video/webm"
+	}
+	return http.DetectContentType(payload)
+}
+
 func resolveSourceMediaURL(origin, raw string) (string, error) {
 	base, err := url.Parse(origin)
 	if err != nil || base.Host == "" || base.User != nil || base.Path != "" || base.RawQuery != "" || base.Fragment != "" || base.Scheme != "http" && base.Scheme != "https" {
@@ -321,24 +362,36 @@ func resolveSourceMediaURL(origin, raw string) (string, error) {
 	return base.ResolveReference(ref).String(), nil
 }
 
-func (h historyImporter) upload(ctx context.Context, kind, sourceID, filename string, payload []byte, checksum string) (string, error) {
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
+func (h historyImporter) upload(ctx context.Context, kind, sourceID, filename string, source *os.File, checksum string) (string, error) {
+	body, err := os.CreateTemp("", "media-ai-multipart-*")
+	if err != nil {
+		return "", fmt.Errorf("create multipart spool: %w", err)
+	}
+	defer func() { _ = body.Close(); _ = os.Remove(body.Name()) }()
+	writer := multipart.NewWriter(body)
 	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
 		return "", err
 	}
-	if _, err := part.Write(payload); err != nil {
+	if _, err := io.Copy(part, source); err != nil {
 		return "", err
 	}
 	if err := writer.Close(); err != nil {
 		return "", err
 	}
-	query := url.Values{"organization_id": {h.cfg.OrganizationID}, "scope": {"ai_clothing"}, "purpose": {"generated_asset_import"}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.GatewayURL+"/api/v1/library-objects:upload?"+query.Encode(), &body)
+	length, err := body.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return "", err
 	}
+	if _, err := body.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	query := url.Values{"organization_id": {h.cfg.OrganizationID}, "scope": {"ai_clothing"}, "purpose": {"generated_asset_import"}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.GatewayURL+"/api/v1/library-objects:upload?"+query.Encode(), body)
+	if err != nil {
+		return "", err
+	}
+	req.ContentLength = length
 	req.Header.Set("Authorization", "Bearer "+h.cfg.BearerToken)
 	idempotencyKind := strings.ReplaceAll(kind, "_", "-")
 	req.Header.Set("Idempotency-Key", "media-ai-"+idempotencyKind+"-"+sourceID)

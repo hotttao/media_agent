@@ -416,17 +416,7 @@ func ImportIncompleteExecution(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	completed := make([]jobsvc.HistoricalStep, 0, len(req.GetCompleted()))
-	for _, item := range req.GetCompleted() {
-		completed = append(completed, jobsvc.HistoricalStep{
-			StepKey: item.GetStepKey(), SourceRecordID: item.GetSourceRecordId(), AssetID: item.GetAssetId(),
-		})
-	}
-	j, err := Svc.ImportIncomplete(ctx, jobsvc.ImportIncompleteCommand{
-		SourceGroupID: req.GetSourceGroupId(), OrganizationID: req.GetOrganizationId(), WorkspaceID: req.GetWorkspaceId(),
-		OwnerUserID: req.GetOwnerUserId(), WorkflowID: req.GetWorkflowId(), WorkflowVersion: int(req.GetWorkflowVersion()),
-		Input: jobInputFromPB(req.GetInput()), Completed: completed,
-	})
+	j, err := Svc.ImportIncomplete(ctx, historicalImportCommandFromPB(&req))
 	if err != nil {
 		if errors.Is(err, jobsvc.ErrHistoryImportConflict) {
 			c.String(consts.StatusConflict, err.Error())
@@ -436,6 +426,20 @@ func ImportIncompleteExecution(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	c.JSON(consts.StatusOK, &pb.ImportIncompleteExecutionResp{JobId: j.ID, Status: jobStatusToPB(j.Status)})
+}
+
+func historicalImportCommandFromPB(req *pb.ImportIncompleteExecutionReq) jobsvc.ImportIncompleteCommand {
+	completed := make([]jobsvc.HistoricalStep, 0, len(req.GetCompleted()))
+	for _, item := range req.GetCompleted() {
+		completed = append(completed, jobsvc.HistoricalStep{
+			StepKey: item.GetStepKey(), SourceRecordID: item.GetSourceRecordId(), AssetID: item.GetAssetId(),
+		})
+	}
+	return jobsvc.ImportIncompleteCommand{
+		SourceGroupID: req.GetSourceGroupId(), OrganizationID: req.GetOrganizationId(), WorkspaceID: req.GetWorkspaceId(),
+		OwnerUserID: req.GetOwnerUserId(), WorkflowID: req.GetWorkflowId(), WorkflowVersion: int(req.GetWorkflowVersion()),
+		Input: jobInputFromPB(req.GetInput()), Completed: completed,
+	}
 }
 
 // ResumeJob .
@@ -466,4 +470,24 @@ func ResumeJob(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	c.JSON(consts.StatusAccepted, jobToPB(j))
+}
+
+// ImportCompletedExecution .
+// @router /api/internal/v1/jobs/import-completed [POST]
+func ImportCompletedExecution(ctx context.Context, c *app.RequestContext) {
+	var req pb.ImportIncompleteExecutionReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	j, err := Svc.ImportCompleted(ctx, historicalImportCommandFromPB(&req))
+	if err != nil {
+		if errors.Is(err, jobsvc.ErrHistoryImportConflict) {
+			c.String(consts.StatusConflict, err.Error())
+			return
+		}
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+	c.JSON(consts.StatusOK, &pb.ImportIncompleteExecutionResp{JobId: j.ID, Status: jobStatusToPB(j.Status)})
 }

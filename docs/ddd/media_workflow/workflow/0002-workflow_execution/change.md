@@ -1,5 +1,19 @@
 # workflow_execution 变更记录
 
+## 2026-10-02 · 已完成视频独立导入
+
+- 每条来源 Video 对应一个终态历史 Execution；共享上游图片可被多个 Job 引用但 Asset 只登记一次，当时曾规划 VideoPush 多视频关系另行保存。
+- 视频及三张上游图片先按来源 ID/摘要摄取，再由单个事务保存四个历史成功 StepRun 和 `succeeded` Job；导入不启动 Conductor，失败可按来源键重试。
+
+## 2026-10-03 · 暂缓 VideoPush 迁移
+
+- 用户决定本轮不迁移 VideoPush；多视频剪辑与发布流程待单独设计。已完成 Video 仍按源 ID 独立导入，VideoPush 只保留在旧库只读清单中，不建立目标读模型。
+
+## 2026-10-03 · VideoPush 改为独立历史记录
+
+- 用户随后明确采用独立 Historical VideoPush 记录：成员关联目标已完成 Video Job，原文字、状态、时间及媒体迁入目标；未来剪辑/发布流程仍待单独设计。
+- 当前四节点 Workflow 及其单输出不承担 VideoPush 导入或发布副作用。
+
 ## 2026-10-02 · 恢复输入使用稳定对象引用
 
 - 用户提供的短期签名 URL 仅用于 Resume 时校验企业命名空间和对象可读性；Job/Outbox/Conductor 输入冻结 Object Path。

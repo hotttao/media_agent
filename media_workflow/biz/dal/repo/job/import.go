@@ -26,8 +26,19 @@ func (r *JobRepo) GetByLegacySource(ctx context.Context, workspaceID, sourceSyst
 // SaveImported inserts the historical Job and all of its StepRuns as one
 // transaction. This path does not start Conductor or pretend to be SubmitJob.
 func (r *JobRepo) SaveImported(ctx context.Context, j *domain.Job, stepRuns []*domain.StepRun) error {
-	if j == nil || j.Origin != "legacy_import" || j.Status != domain.JobAwaitingResume || len(stepRuns) == 0 {
+	if j == nil || j.Origin != "legacy_import" || len(stepRuns) == 0 ||
+		j.Status != domain.JobAwaitingResume && j.Status != domain.JobSucceeded {
 		return errors.New("invalid imported Job aggregate")
+	}
+	if j.Status == domain.JobSucceeded {
+		if j.FinishedAt == nil {
+			return errors.New("completed imported Job requires a finish time")
+		}
+		for _, step := range stepRuns {
+			if step.Origin != "legacy_import" || step.Status != domain.SRSucceeded || step.OutputAssetID == "" {
+				return errors.New("completed imported Job requires verified historical outputs")
+			}
+		}
 	}
 	input, err := json.Marshal(j.Input)
 	if err != nil {
@@ -39,7 +50,7 @@ func (r *JobRepo) SaveImported(ctx context.Context, j *domain.Job, stepRuns []*d
 			SourceSystem: &j.SourceSystem, SourceRecordID: &j.SourceRecordID, SourceDigest: &j.SourceDigest,
 			ImportedAt: j.ImportedAt, Scope: j.Scope, WorkflowID: j.WorkflowID, WorkflowVersion: j.WorkflowVersion,
 			Input: datatypes.JSON(input), Status: string(j.Status), RetryHistory: datatypes.JSON("[]"),
-			SubmittedBy: j.SubmittedBy, SubmittedAt: j.SubmittedAt,
+			SubmittedBy: j.SubmittedBy, SubmittedAt: j.SubmittedAt, FinishedAt: j.FinishedAt,
 		}
 		if err := tx.Create(row).Error; err != nil {
 			return err

@@ -1,5 +1,18 @@
 # execution domain 变更记录
 
+## 2026-10-02 · 历史已完成视频终态
+
+- 增加 `ImportCompletedExecution`：四个真实已登记输出同时成为成功 StepRun，Job 直接为 `succeeded`，没有 Conductor 实例；原视频时间与导入时间分离。
+- 同一源 Video 的不同事实请求冲突，不允许覆盖终态；VideoPush 不塞进 Job 的单输出。
+
+## 2026-10-03 · VideoPush 移出本轮迁移范围
+
+- 已完成 Video 的终态 Job 不携带 VideoPush 成员/剪辑/发布事实，后者只留在旧源清单等待后续模型设计。
+
+## 2026-10-03 · 独立历史发布聚合关联执行
+
+- 用户随后确认 Historical VideoPush 单独迁入目标，并关联已导入的成员 Video Job；Execution 仍不保存多视频组合或发布状态。
+
 ## 2026-10-02 · Resume 输入引用的生命周期
 
 - 历史 Job 与 Outbox 仅持久化受控 Object Path，不保存可能在队列等待时过期的签名 URL；交付时解析失败不产生 Worker Dispatch。

@@ -90,6 +90,25 @@ func TestUploadAcceptsMaterialVideoOnly(t *testing.T) {
 	}
 }
 
+func TestUploadSpoolsVideoLargerThanFormerSixteenMiBLimit(t *testing.T) {
+	video := append([]byte("\x00\x00\x00\x18ftypisom0000"), bytes.Repeat([]byte{0}, 17<<20)...)
+	command := validCommand()
+	command.Purpose = "generated_asset_import"
+	command.Body = bytes.NewReader(video)
+	command.SizeBytes = int64(len(video))
+	result, err := New(&fakeStorage{}).Upload(context.Background(), command)
+	if err != nil || result.ContentType != "video/mp4" || result.SizeBytes != int64(len(video)) {
+		t.Fatalf("large historical video upload: result=%+v err=%v", result, err)
+	}
+	image := append([]byte{}, pngBytes...)
+	image = append(image, bytes.Repeat([]byte{0}, 17<<20)...)
+	command.Body = bytes.NewReader(image)
+	command.SizeBytes = int64(len(image))
+	if _, err := New(&fakeStorage{}).Upload(context.Background(), command); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("large image bypassed image limit: %v", err)
+	}
+}
+
 func TestUploadRejectsInvalidInputsBeforeStorage(t *testing.T) {
 	cases := []struct {
 		name string

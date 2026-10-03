@@ -41,6 +41,7 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 | 重试执行 | 重置允许重试的步骤 | `RetryStepRun/RetryJob` |
 | 取消执行 | 阻止新步骤并请求取消下游任务 | `CancelJob` |
 | 导入未完成执行 | 从完整旧图片谱系建立待继续 Job 与已完成 StepRun，不触发 Conductor | `ImportIncompleteExecution` |
+| 导入已完成执行 | 从一条完整旧 Video 谱系建立终态 Job 与四个历史成功 StepRun，不触发 Conductor | `ImportCompletedExecution` |
 | 继续导入执行 | 补齐缺失输入，原子进入运行态并发出启动请求 | `ResumeExecution` |
 
 ## 聚合与不变量
@@ -61,6 +62,7 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 - Personal Domain 从 `submitted_by` 派生；Managed Domain 从受控 Worker Pool 配置派生。Capability Task 必须服从其冻结 Target，不能跨类型或回退到 `NO_DOMAIN`。
 - 导入的图片谱系只有完整上游且媒体已摄取时才能成为 `Imported Incomplete Execution`；导入写入前还须由 `media_control` 以目标用户身份核验 Workspace 可访问性及其 Organization 归属。每个历史图片 StepRun 保存原 source ID、原时间、来源归属和已登记的唯一输出，不冒充在当前 Template Version 下生成。
 - 导入 Job 初始为 `awaiting_resume`，没有 Conductor 实例；只有 `ResumeExecution` 可使其进入 running。已完成历史 StepRun 不得被普通 Retry、回调或恢复分支重新执行或覆盖。
+- 每条完整来源 Video 独立导入为 `succeeded` Job，四个 StepRun 均为带来源的 `succeeded`，且无 Conductor 实例；源视频 ID 是执行幂等键。VideoPush 与多视频成员关系属于独立 Historical Publication 聚合，不属于该 Job 的单输出。完整执行不可 Resume，也不可用普通 Retry 伪造历史再执行。
 - `ResumeExecution` 的输入必须满足全部待运行节点；用户未补齐 pose/scene/movement 等输入时保留 `awaiting_resume`，不可派发 Capability。相同 source key 的重复导入与相同 resume idempotency key 的重复命令必须返回原结果。
 - 历史 Resume 冻结的媒体输入保存企业命名空间内稳定 Object Path；签名 URL 不进入 Job 输入、StartResume Outbox 或 Conductor 输入，交付 Worker 时才重新解析。Object Path 是技术引用，不绕过原有素材权限校验。
 - Text-only Movement Input 冻结非空 `content`、`asset_kind=movement` 与空 `url`，不得制造 Object Path；它仅能用于未把 movement 槽位映射为 Capability `asset_ref` 的已发布 Workflow Version。已有媒体型输入仍按原对象校验与重签规则处理。

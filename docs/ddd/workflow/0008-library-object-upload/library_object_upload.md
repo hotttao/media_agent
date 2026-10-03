@@ -70,7 +70,7 @@ sequenceDiagram
 - Storage Port 使用代表 `media-materials` 的受限 S3 凭证。生产 Policy 只能访问配置 Bucket 中的 `materials/` Prefix；本地开发可使用独立测试凭证。
 - S3 条件写是对象创建的原子边界。HeadObject 仅用于快速判定和条件写竞争后的收敛，不能单独保证并发安全。
 - 上传成功与后续业务 CRUD 是两个独立提交；Object Path 是二者唯一的稳定关联。
-- 单个企业资源对象最大为 16 MiB；该上限覆盖历史高分辨率身份图迁移及日常图片上传，超限请求在访问 Storage Provider 前以 413 拒绝。
+- 图片对象最大为 16 MiB，`material` / `generated_asset_import` 用途的视频对象最大为 256 MiB；接收端按上限有界落盘、计算校验和后流式写入 Storage Provider，超限请求在访问 Storage Provider 前以 413 拒绝。日常图片页面仍以 16 MiB 为上限。
 
 ## 状态与不变量
 

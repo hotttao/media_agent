@@ -144,6 +144,14 @@ _禁用替代词_：run、instance、invocation。
 从旧系统有完整上游关联、但尚未产生最终视频的图片谱系恢复出的 Execution。已存在的 ModelImage、StyleImage、FirstFrame 作为带来源标记的已完成 Step Run，后继步骤等待显式继续执行；它不是一次新提交的完整运行，也不等同于断链记录。归 `execution` domain。
 _禁用替代词_：孤儿素材、已完成 Job、自动重跑。
 
+**Imported Completed Execution（导入的已完成执行）**:
+从旧系统一条已产出 Video 且上游关系完整的生成链恢复出的终态 Execution；一条 Video 对应一条 Execution，共用的上游图片仍是同一批来源资产。VideoPush 是多条 Video 的下游业务事实，不是这条 Execution 的第二个输出。归 `execution` domain。
+_禁用替代词_：VideoPush Workflow、重新生成的执行、伪造 Conductor 实例。
+
+**Historical VideoPush（历史发布记录）**:
+从旧系统保留的多视频组合、发布文字、媒体与发布状态事实；按来源 VideoPush 身份独立存在，并引用各成员 Video 的已导入 Execution。它不是当前生成 Workflow 的 Step，也不表示新系统已执行剪辑或发布。
+_禁用替代词_：Workflow 输出、Video Step、重新发布任务。
+
 **Resume Execution（继续执行）**:
 用户对 Imported Incomplete Execution 发起的显式命令：补齐所缺 Workflow Input 后，沿已保存的图片结果从首个未完成 Step 继续，不重新调用已完成阶段的 Capability。归 `workflow_execution` application workflow。
 _禁用替代词_：Retry、重新 SubmitJob、恢复旧 Conductor 实例。

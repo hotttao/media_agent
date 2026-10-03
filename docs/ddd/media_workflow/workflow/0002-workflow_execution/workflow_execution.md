@@ -105,7 +105,28 @@ Resume 接收调用方经 Materials 授权取得的短期 URL 时，先限制其
 
 Text-only Movement 是独立于对象媒体的有效输入：用户先经 Materials 资源授权选择 movement，Resume 冻结其非空 `content` 和 `asset_kind=movement`，`url` 保持空值；不调用对象探测，也不生成 Object Path。Renderer 使用 `movement.content`，Capability 映射只按冻结的 Invocation Mapping 生成参数，不能把空 `asset_ref` 伪装为视频或图片。若该 Capability 的输入 schema 明确要求 movement 媒体引用，语义校验必须拒绝这项绑定；内容型输入不能越过能力契约。失败、重复命令和 Outbox 恢复遵守普通 Resume 的状态与幂等边界。
 
-目前代码已有导入 API、`awaiting_resume` 状态、恢复分支与 StartResume Outbox；一条真实样本已通过 Resume→Conductor→Personal Worker→结果登记联调。任何历史图片都不得通过普通 `SubmitJob` 冒充已恢复执行；已有视频分组的批量导入协议仍须单独完成。
+已完成 Video 采用另一条导入分支：每个源 Video ID 对应一个 Imported Completed Execution，即一个终态 Job 和四个成功的历史 StepRun。共享的 ModelImage/StyleImage/FirstFrame 仍只登记一次 Asset，但可被多个 Job 引用。VideoPush 的多视频成员与发布事实由独立的 Historical Publication 聚合导入，不成为四节点 Workflow 的额外输出；导入不触发剪辑或发布。
+
+```mermaid
+sequenceDiagram
+    participant M as Migration CLI
+    participant S as Source media_ai
+    participant A as media_materials
+    participant W as media_workflow
+    participant DB as Workflow DB
+    M->>S: 只读取得 Video 与三层上游、来源时间和媒体
+    M->>M: 校验引用链完整且 Video 不在断链排除清单
+    M->>A: 按 source ID + checksum 幂等摄取四个媒体对象
+    A-->>M: 四个 Imported Generated Asset ID
+    M->>W: ImportCompletedExecution(video ID, owner, Workspace, 四个 Asset ID)
+    W->>W: 核对发布版本、Workspace 归属、四个来源资产
+    W->>DB: TX: 原子保存 Job=succeeded + 四个成功 StepRun
+    W-->>M: Job ID；同源同摘要重试返回原 Job
+```
+
+任一资产摄取或核验失败时不写 Job，已摄取资产可按来源键复用；数据库提交结果不明确时按 `(Workspace, source_system, video ID)` 查询并比较请求摘要，冲突返回错误。已完成 Job 没有 Conductor 实例和 Resume 出口；原始视频时间作为完成时间，导入时间另存。源 VideoPush 关联多条 Video 时，先建立各自执行，再由 [historical_video_push_import](../0004-historical_video_push_import/historical_video_push_import.md) 独立保存有序成员；不能因为共享首帧而合并输出。
+
+目前代码已有未完成执行导入、`awaiting_resume` 状态、恢复分支与 StartResume Outbox；一条真实样本已通过 Resume→Conductor→Personal Worker→结果登记联调。任何历史图片都不得通过普通 `SubmitJob` 冒充已恢复执行；VideoPush 是独立历史事实，不参与本流程的 Job 状态推进。
 
 ## 状态流转
 

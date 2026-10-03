@@ -14,6 +14,11 @@ service JobService {
     option (google.api.http) = { post: "/api/internal/v1/jobs/import-incomplete" body: "*" };
     option (api.post) = "/api/internal/v1/jobs/import-incomplete";
   }
+  // 可信迁移工具：导入已有视频及其四个已完成节点，不启动 Conductor。
+  rpc ImportCompletedExecution(ImportIncompleteExecutionReq) returns (ImportIncompleteExecutionResp) {
+    option (google.api.http) = { post: "/api/internal/v1/jobs/import-completed" body: "*" };
+    option (api.post) = "/api/internal/v1/jobs/import-completed";
+  }
   // —— 用户 / 前端 ——
   rpc SubmitJob(SubmitJobReq) returns (SubmitJobResp) {
     option (google.api.http) = { post: "/api/v1/jobs" body: "*" };

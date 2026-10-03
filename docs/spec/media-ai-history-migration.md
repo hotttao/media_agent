@@ -2,12 +2,12 @@
 
 ## 范围与现状
 
-源事实是 `Product/VirtualIp -> ModelImage -> StyleImage -> FirstFrame -> Video[] -> VideoPush` 的关联，不是旧 `workflows.config`。本文约束 `media_workflow`、`media_materials` 和对象存储的迁移接口。只读源清单、单组图片摄取、历史 Generated Asset 登记、未完成 Job 导入、显式 Resume 与 Outbox 均已实现；**仅一条真实历史链完成了端到端恢复验收，现有导入器仍仅支持未完成图片链，不能声称具备全量迁移能力**。用户已允许在所有功能完备后执行全量迁移；功能门禁未满足前不得启动全量写入。旧库全程只读。发布文案、飞书发布不进入当前四节点生成 Workflow，历史 VideoPush 信息仍需保留来源审计。UI 相关工作按用户要求暂停，等待新的设计。
+源事实是 `Product/VirtualIp -> ModelImage -> StyleImage -> FirstFrame -> Video[] -> VideoPush` 的关联，不是旧 `workflows.config`。本文约束 `media_workflow`、`media_materials` 和对象存储的迁移接口。**本轮迁移纳入素材、图片链、单条 Video、未完成执行及 VideoPush 的独立历史记录；不实现多视频剪辑或重新发布流程。**只读源清单、单组图片摄取、历史 Generated Asset 登记、未完成 Job 导入、显式 Resume 与 Outbox 均已实现；仅一条真实历史链完成了端到端恢复验收，不能声称具备全量迁移能力。用户已允许在所有功能完备后执行全量迁移；功能门禁未满足前不得启动全量写入。旧库全程只读。UI 相关工作按用户要求暂停，等待新的设计。
 
 ## 源清单与纳入规则
 
 - `media_workflow/tools/media_ai_history_migrate` 输出源节点、逐 Video 谱系、`lineage_groups`、`excluded` 和 `issues`。只有上游引用存在且 Product/VirtualIp 一致的组可进入导入器；同一图片可被多个分支引用，按源 ID 只摄取一次。
-- 有 Video 的完整组保留 VideoPush 多视频成员关系和原时间；无有效 VideoPush 的 Video 按 FirstFrame 分组。未匹配 `WorkflowTemplate` 不视作断链，也不猜测模板版本。
+- 有 Video 的完整组按每条 Video 源 ID 导入终态 Execution，并保留各自原时间；完整 VideoPush 另存有序成员与目标 Job 关联、原发布字段和已摄取媒体。未匹配 `WorkflowTemplate` 不视作断链，也不猜测模板版本。
 - 没有下游的 ModelImage、StyleImage、FirstFrame 分别形成停在该节点的未完成执行候选；对应 `next_step_key=style_image/first_frame/video`。上游不存在或错配、无 Video 的 VideoTask、引用不存在 Video 的 VideoPush 排除；记录源 ID 和原因。未完成执行不因没有下游而排除。
 - 抽样 `--only-task` 是 `sample_projection`，不能推断一个 VideoPush 完整或直接执行全量导入。
 
@@ -16,6 +16,12 @@
 `media_materials` 增加受控的历史 Generated Asset 摄取/登记能力：`(source_system, source_record_id)` 唯一，保存 source SHA-256、受控 Object Path、Asset Kind、Organization/Scope、原所有者、原创建时间和导入时间；摄取拒绝任意外部 URL 作为最终资产引用。`origin=native` 仍要求 Job/StepRun/Template；`origin=legacy_import` 以来源键/摘要代替这些生成记录字段，供多个导入 Job 的 StepRun 复用。重复 ID 同摘要返回原 Asset；同 ID 不同摘要报冲突。旧 Product/VirtualIp/pose/scene/movement 先通过现有素材映射表解析，缺失映射则隔离，不创建半成品 Job。
 
 `media_workflow` 增加迁移专用 `ImportIncompleteExecution`（仅可信迁移身份）与用户 `ResumeExecution`。导入请求包含 source group ID、旧节点 ID/时间、目标所有者和 Workspace、所选已发布 Workflow 版本、已登记 Asset ID、已知 Workflow Input 以及缺失输入名；不接收浏览器伪造的成功 StepRun。目标 `jobs` 增加 `origin=native|legacy_import`、来源幂等键、`imported_at` 和仅用于历史导入的 `awaiting_resume` 状态；`step_runs` 增加历史来源 ID/原时间/资产摘要，已完成前缀为 succeeded、后继为 blocked，且无 Conductor ID。导入和资产登记以来源键幂等，失败重试不重复生成。
+
+`POST /api/internal/v1/jobs/import-completed` 使用同一迁移身份与请求结构，但 `source_group_id=video:<source_video_id>` 且 `completed` 必须依序包含 `model_image`、`style_image`、`first_frame`、`video` 四个已登记资产。服务复核来源 ID、归属、Workspace、已发布四节点 Workflow、各资产类别与校验摘要，在单个事务中保存终态 `succeeded` Job 和四个历史成功 StepRun；原视频时间为 `finished_at`，导入时间为 `imported_at`，无 Conductor ID。按源 Video ID 和请求摘要幂等，同 ID 不同事实冲突。共享上游资产只登记一次，可被多个终态 Job 引用。该接口只表达单条 Video 的生成执行；VideoPush 不得合并为一个单输出 Step。
+
+`HistoricalVideoPush` 是独立历史发布聚合，不修改成员 Job。迁移接口 `POST /api/internal/v1/historical-video-pushes/import` 仅接受迁移身份，请求携带源 Push ID、目标 Workspace/Owner/Organization、原 Product/Virtual IP/Scene/Template、标题/正文/状态/资格/发布标记、原创建/修改时间、有序成员 `(source_video_id, job_id)`，以及非空 `url/thumbnail/manual_clip_url` 对应的目标 Object Path 与 SHA-256。服务验证每个 Job 是同 Workspace/Owner/Organization 的 `legacy_import` 终态 Video Job，来源 ID 匹配；所有媒体路径属于本企业目标存储且摘要存在。单事务保存记录与成员，`(workspace, media_ai, source_push_id)` 唯一，同事实重试返回原记录，不同事实 409。公开 Get/List 只允许有权访问 Workspace 的用户并对媒体路径按请求重新签发 URL。迁移工具先摄取非空 Push 媒体，再导入记录；空字段保持空值，绝不持久化旧服务 URL。该记录不触发剪辑、发布或 Conductor。
+
+迁移 CLI 的 `--import-video <source_video_id>` 只能选择源清单中上游完整、未排除的 Video；复核 VideoTask、Product/VirtualIP、Model/Style/FirstFrame 亲子关系及目标输入映射。依次按源 ID 摄取三张图片和视频，收到四个 Imported Generated Asset ID 后再调用终态 Job API。图片上限 16 MiB，视频上限 256 MiB；源端和目标上传服务均有界落盘、流式上传并校验 SHA-256，超限不写 Job。已摄取部分资产在重试时按来源键复用。
 
 导入写入前，`media_workflow` 必须以内部服务凭证向 `media_control` 查询目标 Workspace，并以原所有者作为 acting user。查询结果的 Organization 必须与导入请求一致；Workspace 不存在、无权访问或控制服务不可用均拒绝导入，不能只信任迁移请求中的 Workspace ID。
 
@@ -41,8 +47,8 @@ Conductor Backend Compiler 必须为可恢复版本提供受控恢复分支：�
 |:---|:---|:---|
 | URL 为空、内容非空的 Movement | media_materials asset/Material；media_workflow execution/Job Input 与 workflow_execution/Resume | covered（纯文本，不伪造对象） |
 | 未完成 Model/Style/FirstFrame 链 | media_materials Imported Generated Asset；media_workflow Execution/Job + Resume | covered（单组 API/CLI，批量对账待实现） |
-| 已完成 Video 与独立 VideoTask | media_materials Imported Generated Asset；media_workflow 历史 Execution/StepRun | missing（现有导入 API 限制为最多 3 个已完成图片步骤） |
-| VideoPush 多视频成员、剪辑/文案/发布事实 | 非本轮四节点 Workflow；需独立来源读模型或明确 external-owner | missing（不能塞进单输出 video Step） |
+| 已完成 Video 与独立 VideoTask | media_materials Imported Generated Asset；media_workflow 历史 Execution/StepRun | missing（终态 Job API 已实现，视频资产摄取、CLI 和真实验收未完成） |
+| VideoPush 多视频成员与原发布事实 | media_workflow historical_publication/HistoricalVideoPush；historical_video_push_import | missing（聚合、接口、媒体摄取和真实对账待实现；剪辑/重新发布流程不在本轮范围） |
 | 断链排除 | 迁移 CLI 排除清单；不创建目标聚合 | covered |
 
 存在 `missing`，不能宣称领域迁移能力或全量写入门禁完成。

@@ -25,6 +25,7 @@ func Register(r *server.Hertz) {
 				_v1 := _internal.Group("/v1", _v1Mw()...)
 				{
 					_jobs := _v1.Group("/jobs", _jobsMw()...)
+					_jobs.POST("/import-completed", append(_importcompletedexecutionMw(), job.ImportCompletedExecution)...)
 					_jobs.POST("/import-incomplete", append(_importincompleteexecutionMw(), job.ImportIncompleteExecution)...)
 				}
 			}

@@ -6,8 +6,8 @@ app:
 server:
   enabled: true
   address: ${SERVER_ADDR:-:8003}
-  # 16 MiB library object plus multipart envelope.
-  max_request_body_bytes: 18874368
+  # Up to 256 MiB video plus multipart envelope; image workflow limit stays 16 MiB.
+  max_request_body_bytes: 283115520
 
 database:
   enabled: true

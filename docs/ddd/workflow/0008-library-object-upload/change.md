@@ -1,5 +1,10 @@
 # library_object_upload 变更记录
 
+## 2026-10-03 · 历史视频有界上传
+
+- 保持图片 16 MiB 上限，允许 `material` / `generated_asset_import` 视频至 256 MiB；服务端改用临时文件有界落盘和流式 S3 写入，避免把大视频整个载入内存。
+- Hertz 请求体上限相应提高，仍在业务层按媒体类型拒绝超限或不合法对象。
+
 ## 2026-09-24 · 支持历史高分辨率身份图
 
 - 将单对象上传上限由 4 MiB 调整为 16 MiB，以无损迁移旧 `media_ai` 中 9 MiB 的 Virtual IP 全身图。

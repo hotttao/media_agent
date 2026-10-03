@@ -1,6 +1,6 @@
-# media_ai 历史数据迁移：源清单与单组图片摄取
+# media_ai 历史数据迁移：源清单、图片与单条视频摄取
 
-工具只读旧 `media_ai` MySQL，导出 WorkflowTemplate、ModelImage、StyleImage、FirstFrame、VideoTask、Video 和 VideoPush，并按实际引用恢复每个 Video 的上游谱系、匹配的模板与剪辑分组。默认模式不修改源库或目标库。`--import-group` 只把一个完整、未生成下游视频的图片组，经目标网关上传并通过迁移专用内部 API 登记为历史 Generated Asset；加 `--import-job` 才会导入 `awaiting_resume` Job，且不会自动启动 Conductor。
+工具只读旧 `media_ai` MySQL，导出 WorkflowTemplate、ModelImage、StyleImage、FirstFrame、VideoTask、Video 和 VideoPush，并按实际引用恢复每个 Video 的上游谱系。默认模式不修改源库或目标库。`--import-group` 导入一个未生成下游视频的图片组；加 `--import-job` 才导入 `awaiting_resume` Job。`--import-video <源 Video ID>` 导入一条完整视频与三张上游图片，并通过迁移专用 API 建立 `succeeded` Job；两种模式都不会启动 Conductor。VideoPush 将作为独立历史发布记录关联这些 Job，但该导入命令尚未实现；多视频剪辑与重新发布流程待单独设计。
 
 ```bash
 export MEDIA_AI_DATABASE_URL='mysql://user:password@host:3306/media_ai'
@@ -32,6 +32,8 @@ go run ./tools/media_ai_history_migrate \
   --target-gateway 'http://<统一网关>' \
   --materials-internal-url 'http://127.0.0.1:8003'
 ```
+
+单条已完成视频使用相同目标身份与映射配置，增加 `--import-video '<源 Video ID>'`、`--workflow-id`、`--workflow-version` 和 `--workspace-id`；无需 `--import-job`。工具先检查该 Video 属于完整候选链且未被断链清单排除，再按来源 ID/摘要复用三张上游图片、摄取视频，最后导入四个已完成 StepRun。媒体在迁移工具和目标上传服务均有界落盘；图片上限 16 MiB，视频上限 256 MiB。超过上限明确失败，不截断也不误记完成。
 
 内部 API 默认禁用，需让 `media_materials` 进程配置相同的 `MEDIA_MATERIALS_MIGRATION_TOKEN`；`--import-job` 还需让 `media_workflow` 配置 `MEDIA_WORKFLOW_MIGRATION_TOKEN`，并传入 `--workflow-id`、`--workflow-version` 和 `--workspace-id`。完成后移除密钥并重启。密钥和 API Token 只经环境变量传入，不写在命令行或清单中。工具会逐张校验来源路径、图片类型、SHA-256、上传返回摘要和目标 Product/Virtual IP 对应关系。重复执行使用稳定上传幂等键与来源 ID 唯一约束；同来源不同内容会报冲突。Job 导入还会向 `media_control` 校验目标 Workspace、所有者和企业归属。
 

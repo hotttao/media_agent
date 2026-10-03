@@ -55,13 +55,28 @@ func (s *Service) ConfigureHistoryWorkspaces(lookup HistoricalWorkspaceLookup) {
 // ImportIncomplete freezes a verified historical image prefix. It never
 // starts Conductor; only an explicit Resume may continue this Job.
 func (s *Service) ImportIncomplete(ctx context.Context, cmd ImportIncompleteCommand) (*domain.Job, error) {
+	return s.importHistorical(ctx, cmd, false)
+}
+
+// ImportCompleted records one existing video as a terminal historical Job.
+// Every Video has its own Job; a VideoPush is not collapsed into one Step output.
+// Like ImportIncomplete, this never starts or invents a Conductor execution.
+func (s *Service) ImportCompleted(ctx context.Context, cmd ImportIncompleteCommand) (*domain.Job, error) {
+	return s.importHistorical(ctx, cmd, true)
+}
+
+func (s *Service) importHistorical(ctx context.Context, cmd ImportIncompleteCommand, completedVideo bool) (*domain.Job, error) {
 	if s.historyAssets == nil || s.historyWorkspaces == nil || s.compilations == nil || s.jobRepo == nil {
 		return nil, errors.New("historical import is not configured")
 	}
+	minSteps, maxSteps := 1, 3
+	if completedVideo {
+		minSteps, maxSteps = 4, 4
+	}
 	if cmd.SourceGroupID == "" || cmd.OrganizationID == "" || cmd.WorkspaceID == "" || cmd.OwnerUserID == "" ||
 		cmd.WorkflowID == "" || cmd.WorkflowVersion <= 0 || cmd.Input.Product == nil || cmd.Input.Product.ID == "" ||
-		cmd.Input.VirtualIP == nil || cmd.Input.VirtualIP.ID == "" || len(cmd.Completed) < 1 || len(cmd.Completed) > 3 {
-		return nil, errors.New("incomplete historical execution import request")
+		cmd.Input.VirtualIP == nil || cmd.Input.VirtualIP.ID == "" || len(cmd.Completed) < minSteps || len(cmd.Completed) > maxSteps {
+		return nil, errors.New("invalid historical execution import request")
 	}
 	if len(cmd.SourceGroupID) > 160 || len(cmd.WorkspaceID) > 160 {
 		return nil, errors.New("historical source or workspace ID is too long")
@@ -73,9 +88,9 @@ func (s *Service) ImportIncomplete(ctx context.Context, cmd ImportIncompleteComm
 	if workspace.OrganizationID != cmd.OrganizationID {
 		return nil, errors.New("historical execution organization does not match workspace")
 	}
-	stagePrefix := []string{"model:", "style:", "frame:"}[len(cmd.Completed)-1]
+	stagePrefix := []string{"model:", "style:", "frame:", "video:"}[len(cmd.Completed)-1]
 	if !strings.HasPrefix(cmd.SourceGroupID, stagePrefix) || strings.TrimPrefix(cmd.SourceGroupID, stagePrefix) != cmd.Completed[len(cmd.Completed)-1].SourceRecordID {
-		return nil, errors.New("source group ID does not identify the last completed image")
+		return nil, errors.New("source group ID does not identify the last completed output")
 	}
 	fingerprint, err := historyImportDigest(cmd)
 	if err != nil {
@@ -122,6 +137,9 @@ func (s *Service) ImportIncomplete(ctx context.Context, cmd ImportIncompleteComm
 		Scope: wf.Scope, WorkflowID: wf.ID, WorkflowVersion: wf.Version, Input: cmd.Input,
 		Status: domain.JobAwaitingResume, SubmittedBy: cmd.OwnerUserID, SubmittedAt: now,
 	}
+	if completedVideo {
+		job.Status = domain.JobSucceeded
+	}
 	stepRuns := make([]*domain.StepRun, 0, len(steps))
 	for i, step := range steps {
 		sr := &domain.StepRun{
@@ -147,6 +165,12 @@ func (s *Service) ImportIncomplete(ctx context.Context, cmd ImportIncompleteComm
 				return nil, fmt.Errorf("historical asset %s does not belong to the requested execution", item.AssetID)
 			}
 			created := time.Unix(0, asset.SourceCreatedAt).UTC()
+			if i == 0 {
+				job.SubmittedAt = created
+			}
+			if completedVideo && i == len(cmd.Completed)-1 {
+				job.FinishedAt = &created
+			}
 			selected := 0
 			sr.Origin, sr.SourceSystem, sr.SourceRecordID = "legacy_import", "media_ai", item.SourceRecordID
 			sr.SourceSHA256, sr.SourceCreatedAt, sr.FinishedAt = asset.SourceSHA256, &created, &created

@@ -1,7 +1,6 @@
 package library_object_upload
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 
@@ -16,7 +16,10 @@ import (
 	"media_agent/media_materials/biz/shared/objectstorage"
 )
 
-const MaxUploadBytes int64 = 16 << 20
+const (
+	MaxUploadBytes      int64 = 256 << 20
+	MaxImageUploadBytes int64 = 16 << 20
+)
 
 var (
 	ErrInvalid     = errors.New("invalid library object upload")
@@ -68,26 +71,45 @@ func (w *Workflow) Upload(ctx context.Context, command Command) (objectstorage.O
 	if command.SizeBytes > MaxUploadBytes {
 		return objectstorage.ObjectInfo{}, ErrTooLarge
 	}
-	payload, err := io.ReadAll(io.LimitReader(command.Body, MaxUploadBytes+1))
+	tmp, err := os.CreateTemp("", "media-object-upload-*")
+	if err != nil {
+		return objectstorage.ObjectInfo{}, fmt.Errorf("%w: create bounded upload spool", ErrUnavailable)
+	}
+	defer func() { _ = tmp.Close(); _ = os.Remove(tmp.Name()) }()
+	hash := sha256.New()
+	size, err := io.Copy(io.MultiWriter(tmp, hash), io.LimitReader(command.Body, MaxUploadBytes+1))
 	if err != nil {
 		return objectstorage.ObjectInfo{}, fmt.Errorf("%w: read file", ErrInvalid)
 	}
-	if int64(len(payload)) > MaxUploadBytes {
+	if size > MaxUploadBytes {
 		return objectstorage.ObjectInfo{}, ErrTooLarge
 	}
-	if len(payload) == 0 || int64(len(payload)) != command.SizeBytes {
+	if size == 0 || size != command.SizeBytes {
 		return objectstorage.ObjectInfo{}, ErrInvalid
 	}
-	contentType := detectContentType(payload)
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return objectstorage.ObjectInfo{}, fmt.Errorf("%w: rewind upload", ErrUnavailable)
+	}
+	header := make([]byte, 512)
+	headerSize, err := io.ReadFull(tmp, header)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return objectstorage.ObjectInfo{}, fmt.Errorf("%w: inspect upload", ErrUnavailable)
+	}
+	contentType := detectContentType(header[:headerSize])
 	extension, ok := contentTypes[contentType]
 	if !ok || (strings.HasPrefix(contentType, "video/") && command.Purpose != "material" && command.Purpose != "generated_asset_import") {
 		return objectstorage.ObjectInfo{}, ErrInvalid
 	}
+	if !strings.HasPrefix(contentType, "video/") && size > MaxImageUploadBytes {
+		return objectstorage.ObjectInfo{}, ErrTooLarge
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return objectstorage.ObjectInfo{}, fmt.Errorf("%w: rewind upload", ErrUnavailable)
+	}
 	digest := sha256.Sum256([]byte(strings.Join([]string{command.CallerID, command.IdempotencyKey}, "\x00")))
-	payloadDigest := sha256.Sum256(payload)
 	objectPath := fmt.Sprintf("materials/%s/%s/%s/%x%s", command.OrganizationID, command.Scope, command.Purpose, digest[:16], extension)
 	result, err := w.storage.PutIfAbsent(ctx, objectstorage.PutInput{ObjectPath: objectPath, ContentType: contentType,
-		Checksum: hex.EncodeToString(payloadDigest[:]), SizeBytes: int64(len(payload)), Body: bytes.NewReader(payload)})
+		Checksum: hex.EncodeToString(hash.Sum(nil)), SizeBytes: size, Body: tmp})
 	if errors.Is(err, objectstorage.ErrConflict) {
 		return objectstorage.ObjectInfo{}, ErrConflict
 	}

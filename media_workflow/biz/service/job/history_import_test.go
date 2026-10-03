@@ -109,6 +109,63 @@ func TestImportIncompleteFreezesPrefixAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestImportCompletedVideoIsTerminalIdempotentAndDoesNotStartConductor(t *testing.T) {
+	svc, repo, cmd := historyImportFixture(t)
+	videoCreated := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
+	cmd.SourceGroupID = "video:video-source"
+	cmd.Completed = append(cmd.Completed, HistoricalStep{StepKey: "video", SourceRecordID: "video-source", AssetID: "gen-video"})
+	lookup := svc.historyAssets.(historyAssetLookup)
+	lookup.assets["gen-video"] = &client.ImportedGeneratedAsset{
+		ID: "gen-video", OrganizationID: "org", Scope: "ai_clothing", OwnerUserID: "owner",
+		AssetKind: "ai_video", ObjectPath: "materials/org/ai_clothing/imported/gen-video",
+		SourceSystem: "media_ai", SourceRecordID: "video-source", SourceSHA256: strings.Repeat("b", 64),
+		SourceCreatedAt: videoCreated.UnixNano(), SourceProductID: "product", SourceVirtualIPID: "vip",
+	}
+	job, err := svc.ImportCompleted(context.Background(), cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repeated, err := svc.ImportCompleted(context.Background(), cmd)
+	if err != nil || repeated.ID != job.ID || len(repo.jobs) != 1 {
+		t.Fatalf("completed video import not idempotent: job=%+v repeated=%+v err=%v", job, repeated, err)
+	}
+	if job.Status != domain.JobSucceeded || job.ConductorWorkflowID != "" || job.FinishedAt == nil || !job.FinishedAt.Equal(videoCreated) || job.Origin != "legacy_import" {
+		t.Fatalf("completed historical video was represented as a live execution: %+v", job)
+	}
+	steps := repo.stepRuns[job.ID]
+	if len(steps) != 4 {
+		t.Fatalf("wanted 4 frozen historical steps, got %d", len(steps))
+	}
+	for _, step := range steps {
+		if step.Status != domain.SRSucceeded || step.Origin != "legacy_import" || step.OutputAssetID == "" {
+			t.Fatalf("historical prefix has an unfinished step: %+v", step)
+		}
+	}
+	cmd.Completed[3].AssetID = "another-video-asset"
+	if _, err := svc.ImportCompleted(context.Background(), cmd); !errors.Is(err, ErrHistoryImportConflict) {
+		t.Fatalf("changed video source not rejected: %v", err)
+	}
+}
+
+func TestImportCompletedRejectsWrongVideoAssetAndIncompletePrefix(t *testing.T) {
+	svc, repo, cmd := historyImportFixture(t)
+	cmd.SourceGroupID = "video:video-source"
+	if _, err := svc.ImportCompleted(context.Background(), cmd); err == nil || len(repo.jobs) != 0 {
+		t.Fatalf("three-image prefix accepted as completed: %v", err)
+	}
+	cmd.Completed = append(cmd.Completed, HistoricalStep{StepKey: "video", SourceRecordID: "video-source", AssetID: "gen-video"})
+	lookup := svc.historyAssets.(historyAssetLookup)
+	lookup.assets["gen-video"] = &client.ImportedGeneratedAsset{
+		ID: "gen-video", OrganizationID: "other", Scope: "ai_clothing", OwnerUserID: "owner",
+		AssetKind: "ai_video", ObjectPath: "materials/other/ai_clothing/imported/gen-video",
+		SourceSystem: "media_ai", SourceRecordID: "video-source", SourceSHA256: strings.Repeat("b", 64),
+		SourceCreatedAt: time.Now().UnixNano(), SourceProductID: "product", SourceVirtualIPID: "vip",
+	}
+	if _, err := svc.ImportCompleted(context.Background(), cmd); err == nil || len(repo.jobs) != 0 {
+		t.Fatalf("foreign video output accepted: %v", err)
+	}
+}
+
 func TestImportIncompleteRejectsForeignOrMissingAssetWithoutSaving(t *testing.T) {
 	svc, repo, cmd := historyImportFixture(t)
 	lookup := svc.historyAssets.(historyAssetLookup)

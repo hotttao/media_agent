@@ -95,13 +95,14 @@ type manifest struct {
 }
 
 func main() {
-	var sourceDSN, outputPath, onlyTask, importGroup, inspectGroup string
+	var sourceDSN, outputPath, onlyTask, importGroup, importVideo, inspectGroup string
 	var auditReadiness bool
 	var importCfg importConfig
 	flag.StringVar(&sourceDSN, "source-dsn", os.Getenv("MEDIA_AI_DATABASE_URL"), "media_ai MySQL DSN; prefer environment variable")
 	flag.StringVar(&outputPath, "out", "", "write private JSON manifest to a new file (0600)")
 	flag.StringVar(&onlyTask, "only-task", "", "export one legacy video_task; omit for all data")
 	flag.StringVar(&importGroup, "import-group", "", "import one intact image-only lineage group through target APIs")
+	flag.StringVar(&importVideo, "import-video", "", "import one completed Video and its intact upstream lineage through target APIs")
 	flag.StringVar(&inspectGroup, "inspect-group", "", "inspect one source lineage and its pose/scene dependencies without importing")
 	flag.BoolVar(&auditReadiness, "audit-readiness", false, "read-only audit of all candidate input mappings and source media")
 	flag.StringVar(&importCfg.SourceAssetsURL, "source-assets-url", envOr("MEDIA_AI_ASSETS_URL", "http://192.168.2.38"), "legacy media origin")
@@ -120,13 +121,16 @@ func main() {
 	flag.IntVar(&importCfg.WorkflowVersion, "workflow-version", 1, "published workflow version")
 	flag.StringVar(&importCfg.WorkspaceID, "workspace-id", "", "target Workspace owned by the organization")
 	flag.Parse()
-	if importGroup != "" && onlyTask != "" {
-		fail(errors.New("--import-group and --only-task cannot be combined"))
+	if (importGroup != "" || importVideo != "") && onlyTask != "" {
+		fail(errors.New("import mode and --only-task cannot be combined"))
 	}
-	if inspectGroup != "" && (importGroup != "" || onlyTask != "") {
-		fail(errors.New("--inspect-group cannot be combined with --import-group or --only-task"))
+	if importGroup != "" && importVideo != "" {
+		fail(errors.New("--import-group and --import-video cannot be combined"))
 	}
-	if auditReadiness && (importGroup != "" || inspectGroup != "" || onlyTask != "") {
+	if inspectGroup != "" && (importGroup != "" || importVideo != "" || onlyTask != "") {
+		fail(errors.New("--inspect-group cannot be combined with import mode or --only-task"))
+	}
+	if auditReadiness && (importGroup != "" || importVideo != "" || inspectGroup != "" || onlyTask != "") {
 		fail(errors.New("--audit-readiness requires the full source inventory and cannot import"))
 	}
 	if importCfg.ImportJob && importGroup == "" {
@@ -146,7 +150,7 @@ func main() {
 	defer db.Close()
 	db.SetMaxOpenConns(2)
 	timeout := 2 * time.Minute
-	if importGroup != "" || auditReadiness {
+	if importGroup != "" || importVideo != "" || auditReadiness {
 		timeout = 10 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -196,6 +200,11 @@ func main() {
 	}
 	if importGroup != "" {
 		if err := importImageGroup(ctx, db, &m, importGroup, importCfg); err != nil {
+			fail(err)
+		}
+	}
+	if importVideo != "" {
+		if err := importCompletedVideo(ctx, db, &m, importVideo, importCfg); err != nil {
 			fail(err)
 		}
 	}
