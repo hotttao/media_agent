@@ -1,5 +1,10 @@
 # Agent API Token Provisioning 变更记录
 
+## 2026-10-03 · Gateway 显式申请与企业限制
+
+- 补充现有配置的公开申请入口，可信身份经网关断言及 Auth 当前 User 校验；Caller API Token 的企业限制由 Gateway 回查 Control 保留。
+- Gateway 仅编排身份查询与私有签发，不保存 Secret，不把 Session Token 作为 API Token，也不自动重发未知签发结果。
+
 ## 2026-09-28 · 初始建模
 
 - Agent 创建后由 media_agent_gateway 请求 media_auth 为 `Agent:<id>` 创建 Talos API Token。

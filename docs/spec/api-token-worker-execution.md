@@ -225,6 +225,12 @@ Auth 的 `biz/shared/client/control` 封装生成的 AgentIdentityService client
 
 ### 6.2 签发与代理
 
+Gateway 显式申请接口：`POST /api/v1/agent-clients/:agent_configuration_id/api-tokens`，请求 `name,expires_at,idempotency_key`，响应201 `CreateApiTokenResponse`。路由仅允许当前 User；Gateway 验证 Oathkeeper `internal-api` JWT 并调用 Auth GetMe 解析/检查当前 User。API Token 分支必须是直接 User、含 `api.access`/credential_id，保留 organization_id；浏览器使用 Auth 的 Kratos 身份解析。非法或失败的 Authorization 不能退回 Cookie。
+
+`biz/workflow/agent_token_provisioning.go` 回查 Control 身份，核对配置/Actor/owner/Organization/Team/Workspace/OwnerAuthorized；API Token 限制的企业必须精确匹配。`biz/shared/client` 用生成客户端封装 Auth GetMe、Control Identity 和 Auth 私有签发，固定服务凭据/地址、总期限与 Trace Context，屏蔽上游敏感错误，签发不自动重试。handler 只绑定参数、调用 Workflow、转换响应，返回 no-store。Auth 私有401视作配置不可用503；其他安全400/403/404/409按契约映射。
+
+配置 `INTERNAL_JWKS_URL,INTERNAL_JWT_ISSUER,MEDIA_AUTH_URL,MEDIA_AUTH_AGENT_GATEWAY_TOKEN,MEDIA_CONTROL_URL,CONTROL_INTERNAL_TOKEN`；签发专用凭据默认空，未配置不能启用。公开 Traefik 路由仅转发该管理 API；内部签发仍不公开。新增 CLI `media_agent_gateway agent-client create-token`，Secret 只写显式新文件0600，控制台只输出元数据；未知HTTP结果不得隐式重试或轮换。该入口可在配置创建后调用，自动创建编排与运行时代理单独验收。
+
 Auth 提供 `POST /internal/v1/agent-api-tokens`（CreateActorAPIToken）：内部请求体仅含 `agent_configuration_id,name,expires_at,idempotency_key,scopes[]`。可信调用者 User 从 `X-Media-Auth-Acting-User-ID` 取得，调用方必须提供专用 `X-Agent-Gateway-Internal-Token`，与 `MEDIA_AUTH_AGENT_GATEWAY_TOKEN` 常量时间比较；未配置时拒绝，不复用一般内部查询凭证。
 
 AgentTokenProvisioning 回查 Control，检查 stable Actor/config ID、当前 owner/企业/部门权限和未删除配置，要求可信 User 等于事实 owner。Subject/Actor/Organization 只由权威事实派生；第一阶段 scope 只允许 `agent.gateway`（空数组默认该 scope），拒绝 Worker 和直接 `api.access` scope。幂等键由配置 ID、固定 purpose 和调用方请求键构成有界摘要，调用方请求键必须非空且不超过200字符。

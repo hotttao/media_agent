@@ -22,6 +22,8 @@ sequenceDiagram
     U->>G: Create Agent + request API Token (Web Session)
     G->>C: Create/Get Agent Configuration
     C-->>G: agent_configuration_id + owner_user_id + organization_id
+    G->>C: Resolve current identity; check owner and caller Organization restriction
+    C-->>G: authorized stable identity
     G->>A: CreateActorAPIToken(configuration ID, scopes, idempotency key; trusted owner header)
     A->>C: ResolveAgentIdentity(agent_configuration_id), verify owner/org
     C-->>A: authoritative relationship
@@ -61,6 +63,12 @@ Auth 的签发入口为私有 `POST /internal/v1/agent-api-tokens`。Gateway 使
 非法参数返回 400、身份凭据缺失/错误返回 401、归属或授权不符返回 403、未知配置返回 404、重复签发返回 409；权威服务不可用或持久签发失败返回 503。失败响应不含 Secret 或上游敏感错误正文，成功响应禁止缓存。此入口不加入公开网关路由。
 
 Agent 运行时只调用 media_agent_gateway。Gateway 按全局 API Token Verification 流程形成 `sub=User:<owner>`、`act.sub=Agent:<id>` 的 Internal Identity JWT 后代理内部服务；API Token 不直接传播给内部服务。
+
+## 显式申请入口
+
+`POST /api/v1/agent-clients/:agent_configuration_id/api-tokens` 允许已认证 User 在创建 Agent 配置后显式申请。身份由统一网关 Internal JWT 与 Auth 的当前 User 查询取得，不接受请求体或外部 acting-user header 覆盖。API Token 调用必须是直接 User、带 `api.access` 与管理 Credential；其 Organization 限制在 Gateway 回查 Control 时精确匹配，不能通过受信服务签发跨企业凭据。浏览器身份由 Auth 验证 Kratos 会话并解析业务 User。
+
+请求仅含 name、expires_at、idempotency_key；Gateway 固定 `agent.gateway` scope，使用专用服务凭据调用 Auth，并仅沿此次响应交付 Secret，禁止缓存。不保存 Secret、Token 事实或额外签发意图；Auth 承担持久幂等和未知结果恢复。用户身份或 Control 查询失败不调用签发；Auth 401 转为服务配置错误503，不向用户暴露服务凭据。结果未知不得自动重发，用户可按原键重试确认409或通过管理接口恢复。此显式入口供 Agent 创建流程调用，不等同于已完成自动创建后的申请编排，也不实现运行时代理。
 
 ## 结果
 

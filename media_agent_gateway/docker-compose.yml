@@ -86,6 +86,10 @@ services:
       CODEX_RUNTIME_URL: http://host.docker.internal:3001
       CLAUDE_CODE_RUNTIME_URL: http://host.docker.internal:3003
       MEDIA_CONTROL_URL: http://host.docker.internal:8007
+      MEDIA_AUTH_URL: http://media_auth:8001
+      MEDIA_AUTH_AGENT_GATEWAY_TOKEN: ${MEDIA_AUTH_AGENT_GATEWAY_TOKEN:-}
+      INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
+      INTERNAL_JWT_ISSUER: ${INTERNAL_JWT_ISSUER:-http://oathkeeper:4456/}
       CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
       MEDIA_AGENTS_REDIS_URL: redis://host.docker.internal:6379/0
       LOG_DIR: /media_logs/media-agent-gateway
@@ -93,6 +97,7 @@ services:
       - ../media_logs/media-agent-gateway:/media_logs/media-agent-gateway
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks: [default, auth]
     depends_on:
       session_event_bus:
         condition: service_healthy
@@ -101,3 +106,8 @@ services:
       claude_code_agent:
         condition: service_healthy
     restart: unless-stopped
+
+networks:
+  auth:
+    external: true
+    name: media-auth

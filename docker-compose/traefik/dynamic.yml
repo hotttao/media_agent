@@ -57,6 +57,11 @@ http:
       priority: 60
       middlewares: [oathkeeper-forward-auth]
       service: control
+    agent-client-management:
+      rule: "PathPrefix(`/api/v1/agent-clients`)"
+      priority: 60
+      middlewares: [oathkeeper-forward-auth]
+      service: agent-api
     frontend:
       rule: "PathPrefix(`/`)"
       priority: 1
@@ -119,3 +124,7 @@ http:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:5173"
+    agent-api:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8006"

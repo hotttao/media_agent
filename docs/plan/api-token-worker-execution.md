@@ -77,6 +77,7 @@
 - [x] Auth 内部 Agent Token Provisioning：专用 Gateway 服务凭证、owner事实派生、仅 agent.gateway scope、持久签发与重复命令拒绝重放Secret；单测/真实Talos接口门禁。
 - [ ] 定义 Agent API Client/代理 IDL，不与 Agent Session Token 混用。
 - [ ] Agent 创建后由 Gateway 幂等调用 media_auth 创建 Actor Token。
+  - [x] 现有配置的显式申请 IDL/Workflow/服务端身份接入、企业限制、公开路由及一次性 Secret 交付，HTTP与CLI门禁。
 - [ ] Gateway 只回传一次 Secret，不持久化 Secret。
 - [ ] Gateway 验证 Agent Token、校验 owner 委托并代理内部服务。
 - [ ] Agent disabled/deleted/owner 解绑触发 Token 撤销。
@@ -182,6 +183,7 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 | Token Secret 生命周期 | Talos | API Token Issuance/Rotation/Revocation Adapter | external-owner（Talos） |
 | Agent Token 私有签发/幂等 | Auth / api_token | 专用凭据入口、Control 权威校验、复用 API Token Issuance | covered |
 | Agent 创建后申请/一次性回传 | Agent Gateway | Agent API Token Provisioning 的客户端编排 | missing |
+| 已有配置显式申请/一次性回传 | Agent Gateway | 公开管理入口、Control 企业限制、Auth 私有签发、CLI 0600文件 | covered |
 | Agent 委托代理 | Agent Gateway | 受限内部身份代理，不能开放任意 URL | missing |
 | Agent disabled/deleted/owner 解绑撤销 | Control + Auth | 权威生命周期事实、持久撤销意图/恢复 | missing |
 
@@ -198,3 +200,11 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - Workflow/handler/Control client race 测试和 Auth 全量测试、架构检查通过。新 Auth 镜像已部署；`TestAgentTokenInternalProvisioning` 真实连接 Control/Talos，验证签发201、专用身份401、非owner403、未知配置404、重复409且不重放Secret、公开列表无Secret、撤销后inactive及普通API/Worker入口隔离。
 - 既有 `TestAPITokenGateway`、`TestWorkflowWorkerGatewayAPIToken` 回归通过；公开 CLI 读取本次 Agent Token 元数据并重复撤销通过。仅清理测试自己创建的凭据，不启动 Agent Runtime，不领取任务。
 - domain-modeling 同步重复请求、一次性响应和信任边界。上述覆盖 Auth 私有签发，不代表 Gateway 创建/代理、身份停用/解绑的持久撤销或 P6 整体完成；UI不在当前实施范围。
+
+### Gateway 已有配置显式申请
+
+- 新增 Agent Client 管理 IDL/生成模型/client/router/OpenAPI、Gateway 身份接入、Control 回查及私有签发编排；不接受客户端 acting-user 或身份字段覆盖，保留调用 User API Token 的企业限制，固定 `agent.gateway` scope，不保存 Secret 或自动重试签发。
+- Gateway 全量测试、核心 race 和架构检查通过；部署前只读确认 Agent Task/Batch 无待运行项、River 空队列、调度 Outbox 无待处理动作，仅以 `--no-deps` 启动 Gateway 后端，未启动 Runtime或观测后端。
+- 真实网关 `TestAgentTokenGatewayProvisioning` 通过：未认证拒绝、未知配置404、非法请求400、签发201/no-store、伪造身份/scope无效、重复409且不重放Secret、Agent Token不能访问管理入口、列表与撤销。既有 User/Worker网关测试回归通过；企业限制由 Workflow 单测覆盖，尚不冒充多企业真实数据验收。
+- CLI 实际签发到新文件0600，公开管理列表验证 active Agent 与 scope 后撤销成功；5173首页HTTP200。Traefik配置watch=false，新增路由通过重启加载。Gateway保留运行；UI未修改。
+- 自动配置创建后的申请编排、运行时代理、生命周期持久撤销、P7旧ServiceToken删除与P5整体门禁仍未完成。

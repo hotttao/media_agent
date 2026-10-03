@@ -1,0 +1,19 @@
+syntax = "proto3";
+package media_agent_gateway.agent_client;
+import "api.proto";
+import "google/api/annotations.proto";
+import "media_auth/api_token.proto";
+option go_package = "media_agent_gateway/agent_client";
+
+service AgentClientService {
+  rpc CreateAgentAPIToken(CreateAgentAPITokenRequest) returns (media_auth.api_token.CreateApiTokenResponse) {
+    option (api.post) = "/api/v1/agent-clients/:agent_configuration_id/api-tokens";
+    option (google.api.http) = { post: "/api/v1/agent-clients/{agent_configuration_id}/api-tokens" body: "*" };
+  }
+}
+message CreateAgentAPITokenRequest {
+  string agent_configuration_id = 1 [(api.path) = "agent_configuration_id"];
+  string name = 2;
+  string expires_at = 3;
+  string idempotency_key = 4;
+}

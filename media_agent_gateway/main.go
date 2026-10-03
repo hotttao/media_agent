@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"media_agent/hertz_infra/authn/internaljwt"
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_agent_gateway/biz/dal"
@@ -14,6 +15,7 @@ import (
 	taskrepo "media_agent/media_agent_gateway/biz/dal/repo/agent_task"
 	batchrepo "media_agent/media_agent_gateway/biz/dal/repo/batch_run"
 	teamworkrepo "media_agent/media_agent_gateway/biz/dal/repo/teamwork_runtime"
+	agentclienthandler "media_agent/media_agent_gateway/biz/handler/agent_client"
 	taskhandler "media_agent/media_agent_gateway/biz/handler/agent_task"
 	batchhandler "media_agent/media_agent_gateway/biz/handler/batch_run"
 	chathandler "media_agent/media_agent_gateway/biz/handler/chat"
@@ -73,6 +75,14 @@ func main() {
 
 	internalToken := envOr("CONTROL_INTERNAL_TOKEN", "")
 	middleware.Configure(cfg.GetAuth().GetJwtSecret(), internalToken)
+	if credential := os.Getenv("MEDIA_AUTH_AGENT_GATEWAY_TOKEN"); credential != "" {
+		agentTokens, err := sharedclient.NewAgentTokenClient(os.Getenv("MEDIA_AUTH_URL"), os.Getenv("MEDIA_CONTROL_URL"), internalToken, credential, internaljwt.NewVerifier(os.Getenv("INTERNAL_JWKS_URL"), os.Getenv("INTERNAL_JWT_ISSUER"), "internal-api", nil))
+		if err != nil || os.Getenv("INTERNAL_JWKS_URL") == "" || os.Getenv("INTERNAL_JWT_ISSUER") == "" {
+			log.Fatal("invalid Agent Token management configuration")
+		}
+		middleware.ConfigureAgentTokenManagement(agentTokens)
+		agentclienthandler.Configure(workflow.NewAgentTokenProvisioning(agentTokens, agentTokens))
+	}
 	store := repo.New(db)
 	fallbackControl := sharedclient.MockControl{
 		WorkspaceID: envOr("DEFAULT_WORKSPACE_ID", "default"),

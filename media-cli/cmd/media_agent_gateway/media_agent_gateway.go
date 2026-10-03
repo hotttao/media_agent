@@ -9,8 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	agentclient "media_agent/hertz_gen/media_agent_gateway/agent_client_service"
 	"media_agent/hertz_gen/media_agent_gateway/agent_task_service"
 	"media_agent/hertz_gen/media_agent_gateway/chat_service"
+	authapi "media_agent/hertz_gen/media_auth/api_token_service"
 	agenttaskpb "media_agent/hertz_gen/model/media_agent_gateway/agent_task"
 	chatpb "media_agent/hertz_gen/model/media_agent_gateway/chat"
 	"media_agent/hertz_infra/clienthertz"
@@ -22,6 +24,8 @@ import (
 var (
 	agentTaskClient agent_task_service.Client
 	chatClient      chat_service.Client
+	agentClient     agentclient.Client
+	tokenManager    authapi.Client
 )
 
 // MediaAgentGatewayCmd groups Agent Gateway command E2E entry points.
@@ -29,6 +33,7 @@ var MediaAgentGatewayCmd = &cobra.Command{Use: "media_agent_gateway", Short: "è°
 
 func init() {
 	MediaAgentGatewayCmd.AddCommand(agentTaskCmd(), chatCmd())
+	MediaAgentGatewayCmd.AddCommand(agentClientCmd())
 	cmd.RegisterCmd(MediaAgentGatewayCmd)
 }
 
@@ -52,6 +57,14 @@ func Init(cfg *config.Config) {
 		log.Fatalf("media_agent_gateway: build shared client: %v", err)
 	}
 	store := cookie.New(cmd.CookiesDir)
+	agentClient, err = agentclient.NewAgentClientServiceClient(host, agentclient.WithHertzClientMiddleware(store.Middleware(host)))
+	if err != nil {
+		log.Fatal("media_agent_gateway: Agent Client configuration unavailable")
+	}
+	tokenManager, err = authapi.NewApiTokenServiceClient(host, authapi.WithHertzClientMiddleware(store.Middleware(host)))
+	if err != nil {
+		log.Fatal("media_agent_gateway: Token Manager configuration unavailable")
+	}
 	chatClient, err = chat_service.NewChatServiceClient(host,
 		chat_service.WithHertzClient(shared),
 		chat_service.WithHertzClientMiddleware(store.Middleware(host)),

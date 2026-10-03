@@ -208,6 +208,22 @@ go -C media-cli run . media_auth api-token revoke --id <test_token_id>
 
 此门禁不证明 Agent Gateway 的申请/代理或停用/删除/解绑触发的批量持久撤销已经完成；不为内部签发增加公开 CLI 绕过 Gateway。
 
+### Gateway 已有 Agent 配置申请
+
+`TestAgentTokenGatewayProvisioning` 全程使用 User API Token 和公开统一网关，不依赖内部签发凭据。设置上文网关/Workspace变量，测试仅申请并撤销自己的临时 Agent Token，验证身份字段/scope伪造、未知配置、重复命令、no-store及管理入口隔离。它不创建或启动 Agent Runtime。
+
+```bash
+go -C media-cli test ./e2e -run '^TestAgentTokenGatewayProvisioning$' -count=1 -v
+
+MEDIA_AGENT_GATEWAY_ADDR="$MEDIA_GATEWAY_ADDR" \
+go -C media-cli run . media_agent_gateway agent-client create-token \
+  --agent-configuration-id <configuration_id> --name <test_name> \
+  --expires-at <RFC3339> --idempotency-key <unique_request_key> \
+  --env-out <new_private_file>
+```
+
+CLI 是独立门禁：核对新文件0600、管理列表中的 Agent/owner/企业/scope，并使用 User 管理 API 撤销本次 Token。该门禁只覆盖已有配置显式申请，不证明自动创建编排、Agent运行时代理或生命周期批量撤销已完成。Traefik当前关闭文件热加载，路由配置变更需要显式重启统一网关。
+
 ### API Token 轮换恢复集成测试
 
 `media_auth/e2e/api_token_rotation_test.go` 使用 testcontainers 的隔离 PostgreSQL；设置 `MEDIA_E2E_TALOS_URL` 后还会连接已由仓库启动的 Talos Admin API。测试为唯一临时 User Actor 创建 Key，不使用测试账号的既有凭据；结束后撤销自己创建的 Key。
