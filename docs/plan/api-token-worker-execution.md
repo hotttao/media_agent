@@ -73,6 +73,7 @@
 ## P6 · Agent Token 申请与代理
 
 - [x] Control 稳定 Agent Identity 内部解析：按 Configuration ID 定位，只读投影归属/当前 owner 授权，服务身份保护、无 Provider Secret；单测与真实 HTTP 门禁。
+- [x] Auth Agent ActorValidator：非缓存查询 Control，Create/Verify/Rotate 精确校验归属及当前授权；单测、部署后既有 User/Worker 链路回归。
 - [ ] 定义 Agent API Client/代理 IDL，不与 Agent Session Token 混用。
 - [ ] Agent 创建后由 Gateway 幂等调用 media_auth 创建 Actor Token。
 - [ ] Gateway 只回传一次 Secret，不持久化 Secret。
@@ -181,3 +182,10 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 | Agent Token 签发/幂等 | Auth + Agent Gateway / api_token | Agent API Token Provisioning | missing |
 | Agent 委托代理 | Agent Gateway | 受限内部身份代理，不能开放任意 URL | missing |
 | Agent disabled/deleted/owner 解绑撤销 | Control + Auth | 权威生命周期事实、持久撤销意图/恢复 | missing |
+
+### Auth Agent 校验接线
+
+- `biz/shared/client/control` 使用生成客户端和固定内部 system 服务身份，传播 Trace Context、限制配置地址/ID和总期限，屏蔽上游错误正文；不缓存授权、不传用户凭据。取消/超时后的响应不能授权成功。
+- `AgentActorValidator` 精确核对配置 ID、Actor、owner、企业、Workspace/Team和当前 owner 授权；Create/Verify/Rotate 共用此判定。Worker 权威保持独立，未知 Actor 拒绝；缺少 Control 配置时 Agent 不可用，不能退回本地 Hash。
+- Client/Service race 测试覆盖跨 owner/企业、归属错配、失去授权、删除/未知状态、上游失败/超时/取消和敏感错误屏蔽；Auth 全量 Go 测试、架构检查通过，新镜像已部署。容器内只读查询验证 Auth→Control 网络/凭证配置，既有 User/Worker 生命周期、Agent Identity查询和请求关联的5项真实 HTTP门禁及CLI auth me通过。
+- 没有通过真实 Agent Token 执行完整签发/代理/撤销：当前尚无新 Agent 签发入口，不用上述单测或容器探测替代该验收项。P6 其余项和能力矩阵中的 missing 保持未完成，UI未修改。

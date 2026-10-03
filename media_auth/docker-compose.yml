@@ -19,6 +19,8 @@ services:
       ORY_KRATOS_PUBLIC_URL: http://kratos:4433
       ORY_KRATOS_ADMIN_URL: http://kratos:4434
       TALOS_URL: http://talos:4420
+      MEDIA_CONTROL_URL: http://host.docker.internal:8007
+      CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
       LOG_DIR: /media_logs/media-auth
     volumes:
     - ../media_logs/media-auth:/media_logs/media-auth

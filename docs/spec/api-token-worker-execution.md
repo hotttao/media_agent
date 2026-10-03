@@ -219,6 +219,10 @@ Agent Actor 使用 `Agent:<agent_configurations.id>`，不是现有 `agent_id` �
 
 实现映射：`media_control/biz/domain/workspace` 身份读模型与查询接口、`biz/dal/repo/workspace` 单次 join 查询、`biz/service/agent_identity` 只读用例、IDL/generated router/薄 handler、main 装配。Auth 接入、Gateway 申请/代理和 disabled/解绑撤销是独立后续门禁，不以该查询上线代表 P6 完成。
 
+Auth 的 `biz/shared/client/control` 封装生成的 AgentIdentityService client，只向配置的内部地址发送固定 system 服务身份，不传用户 Cookie 或 API Token；5 秒总超时且不超过父请求期限，查询取消/错误/非200均拒绝。禁止把生成客户端可能包含来源响应正文的错误传给业务层，禁止缓存身份授权。配置为 `MEDIA_CONTROL_URL` 与 `CONTROL_INTERNAL_TOKEN`；缺少任一项时 Agent Validator 不装配，仍 fail closed。
+
+`biz/service/api_token/AgentActorValidator` 精确匹配 Configuration ID、`Agent:<id>`、owner、企业、非空 Workspace/Team 及 owner_authorized，拒绝 deleted/未知 Workspace 状态。现有 Create/Verify/Rotate 统一调用 ActorValidator，Personal Worker 继续使用独立的 Worker Identity 权威，其他未知 Actor 类型不得借 Agent 校验通过。此接线不开放任意客户端提交 Actor 的签发 API，也不代表生命周期后台撤销或 Gateway 代理完成。
+
 ### 6.2 签发与代理
 
 创建 Agent 后，`media_agent_gateway` 使用稳定幂等键请求 `media_auth.CreateActorAPIToken`。`media_auth` 必须回查 Agent 的 owner、Organization 和状态；Gateway 不接受请求体覆盖 owner，也不保存 Secret。

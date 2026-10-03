@@ -58,6 +58,7 @@ import (
 	userservice "media_agent/media_auth/biz/service/user"
 	wecomservice "media_agent/media_auth/biz/service/wecom"
 	workeridentityservice "media_agent/media_auth/biz/service/worker_identity"
+	controlclient "media_agent/media_auth/biz/shared/client/control"
 	"media_agent/media_auth/biz/shared/client/introspect"
 	ketoclient "media_agent/media_auth/biz/shared/client/keto"
 	kratosclient "media_agent/media_auth/biz/shared/client/kratos"
@@ -186,8 +187,23 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 			user, err := userRepo.FindByID(ctx, userID)
 			return err == nil && user.IsActive()
 		})
+		var agentValidator *apitokenservice.AgentActorValidator
+		if controlURL, controlToken := os.Getenv("MEDIA_CONTROL_URL"), os.Getenv("CONTROL_INTERNAL_TOKEN"); controlURL != "" && controlToken != "" {
+			authority, err := controlclient.New(controlURL, controlToken, 5*time.Second)
+			if err != nil {
+				log.Fatal("init di: invalid Control identity configuration")
+			}
+			agentValidator = apitokenservice.NewAgentActorValidator(authority)
+		}
 		apiTokenSvc.SetActorValidator(func(ctx context.Context, actorType domainapitoken.ActorType, actorID, userID, organizationID string) bool {
-			return actorType == domainapitoken.ActorPersonalWorker && workerIdentitySvc.ValidateActor(ctx, actorID, userID, organizationID)
+			switch actorType {
+			case domainapitoken.ActorPersonalWorker:
+				return workerIdentitySvc.ValidateActor(ctx, actorID, userID, organizationID)
+			case domainapitoken.ActorAgent:
+				return agentValidator.Validate(ctx, actorID, userID, organizationID)
+			default:
+				return false
+			}
 		})
 		workeridentityhandler.Provisioning = workflow.NewWorkerTokenProvisioning(workerIdentitySvc, apiTokenSvc)
 		go workerRevocation.Run(context.Background())
