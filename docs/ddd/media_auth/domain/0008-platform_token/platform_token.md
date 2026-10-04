@@ -121,6 +121,8 @@ Platform Token 是独立聚合，不复用 API Token/Talos 或旧 Service Token 
 
 ## 关联关系
 
+- 启动前核对迁移schema及旧Platform行已清空，并分页验证所有密文（包括撤销历史）的结构/版本/AEAD与Hash；失败拒绝启动，不隐式补发。登录/注册/Kratos/企微无Secret确保和用户撤销只注入本独立用例，旧明文获取及Platform本地Hash验证不得继续作为旁路。
+
 - 依赖 auth 的当前User生命周期；不依赖 service_token。
 - 旧表到加密存储的迁移须先逐条验证ID/owner/Hash与密文可恢复，再原子转移事实；迁移编排和调用方切换是删除旧认证的前置门禁，不能以新表存在视为迁移完成。
 - [Platform Token Migration](../../workflow/0013-platform-token-migration/platform_token_migration.md)协调旧凭据到密文事实的同库原子转移，包含撤销历史，保留ID与时间，默认演练回滚。

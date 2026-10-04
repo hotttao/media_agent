@@ -9,3 +9,7 @@
 补齐 User 临时禁用与恢复：管理接口只接受 `active | disabled`，禁用与删除共用可靠撤销 Outbox，并增加 Kratos Web Session 撤销；恢复递增 `auth_version` 且不复活旧凭证。Ory browser session 请求仍在每次进入业务服务时回查业务 User 状态，从事实源即时拒绝 disabled/deleted User。
 
 明确 Kratos `metadata_admin.role=platform_admin` 的受信任管理员引导映射；普通浏览器输入不得控制平台角色。
+
+# 2026-10-04 · Platform生命周期切换
+
+本地/LDAP登录、注册和可信Kratos用户解析只注入独立密文无Secret确保，最多5秒、固定安全日志、失败不改变认证结果；关闭配置不回退旧明文服务。用户撤销同事务覆盖新密文聚合，避免遗漏浏览器真实入口。

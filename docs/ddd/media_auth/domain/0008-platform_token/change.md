@@ -3,6 +3,8 @@
 依据 ADR-0007 新建独立 Platform Token 聚合，替代原 `service_tokens.token` 明文列设计，并限制为 Gateway 与 Control Schedule Worker 的 purpose-bound 内部能力。
 # 2026-10-04 · 独立加密存储约束
 
+- 生命周期接线覆盖本地/LDAP/注册/Kratos/企微和用户撤销；旧Platform获取/本地Hash不再作为旁路。启动只读验证迁移前置及全部历史密文，故障不补发或跳过。
+
 - 独立Platform IDL提供purpose-bound获取/内省/轮换，固定错误与no-store；专用mTLS监听器只注册该路由，默认关闭且缺失配置拒绝启动。确保/用户撤销不开放Secret接口。认证/DTO接入仍为单聚合用例，迁移与审计沿用既有Workflow。
 
 - 明确真实mTLS CallerVerifier边界：独立Client CA、TLS1.3、精确单URI SAN和ClientAuth用途；连接事实绑定实例隔离context，当前时刻重新验证，不接受CN/Header/普通Internal Token替代。认证适配器本身不产生持久化业务状态，因此不新增空壳Workflow；既有迁移/审计Workflow不变。

@@ -118,6 +118,8 @@ auth 负责平台账号的本地密码 / LDAP 双路登录、会话（JWT cookie
 9. 返回 ApiUser{ id, username, role, auth_source, default_prompt_id, auto_evolution }
 ```
 
+本地/LDAP登录、注册及可信Kratos身份解析均只委托独立密文Platform无Secret确保端口；不再注入旧ServiceToken。同步尝试使用请求context和最多5秒deadline；可选注册后台尝试保留技术上下文但解除请求取消，最多5秒。当前账号校验成功后才确保，确保失败不改变登录结果，只记录固定安全错误，不记录Secret或底层错误。配置关闭时明确跳过，不退回明文服务。确保重试由后续登录/合法离线获取触发，不宣称后台保证投递。
+
 ### auth_source 推导（修正点，见 change.md）
 ```
 password_hash 非空            → 'password'

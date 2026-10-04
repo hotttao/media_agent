@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"time"
 
 	domainauth "media_agent/media_auth/biz/domain/auth"
 	policyauth "media_agent/media_auth/biz/policy/auth"
@@ -27,8 +28,8 @@ type Service struct {
 	// authSourceResolver 推导无密码账号的 wecom/ldap 来源（identity domain 实现）。
 	// 当前 nil（identity 未实现），wecom 分支回退 ldap。
 	resolver domainauth.AuthSourceResolver
-	// platformTokenEnsurer 登录成功后 ensure platform service token（service_token domain 实现）。
-	// nil 时跳过（service_token 未实现）。
+	// platformTokenEnsurer is the independent encrypted custody use case.
+	// Nil skips optional bootstrap; never falls back to plaintext storage.
 	platformTokenEnsurer domainauth.PlatformTokenEnsurer
 }
 
@@ -53,7 +54,7 @@ func NewService(repo domainauth.UserRepo, signer domainauth.SessionSigner, ldap 
 // SetAuthSourceResolver 注入 identity 提供的 auth_source 解析器（identity domain 完成后调用）。
 func (s *Service) SetAuthSourceResolver(r domainauth.AuthSourceResolver) { s.resolver = r }
 
-// SetPlatformTokenEnsurer 注入 service_token 提供的 platform token ensurer（service_token domain 完成后调用）。
+// SetPlatformTokenEnsurer injects the no-Secret encrypted custody port.
 func (s *Service) SetPlatformTokenEnsurer(e domainauth.PlatformTokenEnsurer) {
 	s.platformTokenEnsurer = e
 }
@@ -151,14 +152,7 @@ func (s *Service) Login(ctx context.Context, cmd LoginCommand) (ApiUser, string,
 		return ApiUser{}, "", err
 	}
 
-	// 6. ensurePlatformToken（fire-and-forget，失败仅日志，不影响登录）。
-	if s.platformTokenEnsurer != nil {
-		if err := s.platformTokenEnsurer.EnsurePlatformToken(ctx, u.ID); err != nil {
-			log.Printf("auth: ensurePlatformToken for user %s: %v", u.ID, err)
-		}
-	} else {
-		log.Printf("auth: platformTokenEnsurer not wired, skip ensurePlatformToken for %s", u.ID)
-	}
+	s.ensurePlatform(ctx, u.ID)
 
 	return toApiUser(u, s.resolver), token, nil
 }
@@ -204,9 +198,7 @@ func (s *Service) Register(ctx context.Context, cmd RegisterCommand) (ApiUser, s
 	// fire-and-forget ensure platform token。
 	if s.platformTokenEnsurer != nil {
 		go func() {
-			if err := s.platformTokenEnsurer.EnsurePlatformToken(context.Background(), u.ID); err != nil {
-				log.Printf("auth: ensurePlatformToken for %s: %v", u.ID, err)
-			}
+			s.ensurePlatform(context.WithoutCancel(ctx), u.ID)
 		}()
 	}
 	return toApiUser(u, s.resolver), token, nil
@@ -237,7 +229,19 @@ func (s *Service) ResolveKratosIdentity(ctx context.Context, identityID, email, 
 	if !policyauth.CanLogin(u) {
 		return ApiUser{}, ErrAccountDisabled
 	}
+	s.ensurePlatform(ctx, u.ID)
 	return toApiUser(u, s.resolver), nil
+}
+
+func (s *Service) ensurePlatform(ctx context.Context, userID string) {
+	if s.platformTokenEnsurer == nil {
+		return
+	}
+	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := s.platformTokenEnsurer.EnsurePlatformToken(bounded, userID); err != nil {
+		log.Print("auth: platform credential bootstrap failed")
+	}
 }
 
 // UpdateMe 局部更新本人设置（目前仅 auto_evolution）。AutoEvolution nil=不改。

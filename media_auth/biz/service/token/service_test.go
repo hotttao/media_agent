@@ -24,6 +24,17 @@ type userRepoStub struct {
 	user domainauth.User
 }
 
+func TestLegacyPlatformCannotBeVerifiedOrAcquired(t *testing.T) {
+	repo := &tokenRepoStub{token: domainst.Token{ID: "old-platform", CreatedBy: "user-1", IsPlatform: true}}
+	svc := NewService(repo, &userRepoStub{user: domainauth.User{ID: "user-1", Status: "active"}})
+	if result, err := svc.VerifyToken(t.Context(), "fixture-platform-secret"); err != nil || result.Active {
+		t.Fatal("legacy platform hash bypass accepted")
+	}
+	if secret, err := svc.GetPlatformToken(t.Context(), "user-1"); err == nil || secret != "" {
+		t.Fatal("legacy platform acquisition accepted")
+	}
+}
+
 func (r *userRepoStub) FindByID(context.Context, string) (domainauth.User, error) {
 	return r.user, nil
 }

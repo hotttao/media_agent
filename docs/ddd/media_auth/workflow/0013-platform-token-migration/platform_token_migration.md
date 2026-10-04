@@ -80,6 +80,8 @@ sequenceDiagram
 
 ## 权限与失败
 
+开启密文运行接线前，启动检查须确认0015/0016已应用且迁移无dirty状态、旧表无任何Platform行（含撤销历史），并分页核对全部密文记录的结构、Key版本和可解密/Hash一致性。缺失schema、未迁移事实、未知Key或损坏历史均拒绝启动；不修改/跳过/补发来掩盖失败。检查不返回Secret、不替代停止旧写入者或实际迁移，普通ServiceToken不计为未迁移Platform。
+
 工具使用服务DatabaseConfig中的维护数据库凭据，无公开API，不接收User/Agent Token。密钥为私有regular文件，不作为命令行明文参数或日志输出。缺owner、无效Secret、Hash不一致、目标不可解密或事实冲突，须修复来源后重跑。固定安全错误；仅成功/演练输出计数。
 
 ## 结果事件

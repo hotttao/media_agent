@@ -2,13 +2,14 @@
 //
 // wecom_login_bind：企微 corp OAuth 登录/绑定 callback 的跨 domain 编排——
 // wecom client（取 userid/userinfo）+ identity（find/bind）+ auth（user 查询 + system 校验 +
-// session 签发）+ service_token（ensure platform token）。对齐 control-plane routes/wecom-auth.ts callback。
+// session 签发）+ 独立密文 platform_token（无Secret确保）。
 package workflow
 
 import (
 	"context"
 	"encoding/json"
 	"log"
+	"time"
 
 	domainauth "media_agent/media_auth/biz/domain/auth"
 	domainwecom "media_agent/media_auth/biz/domain/wecom"
@@ -117,8 +118,10 @@ func (w *WecomLoginBind) handleLogin(ctx context.Context, userid string) (WecomC
 	// fire-and-forget ensure platform token（失败仅日志）。
 	if w.ensurer != nil {
 		go func() {
-			if err := w.ensurer.EnsurePlatformToken(context.Background(), user.ID); err != nil {
-				log.Printf("wecom: ensurePlatformToken for %s: %v", user.ID, err)
+			bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			if err := w.ensurer.EnsurePlatformToken(bounded, user.ID); err != nil {
+				log.Print("wecom: platform credential bootstrap failed")
 			}
 		}()
 	}

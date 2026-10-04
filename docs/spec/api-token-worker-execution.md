@@ -325,6 +325,14 @@ Confirm/Retry以`GREATEST(传入时刻, clock_timestamp())`检查有效lease，�
 
 typed `platform_token`配置含enabled/address/server_cert_file/server_key_file/client_ca_file/key_file/key_version/audit_file；AEAD文件用既有私有读取器，不生成替代密钥。启动编排装配Repo/UserReader/TxRunner/Keyring/Verifier/service与审计投递器，启用失败返回固定安全错误；后台监听失败不能默默降级。关闭取消投递、停监听后关sink。开启运行配置前必须先完成旧调用停止、0015/0016及实际原子迁移；关闭阶段不切换旧登录/撤销链路。
 
+### 7.7 Platform生命周期切换与启动门禁
+
+先初始化Platform运行依赖再InitDI，显式注入独立service至Auth本地/LDAP登录、注册、Kratos身份解析和企微Login；关闭时无确保而不是注入旧明文服务。确保不返回Secret、不影响已成功认证的结果，尝试最多5秒；异步注册/企微解除请求取消但保留技术context。日志使用固定安全错误，不输出原始错误。
+
+用户撤销Worker在既有TX中同时调用旧兼容清理及独立Platform.RevokeAllForUser，审计与密文撤销原子；任一失败不确认用户事件。旧GetPlatformToken入口拒绝，旧Hash验证即使命中is_platform也返回inactive，不得通过旧入口取/生成/验证Platform。
+
+Startup Readiness由DAL提供迁移版本/dirty及旧is_platform存在性查询、密文keyset分页（100），Workflow验证全部密文结构/Key/AEAD/Hash，最多30秒。没有Secret输出或写入；未迁移/损坏/缺Key/schema故障拒绝启动，不能以正常登录触发补发恢复。普通旧ServiceToken不算Platform迁移遗漏。检查不是迁移或停止旧写入者的替代。
+
 兼容期不得把同一个 Secret 同时交给本地 Hash 和 Talos 两套验证器。
 
 ## 8. 验收标准

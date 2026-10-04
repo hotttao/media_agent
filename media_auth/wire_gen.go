@@ -30,6 +30,7 @@ import (
 	dalteam "media_agent/media_auth/biz/dal/repo/team"
 	dalworkeridentity "media_agent/media_auth/biz/dal/repo/worker_identity"
 	domainapitoken "media_agent/media_auth/biz/domain/api_token"
+	domainauth "media_agent/media_auth/biz/domain/auth"
 	domainwecom "media_agent/media_auth/biz/domain/wecom"
 	agenttokenhandler "media_agent/media_auth/biz/handler/agent_token"
 	apitokenhandler "media_agent/media_auth/biz/handler/api_token"
@@ -84,7 +85,7 @@ var SessionMiddleware app.HandlerFunc
 // 必须在 register(h) 之前调用，确保首个请求到达时依赖非 nil。
 //
 // db 可能为 nil（database.enabled=false）：此时仅 session signer 可装配，repo/service 不可用。
-func InitDI(db *gorm.DB, cfg *configpb.Config) {
+func InitDI(db *gorm.DB, cfg *configpb.Config, platform *platformRuntime) {
 	// session signer（JWT HS256），middleware 与 service 共用。
 	signer, err := session.NewSigner(cfg.GetAuth())
 	if err != nil {
@@ -116,11 +117,16 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	identityhandler.IdentitySvc = identitySvc
 	authSvc.SetAuthSourceResolver(identitySvc)
 
-	// service_token domain：repo + service + handler 回填；service 同时作 PlatformTokenEnsurer 注入 auth。
+	// Legacy generic service token compatibility only. Platform bootstrap must
+	// come from independent encrypted custody, never this plaintext repository.
 	stRepo := dalservicetoken.NewRepo(db)
 	stSvc := servicetokenservice.NewService(stRepo)
 	servicetokenhandler.ServiceTokenSvc = stSvc
-	authSvc.SetPlatformTokenEnsurer(stSvc)
+	var platformEnsurer domainauth.PlatformTokenEnsurer
+	if platform != nil {
+		platformEnsurer = platform.service
+	}
+	authSvc.SetPlatformTokenEnsurer(platformEnsurer)
 
 	organizationRepo := dalorganization.NewRepo(db)
 	membershipValidator := func(ctx context.Context, organizationID, userID string) bool {
@@ -246,7 +252,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 	wecomCli := wecomclient.NewClient(wecomDomainCfg, nil)
 	wecomSvc := wecomservice.NewService(wecomDomainCfg)
 	wecomhandler.WecomSvc = wecomSvc
-	wecomFlow := workflow.NewWecomLoginBind(wecomCli, identitySvc, userRepo, signer, stSvc)
+	wecomFlow := workflow.NewWecomLoginBind(wecomCli, identitySvc, userRepo, signer, platformEnsurer)
 	wecomhandler.WecomFlow = wecomFlow
 
 	// mcp_oauth domain：repo + MCP server client + pendingauth store + service + workflow + handler。
@@ -260,6 +266,9 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 
 	// 用户软删除：提交 User + Outbox，worker 最终一致撤销各认证域凭据。
 	userDeleteFlow := workflow.NewUserSoftDelete(userRepo, accessOutbox, stRepo, oauthRepo, mcpRepo, txRunner)
+	if platform != nil {
+		userDeleteFlow.SetPlatformTokenRevoker(platform.service)
+	}
 	if kratosAdminURL := os.Getenv("ORY_KRATOS_ADMIN_URL"); kratosAdminURL != "" {
 		userDeleteFlow.SetIdentitySessionRevoker(kratosclient.New(kratosAdminURL, nil))
 	}

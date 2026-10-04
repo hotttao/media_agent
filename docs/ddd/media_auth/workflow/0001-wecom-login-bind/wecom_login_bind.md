@@ -66,13 +66,15 @@ stateDiagram-v2
 ```
 
 ## 幂等设计
+
+成功登录后只调用独立密文Platform用例的无Secret确保端口，不使用旧ServiceToken。可选后台确保使用保留请求技术上下文、解除浏览器取消且最多5秒的context；失败只记录固定安全消息，不回显底层错误，不撤销已签发的会话。重复登录/后续授权获取可再次确保；无调用者/purpose获取权限交给浏览器。绑定分支不为了绑定额外签发Platform凭据。
 - `bindIdentity` 幂等：`ON CONFLICT (user_id, provider) DO UPDATE`，重复绑定同 provider 只更新 display_name/metadata，不报错。
 - `ensurePlatformToken` 幂等：部分唯一索引保证每用户至多一个 active platform token，重复触发直接返回现有。
 - 企微 `code` 一次性：callback 重复点击因 code 已被企微消费会失败，由企微侧保证，media_auth 不缓存 code。
 
 ## 一致性边界
 
-企微换取身份和读取用户资料均在数据库事务外。登录分支仅在身份已存在后签发 Cookie JWT；绑定分支在一个本地事务中写 `user_identities`，必要时同时创建 Platform Token。Cookie 签发失败不回滚已完成的绑定，用户可重新登录。
+企微换取身份和读取用户资料均在数据库事务外。登录分支在身份已存在且账号可登录后签发 Cookie JWT，独立Platform确保是签发后的有界可选尝试，不与会话交付构成同一事务。绑定分支只写 `user_identities`，不创建Platform凭据；用户后续登录可再次确保。
 
 ## 权限与失败
 
@@ -83,7 +85,7 @@ stateDiagram-v2
 
 ## 一致性边界
 
-企微换取身份和读取用户资料均在数据库事务外。登录分支仅在身份已存在后签发 Cookie JWT；绑定分支在一个本地事务中写 `user_identities`，必要时同时创建 Platform Token。Cookie 签发失败不回滚已完成的绑定，用户可重新登录。
+企微换取身份和读取用户资料均在数据库事务外。登录分支在身份已存在且账号可登录后签发 Cookie JWT，独立Platform确保是签发后的有界可选尝试，不与会话交付构成同一事务。绑定分支只写 `user_identities`，不创建Platform凭据；用户后续登录可再次确保。
 
 ## 权限与失败
 

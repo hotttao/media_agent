@@ -48,6 +48,13 @@ func newPlatformRuntime(db *gorm.DB, cfg *configpb.PlatformTokenConfig) (*platfo
 	if err != nil {
 		return nil, errPlatformRuntime
 	}
+	repo, tx := platformrepo.NewRepo(db), dal.NewTxRunner(db)
+	checkCtx, checkCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	checkErr := workflow.CheckPlatformCustody(checkCtx, repo, ring)
+	checkCancel()
+	if checkErr != nil {
+		return nil, errPlatformRuntime
+	}
 	v, tlsConfig, err := platformmtls.LoadFiles(cfg.GetServerCertFile(), cfg.GetServerKeyFile(), cfg.GetClientCaFile(), map[string]string{
 		"spiffe://media-agent/services/media_agent_gateway":           "media_agent_gateway",
 		"spiffe://media-agent/services/media_control_schedule_worker": "media_control_schedule_worker",
@@ -59,7 +66,6 @@ func newPlatformRuntime(db *gorm.DB, cfg *configpb.PlatformTokenConfig) (*platfo
 	if err != nil {
 		return nil, errPlatformRuntime
 	}
-	repo, tx := platformrepo.NewRepo(db), dal.NewTxRunner(db)
 	delivery, err := workflow.NewPlatformAuditDelivery(tx, repo, sink, workflow.PlatformAuditOptions{})
 	if err != nil {
 		sink.Close()

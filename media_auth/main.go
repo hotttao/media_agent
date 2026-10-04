@@ -76,12 +76,12 @@ func main() {
 
 	// 8. 依赖注入：把 service / workflow 装配到 handler 包级变量。
 	//    必须在 register(h) 之前完成，确保首个请求到达时依赖非 nil。
-	InitDI(db, cfg)
 	platform, err := newPlatformRuntime(db, cfg.GetPlatformToken())
 	if err != nil {
 		log.Fatal("platform token runtime initialization failed")
 	}
 	defer platform.close()
+	InitDI(db, cfg, platform)
 
 	// 8.1 挂 session 鉴权中间件（cookie JWT 验签 + 注入 ctx + 滑动续期 + skip list）。
 	//     在业务路由注册前挂载，所有受保护路由经此鉴权。

@@ -40,14 +40,19 @@ type identitySessionRevoker interface {
 
 // UserSoftDelete 原子提交用户终态与访问撤销事件，并异步清理各认证域凭据。
 type UserSoftDelete struct {
-	users  softDeleteUsers
-	outbox domainauth.AccessRevocationOutbox
-	tokens userTokenRevoker
-	oauth  userOAuthRevoker
-	mcp    userMCPRevoker
-	kratos identitySessionRevoker
-	tx     TransactionRunner
+	users    softDeleteUsers
+	outbox   domainauth.AccessRevocationOutbox
+	tokens   userTokenRevoker
+	platform userTokenRevoker
+	oauth    userOAuthRevoker
+	mcp      userMCPRevoker
+	kratos   identitySessionRevoker
+	tx       TransactionRunner
 }
+
+// SetPlatformTokenRevoker installs independent custody cleanup during the
+// compatibility cutover. It participates in the same caller transaction.
+func (w *UserSoftDelete) SetPlatformTokenRevoker(revoker userTokenRevoker) { w.platform = revoker }
 
 // SetIdentitySessionRevoker attaches the external identity session revoker.
 // It is optional so deployments without Kratos keep the legacy auth path.
@@ -156,6 +161,11 @@ func (w *UserSoftDelete) ProcessPending(ctx context.Context) error {
 			}
 			if err := w.tokens.RevokeAllForUser(txCtx, event.UserID); err != nil {
 				return err
+			}
+			if w.platform != nil {
+				if err := w.platform.RevokeAllForUser(txCtx, event.UserID); err != nil {
+					return err
+				}
 			}
 			if err := w.oauth.RevokeUserCredentials(txCtx, event.UserID); err != nil {
 				return err

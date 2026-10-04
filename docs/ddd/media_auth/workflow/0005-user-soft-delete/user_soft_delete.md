@@ -46,6 +46,8 @@ sequenceDiagram
 
 TX1 只提交 User 终态、auth_version 和 Outbox，是软删除的业务提交点。各 Token Domain 在 TX2 幂等撤销自己的凭证。Edge 缓存更新在事务外；短暂传播延迟通过 auth_version 撤销事件和可靠重试收敛。
 
+密文Platform撤销必须参与TX2，使用独立用例`RevokeAllForUser(txCtx,user_id)`，同事务记录固定审计Outbox；不能调用会开启另一事务的独立撤销入口。兼容阶段旧凭据清理和新密文撤销均成功后才确认用户撤销事件；任一失败整笔本地事务回滚并保留重试。当前User状态与行锁禁止晚到登录确保重新发放。
+
 ## 幂等、重试与恢复
 
 `user_id + auth_version` 是撤销幂等键。重复删除返回既有 deleted 状态。Token 已撤销视为成功；Edge 重复事件只保留最大 auth_version。撤销 Worker 失败持续重试并告警，不得把 User 恢复为 active。

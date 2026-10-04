@@ -130,10 +130,15 @@ func (r *fakeUserRepo) SoftDeleteUser(_ context.Context, id, by string) (domaina
 func (r *fakeUserRepo) CountActiveAdmins(context.Context) (int, error) { return 2, nil }
 
 type fakeEnsurer struct {
-	done chan struct{}
+	done    chan struct{}
+	bounded chan bool
 }
 
-func (e *fakeEnsurer) EnsurePlatformToken(_ context.Context, userID string) error {
+func (e *fakeEnsurer) EnsurePlatformToken(ctx context.Context, userID string) error {
+	if e.bounded != nil {
+		deadline, ok := ctx.Deadline()
+		e.bounded <- ok && ctx.Err() == nil && deadline.After(time.Now()) && time.Until(deadline) <= 5*time.Second
+	}
 	if e.done != nil {
 		e.done <- struct{}{}
 	}
@@ -183,7 +188,7 @@ func TestWecomLogin_Success(t *testing.T) {
 	users := &fakeUserRepo{users: map[string]domainauth.User{
 		"u1": {ID: "u1", Username: "alice", DisplayName: "Alice", Role: "user"},
 	}}
-	ensurer := &fakeEnsurer{done: make(chan struct{}, 1)}
+	ensurer := &fakeEnsurer{done: make(chan struct{}, 1), bounded: make(chan bool, 1)}
 	wecom := &fakeWeComClient{useridByCode: map[string]string{"code1": "wecom-userid"}}
 	signer := newTestSigner(t)
 	w := newWecomFlow(t, wecom, users, identityservice.NewService(identityRepo), signer, ensurer)
@@ -206,6 +211,9 @@ func TestWecomLogin_Success(t *testing.T) {
 	case <-ensurer.done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("ensurePlatformToken not called")
+	}
+	if !<-ensurer.bounded {
+		t.Fatal("wecom bootstrap missing bounded context")
 	}
 }
 

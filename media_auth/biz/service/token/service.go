@@ -66,7 +66,7 @@ func (s *Service) VerifyToken(ctx context.Context, plaintext string) (VerifyResu
 		}
 		return VerifyResult{}, err
 	}
-	if !t.IsActiveAt(time.Now()) {
+	if t.IsPlatform || !t.IsActiveAt(time.Now()) {
 		return VerifyResult{Active: false}, nil
 	}
 	if len(t.Scopes) > 0 {
@@ -108,12 +108,6 @@ func (s *Service) ValidateSession(ctx context.Context, sess domainauth.Session) 
 }
 
 func (s *Service) GetPlatformToken(ctx context.Context, userID string) (string, error) {
-	if userID == "" {
-		return "", errors.New("user_id is required")
-	}
-	u, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil || !u.IsActive() {
-		return "", nil
-	}
-	return s.tokenRepo.EnsurePlatformToken(ctx, userID)
+	// Retained only until legacy IDL removal. No reads, creates or fallback.
+	return "", errors.New("legacy platform token endpoint disabled")
 }

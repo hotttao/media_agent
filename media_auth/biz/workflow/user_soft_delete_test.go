@@ -89,6 +89,24 @@ func newDeleteFlow(users *deleteUsersFake, outbox *outboxFake, token, oauth, mcp
 	return NewUserSoftDelete(users, outbox, token, oauth, mcp, txFake{})
 }
 
+func TestUserRevocationIncludesIndependentPlatformAndDoesNotConfirmFailure(t *testing.T) {
+	users := &deleteUsersFake{users: map[string]domainauth.User{"u": {ID: "u", Status: "disabled"}}}
+	outbox := &outboxFake{events: []domainauth.AccessRevocationEvent{{ID: "event", UserID: "u"}}}
+	legacy, platform := &revokeFake{}, &revokeFake{err: errors.New("fixture custody failure")}
+	flow := newDeleteFlow(users, outbox, legacy, &revokeFake{}, &revokeFake{})
+	flow.SetPlatformTokenRevoker(platform)
+	if err := flow.ProcessPending(t.Context()); err != nil {
+		t.Fatal("retry scheduling failed")
+	}
+	if outbox.delivered || !outbox.failed || legacy.calls != 1 || platform.calls != 1 {
+		t.Fatal("platform failure confirmed or cleanup skipped")
+	}
+	platform.err = nil
+	if err := flow.ProcessPending(t.Context()); err != nil || !outbox.delivered || platform.calls != 2 {
+		t.Fatal("independent platform cleanup did not recover")
+	}
+}
+
 func TestUserSoftDeleteCommitsTerminalStateAndEvent(t *testing.T) {
 	users := &deleteUsersFake{users: map[string]domainauth.User{
 		"u1": {ID: "u1", Role: "admin", Status: "active", AuthVersion: 1},

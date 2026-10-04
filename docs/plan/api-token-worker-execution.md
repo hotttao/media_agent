@@ -309,6 +309,21 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - [x] 隔离CA真实Hertz HTTPS链路与失败分支、全量Go/race/架构检查（用例为测试桩，不代替运行密文/审计验收）。
 - [ ] 运行证书/密钥、实际迁移、登录/WeCom/撤销及旧调用替换；未通过不开放运行配置。
 
+### Platform生命周期切换门禁
+
+- [x] 独立生命周期注入（本地/LDAP/注册/Kratos/企微）、有界安全确保与用户撤销原子接线。
+- [x] 旧Platform获取/本地Hash旁路拒绝；普通旧ServiceToken待整体清理。
+- [x] 启动只读检查：schema/dirty/旧Platform未迁移/全部密文完整性。
+- [x] 单测/race/隔离PG回归，运行环境后续单独验收。
+
+### 2026-10-04 · Platform生命周期与启动前置验收
+
+- domain-modeling同步Auth/Kratos/企微与用户撤销入口；启动先准备独立Platform再注入DI，无旧明文bootstrap回退。确保有界5秒、后台保留技术context，日志仅固定消息，失败不改变已认证会话。
+- 独立Platform用户撤销参与既有本地TX，凭据/审计及用户事件确认同事务，后续清理失败整笔回滚。旧Platform获取直接拒绝，旧Hash命中Platform也inactive；35条普通旧ServiceToken仍待整体退役，不把拒绝Platform当作ServiceToken已删除。
+- DAL/Workflow只读检查迁移版本/dirty/全部旧Platform（含撤销历史）和100条分页的所有密文结构/Key/AEAD/Hash，故障统一拒绝启动。检查不产生Secret输出，不替代实际迁移或停止旧写入者。
+- Auth全量Go、Auth/Token/Workflow race、真实Hertz接线race及架构检查通过。两项隔离PG race门禁通过（36.763s）：105条撤销历史迁移/缺版本表/dirty/缺Key/末页损坏/普通凭据不误判，及真实Kratos映射→独立确保→禁用→后续清理失败回滚→重试原子撤销/审计→恢复不复活旧凭据。夹具直接SQL迁移不带版本表，测试显式创建迁移元数据事实，首先验证缺失时确实拒绝。
+- 运行服务未重启/部署，实际DB仍version14/dirty=false；67条旧Platform、35条普通旧ServiceToken未改动。运行证书/密钥、实际数据迁移、调用者与完整运行验收、旧ServiceToken整体删除仍missing；P7不完成，UI保持排除。
+
 ### 2026-10-04 · Platform内部HTTP接线验收
 
 - domain-modeling明确三项HTTP契约与错误/缓存边界；确保/用户撤销仍内部调用，不新增Secret公共接口。独立生成IDL/DTO/client/router，公开Swagger重新生成无差异。
