@@ -3,150 +3,203 @@ package media_workflow
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/spf13/cobra"
-
+	assetpb "media_agent/hertz_gen/model/media_materials/generated_asset"
+	objectpb "media_agent/hertz_gen/model/media_materials/library_object"
+	matpb "media_agent/hertz_gen/model/media_materials/material"
 	prodpb "media_agent/hertz_gen/model/media_materials/product"
-	reachpb "media_agent/hertz_gen/model/media_materials/reachability"
 	vippb "media_agent/hertz_gen/model/media_materials/virtual_ip"
 	jobpb "media_agent/hertz_gen/model/media_workflow/job"
 	wfpb "media_agent/hertz_gen/model/media_workflow/workflow"
 )
 
-var submitJobCmd = &cobra.Command{
-	Use:   "submit-job",
-	Short: "assemble JobInput bundle (reachability 校验 + 解析) and submit to media_workflow",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
-		userID, _ := cmd.Flags().GetString("user-id")
-		workflowID, _ := cmd.Flags().GetString("workflow-id")
-		version, _ := cmd.Flags().GetInt("workflow-version")
-		productID, _ := cmd.Flags().GetString("product-id")
-		vipID, _ := cmd.Flags().GetString("virtual-ip-id")
-		return runSubmitJob(ctx, userID, workflowID, version, productID, vipID)
-	},
+type submitSelection struct {
+	organization, workflow, product, virtualIP string
+	version                                    int
+	materials, assets                          map[string]string
+	dryRun                                     bool
 }
 
-func init() {
-	submitJobCmd.Flags().String("user-id", "", "submitter user id (for reachability viewer check)")
-	submitJobCmd.Flags().String("workflow-id", "", "workflow id")
-	submitJobCmd.Flags().Int("workflow-version", 0, "workflow version (0 = latest)")
-	submitJobCmd.Flags().String("product-id", "", "product input id (optional)")
-	submitJobCmd.Flags().String("virtual-ip-id", "", "virtual_ip input id (optional)")
-	_ = submitJobCmd.MarkFlagRequired("workflow-id")
+var submitJobCmd = newSubmitJobCommand()
+
+func newSubmitJobCommand() *cobra.Command {
+	var selection submitSelection
+	c := &cobra.Command{Use: "submit-job", Short: "选择企业素材并提交自包含 Workflow 输入", Args: cobra.NoArgs}
+	c.Flags().StringVar(&selection.organization, "organization-id", "", "素材所属企业")
+	c.Flags().StringVar(&selection.workflow, "workflow-id", "", "已发布 Workflow ID")
+	c.Flags().IntVar(&selection.version, "workflow-version", 0, "发布版本（0=当前版本）")
+	c.Flags().StringVar(&selection.product, "product-id", "", "Product ID")
+	c.Flags().StringVar(&selection.virtualIP, "virtual-ip-id", "", "Virtual IP ID")
+	c.Flags().StringToStringVar(&selection.materials, "material", nil, "输入名=Material ID，可重复指定")
+	c.Flags().StringToStringVar(&selection.assets, "asset", nil, "输入名=Generated Asset ID，可重复指定")
+	c.Flags().BoolVar(&selection.dryRun, "dry-run", false, "验证并组装输入，不创建 Job；不输出媒体 URL")
+	_ = c.MarkFlagRequired("organization-id")
+	_ = c.MarkFlagRequired("workflow-id")
+	c.RunE = func(c *cobra.Command, _ []string) error {
+		request, err := buildSubmitRequest(c.Context(), selection)
+		if err != nil {
+			return err
+		}
+		if selection.dryRun {
+			_, err = fmt.Fprintf(c.OutOrStdout(), "input validated workflow_id=%s version=%d materials=%d assets=%d; no Job submitted\n", request.WorkflowId, request.WorkflowVersion, len(request.Input.Material), len(request.Input.Asset))
+			return err
+		}
+		result, _, err := JobCli.SubmitJob(c.Context(), request)
+		if err != nil {
+			return fmt.Errorf("submit job failed")
+		}
+		if result.GetJobId() == "" {
+			return fmt.Errorf("gateway did not acknowledge a Job")
+		}
+		_, err = fmt.Fprintf(c.OutOrStdout(), "submitted job_id=%s status=%s\n", result.GetJobId(), result.GetStatus())
+		return err
+	}
+	return c
 }
 
-// runSubmitJob caller 组装 JobInput bundle 并提交。
-// 流程（bundle 模式，见 docs/ddd/media_materials/workflow/0001-reachability/reachability.md）：
-//  1. GetWorkflow 拿 scope（可达性锚点）
-//  2. CheckProductAccessible / CheckVirtualIPAccessible 校验容器可达
-//  3. GetProduct / GetVirtualIp 填 ProductData / VirtualIpData（reachability 不返回结构化字段）
-//  4. ResolveAssetByKind + AssetRead 解析 workflow_input slot 的 asset（url/content 填 bundle）
-//  5. SubmitJob 提交自包含 bundle
-func runSubmitJob(ctx context.Context, userID, workflowID string, version int, productID, vipID string) error {
-	// 1. workflow scope
-	wf, _, err := WfCli.GetWorkflow(ctx, &wfpb.GetWorkflowReq{Id: workflowID})
+// Use authorized public resource reads, explicit selections and signed URLs.
+// Identity comes from gateway credentials, never from a caller-supplied User ID.
+func buildSubmitRequest(ctx context.Context, s submitSelection) (*jobpb.SubmitJobReq, error) {
+	if s.organization == "" || s.workflow == "" || s.version < 0 {
+		return nil, fmt.Errorf("organization, workflow and a nonnegative version are required")
+	}
+	if WfCli == nil || JobCli == nil || ProdCli == nil || VipCli == nil || MatCli == nil || ObjectCli == nil || AssetCli == nil {
+		return nil, fmt.Errorf("Workflow/Materials clients are not configured")
+	}
+	ctx = context.WithValue(ctx, materialOrganizationKey{}, s.organization)
+	wf, _, err := WfCli.GetWorkflow(ctx, &wfpb.GetWorkflowReq{Id: s.workflow})
 	if err != nil {
-		return fmt.Errorf("get workflow: %w", err)
+		return nil, fmt.Errorf("workflow read failed")
 	}
-	scope := wf.GetScope()
-	if version == 0 {
-		version = int(wf.GetVersion())
+	if int32(wf.GetStatus()) != 2 || wf.GetVersion() < 1 {
+		return nil, fmt.Errorf("workflow must be published")
 	}
-
-	bundle := &jobpb.JobInput{}
-
-	// 2 + 3. product 输入
-	if productID != "" {
-		acc, _, err := ReachCli.CheckProductAccessible(ctx, &reachpb.CheckProductAccessibleReq{
-			WorkflowScope: scope, ProductId: productID,
-		})
-		if err != nil {
-			return fmt.Errorf("check product accessible: %w", err)
-		}
-		if !acc.GetAccessible() {
-			return fmt.Errorf("product %s not accessible: %s", productID, acc.GetReason())
-		}
-		p, _, err := ProdCli.GetProduct(ctx, &prodpb.GetProductReq{Id: productID})
-		if err != nil {
-			return fmt.Errorf("get product: %w", err)
-		}
-		bundle.Product = &jobpb.ProductData{
-			Id: p.GetId(), Name: p.GetName(), TargetAudience: p.GetTargetAudience(),
-			ProductDetails: p.GetProductDetails(), DisplayActions: p.GetDisplayActions(),
-		}
+	if s.version != 0 && s.version != int(wf.GetVersion()) {
+		return nil, fmt.Errorf("selected version does not match the current published input schema")
 	}
-
-	// 2 + 3. virtual_ip 输入
-	if vipID != "" {
-		acc, _, err := ReachCli.CheckVirtualIPAccessible(ctx, &reachpb.CheckVirtualIPAccessibleReq{
-			UserId: userID, WorkflowScope: scope, VirtualIpId: vipID,
-		})
-		if err != nil {
-			return fmt.Errorf("check virtual_ip accessible: %w", err)
-		}
-		if !acc.GetAccessible() {
-			return fmt.Errorf("virtual_ip %s not accessible: %s", vipID, acc.GetReason())
-		}
-		v, _, err := VipCli.GetVirtualIp(ctx, &vippb.GetVirtualIpReq{Id: vipID})
-		if err != nil {
-			return fmt.Errorf("get virtual_ip: %w", err)
-		}
-		// JobInput still uses legacy *Url field names. The organization-library
-		// contract carries stable object paths; URL resolution belongs to the
-		// deferred workflow/storage integration and this command is not exposed
-		// in the current milestone.
-		bundle.VirtualIp = &jobpb.VirtualIpData{
-			Id: v.GetId(), Name: v.GetName(), AvatarUrl: v.GetAvatarObjectPath(),
-			FullBodyUrl: v.GetFullBodyObjectPath(), ThreeViewUrl: v.GetThreeViewObjectPath(), NineViewUrl: v.GetNineViewObjectPath(),
-		}
-	}
-
-	// 4. ResolveAssetByKind + AssetRead 解析 input_schema 里的 asset slot
+	entries := map[string]*wfpb.InputSchemaEntry{}
 	for _, entry := range wf.GetInputSchema().GetEntries() {
-		ownerKind, ownerID := ownerForEntry(entry.GetName(), productID, vipID)
-		if ownerID == "" {
-			continue
+		entries[entry.Name] = entry
+	}
+	for name, id := range s.materials {
+		if id == "" || entries[name] == nil || entries[name].ResourceType != "MATERIAL" {
+			return nil, fmt.Errorf("invalid Material input selection")
 		}
-		resolved, _, err := ReachCli.ResolveAssetByKind(ctx, &reachpb.ResolveAssetByKindReq{
-			OwnerKind: ownerKind, OwnerId: ownerID, AssetKind: entry.GetName(),
-		})
-		if err != nil {
-			return fmt.Errorf("resolve asset by kind %q: %w", entry.GetName(), err)
+	}
+	for name, id := range s.assets {
+		if id == "" || entries[name] == nil || entries[name].ResourceType != "ASSET" {
+			return nil, fmt.Errorf("invalid Generated Asset input selection")
 		}
-		read, _, err := ReachCli.AssetRead(ctx, &reachpb.AssetReadReq{
-			ResourceType: resolved.GetResourceType(), Id: resolved.GetAssetId(),
-		})
-		if err != nil {
-			return fmt.Errorf("asset read %s: %w", resolved.GetAssetId(), err)
-		}
-		switch resolved.GetResourceType() {
+	}
+	for _, entry := range entries {
+		selected := false
+		switch entry.ResourceType {
+		case "PRODUCT":
+			selected = s.product != ""
+		case "VIRTUAL_IP":
+			selected = s.virtualIP != ""
 		case "MATERIAL":
-			bundle.Material = append(bundle.Material, &jobpb.MaterialData{Name: entry.GetName(), Url: read.GetUrl(), Content: read.GetContent()})
+			selected = s.materials[entry.Name] != ""
 		case "ASSET":
-			bundle.Asset = append(bundle.Asset, &jobpb.AssetData{Name: entry.GetName(), Url: read.GetUrl(), Content: read.GetContent()})
+			selected = s.assets[entry.Name] != ""
+		default:
+			return nil, fmt.Errorf("unsupported workflow input type")
+		}
+		if entry.Required && !selected {
+			return nil, fmt.Errorf("required input %s is not selected", entry.Name)
 		}
 	}
-
-	// 5. SubmitJob
-	resp, _, err := JobCli.SubmitJob(ctx, &jobpb.SubmitJobReq{
-		WorkflowId: workflowID, WorkflowVersion: int32(version), Input: bundle, SubmittedBy: userID,
-	})
-	if err != nil {
-		return fmt.Errorf("submit job: %w", err)
+	resolve := func(path string) (string, error) {
+		if path == "" {
+			return "", nil
+		}
+		resolved, _, err := ObjectCli.ResolveLibraryObject(ctx, &objectpb.ResolveLibraryObjectReq{OrganizationId: s.organization, ObjectPath: path})
+		if err != nil || resolved.GetUrl() == "" {
+			return "", fmt.Errorf("selected media object is not accessible")
+		}
+		return resolved.GetUrl(), nil
 	}
-	fmt.Printf("submitted job_id=%s status=%s\n", resp.GetJobId(), resp.GetStatus())
-	return nil
-}
-
-// ownerForEntry 简化：当前按 product 优先，vip 次之解析 asset。
-// 完整实现需 workflow.input_schema 标注每个 entry 的 owner_kind（product/virtual_ip）。
-func ownerForEntry(name, productID, vipID string) (string, string) {
-	if productID != "" {
-		return "product", productID
+	input := &jobpb.JobInput{}
+	if s.product != "" {
+		p, _, err := ProdCli.GetProduct(ctx, &prodpb.GetProductReq{Id: s.product, OrganizationId: s.organization})
+		if err != nil || p.GetOrganizationId() != s.organization || p.GetScope() != wf.GetScope() {
+			return nil, fmt.Errorf("selected Product is outside the workflow scope or inaccessible")
+		}
+		path := ""
+		for _, image := range p.GetImages() {
+			if path == "" || image.GetIsMain() {
+				path = image.GetObjectPath()
+			}
+			if image.GetIsMain() {
+				break
+			}
+		}
+		imageURL, err := resolve(path)
+		if err != nil {
+			return nil, err
+		}
+		input.Product = &jobpb.ProductData{Id: p.Id, Name: p.Name, TargetAudience: p.TargetAudience, ProductDetails: p.ProductDetails, DisplayActions: p.DisplayActions, ImageUrl: imageURL}
 	}
-	if vipID != "" {
-		return "virtual_ip", vipID
+	if s.virtualIP != "" {
+		v, _, err := VipCli.GetVirtualIp(ctx, &vippb.GetVirtualIpReq{Id: s.virtualIP, OrganizationId: s.organization})
+		if err != nil || v.GetOrganizationId() != s.organization || v.GetScope() != wf.GetScope() {
+			return nil, fmt.Errorf("selected Virtual IP is outside the workflow scope or inaccessible")
+		}
+		urls := make([]string, 4)
+		for i, path := range []string{v.AvatarObjectPath, v.FullBodyObjectPath, v.ThreeViewObjectPath, v.NineViewObjectPath} {
+			urls[i], err = resolve(path)
+			if err != nil {
+				return nil, err
+			}
+		}
+		input.VirtualIp = &jobpb.VirtualIpData{Id: v.Id, Name: v.Name, AvatarUrl: urls[0], FullBodyUrl: urls[1], ThreeViewUrl: urls[2], NineViewUrl: urls[3]}
 	}
-	return "", ""
+	names := make([]string, 0, len(s.materials)+len(s.assets))
+	for name := range s.materials {
+		names = append(names, name)
+	}
+	for name := range s.assets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		entry := entries[name]
+		if id := s.materials[name]; id != "" {
+			m, _, err := MatCli.GetMaterial(ctx, &matpb.GetMaterialReq{Id: id, OrganizationId: s.organization})
+			if err != nil || m.GetOrganizationId() != s.organization || m.GetScope() != wf.GetScope() || m.GetAssetKind() != entry.AssetKind {
+				return nil, fmt.Errorf("selected Material does not match input %s", name)
+			}
+			resourceURL, err := resolve(m.ObjectPath)
+			if err != nil {
+				return nil, err
+			}
+			content := m.Content
+			if content == "" {
+				content = m.Prompt
+			}
+			if content == "" {
+				content = m.Description
+			}
+			if resourceURL == "" && content == "" {
+				return nil, fmt.Errorf("selected Material input %s has no media or content", name)
+			}
+			input.Material = append(input.Material, &jobpb.MaterialData{Name: name, AssetKind: m.AssetKind, Url: resourceURL, Content: content})
+		} else {
+			a, _, err := AssetCli.GetGeneratedAsset(ctx, &assetpb.GetGeneratedAssetReq{Id: s.assets[name]})
+			if err != nil || a.GetScope() != wf.GetScope() || a.GetAssetKind() != entry.AssetKind {
+				return nil, fmt.Errorf("selected Generated Asset does not match input %s", name)
+			}
+			resourceURL, err := resolve(a.ObjectPath)
+			if err != nil {
+				return nil, err
+			}
+			if resourceURL == "" && a.Content == "" {
+				return nil, fmt.Errorf("selected Generated Asset input %s has no media or content", name)
+			}
+			input.Asset = append(input.Asset, &jobpb.AssetData{Name: name, AssetKind: a.AssetKind, Url: resourceURL, Content: a.Content})
+		}
+	}
+	return &jobpb.SubmitJobReq{WorkflowId: s.workflow, WorkflowVersion: wf.Version, Input: input}, nil
 }

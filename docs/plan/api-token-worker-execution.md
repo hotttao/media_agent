@@ -49,6 +49,14 @@ P6 保留既有实现与后续设计，但 **Agent 创建后自动申请 Token�
 - 与既有 `TestRequestCorrelationGateway` 合计1.748s通过，不启动观测后端/Worker/生成任务，不改变账号或业务数据。此前手动核对的响应/落盘日志关联现有可重复执行门禁。
 - 只证明请求级日志关联，不将共享客户端父trace下的两个独立请求冒充服务间调用，也不勾选异步Job/Worker/Outbox/Conductor全生命周期关联。
 
+### 正常提交入口修复（2026-10-04）
+
+- 按用户最新指令停止历史对账，修复既有submit-job实际调用停用Reachability、Object Path误当URL以及缺少API Token中间件的问题。直接选择企业内Product/VIP/Material/Generated Asset，不恢复旧Binding接口。
+- 增加显式输入名=资源ID选择、schema/Scope/kind/必填校验、主图与VIP四图解析、纯文本动作和无Secret摘要dry-run；User身份由网关派生。提交中不访问迁移接口、源库或历史报告。
+- typed-client HTTP桩race门禁验证公开路由/企业query/Bearer、主图/全身/三视/九视/资产与文本动作输入、必填/未知输入/跨企业/错误版本拒绝、dry-run不提交及正常命令单次提交。夹具初始遗漏Content-Type导致解码失败，补齐后复验通过；不以最初失败的全模块运行冒充通过。
+- 真实统一网关CLI dry-run通过，随后通过正常CLI命令仅提交 `job_5d10c178-57fe-4583-a3af-e5ee554e9fd3`，独立media_worker完成四节点。已有Job观察门禁通过（5.69s，不再次提交），结果读取门禁通过（1.17s），四个目标存储媒体Range206且类型正确。
+- media-cli全模块Go测试复验通过。测试Worker验收后SIGINT停止，其他后端继续运行；不迁移数据、不修改UI、不增加Agent功能。Provider仍是约定的media_ai_fixture Mock。
+
 ## P1 · Capability Target 与 IR
 
 - [x] migration 增加 `execution_target`、`managed_pool_key` 和约束，旧数据回填 Personal。

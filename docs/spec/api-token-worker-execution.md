@@ -221,7 +221,18 @@ CLI `media_auth worker-identity create/list/get/disable/delete/create-token` 使
 
 Traefik认证服务路由与Oathkeeper普通认证API规则同时包含`/api/worker-identities`，沿用Session或要求api.access的User API Token，不将管理入口加入`/api/worker/v1`规则。网关文件配置变更后重启本仓库网关；与浏览器回归串行。
 
-### 5.2 Managed Worker
+### 5.2 Workflow 客户端提交
+
+既有 `media-cli media_workflow submit-job` 使用公开网关和 User API Token，提交自包含 JobInput。不调用已停用的 Reachability/Binding 接口，不按 owner/kind 猜测资源，也不接受手填提交者身份。
+
+- 明确选择企业、发布的Workflow、Product/Virtual IP，以及输入名对应的Material/Generated Asset ID。
+- 根据当前发布输入schema校验必填输入、resource_type、asset_kind；资源由当前公开API授权读取并核对Scope，对象由公开resolve签发访问URL，不将Object Path当作URL。
+- Product选择主图，Virtual IP保留头像/全身/三视/九视图。纯文本动作保留content，无对象时不做无意义解析。
+- API Token/Cookie中间件在每个共享治理客户端只安装一次；所有素材读取带选定企业。Generated Asset既有IDL未声明企业query字段的调用，在客户端上下文中补齐query，不修改生成代码。
+- `--dry-run`只读验证与组装，输出安全摘要，不创建Job或打印签名URL；正常调用只提交一次，要求服务返回Job ID。服务端仍是身份、资源权限和执行授权的最终事实源。
+- 显式旧版本与当前发布schema不一致时拒绝，不能拿当前schema组装另一冻结版本；未来独立历史版本读取能力不在此次客户端修复范围。
+
+### 5.3 Managed Worker
 
 - 是 `media_workflow` 服务边界内的独立运行入口；
 - 不调用公开 Worker API，不申请 API Token，不访问 Talos；

@@ -252,6 +252,19 @@ go -C media-cli test ./e2e -run '^TestWorkflowPersonalWorkerFixture$' -count=1 -
 
 沿用上文网关/User API Token/Organization 环境变量。当前用户有未结束 Job 时拒绝提交。失败/超时保留执行供排查，不能自动重提；使用 `MEDIA_E2E_SAMPLE_JOB_ID=<existing-job-id>` 仅验收已有执行。样本完成后须用户确认，再迁移其他 Workflow 数据。
 
+正常CLI提交是独立门禁，使用当前公开素材选择与对象解析，不调用旧Reachability。先dry-run，再核对队列/启动限定Capability的独立Worker后，只提交一条；移除dry-run后打印的Job ID用于上述已有Job观察模式，不再让测试创建另一条Job：
+
+```bash
+APP_ENV=local MEDIA_WORKFLOW_ADDR="$MEDIA_GATEWAY_ADDR" \
+MEDIA_MATERIALS_ADDR="$MEDIA_GATEWAY_ADDR" \
+go -C media-cli run . media_workflow submit-job --dry-run \
+  --organization-id <organization_id> --workflow-id <published_workflow_id> \
+  --product-id <product_id> --virtual-ip-id <virtual_ip_id> \
+  --material 'movement=<material_id>,pose=<material_id>,scene=<material_id>'
+```
+
+`--asset 'input_name=<generated_asset_id>'` 选择schema声明的产物输入；不按类型自动挑记录。请求身份来自同一套`MEDIA_API_TOKEN`，不再支持手填`--user-id`。dry-run只输出输入计数/版本摘要，没有短时URL。该CLI门禁不替代HTTP执行/结果及审批门禁，也不作为前端旅程验收。
+
 ### 已完成 Workflow 输出只读验收
 
 `TestWorkflowCompletedOutputsGateway` 读取指定的已有四节点成功 Job，检查当前用户归属、每个节点成功且有产物、产物 Object Path 属于测试企业，再以不携带 API Token/Cookie 的独立 HTTP 客户端请求短时存储 URL。四个输出必须分别返回 `206 bytes 0-0/<positive-size>`，前三个为图片、最后一个为视频；不跟随重定向，不打印签名 URL。不提交、恢复、审批 Job，不启动 Worker。该门禁不代替新的四节点执行或前端预览验收。
