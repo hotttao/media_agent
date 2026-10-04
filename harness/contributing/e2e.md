@@ -284,8 +284,13 @@ go -C media-cli run . media_workflow historical-publication list --workspace-id 
 
 `TestRequestCorrelationGateway` 使用同一套网关/User API Token 配置，只读验证 Workflow/Materials API 保留合法 W3C trace ID，无父上下文时返回新的 `X-Trace-ID`。测试不启动观测后端；落盘日志对应关系另以服务日志核对，不用本测试证明异步 Worker/Outbox/Conductor 链路。
 
+`TestRequestCorrelationLogsGateway` 在同样只读请求基础上，额外读取可读的实际挂载应用日志，逐个核对响应trace ID、非零且不同于上游的server span及未采样标志00。显式要求当前服务关闭观测导出；缺日志配置为Skip，日志不可读或5秒内缺记录为失败。只扫描每个文件末尾最多2MiB，不打印完整日志/Secret。此门禁不证明异步执行关联，也不将两个请求携带同一个父trace解释为两服务间真实内部调用。
+
 ```bash
 go -C media-cli test ./e2e -run '^TestRequestCorrelationGateway$' -count=1 -v
+
+MEDIA_E2E_REQUEST_LOG_DIR=/absolute/path/to/media_agent/media_logs \
+go -C media-cli test ./e2e -run '^TestRequestCorrelationLogsGateway$' -count=1 -v
 ```
 
 ### Agent 稳定身份只读查询

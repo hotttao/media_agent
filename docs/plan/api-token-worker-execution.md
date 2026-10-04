@@ -43,6 +43,12 @@ P6 保留既有实现与后续设计，但 **Agent 创建后自动申请 Token�
 - 真实 `TestLibraryObjectUploadE2E` 验证上传返回的大小、image/png 类型与SHA-256匹配源文件，同内容重试保持对象身份、不同内容409。通过公开resolve取得短时URL后，独立无User凭据的存储请求返回200，下载内容逐字节一致且PNG可解码到原尺寸；跨企业上传及resolve均404。
 - 与 `TestMaterialsE2E` 三类资源CRUD一同真实运行通过（4.892s），借用测试API Token未签发/轮换/撤销，临时Material/VIP/Product记录通过API清理。一个测试PNG对象留在测试企业存储：当前没有对象删除API，不绕过服务直接删除。未修改原有素材或UI，不将下载解码门禁冒充前端上传/预览旅程验收。
 
+### 请求级日志关联自动门禁（2026-10-04）
+
+- 新增 `TestRequestCorrelationLogsGateway`，真实统一网关只读调用Workflow/Materials API，有/无上游W3C context两种场景均通过。响应X-Trace-ID逐个匹配实际app.log，server span非零且不同于上游，trace_flags=00；复用有界日志读取，不输出完整日志或凭据。
+- 与既有 `TestRequestCorrelationGateway` 合计1.748s通过，不启动观测后端/Worker/生成任务，不改变账号或业务数据。此前手动核对的响应/落盘日志关联现有可重复执行门禁。
+- 只证明请求级日志关联，不将共享客户端父trace下的两个独立请求冒充服务间调用，也不勾选异步Job/Worker/Outbox/Conductor全生命周期关联。
+
 ## P1 · Capability Target 与 IR
 
 - [x] migration 增加 `execution_target`、`managed_pool_key` 和约束，旧数据回填 Personal。
