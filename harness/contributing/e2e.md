@@ -120,7 +120,7 @@ go -C media-cli run . media_auth api-token list
 
 CLI 提供 `api-token create/list/rotate/revoke`。创建和轮换要求 `--env-out` 指向新文件，Secret 只写该文件（0600），控制台只返回元数据。测试不会输出 Secret；`.env` 不得提交。旧的本地 Session 测试仍适用于没有启用 Ory 的独立服务环境。
 
-Materials公开门禁 `TestMaterialsE2E` 和上传门禁 `TestLibraryObjectUploadE2E` 使用同一预置API Token，不需要Cookie、密码或 `MEDIA_MATERIALS_ADDR`。三类资源测试只清理自己创建的资源，不撤销借用凭据；上传重试验证路径/校验和相同、不同内容409。上传对象保留在测试企业对象存储中，本轮没有对象删除API，不直接绕过服务删除底层数据。
+Materials公开门禁 `TestMaterialsE2E` 和上传门禁 `TestLibraryObjectUploadE2E` 使用同一预置API Token，不需要Cookie、密码或 `MEDIA_MATERIALS_ADDR`。三类资源测试只清理自己创建的资源，不撤销借用凭据；上传使用可解码的真实2×2 PNG，核对大小/类型/SHA-256、同内容重试路径/校验和相同、不同内容409，再通过公开解析接口取得短时URL，由不带API Token/Cookie且不跟随重定向的独立客户端下载、逐字节比较并解码。另验证跨企业上传及解析均被拒绝。`TestLibraryPNGFixtureIsValidAndDistinct` 为本地夹具有效性门禁，不代替真实上传验收。上传对象保留在测试企业对象存储中，本轮没有对象删除API，不直接绕过服务删除底层数据。
 
 ```bash
 go -C media-cli test ./e2e -run '^(TestMaterialsE2E|TestLibraryObjectUploadE2E)$' -count=1 -v

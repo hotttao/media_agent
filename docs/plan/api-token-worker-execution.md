@@ -37,6 +37,12 @@ P6 保留既有实现与后续设计，但 **Agent 创建后自动申请 Token�
 - `TestDispatchInboxConcurrentReplayAndDeliveryRetry` race 通过，验证八并发相同结果、相反操作冲突、投递失败保留收据与恢复重试；Conductor 为注入桩，只有仓储是实际隔离 PostgreSQL。
 - 两项 PostgreSQL 门禁合计 47.210s 通过，临时数据库按 fixture 清理；Workflow 全模块 Go 测试及服务架构检查通过。未改变运行账号/凭据/任务、未启动客户端 Worker 或观测后端、未修改 UI。
 
+### 素材上传与实际图片可读性复验（2026-10-04）
+
+- 原上传测试仅构造PNG文件头与任意文本，不能作为图片实际可展示的证据。改为标准PNG编码器生成两个不同颜色的有效2×2图片；本地解码/尺寸/像素及内容差异 race 测试通过。
+- 真实 `TestLibraryObjectUploadE2E` 验证上传返回的大小、image/png 类型与SHA-256匹配源文件，同内容重试保持对象身份、不同内容409。通过公开resolve取得短时URL后，独立无User凭据的存储请求返回200，下载内容逐字节一致且PNG可解码到原尺寸；跨企业上传及resolve均404。
+- 与 `TestMaterialsE2E` 三类资源CRUD一同真实运行通过（4.892s），借用测试API Token未签发/轮换/撤销，临时Material/VIP/Product记录通过API清理。一个测试PNG对象留在测试企业存储：当前没有对象删除API，不绕过服务直接删除。未修改原有素材或UI，不将下载解码门禁冒充前端上传/预览旅程验收。
+
 ## P1 · Capability Target 与 IR
 
 - [x] migration 增加 `execution_target`、`managed_pool_key` 和约束，旧数据回填 Personal。
