@@ -277,6 +277,14 @@ Materials/Workflow分别配置独立 `AGENT_JWKS_URL,AGENT_JWT_ISSUER` 与精确
 4. 已有非 Platform Service Token 在明确迁移窗口换发为 Talos API Token；Secret 无法反推时必须换发，不能静默复制 Hash。
 5. 所有调用方完成切换后删除 `service_token` domain、IDL、路由和本地 Hash 验证；Platform Token 保持独立。
 
+### 7.1 Platform Token 加密存储前置
+
+`media_auth/biz/domain/platform_token`独立Token元数据/密文与Repository，不依赖service_token。`biz/shared/platformcipher`提供版本化AES-256-GCM Keyring；key为32字节，Seal每次随机12字节nonce，AAD为固定用途+Token ID+User ID+key_version，Open再常量时间核对SHA-256。仅接受既有tos_+64hex形态；失败统一安全错误，不携带Token或底层错误。本地Secret文件必须regular、32字节且无group/other权限；配置缺失不生成替代Key。Keyring保留旧版本支持读旧密文，不自动把密钥写入数据库。
+
+0015迁移创建独立platform_tokens（ID/User、32字节Hash、ciphertext、12字节nonce、key_version、创建/过期/撤销时间），User同库引用、Hash唯一、每User至多一条未撤销；过期记录先撤销再换发。DAL仅读写密文，不拥有生成/解密，使用上层事务context；支持创建、按User读取当前记录、Hash查询及幂等User撤销。数据存在时down拒绝，不能恢复明文存储。
+
+独立表/加密核心验证通过仍不代表已迁移：旧Platform行逐条校验与原子转移、Secret部署、purpose-bound内部接入/调用方、撤销事件接线及旧Hash分支删除须另行完成。此阶段不更新当前服务启动逻辑或生产数据，不新增公开取回凭据接口。
+
 兼容期不得把同一个 Secret 同时交给本地 Hash 和 Talos 两套验证器。
 
 ## 8. 验收标准

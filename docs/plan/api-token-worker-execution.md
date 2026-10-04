@@ -94,6 +94,8 @@
 ## P7 · 删除旧 Service Token
 
 - [ ] 明确 Platform Token 独立存储和调用方后，删除 `service_token` domain/policy/service/repo。
+  - [x] 独立Platform Token密文聚合/0015 schema、版本化AEAD与归属防调换、DAL/隔离PG门禁。
+  - [ ] 旧Platform明文逐条验证、原子迁移与切换；部署外部密钥、受限内部调用者/purpose、用户撤销接线。
 - [ ] 删除旧 IDL、路由、生成代码与 `tos_` 本地 Hash 工具。
 - [ ] 删除旧表或改为只读迁移归档；历史 migration 保留可重放。
 - [ ] 更新 OpenAPI、CLI、配置、部署和所有文档引用。
@@ -198,6 +200,10 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 | Agent 委托断言签名与请求绑定 | hertz_infra / Internal Identity JWT | 独立RSA/JWKS、精确audience、60秒TTL、方法/URI/body摘要及私有密钥读取 | covered |
 | Agent disabled/deleted/owner 解绑撤销 | Control + Auth | 权威生命周期事实、持久撤销意图/恢复 | missing |
 | Agent 当前委托关系周期复核 | Auth / api_token | 事务外权威查询、精确Actor撤销意图、既有Talos恢复；不替代生命周期事件 | covered |
+| Platform Token 独立密文存储 | Auth / platform_token | 0015、AES-256-GCM、归属绑定、唯一性/事务/降级保护；尚未部署 | covered |
+| 登录/WeCom 确保 Platform Token | Auth / platform_token | 从旧混合 ServiceToken 接线切换到独立聚合 | missing |
+| 内部获取/校验 Platform Token | Auth / platform_token | 调用者身份与 purpose 限制、独立密文读取/验证 | missing |
+| 用户撤销及旧明文迁移 | Auth / platform_token | 外部密钥部署、逐条验证/原子迁移、撤销接线 | missing |
 
 ### Auth Agent 校验接线
 
@@ -251,3 +257,10 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 三个新镜像部署并保持运行；真实`TestAgentProxyAuditGateway`检查Gateway与两类业务服务的实际JSON落盘日志，成功请求和素材企业隔离404均正确关联身份/trace_id，且不包含Secret或query。
 - 独立CLI通过新文件0600申请临时Agent Token、调用任务只读接口，两侧日志同trace_id `a7b25ec1e69dd5101fb8aa19ce66920f`；随后用User撤销该Token，Agent CLI再调用失败。HTTP的Agent申请/代理、User Token生命周期、Worker认证边界及请求关联5项回归通过（14.377s）。
 - 审计能力covered，不代表P6整体完成；自动创建申请、可靠生命周期事件、P7旧ServiceToken清理及P5剩余门禁仍missing。UI继续排除，5173 HTTP200；未启动Runtime或观测后端，未提交生成Job。
+
+### 2026-10-04 · Platform Token 独立密文存储门禁
+
+- 只读核对旧混合表：67条Platform Token，59条未撤销，67条均存明文且符合现有Secret/Hash格式。不能直接删除共用表或确保/读取/用户撤销接线。
+- 按既有ADR-0007实现独立聚合、DAL及0015 schema。AES-256-GCM绑定ID/用户/密钥版本；SHA-256校验、随机nonce、受限外部密钥文件读取，不隐式生成密钥。密文表不含Secret列，每用户至多一个未撤销记录（过期也须先显式撤销），非空历史拒绝降级删除。
+- Auth全量Go测试及架构检查通过；加密/领域race单测通过；隔离PostgreSQL的两项race集成测试通过（29.203s），覆盖并发冲突、跨用户隔离、过期/撤销/替换、事务回滚、SQL约束和降级保护。
+- 本阶段未部署密钥、未应用0015到运行环境、未改写67条凭据、未切换认证链路。没有新增公开API，故本门禁不冒充HTTP/CLI或内部调用者认证验收。下一阶段仍须原子迁移和调用者/purpose接线后再删除旧ServiceToken；P7总体保持未完成，UI不在范围内。

@@ -120,6 +120,16 @@ go -C media-cli run . media_auth api-token list
 
 CLI 提供 `api-token create/list/rotate/revoke`。创建和轮换要求 `--env-out` 指向新文件，Secret 只写该文件（0600），控制台只返回元数据。测试不会输出 Secret；`.env` 不得提交。旧的本地 Session 测试仍适用于没有启用 Ory 的独立服务环境。
 
+### Platform Token 独立密文存储集成测试
+
+`media_auth/e2e/platform_token_repo_test.go` 使用隔离PostgreSQL及仅测试用内存密钥，覆盖每用户当前凭据的并发唯一性、归属隔离、过期后显式撤销再替换、事务回滚、密文列约束及非空历史降级保护。不会读取或改写运行环境的旧凭据，不部署密钥，不模拟登录，也不启动业务服务：
+
+```bash
+go -C media_auth test -tags=e2e -race ./e2e -run '^TestPlatformToken' -count=1 -v
+```
+
+该存储门禁不能代替后续旧明文迁移、启动接线、内部调用者/purpose、撤销以及HTTP/CLI验收；加密与防调换单测位于`biz/shared/platformcipher`。
+
 ### Personal Worker 身份与撤销集成测试
 
 `media_auth/e2e/worker_identity*.go` 使用隔离 PostgreSQL，覆盖归属、状态 CAS、事务回滚、Actor/Organization 隔离、晚到签发恢复和降级迁移保护。真实 Talos 测试创建唯一临时 Worker Actor，验证停用事务提交后立即拒绝访问，重建撤销 Workflow 后 Talos Key 进入 revoked；只撤销测试自己创建的 Key，不使用或改动已有 Worker 凭据。
