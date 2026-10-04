@@ -46,7 +46,6 @@ func main() {
 		model.User{},
 		model.UserIdentity{},
 		model.WorkerIdentity{},
-		model.ServiceToken{},
 		model.OAuthClient{},
 		model.OAuthAuthorizationCode{},
 		model.OAuthRefreshToken{},

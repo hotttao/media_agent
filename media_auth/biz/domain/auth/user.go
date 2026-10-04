@@ -64,11 +64,9 @@ type AuthSourceResolver interface {
 	ResolveByUserID(ctx context.Context, userID string) string
 }
 
-// PlatformTokenEnsurer 确保 user 拥有一个 active platform service token（不存在则建）。
-//
-// 由 service_token domain 实现并注入（service 层装配），auth domain 不 import service_token domain。
-// auth.Login 成功后 fire-and-forget 调用，为 agent 回调 control_plane 预备明文 platform token。
-// 详见 spec §5.4 / ADR-0002。
+// PlatformTokenEnsurer 确保 user 拥有一个 active 独立密文托管凭据。
+// 由 platform_token 用例实现并在装配层注入，不返回明文、不依赖旧 service_token 领域。
+// 认证成功后的限时确保失败不阻断登录；内部使用仍需可信 caller/purpose。
 type PlatformTokenEnsurer interface {
 	// EnsurePlatformToken 确保 user 的 active platform token 存在；仅副作用，不返回明文。
 	EnsurePlatformToken(ctx context.Context, userID string) error

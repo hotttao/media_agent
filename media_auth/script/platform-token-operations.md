@@ -18,7 +18,7 @@ Auth 仅挂载服务端证书/私钥、可信 CA 和托管密钥，均只读且�
 
 ## 旧数据原子迁移
 
-先用新镜像、`PLATFORM_TOKEN_ENABLED=false` 正常启动 Auth，应用 0015/0016；再停止 Auth 及其他旧凭据写入者。维护窗口内先演练，再显式提交，命令不输出 Secret、Hash、密文或 DSN。
+有旧数据的升级必须分阶段：先使用只包含 0015/0016 的过渡版本，`PLATFORM_TOKEN_ENABLED=false` 正常启动 Auth；再停止 Auth 及其他旧凭据写入者。维护窗口内先演练，再显式提交，命令不输出 Secret、Hash、密文或 DSN。包含 0017 的最终版本只能在旧 Platform 行全部转移后启动，不能拿它代替过渡版本；即使是已撤销的旧 Platform 行也会阻断 0017。新建空库可直接应用全部迁移。
 
 ```bash
 /tmp/media-agent-platform-token-migrate \
@@ -29,6 +29,8 @@ Auth 仅挂载服务端证书/私钥、可信 CA 和托管密钥，均只读且�
 ```
 
 `--apply` 同事务保留 ID、User、Hash、创建/过期/撤销历史，验证加密回读后才删除已验证旧 Platform 行，不改变普通旧 ServiceToken。迁移失败整批回滚，不跳过错误行；重跑已完成迁移返回零行。提交后不得回退到旧镜像或明文写入者。
+
+0017 将剩余普通旧凭据保留为只读历史，不再是认证来源。语句级 `ENABLE ALWAYS` 触发器拒绝 INSERT/UPDATE/DELETE/TRUNCATE（包括影响零行的写入）；数据库管理员的 DDL 权限不在此保护边界内。该迁移不删除、不改写历史字段，down 明确拒绝自动回退，不能通过降级恢复旧认证。专用 Platform 维护投影仍可执行零行重跑，不注册旧业务 CRUD。
 
 ## 启动与验收
 
@@ -47,4 +49,4 @@ INFRA=unit docker compose \
 
 真实 HTTP 门禁位于 `media-cli/e2e/platform_token_mtls_e2e_test.go`，四项环境变量见 `harness/contributing/e2e.md`。创建随机密码的独立测试 User，获取/内省/轮换仅操作该 User；轮换后凭据一小时过期。不会重置或轮换已有测试账号。用例读取实际落盘元数据，验证 no-store、purpose 限制、无证书握手拒绝、普通 HTTP 拒绝及旧凭据失效，不打印或保存 Secret。
 
-此门禁不替代 API Token HTTP 回归及 CLI 跨进程门禁，也不代表未来 Gateway/Control 调用适配器已接线。普通 ServiceToken 整体退役、真实企微回调和真实用户删除仍需各自验收。
+此门禁不替代 API Token HTTP 回归及 CLI 跨进程门禁，也不代表未来 Gateway/Control 调用适配器已接线。旧路由退役和历史归档另有专用门禁；真实企微回调和真实用户删除仍需各自验收。

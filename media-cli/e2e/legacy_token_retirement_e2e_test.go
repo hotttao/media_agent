@@ -66,3 +66,26 @@ func TestLegacyTokenVerificationRetirement(t *testing.T) {
 		}
 	}
 }
+
+// Public routes must be absent even for an authenticated current principal.
+// The provisioned token is borrowed, never created, logged or revoked here.
+func TestLegacyTokenCRUDRetirement(t *testing.T) {
+	addr, token := os.Getenv("MEDIA_GATEWAY_ADDR"), os.Getenv("MEDIA_API_TOKEN")
+	if addr == "" || token == "" {
+		t.Skip("configure unified gateway address and provisioned API Token")
+	}
+	status, _ := doJSONBearer(t, addr, http.MethodGet, "/api/auth/me", token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("current API Token status=%d want=200", status)
+	}
+	for _, target := range []struct{ method, path string }{
+		{http.MethodGet, "/api/service-tokens"},
+		{http.MethodPost, "/api/service-tokens"},
+		{http.MethodDelete, "/api/service-tokens/retired-route-test"},
+	} {
+		status, _ := doJSONBearer(t, addr, target.method, target.path, token, nil)
+		if status != http.StatusNotFound {
+			t.Fatalf("retired %s route status=%d want=404", target.method, status)
+		}
+	}
+}

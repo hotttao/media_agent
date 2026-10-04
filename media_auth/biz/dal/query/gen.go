@@ -22,7 +22,6 @@ var (
 	OAuthAuthorizationCode *oAuthAuthorizationCode
 	OAuthClient            *oAuthClient
 	OAuthRefreshToken      *oAuthRefreshToken
-	ServiceToken           *serviceToken
 	Team                   *team
 	TeamInvite             *teamInvite
 	TeamMember             *teamMember
@@ -38,7 +37,6 @@ func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	OAuthAuthorizationCode = &Q.OAuthAuthorizationCode
 	OAuthClient = &Q.OAuthClient
 	OAuthRefreshToken = &Q.OAuthRefreshToken
-	ServiceToken = &Q.ServiceToken
 	Team = &Q.Team
 	TeamInvite = &Q.TeamInvite
 	TeamMember = &Q.TeamMember
@@ -55,7 +53,6 @@ func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 		OAuthAuthorizationCode: newOAuthAuthorizationCode(db, opts...),
 		OAuthClient:            newOAuthClient(db, opts...),
 		OAuthRefreshToken:      newOAuthRefreshToken(db, opts...),
-		ServiceToken:           newServiceToken(db, opts...),
 		Team:                   newTeam(db, opts...),
 		TeamInvite:             newTeamInvite(db, opts...),
 		TeamMember:             newTeamMember(db, opts...),
@@ -73,7 +70,6 @@ type Query struct {
 	OAuthAuthorizationCode oAuthAuthorizationCode
 	OAuthClient            oAuthClient
 	OAuthRefreshToken      oAuthRefreshToken
-	ServiceToken           serviceToken
 	Team                   team
 	TeamInvite             teamInvite
 	TeamMember             teamMember
@@ -94,7 +90,6 @@ func (q *Query) clone(db *gorm.DB) *Query {
 		OAuthAuthorizationCode: q.OAuthAuthorizationCode.clone(db),
 		OAuthClient:            q.OAuthClient.clone(db),
 		OAuthRefreshToken:      q.OAuthRefreshToken.clone(db),
-		ServiceToken:           q.ServiceToken.clone(db),
 		Team:                   q.Team.clone(db),
 		TeamInvite:             q.TeamInvite.clone(db),
 		TeamMember:             q.TeamMember.clone(db),
@@ -120,7 +115,6 @@ func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 		OAuthAuthorizationCode: q.OAuthAuthorizationCode.replaceDB(db),
 		OAuthClient:            q.OAuthClient.replaceDB(db),
 		OAuthRefreshToken:      q.OAuthRefreshToken.replaceDB(db),
-		ServiceToken:           q.ServiceToken.replaceDB(db),
 		Team:                   q.Team.replaceDB(db),
 		TeamInvite:             q.TeamInvite.replaceDB(db),
 		TeamMember:             q.TeamMember.replaceDB(db),
@@ -136,7 +130,6 @@ type queryCtx struct {
 	OAuthAuthorizationCode IOAuthAuthorizationCodeDo
 	OAuthClient            IOAuthClientDo
 	OAuthRefreshToken      IOAuthRefreshTokenDo
-	ServiceToken           IServiceTokenDo
 	Team                   ITeamDo
 	TeamInvite             ITeamInviteDo
 	TeamMember             ITeamMemberDo
@@ -152,7 +145,6 @@ func (q *Query) WithContext(ctx context.Context) *queryCtx {
 		OAuthAuthorizationCode: q.OAuthAuthorizationCode.WithContext(ctx),
 		OAuthClient:            q.OAuthClient.WithContext(ctx),
 		OAuthRefreshToken:      q.OAuthRefreshToken.WithContext(ctx),
-		ServiceToken:           q.ServiceToken.WithContext(ctx),
 		Team:                   q.Team.WithContext(ctx),
 		TeamInvite:             q.TeamInvite.WithContext(ctx),
 		TeamMember:             q.TeamMember.WithContext(ctx),

@@ -26,7 +26,6 @@ import (
 	dalmcpoauth "media_agent/media_auth/biz/dal/repo/mcp_oauth"
 	daloauth "media_agent/media_auth/biz/dal/repo/oauth"
 	dalorganization "media_agent/media_auth/biz/dal/repo/organization"
-	dalservicetoken "media_agent/media_auth/biz/dal/repo/service_token"
 	dalteam "media_agent/media_auth/biz/dal/repo/team"
 	dalworkeridentity "media_agent/media_auth/biz/dal/repo/worker_identity"
 	domainapitoken "media_agent/media_auth/biz/domain/api_token"
@@ -40,7 +39,6 @@ import (
 	oauthhandler "media_agent/media_auth/biz/handler/oauth"
 	oauthclienthandler "media_agent/media_auth/biz/handler/oauth_client"
 	organizationhandler "media_agent/media_auth/biz/handler/organization"
-	servicetokenhandler "media_agent/media_auth/biz/handler/service_token"
 	teamhandler "media_agent/media_auth/biz/handler/team"
 	teaminternalhandler "media_agent/media_auth/biz/handler/team_internal"
 	tokenhandler "media_agent/media_auth/biz/handler/token"
@@ -54,7 +52,6 @@ import (
 	mcpoauthservice "media_agent/media_auth/biz/service/mcp_oauth"
 	oauthservice "media_agent/media_auth/biz/service/oauth"
 	organizationservice "media_agent/media_auth/biz/service/organization"
-	servicetokenservice "media_agent/media_auth/biz/service/service_token"
 	teamservice "media_agent/media_auth/biz/service/team"
 	tokenservice "media_agent/media_auth/biz/service/token"
 	userservice "media_agent/media_auth/biz/service/user"
@@ -117,11 +114,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config, platform *platformRuntime) {
 	identityhandler.IdentitySvc = identitySvc
 	authSvc.SetAuthSourceResolver(identitySvc)
 
-	// Legacy generic service token compatibility only. Platform bootstrap must
-	// come from independent encrypted custody, never this plaintext repository.
-	stRepo := dalservicetoken.NewRepo(db)
-	stSvc := servicetokenservice.NewService(stRepo)
-	servicetokenhandler.ServiceTokenSvc = stSvc
+	// Platform bootstrap only uses independent encrypted custody.
 	var platformEnsurer domainauth.PlatformTokenEnsurer
 	if platform != nil {
 		platformEnsurer = platform.service
@@ -137,7 +130,6 @@ func InitDI(db *gorm.DB, cfg *configpb.Config, platform *platformRuntime) {
 		_, err = organizationRepo.GetMembership(ctx, organizationID, userID)
 		return err == nil
 	}
-	stSvc.SetMembershipValidator(membershipValidator)
 	organizationSvc := organizationservice.NewService(organizationRepo)
 	organizationhandler.Svc = organizationSvc
 	teaminternalhandler.OrganizationSvc = organizationSvc
@@ -264,7 +256,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config, platform *platformRuntime) {
 	mcpoauthhandler.McpOAuthFlow = mcpFlow
 
 	// 用户软删除：提交 User + Outbox，worker 最终一致撤销各认证域凭据。
-	userDeleteFlow := workflow.NewUserSoftDelete(userRepo, accessOutbox, stRepo, oauthRepo, mcpRepo, txRunner)
+	userDeleteFlow := workflow.NewUserSoftDelete(userRepo, accessOutbox, nil, oauthRepo, mcpRepo, txRunner)
 	if platform != nil {
 		userDeleteFlow.SetPlatformTokenRevoker(platform.service)
 	}

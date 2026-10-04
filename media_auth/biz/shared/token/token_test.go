@@ -1,6 +1,6 @@
 // token_test.go：shared token 工具单测。
 //
-// 覆盖：HashToken（sha256 hex）、GenerateTokenAndHash（tos_ 前缀 + hash 匹配）、
+// 覆盖：OAuth HashToken（sha256 hex）、
 //
 //	GenerateOpaqueTokenAndHash（hex + hash 匹配）、ComputePKCEChallenge（RFC 7636 向量）、
 //	GeneratePKCEVerifier / GenerateState（格式 + 唯一性）。
@@ -24,25 +24,6 @@ func TestHashToken(t *testing.T) {
 	// 相同输入确定性
 	if HashToken("abc") != got {
 		t.Errorf("HashToken not deterministic")
-	}
-}
-
-func TestGenerateTokenAndHash(t *testing.T) {
-	plaintext, hash, err := GenerateTokenAndHash()
-	if err != nil {
-		t.Fatalf("GenerateTokenAndHash: %v", err)
-	}
-	if !strings.HasPrefix(plaintext, "tos_") {
-		t.Errorf("plaintext should have tos_ prefix, got %q", plaintext)
-	}
-	// hash 与明文一致
-	if hash != HashToken(plaintext) {
-		t.Errorf("hash should match HashToken(plaintext)")
-	}
-	// 两次生成应不同（随机）
-	p2, _, _ := GenerateTokenAndHash()
-	if p2 == plaintext {
-		t.Errorf("two generates should differ")
 	}
 }
 

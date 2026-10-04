@@ -124,16 +124,20 @@ Talos Client `RecoverIssue` 与正常 `Issue` 分离：必须提供非空 reques
 - `idl/media_auth/token.proto` 删除 `VerifyToken`、`GetPlatformToken` RPC 及专属 request/response；Session RPC 保留独立 `VerifySessionResponse`，字段编号兼容既有会话客户端。API Token RPC 不变。
 - Auth 的 `biz/service/token` 仅依赖 UserRepo 提供当前会话状态/版本查询，移除旧TokenRepo、Hash、membership和Platform获取；DI不再为会话校验注入旧凭据仓储。
 - Auth 本地Cookie中间件遇到未经受信JWT中间件验证的Bearer直接401，不查旧Hash也不降级Cookie。Workflow/Materials移除Bearer回调Auth `/api/auth/me`、其原始Token缓存及仅用于该路径的异步预取；可信JWT、Kratos和OAuth路径不变。
-- 重新生成DTO/client/router；对应旧handler及失效测试删除或替换。旧CRUD和归档清理属于下一删除门禁，不能把验证路径删除当作P7整体完成。
+- 删除`idl/media_auth/service_token.proto`、旧handler/router/DTO/client、domain/policy/service和普通repo；重新生成剩余路由聚合和OpenAPI。不保留失效公开CLI。UI按用户要求暂停，旧UI API封装仅列为失效引用，不能借此恢复旧服务。
+- Platform维护投影`LegacyPlatformRecord/PlatformMigrationSource`归`platform_token`端口，SQL适配器在`dal/repo/platform_token/legacy_migration.go`且使用私有临时行模型，不生成普通CRUD Query。UserSoftDelete不再注入或调用旧TokenRepo；独立Platform撤销仍参与原本地TX和审计。
+- OAuth Client Secret切换既有`GenerateOpaqueTokenAndHash`，删除旧`GenerateTokenAndHash`；SHA-256/opaque/PKCE/state仍用于OAuth，不作为普通Bearer验证工具。
+- 0017锁定旧表，拒绝任何遗留is_platform行后，为`service_tokens`安装always-enabled statement trigger，拒绝INSERT/UPDATE/DELETE/TRUNCATE（含无匹配行的写语句）。保留普通历史字段/ID/Hash和原迁移；不修改revoked_at或删除记录。仅DB管理员DDL不在保护范围；down固定拒绝重新启用。启动部署必须使用已删除旧清理的新代码。
+- 隔离PG门禁覆盖非空归档保真、四种写拒绝/无匹配写、事务回滚/重试、遗留Platform拒绝与原子迁移后再归档、维护工具归档后零行重跑，以及拒绝down。历史迁移测试显式固定在schema16；当前用例使用最新schema，不把旧夹具降级当成生产门禁。
 
 | 原能力/事实入口 | 目标上下文/Domain/聚合或读模型 | Workflow | 状态 |
 |:---|:---|:---|:---|
 | 旧ServiceToken Hash验证/普通Bearer远程验证及缓存 | Auth/api_token/Principal，由Talos验证；业务服务只验可信JWT | API Token Verification | deprecated-with-reason：统一长期凭证，禁止本地旁路 |
 | 旧Platform RPC明文读取 | Auth/platform_token/Token | 私有mTLS单聚合获取 | covered |
 | 旧Session内省 | Auth/auth/User当前状态与auth_version读模型 | 无，纯读 | covered |
-| 旧ServiceToken创建/列表/撤销、CLI/Swagger | Auth/api_token/Token元数据 | Issuance/Rotation/Revocation | missing：旧CRUD代码仍须删除 |
+| 旧ServiceToken创建/列表/撤销、CLI/Swagger | Auth/api_token/Token元数据 | Issuance/Rotation/Revocation | deprecated-with-reason：统一API Token能力，旧公开入口退出 |
 | 旧用户删除时的凭据清理 | Auth/platform_token及api_token | User Access Revocation | covered，新链路已接；旧清理代码待退役 |
-| 旧表普通35条凭据历史及维护工具 | Auth迁移只读投影，不作认证事实 | Platform Token Migration | missing：归档与仅维护DAL收口待完成 |
+| 旧表普通35条凭据历史及维护工具 | Auth迁移只读投影，不作认证事实 | Platform Token Migration | covered：只读归档保留历史，维护来源无普通CRUD |
 
 ### 4.1 持久模型
 

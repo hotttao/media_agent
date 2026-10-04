@@ -8,8 +8,8 @@ import (
 	"errors"
 	"time"
 
+	legacy "media_agent/media_auth/biz/domain/platform_token"
 	platform "media_agent/media_auth/biz/domain/platform_token"
-	legacy "media_agent/media_auth/biz/domain/service_token"
 	"media_agent/media_auth/biz/shared/platformcipher"
 )
 

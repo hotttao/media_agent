@@ -20,6 +20,13 @@ func newDB(t *testing.T) *fixtures.Database {
 	return db
 }
 
+func newDBAtVersion(t *testing.T, version int) *fixtures.Database {
+	t.Helper()
+	db := fixtures.NewDatabase(t)
+	fixtures.MigrateToVersion(t, db, version)
+	return db
+}
+
 // seedUser 插入一个测试 user。
 func seedUser(t *testing.T, db *fixtures.Database, id, username string) {
 	t.Helper()

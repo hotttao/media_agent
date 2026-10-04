@@ -93,7 +93,7 @@
 
 ## P7 · 删除旧 Service Token
 
-- [ ] 明确 Platform Token 独立存储和调用方后，删除 `service_token` domain/policy/service/repo。
+- [x] 明确 Platform Token 独立存储和调用方后，删除 `service_token` domain/policy/service/repo。
   - [x] 独立Platform Token密文聚合/0015 schema、版本化AEAD与归属防调换、DAL/隔离PG门禁。
   - [x] 离线原子迁移Workflow/工具：默认演练、保留撤销历史、冲突拒绝、整批回滚、重跑和隔离PG验收。
   - [x] 独立运行用例：可信caller/purpose端口、User状态/并发行锁、确保/内省/轮换/撤销、元数据持久审计和PG门禁；不含mTLS接入/启动接线。
@@ -102,7 +102,13 @@
 - [ ] 删除旧 IDL、路由、生成代码与 `tos_` 本地 Hash 工具。
   - [x] 先移除旧验证/Platform读取RPC和Auth/Workflow/Materials普通Bearer回退；保留Session与OAuth能力并验证失败不降级Cookie。
   - [ ] 再删除旧CRUD/CLI/Swagger、domain/policy/service及非维护DAL；归档旧事实并保留历史migration与专用维护投影。
-- [ ] 删除旧表或改为只读迁移归档；历史 migration 保留可重放。
+    - [x] 移动维护端口/SQL到Platform专用投影，删除旧业务目录与DI/用户撤销接线。
+    - [x] OAuth Client Secret解耦旧tos_生成器，保留现有Secret、PKCE/state及grant规则。
+    - [x] 0017只读归档、隔离PG保真/写拒绝/迁移阻断/down门禁，历史测试固定schema16。
+    - [x] IDL与失效生成物清理，重生成路由聚合、GORM Query和Swagger。
+    - [ ] 迁移旧Materials HTTP测试为API Token/统一网关，并按当前组织归属与内部RPC契约恢复覆盖。
+    - [x] 部署新Auth并核对35条历史数量、归档状态、接口404和独立Platform/API Token/CLI门禁；字段保真由隔离PG验证，运行环境未完成前后字段指纹比较。
+- [x] 删除旧表或改为只读迁移归档；历史 migration 保留可重放。
 - [ ] 更新 OpenAPI、CLI、配置、部署和所有文档引用。
 - [ ] 运行全仓 `make arch-check`、相关模块 `go test ./...` 和 E2E。
 
@@ -351,3 +357,13 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 三个服务全量Go、认证边界单测/race、Auth根接线race、生成包编译与各服务架构检查通过；CLI全量测试通过（未配置运行地址的HTTP测试明确Skip，不算运行验收）。实际HTTP退役测试先在旧镜像上因旧RPC401而失败，新镜像通过（0.18s），证明旧RPC404、三个服务旧Bearer401以及Session/API Token内省仍存在且拒绝非法凭据。
 - Auth/Workflow/Materials新镜像已部署，三个RestartCount=0、schema16/dirty=false；旧Platform0、旧普通ServiceToken35保持不变，Platform审计pending0。独立mTLS获取/轮换/内省/真实落盘回归通过（2.10s）；统一网关API Token、Agent签发/代理/审计、Worker五项回归通过（18.000s），独立CLI me与5173 HTTP200通过。未启动观测后端或提交生成Job。
 - 本项只完成P7验证边界删除；旧CRUD/domain/policy/service、非维护DAL与Hash工具、Swagger及旧表归档仍须完成，不能以认证旁路关闭标记P7全部完成。旧测试中仍调用CRUD的Materials HTTP门禁须改用API Token/统一网关；当前已用API Token的五项网关门禁不替代它们。
+
+### 2026-10-04 · 旧业务凭据 CRUD 删除与只读归档
+
+- 按 domain-modeling 更新迁移/User停用 Workflow、OAuth领域、change/spec/plan：旧业务领域、policy/service/handler/router、IDL客户端、模型及GORM Query已删除；维护端口/SQL移至Platform独立目录，不接普通DI。用户撤销仅操作当前凭据，不再写历史表。
+- OAuth Client Secret改用独立不透明生成器，既有Secret验证不变；共享Hash/PKCE/state继续用于OAuth，不用于业务Bearer验证。全量路由/Swagger/GORM重生成完成，并修复Hertz生成器`oauth`与`mcp_oauth`注册顺序冲突。
+- 新0017以事务锁与前置检查阻断残留旧Platform；只读归档保留原事实，语句级ALWAYS触发器拒绝写入及TRUNCATE，down拒绝自动恢复。历史迁移夹具固定schema16，普通夹具仍执行最新迁移。
+- 隔离PG race迁移/readiness/Kratos/归档回归通过（91.348s）：历史字段指纹一致、八种写入拒绝、旧Platform未转移整批失败、零行重跑、用户停用不依赖旧表。Auth全模块测试、相关race与架构检查通过。
+- 新Auth镜像已部署，schema17/dirty=false、RestartCount=0、旧Platform0/普通历史35、归档触发器ALWAYS。运行字段指纹前置查询使用错误列名而失败，故只确认历史数量未变；不声称完成运行前后字段保真比对，也不为补验而解除归档。
+- HTTP旧CRUD（经网关）、旧验证RPC、独立Platform mTLS/真实审计（2.21s）、API Token、Agent签发/代理/跨服务审计、Worker凭据门禁通过。第一次组合运行因测试日志根目录/凭据注入配置错误失败和Skip，纠正后相应三项通过（19.731s）；其他四项各自通过，不把失败组合记为整体通过。独立CLI me及5173 HTTP200通过，服务保持运行；未启动观测后端或生成Job。
+- P7仍未整体完成：旧Materials HTTP门禁仍依赖旧CRUD，须按API Token/组织归属/内部RPC现契约重构，不能删除测试冒充覆盖。P6/P5及Workflow租户模型其他missing保留；UI排除，用户`ui_workflow/DESIGN.md`未修改。

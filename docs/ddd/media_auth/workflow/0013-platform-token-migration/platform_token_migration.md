@@ -2,10 +2,9 @@
 name: platform_token_migration
 description: 原子转移旧长期委托凭据到独立密文托管
 participants:
-  - media_auth/service_token
+  - media_auth/legacy_platform_source（仅维护投影）
   - media_auth/platform_token
 domains:
-  - service_token
   - platform_token
 ---
 
@@ -54,6 +53,8 @@ sequenceDiagram
 ```
 
 仓储只使用传入事务，Workflow拥有事务边界。锁阻止并行迁移和运行时写入竞争，但不能替代停机/切换：旧应用在提交后仍会重新创建明文。工具不自动启动、停机或切换服务。AEAD只做本地计算，事务内不调用Talos/KMS/HTTP。
+
+旧来源仅是Platform维护投影，不保留ServiceToken业务Domain、CRUD或验证能力。完成迁移后，0017须在锁内确认所有旧Platform行已清空，再将旧表普通历史冻结为只读归档；有遗留Platform时拒绝整个归档迁移。归档表保持旧字段与ID供维护核对，不作为任何认证事实。新代码的用户撤销不修改归档，防止后台重试因写只读表而失败；完成后的维护工具重跑仍为零行。INSERT/UPDATE/DELETE/TRUNCATE均由数据库statement trigger拒绝，不能靠应用约定实现只读；管理员DDL权限不属于该防护边界。归档的down明确拒绝，不能自动回退重新启用旧凭据。
 
 ## 状态与不变量
 

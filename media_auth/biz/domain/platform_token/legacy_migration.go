@@ -1,4 +1,4 @@
-package servicetoken
+package platformtoken
 
 import (
 	"context"

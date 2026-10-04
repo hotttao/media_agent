@@ -1094,74 +1094,6 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
-    /api/service-tokens:
-        get:
-            tags:
-                - ServiceTokenService
-            description: GET /api/service-tokens —— 当前用户的有效 token 列表(不含 secret)
-            operationId: ServiceTokenService_ListServiceTokens
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListServiceTokensResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-        post:
-            tags:
-                - ServiceTokenService
-            description: POST /api/service-tokens —— 创建 token,响应里 token 字段只此一次
-            operationId: ServiceTokenService_CreateServiceToken
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/CreateServiceTokenRequest'
-                required: true
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/CreateServiceTokenResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
-    /api/service-tokens/{id}:
-        delete:
-            tags:
-                - ServiceTokenService
-            description: DELETE /api/service-tokens/:id —— 撤销自己名下的非 platform token
-            operationId: ServiceTokenService_RevokeServiceToken
-            parameters:
-                - name: id
-                  in: path
-                  required: true
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RevokeServiceTokenResponse'
-                default:
-                    description: Default error response
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Status'
     /api/teams:
         get:
             tags:
@@ -2173,39 +2105,6 @@ components:
             properties:
                 name:
                     type: string
-        CreateServiceTokenRequest:
-            type: object
-            properties:
-                name:
-                    type: string
-                organization_id:
-                    type: string
-                scopes:
-                    type: array
-                    items:
-                        type: string
-                expires_at:
-                    type: string
-        CreateServiceTokenResponse:
-            type: object
-            properties:
-                id:
-                    type: string
-                name:
-                    type: string
-                token:
-                    type: string
-                    description: tos_xxx 明文,仅本次响应可见
-                created_at:
-                    type: string
-                organization_id:
-                    type: string
-                scopes:
-                    type: array
-                    items:
-                        type: string
-                expires_at:
-                    type: string
         CreateTeamRequest:
             type: object
             properties:
@@ -2421,13 +2320,6 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ApiOrganization'
-        ListServiceTokensResponse:
-            type: object
-            properties:
-                tokens:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/ServiceTokenRecord'
         ListUsersResponse:
             type: object
             properties:
@@ -2525,11 +2417,6 @@ components:
             properties:
                 success:
                     type: boolean
-        RevokeServiceTokenResponse:
-            type: object
-            properties:
-                success:
-                    type: boolean
         RotateApiTokenRequest:
             type: object
             properties:
@@ -2544,30 +2431,6 @@ components:
                     $ref: '#/components/schemas/ApiTokenRecord'
                 secret:
                     type: string
-        ServiceTokenRecord:
-            type: object
-            properties:
-                id:
-                    type: string
-                name:
-                    type: string
-                created_by:
-                    type: string
-                created_at:
-                    type: string
-                revoked_at:
-                    type: string
-                is_platform:
-                    type: boolean
-                organization_id:
-                    type: string
-                scopes:
-                    type: array
-                    items:
-                        type: string
-                expires_at:
-                    type: string
-            description: ServiceTokenRecord —— 不含 token_hash / token 明文
         SetDefaultPromptRequest:
             type: object
             properties:
@@ -2797,15 +2660,6 @@ tags:
          /token 接受 application/x-www-form-urlencoded 和 application/json 两种 Content-Type,
          proto 字段一律声明,handler 层按 Content-Type 分支。
     - name: OrganizationService
-    - name: ServiceTokenService
-      description: |-
-        ServiceTokenService —— B2B API token 管理(tos_xxx 形式)。
-
-         安全要点:
-           * POST 创建时 token 明文只返回一次,DB 存 token_hash(SHA-256)
-           * LIST 只返 id/name/created_at/revoked_at/is_platform,绝不返 hash
-           * DELETE 仅能撤销非 platform 的自己 token(is_platform = false 的 DB 约束)
-           * 每用户至多一个 active platform token(DB 唯一部分索引保证)
     - name: TeamService
       description: |-
         Team CRUD + 成员管理 + 邀请签发与撤销。创建者自动成为首任 admin。

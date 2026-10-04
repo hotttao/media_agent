@@ -18,10 +18,10 @@ import (
 	"time"
 
 	"media_agent/media_auth/biz/dal"
+	legacyrepo "media_agent/media_auth/biz/dal/repo/platform_token"
 	platformrepo "media_agent/media_auth/biz/dal/repo/platform_token"
-	legacyrepo "media_agent/media_auth/biz/dal/repo/service_token"
+	legacy "media_agent/media_auth/biz/domain/platform_token"
 	platform "media_agent/media_auth/biz/domain/platform_token"
-	legacy "media_agent/media_auth/biz/domain/service_token"
 	"media_agent/media_auth/biz/shared/platformcipher"
 	"media_agent/media_auth/biz/workflow"
 	"media_agent/media_auth/e2e/fixtures"
@@ -67,7 +67,7 @@ func migrationCounts(t *testing.T, db *fixtures.Database, wantOld, wantTarget in
 }
 
 func TestPlatformTokenMigrationDryRunPagingConcurrentApplyAndHistory(t *testing.T) {
-	db := newDB(t)
+	db := newDBAtVersion(t, 16)
 	seedUser(t, db, "owner", "owner")
 	ring := platformTestRing(t)
 	target := platformrepo.NewRepo(db.Gorm)
@@ -147,7 +147,7 @@ func migrationTimeEqual(a, b *time.Time) bool {
 func TestPlatformTokenMigrationBadSourceOrConflictingTargetRollsBackAll(t *testing.T) {
 	for _, fault := range []string{"hash", "missing-owner", "empty-id", "different-history", "unreadable-target"} {
 		t.Run(fault, func(t *testing.T) {
-			db := newDB(t)
+			db := newDBAtVersion(t, 16)
 			seedUser(t, db, "owner", "owner")
 			ring := platformTestRing(t)
 			target := platformrepo.NewRepo(db.Gorm)
@@ -197,7 +197,7 @@ func (s cancelMigrationSource) DeleteMigratedPlatform(ctx context.Context, id st
 }
 
 func TestPlatformTokenMigrationCancellationAfterWriteRollsBack(t *testing.T) {
-	db := newDB(t)
+	db := newDBAtVersion(t, 16)
 	seedUser(t, db, "owner", "owner")
 	seedLegacyPlatform(t, db, 0, true)
 	seedLegacyPlatform(t, db, 1, false)
@@ -212,7 +212,7 @@ func TestPlatformTokenMigrationCancellationAfterWriteRollsBack(t *testing.T) {
 }
 
 func TestPlatformTokenMigrationMaintenanceExecutableDefaultsToRollback(t *testing.T) {
-	db := newDB(t)
+	db := newDBAtVersion(t, 16)
 	seedUser(t, db, "owner", "owner")
 	seedLegacyPlatform(t, db, 0, false)
 	dir := t.TempDir()

@@ -134,6 +134,18 @@ MEDIA_AUTH_INTERNAL_TOKEN=<configured-private-introspection-credential> \
 
 凭据从忽略的env文件注入，不把实际值写在命令记录中。此门禁不代替网关API Token成功流程、独立CLI门禁或旧CRUD/归档清理验收。各服务中间件单测另使用有效Cookie验证失败Bearer及大小写/其他Authorization变体均不得降级，且不会向旧Auth请求身份。
 
+`TestLegacyTokenCRUDRetirement` 使用预先签发的 `MEDIA_API_TOKEN` 请求 `MEDIA_GATEWAY_ADDR`，先验证 `/api/auth/me` 成功，再检查旧创建、列表、撤销路由均为404。不会签发或撤销借用凭据，不模拟登录。
+
+```bash
+go -C media-cli test ./e2e -run '^TestLegacyTokenCRUDRetirement$' -count=1 -v
+```
+
+`service_token_retirement_test.go` 使用隔离PG：历史夹具显式迁移至16，再验证0017不改变历史、八种写操作均被拒绝、旧Platform未转移时整批回滚、down拒绝自动恢复旧认证，以及独立Platform和User停用流程不再写旧表。历史Platform迁移测试也固定schema16；一般夹具仍执行全部最新迁移。不得为构造历史夹具关闭运行环境的归档保护。
+
+```bash
+go -C media_auth test -tags=e2e -race ./e2e -run '^(TestRetiredServiceTokenArchive|TestPlatformToken(Migration|Readiness|Kratos))' -count=1 -v
+```
+
 运行环境 mTLS 门禁使用预启动 Auth；先完成[维护切换](../../media_auth/script/platform-token-operations.md)，再执行：
 
 ```bash

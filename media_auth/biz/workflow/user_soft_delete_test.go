@@ -98,7 +98,7 @@ func TestUserRevocationIncludesIndependentPlatformAndDoesNotConfirmFailure(t *te
 	if err := flow.ProcessPending(t.Context()); err != nil {
 		t.Fatal("retry scheduling failed")
 	}
-	if outbox.delivered || !outbox.failed || legacy.calls != 1 || platform.calls != 1 {
+	if outbox.delivered || !outbox.failed || legacy.calls != 0 || platform.calls != 1 {
 		t.Fatal("platform failure confirmed or cleanup skipped")
 	}
 	platform.err = nil

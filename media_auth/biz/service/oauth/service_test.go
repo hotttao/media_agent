@@ -443,9 +443,9 @@ func TestCreateClient_GeneratesSecretAndHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateClient: %v", err)
 	}
-	// 明文 secret 非空 + tos_ 前缀。
-	if res.ClientSecret == "" || !strings.HasPrefix(res.ClientSecret, "tos_") {
-		t.Errorf("client_secret: got %q", res.ClientSecret)
+	// OAuth Secret is independent of retired ServiceToken formatting.
+	if len(res.ClientSecret) != 64 || strings.HasPrefix(res.ClientSecret, "tos_") {
+		t.Error("invalid independent OAuth client secret format")
 	}
 	// client id 非空。
 	if res.Client.ID == "" {

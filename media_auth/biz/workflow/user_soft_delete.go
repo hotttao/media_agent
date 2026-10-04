@@ -42,7 +42,6 @@ type identitySessionRevoker interface {
 type UserSoftDelete struct {
 	users    softDeleteUsers
 	outbox   domainauth.AccessRevocationOutbox
-	tokens   userTokenRevoker
 	platform userTokenRevoker
 	oauth    userOAuthRevoker
 	mcp      userMCPRevoker
@@ -51,7 +50,7 @@ type UserSoftDelete struct {
 }
 
 // SetPlatformTokenRevoker installs independent custody cleanup during the
-// compatibility cutover. It participates in the same caller transaction.
+// independent custody path. It participates in the same caller transaction.
 func (w *UserSoftDelete) SetPlatformTokenRevoker(revoker userTokenRevoker) { w.platform = revoker }
 
 // SetIdentitySessionRevoker attaches the external identity session revoker.
@@ -61,9 +60,9 @@ func (w *UserSoftDelete) SetIdentitySessionRevoker(revoker identitySessionRevoke
 }
 
 func NewUserSoftDelete(users softDeleteUsers, outbox domainauth.AccessRevocationOutbox,
-	tokens userTokenRevoker, oauth userOAuthRevoker, mcp userMCPRevoker,
+	platform userTokenRevoker, oauth userOAuthRevoker, mcp userMCPRevoker,
 	tx TransactionRunner) *UserSoftDelete {
-	return &UserSoftDelete{users: users, outbox: outbox, tokens: tokens, oauth: oauth, mcp: mcp, tx: tx}
+	return &UserSoftDelete{users: users, outbox: outbox, platform: platform, oauth: oauth, mcp: mcp, tx: tx}
 }
 
 func (w *UserSoftDelete) Delete(ctx context.Context, currentUserID, targetID string) error {
@@ -157,9 +156,6 @@ func (w *UserSoftDelete) ProcessPending(ctx context.Context) error {
 		err := w.tx.RunInTx(ctx, func(txCtx context.Context) error {
 			user, err := w.users.FindByID(txCtx, event.UserID)
 			if err != nil {
-				return err
-			}
-			if err := w.tokens.RevokeAllForUser(txCtx, event.UserID); err != nil {
 				return err
 			}
 			if w.platform != nil {

@@ -26,7 +26,7 @@ oauth 负责媒体平台作为 OAuth2 Authorization Server 的全部能力：第
 - 不签发 session cookie（归 [auth](../0001-auth/auth.md)）；access_token 是 JWT 不是 cookie。
 - 不做 media_auth 作为 OAuth client 连第三方（角色相反，归 [mcp_oauth](../0006-mcp_oauth/mcp_oauth.md)）。
 - 不校验 scope 取值集合（scope 透传，默认 `profile`，不做 scope 集 validation）。
-- 不维护 client 注册 HTTP 接口（client 注册由控制面/脚本维护，本批次 IDL 不暴露 client CRUD）。
+- 不发行 API Token 或 Platform Token；OAuth Client Secret 是独立客户端认证凭据。
 
 ## 能力清单
 
@@ -36,6 +36,9 @@ oauth 负责媒体平台作为 OAuth2 Authorization Server 的全部能力：第
 | 批准授权 | 签发 authorization_code，拼好 redirect URL | `ApproveAuthorization` `POST /api/oauth/authorize` |
 | 换 token | 三 grant 合一入口（form-urlencoded） | `ExchangeToken` `POST /api/oauth/token` |
 | 用户信息 | Bearer access_token 解析用户 | `GetUserInfo` `GET /api/oauth/userinfo` |
+| 客户端管理 | 管理员创建、列举、撤销客户端 | `CreateClient` / `ListClients` / `RevokeClient` |
+
+Client Secret使用独立随机opaque生成器（32字节hex），只在创建时交付一次，库内保留SHA-256，不复用旧ServiceToken生成器。已有带旧前缀的Client Secret仍按哈希验证，不重置、不重新签发；授权码、Refresh Token、PKCE、state以及Access Token规则不因此改变。
 
 ## 数据模型
 

@@ -26,10 +26,10 @@ fmt:
 
 # 业务 IDL：../idl/media_auth/ 下所有 .proto（相对 IDL 根，去掉 ../idl/ 前缀）。
 # 注意：hz update 对 register.go 的 INSERT_POINT 累积有顺序敏感性（v0.9.1），
-# token.proto 必须在其余 service 之前生成（否则报 "router has been registered"）。
-# 故 BIZ_PROTOS 把 token 提到首位，其余按名字排序。
-BIZ_PROTOS := media_auth/token.proto \
-	$(filter-out media_auth/token.proto,$(shell find ../idl/media_auth -type f -name '*.proto' | sed 's|^\.\./idl/||' | sort))
+# token/auth/oauth must precede suffix-containing api_token/mcp_oauth etc.
+# hz v0.9.1 checks registration by substring; suffix-first causes false duplicates.
+BIZ_PROTOS := media_auth/token.proto media_auth/auth.proto media_auth/oauth.proto \
+	$(filter-out media_auth/token.proto media_auth/auth.proto media_auth/oauth.proto,$(shell find ../idl/media_auth -type f -name '*.proto' | sed 's|^\.\./idl/||' | sort))
 
 # 参与 OpenAPI 文档生成的正式 service proto：排除 token.proto（internal mTLS，不挂网关/不出 OpenAPI）。
 # 约定：正式 service proto 必须同时挂 api.* 与 google.api.http 两条注解（见 idl.md §2）。

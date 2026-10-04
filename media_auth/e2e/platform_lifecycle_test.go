@@ -10,8 +10,8 @@ import (
 	configpb "media_agent/hertz_gen/config"
 	"media_agent/media_auth/biz/dal"
 	authrepo "media_agent/media_auth/biz/dal/repo/auth"
+	legacyrepo "media_agent/media_auth/biz/dal/repo/platform_token"
 	platformrepo "media_agent/media_auth/biz/dal/repo/platform_token"
-	legacyrepo "media_agent/media_auth/biz/dal/repo/service_token"
 	domain "media_agent/media_auth/biz/domain/platform_token"
 	authservice "media_agent/media_auth/biz/service/auth"
 	"media_agent/media_auth/biz/shared/platformcipher"
@@ -20,7 +20,7 @@ import (
 )
 
 func TestPlatformTokenReadinessRejectsUnmigratedDirtyAndCorruptHistory(t *testing.T) {
-	db := newDB(t)
+	db := newDBAtVersion(t, 16)
 	seedUser(t, db, "owner", "owner")
 	ring, repo := platformTestRing(t), platformrepo.NewRepo(db.Gorm)
 	check := func(want bool) {
@@ -109,7 +109,7 @@ func TestPlatformTokenKratosBootstrapAndUserRevocationTransaction(t *testing.T) 
 	}
 	outbox := authrepo.NewAccessRevocationOutbox(db.Gorm)
 	mcp := &localCredentialCleanup{err: errors.New("fixture local cleanup failure")}
-	flow := workflow.NewUserSoftDelete(users, outbox, legacyrepo.NewRepo(db.Gorm), &localCredentialCleanup{}, mcp, dal.NewTxRunner(db.Gorm))
+	flow := workflow.NewUserSoftDelete(users, outbox, nil, &localCredentialCleanup{}, mcp, dal.NewTxRunner(db.Gorm))
 	flow.SetPlatformTokenRevoker(custody)
 	if err := flow.UpdateStatus(t.Context(), "admin", "owner", "disabled"); err != nil {
 		t.Fatal("disable failed")

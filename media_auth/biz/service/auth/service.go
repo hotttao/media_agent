@@ -88,7 +88,7 @@ var (
 //  3. role=='system' → 403；
 //  4. 本地登录成功更新 last_login_at；
 //  5. 签 session（signer.Sign）；
-//  6. fire-and-forget ensurePlatformToken（service_token domain 未实现，留日志占位）。
+//  6. 限时确保独立密文 Platform Token；失败安全记录且不阻断登录。
 func (s *Service) Login(ctx context.Context, cmd LoginCommand) (ApiUser, string, error) {
 	if cmd.Username == "" || cmd.Password == "" {
 		return ApiUser{}, "", ErrInvalidCredentials

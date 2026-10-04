@@ -16,8 +16,8 @@ import (
 
 	config "media_agent/hertz_infra/config"
 	"media_agent/media_auth/biz/dal"
+	legacy "media_agent/media_auth/biz/dal/repo/platform_token"
 	platform "media_agent/media_auth/biz/dal/repo/platform_token"
-	legacy "media_agent/media_auth/biz/dal/repo/service_token"
 	"media_agent/media_auth/biz/shared/platformcipher"
 	"media_agent/media_auth/biz/workflow"
 )

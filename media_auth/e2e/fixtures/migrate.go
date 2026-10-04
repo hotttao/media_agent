@@ -4,6 +4,10 @@
 package fixtures
 
 import (
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	configpb "media_agent/hertz_gen/config"
@@ -24,5 +28,42 @@ func Migrate(t *testing.T, db *Database) {
 	dir := resolveMigrationsDir(t)
 	if err := dal.Migrate(dir, cfg); err != nil {
 		t.Fatalf("migrate: %v", err)
+	}
+}
+
+// MigrateToVersion is only for historical migration scenarios. Production
+// continues to apply every migration; ordinary fixtures also use Migrate.
+func MigrateToVersion(t *testing.T, db *Database, version int) {
+	t.Helper()
+	if version < 1 {
+		t.Fatal("invalid historical schema version")
+	}
+	dir := resolveMigrationsDir(t)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal("historical migrations unavailable")
+	}
+	selected := t.TempDir()
+	found := false
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		prefix, _, ok := strings.Cut(entry.Name(), "_")
+		n, err := strconv.Atoi(prefix)
+		if !ok || err != nil || n > version {
+			continue
+		}
+		found = found || n == version
+		contents, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil || os.WriteFile(filepath.Join(selected, entry.Name()), contents, 0600) != nil {
+			t.Fatal("historical migration fixture preparation failed")
+		}
+	}
+	if !found {
+		t.Fatal("historical migration version unavailable")
+	}
+	if err := dal.Migrate(selected, &configpb.DatabaseConfig{Enabled: true, Driver: "postgres", Dsn: db.DSN, MigrateOnStart: true}); err != nil {
+		t.Fatal("historical schema migration failed")
 	}
 }

@@ -409,7 +409,7 @@ func (s *Service) CreateClient(ctx context.Context, userID, role string, cmd Cre
 	if err != nil {
 		return CreateClientResult{}, err
 	}
-	plaintext, hash, err := token.GenerateTokenAndHash()
+	plaintext, hash, err := token.GenerateOpaqueTokenAndHash()
 	if err != nil {
 		return CreateClientResult{}, err
 	}
