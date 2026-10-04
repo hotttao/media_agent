@@ -294,3 +294,9 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 标准库文件sink只接受固定元数据，私有regular绝对路径、写前/Sync后核对路径与FD，完整写+Sync才确认。换行边界隔离短写末行；取消、短写、Sync故障、重命名/替换/关闭均不误确认；重开按同event ID恢复。
 - Auth全量Go测试、Workflow/文件sink race单测与架构检查通过；三项隔离PG/真实文件门禁通过（42.403s），验证持锁时跳过、旧lease/CAS/终态/attempts/数据库时钟、未知确认后关闭/重开和投递器重建、实际元数据落盘及单项失败继续。全部Platform凭据/迁移/用例/投递race回归通过（171.533s）。测试捕获/检查日志，不输出Secret或完整日志。
 - 运行数据库仍version14/dirty=false，未部署Secret、0015/0016或启动新投递器，未迁移运行凭据；5173 HTTP200。剩余真实mTLS/IDL、启动/登录/WeCom/用户撤销接线、实际迁移及旧ServiceToken删除仍missing，P7总体未完成；UI保持排除。
+
+### 2026-10-04 · Platform mTLS调用者认证适配器
+
+- domain-modeling补齐证书身份与context边界，不新增术语/ADR/持久化Workflow。实现标准库Verifier和Hertz连接中间件，独立Client CA、TLS1.3、ClientAuth与精确单URI SAN，拒绝普通HTTP及Header身份；验证结果不可跨Verifier复用，调用时重新检查有效期。
+- Auth全量Go测试、架构检查及隔离CA真实TLS握手/race测试通过：两种允许Caller、无证书/错误CA/CN-only/未知或多URI/错误用途（含Any而无ClientAuth）/过期/旧TLS版本及伪造Header；证据快照、配置克隆、过期复核、取消和缺失context门禁通过。5173只读访问HTTP200。
+- 本门禁只完成认证适配器，未启动运行内部监听器或开放新API；IDL/配置/证书部署、实际调用者、登录/WeCom/撤销、数据迁移和旧ServiceToken删除仍missing，P7保持未完成。UI未修改。

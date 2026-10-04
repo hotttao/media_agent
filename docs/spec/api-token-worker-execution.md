@@ -309,6 +309,14 @@ Domain增加AuditDelivery（固定Event、lease ID/until、attempts）、Outbox�
 
 Confirm/Retry以`GREATEST(传入时刻, clock_timestamp())`检查有效lease，防止数据库等待后使用过时进程时间。sink仅接受绝对路径；写前与Sync后核对当前路径/FD一致及私有权限，重命名/替换不默默确认旧文件。每次记录增加换行边界隔离此前短写末行；读取时跳过空行、隔离非法行，再按event ID去重。
 
+### 7.5 Platform内部调用者认证
+
+`biz/shared/platformmtls`仅依赖标准库，实现结构化CallerVerifier端口。初始化克隆独立Client CA及固定URI映射；CA/映射缺失拒绝。内部监听器TLSConfig强制TLS1.3、RequireAndVerifyClientCert，禁止session ticket恢复；VerifyConnection拒绝未知服务。叶证书必须非CA、单URI SAN、ClientAuth用途且当前时间信任链有效；固定URI为`spiffe://media-agent/services/<caller>`，caller仅Gateway或Control Schedule Worker。此为本地URI命名约定，不是SPIFFE attestation/federation；不读CN/Header/JWT。
+
+`biz/middleware.PlatformCaller`仅挂内部监听器；从Hertz `network.ConnTLSer.ConnectionState`取得已完成握手的实际连接状态，普通HTTP或Verifier缺失返回固定403。Verifier Bind保存DER快照到实例隔离context，用例VerifyPlatformCaller按当前时间重新验证，不跨实例复用或延长证书有效期。现有service的caller/purpose allowlist仍是最终业务门禁；TLS身份不替代User当前状态和资源授权。
+
+认证适配器测试使用隔离CA、真实本地TLS握手；覆盖合法两种Caller、无证书、错误CA、CN-only、未知/多URI、错误用途、过期和旧TLS版本，伪造Header不可绕过。它不等同于运行环境内部API/IDL及服务切换验收；只有监听器、生成路由、配置、证书部署、调用者和密文迁移接线后才开放运行接口。
+
 兼容期不得把同一个 Secret 同时交给本地 Hash 和 Talos 两套验证器。
 
 ## 8. 验收标准

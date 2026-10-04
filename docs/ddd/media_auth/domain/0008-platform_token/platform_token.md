@@ -103,6 +103,10 @@ Platform Token 是独立聚合，不复用 API Token/Talos 或旧 Service Token 
 
 调用者只从注入的可信CallerVerifier取得，命令不接收caller字段；固定`offline-task`只允许`media_agent_gateway`或`media_control_schedule_worker`。CallerVerifier缺失/故障、未授权caller或purpose一律拒绝；不能使用普通Internal Token、请求Header或JWT claim自行声称服务身份。mTLS接入必须实现该Verifier，未接入前不能开放端点。
 
+内部监听器使用独立Client CA、TLS 1.3及强制客户端证书验证；叶证书仅有一个URI SAN，按精确URI `spiffe://media-agent/services/media_agent_gateway` 或 `spiffe://media-agent/services/media_control_schedule_worker` 映射服务身份。不使用CN、DNS SAN、转发Header或公共Session推导CallerService；此URI是本地证书命名约定，不表示已实现SPIFFE工作负载证明/联邦。证书必须具有ClientAuth用途，当前时间链验证成功；请求进入及用例读取身份时重新验证，keep-alive或后台延迟不能延长过期证书的权限。
+
+可信接入层只把服务器连接的TLS状态绑定至context；凭据证据是不可变DER快照，绑定特定Verifier/CA实例，不能在另一信任配置复用。普通HTTP连接、未完成握手、未知服务、多个URI身份及校验故障一律拒绝。实例配置启动固化，换证/CA更新须按服务重启流程，不把用户Token或普通Internal Token作为降级认证。
+
 ### EnsurePlatformToken / IntrospectPlatformToken / RevokePlatformToken
 
 登录内部确保只返回error，不交付Secret；当前过期时先撤销再创建，当前有效时须验证密文完整性。内省先校验caller/purpose，再按Hash找记录、锁User、重读凭据检查当前事实与密文完整性，只返回User/credential元数据；未知/撤销/过期/停用返回inactive，查询或加密故障返回固定错误。用户撤销内部命令允许停用/已删除User，幂等撤销当前凭据，不创造替代凭据。

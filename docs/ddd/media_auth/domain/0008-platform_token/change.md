@@ -3,6 +3,8 @@
 依据 ADR-0007 新建独立 Platform Token 聚合，替代原 `service_tokens.token` 明文列设计，并限制为 Gateway 与 Control Schedule Worker 的 purpose-bound 内部能力。
 # 2026-10-04 · 独立加密存储约束
 
+- 明确真实mTLS CallerVerifier边界：独立Client CA、TLS1.3、精确单URI SAN和ClientAuth用途；连接事实绑定实例隔离context，当前时刻重新验证，不接受CN/Header/普通Internal Token替代。认证适配器本身不产生持久化业务状态，因此不新增空壳Workflow；既有迁移/审计Workflow不变。
+
 - Outbox增加SKIP LOCKED领取、未过期lease确认/退避CAS与attempts饱和规则，delivered为不可重置终态；日志sink事务外Sync后确认，部分写入或确认未知保留重投。
 
 - 补齐单聚合用例：User行锁协调当前状态/并发，可信CallerVerifier与固定purpose先于凭据操作；同事务审计Outbox仅含固定元数据，不保存Secret。mTLS接入、审计投递和运行时切换仍是独立门禁，不以用例测试冒充已完成。
