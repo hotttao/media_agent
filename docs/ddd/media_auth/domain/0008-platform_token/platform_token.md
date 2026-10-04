@@ -107,6 +107,10 @@ Platform Token 是独立聚合，不复用 API Token/Talos 或旧 Service Token 
 
 可信接入层只把服务器连接的TLS状态绑定至context；凭据证据是不可变DER快照，绑定特定Verifier/CA实例，不能在另一信任配置复用。普通HTTP连接、未完成握手、未知服务、多个URI身份及校验故障一律拒绝。实例配置启动固化，换证/CA更新须按服务重启流程，不把用户Token或普通Internal Token作为降级认证。
 
+内部HTTP契约独立于旧TokenService：`POST /internal/platform-token/acquire`（user_id/purpose）、`introspect`（token/purpose）、`rotate`（user_id/purpose/可选expires_at Unix秒）。获取/轮换只返回token；内省只返回active/user_id/credential_id。无caller命令字段；无外部确保/撤销接口。响应固定no-store，绑定/时间格式错误返回固定400，拒绝403，依赖或事务故障503，不输出绑定/底层错误原文。轮换响应未知不自动重试。
+
+专用mTLS监听器只注册Platform生成路由，不挂Session、公开认证/运维端点或普通access log。生成的主路由聚合若注册相同路径，其组中间件仍要求真实TLS证书和context，普通HTTP必拒绝；不能把仅隔离网络当作认证。Platform配置默认关闭，启用须先具备独立CA/服务证书/私有AEAD Key/审计文件、schema与旧凭据迁移前置。
+
 ### EnsurePlatformToken / IntrospectPlatformToken / RevokePlatformToken
 
 登录内部确保只返回error，不交付Secret；当前过期时先撤销再创建，当前有效时须验证密文完整性。内省先校验caller/purpose，再按Hash找记录、锁User、重读凭据检查当前事实与密文完整性，只返回User/credential元数据；未知/撤销/过期/停用返回inactive，查询或加密故障返回固定错误。用户撤销内部命令允许停用/已删除User，幂等撤销当前凭据，不创造替代凭据。

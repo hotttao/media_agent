@@ -34,7 +34,7 @@ BIZ_PROTOS := media_auth/token.proto \
 # 参与 OpenAPI 文档生成的正式 service proto：排除 token.proto（internal mTLS，不挂网关/不出 OpenAPI）。
 # 约定：正式 service proto 必须同时挂 api.* 与 google.api.http 两条注解（见 idl.md §2）。
 SWAGGER_PROTOS := $(shell find ../idl/media_auth -type f -name '*.proto' \
-		-not -name 'token.proto' | sed 's|^\.\./idl/||')
+		-not -name 'token.proto' -not -name 'platform_token.proto' | sed 's|^\.\./idl/||')
 
 .PHONY: hz-update
 hz-update:

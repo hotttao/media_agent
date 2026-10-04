@@ -122,6 +122,12 @@ CLI 提供 `api-token create/list/rotate/revoke`。创建和轮换要求 `--env-
 
 ### Platform Token 独立密文存储集成测试
 
+专用监听器的本地接线测试位于`media_auth/platform_runtime_test.go`：隔离CA/临时证书、真实Hertz HTTPS连接和生成路由，检查认证context/no-store/安全错误、普通HTTP伪造Header拒绝以及公共路由排除。用例使用测试桩，无运行数据库或旧凭据操作；这是接线门禁，不代替下述真实存储/用例测试或部署后的HTTP/CLI门禁。`biz/shared/platformmtls`另覆盖真实TLS握手证书边界及安全文件读取。
+
+```bash
+go -C media_auth test -race . ./biz/shared/platformmtls ./biz/middleware
+```
+
 `media_auth/e2e/platform_token_repo_test.go` 使用隔离PostgreSQL及仅测试用内存密钥，覆盖每用户当前凭据的并发唯一性、归属隔离、过期后显式撤销再替换、事务回滚、密文列约束及非空历史降级保护。不会读取或改写运行环境的旧凭据，不部署密钥，不模拟登录，也不启动业务服务：
 
 ```bash

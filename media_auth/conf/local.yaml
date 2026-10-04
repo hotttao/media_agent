@@ -165,3 +165,14 @@ mcp_oauth:
 token_verify: # internal VerifyToken(mTLS) listener
   enabled: true
   address: ${INTERNAL_ADDR:-:8889}
+
+# Disabled until legacy credentials are atomically migrated and callers switch.
+platform_token:
+  enabled: ${PLATFORM_TOKEN_ENABLED:-false}
+  address: ${PLATFORM_TOKEN_ADDR:-:8890}
+  server_cert_file: ${PLATFORM_TOKEN_CERT_FILE:-}
+  server_key_file: ${PLATFORM_TOKEN_TLS_KEY_FILE:-}
+  client_ca_file: ${PLATFORM_TOKEN_CLIENT_CA_FILE:-}
+  key_file: ${PLATFORM_TOKEN_KEY_FILE:-}
+  key_version: ${PLATFORM_TOKEN_KEY_VERSION:-}
+  audit_file: ${PLATFORM_TOKEN_AUDIT_FILE:-}

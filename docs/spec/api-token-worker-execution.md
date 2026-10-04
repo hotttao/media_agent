@@ -317,6 +317,14 @@ Confirm/Retry以`GREATEST(传入时刻, clock_timestamp())`检查有效lease，�
 
 认证适配器测试使用隔离CA、真实本地TLS握手；覆盖合法两种Caller、无证书、错误CA、CN-only、未知/多URI、错误用途、过期和旧TLS版本，伪造Header不可绕过。它不等同于运行环境内部API/IDL及服务切换验收；只有监听器、生成路由、配置、证书部署、调用者和密文迁移接线后才开放运行接口。
 
+### 7.6 Platform内部HTTP与运行接线
+
+独立`idl/media_auth/platform_token.proto`不进入公开OpenAPI/CLI。POST `/internal/platform-token/acquire`输入user_id/purpose，返回token；`introspect`输入token/purpose，返回active/user_id/credential_id；`rotate`输入user_id/purpose及可选expires_at（Unix秒，0表示无过期），返回token。不接caller字段，不提供HTTP确保/撤销。通过hz生成DTO/client/router，手写handler只翻译并调用独立用例；路由middleware要求已验证连接context，handler再次检查CallerVerifier，默认依赖缺失拒绝。
+
+固定响应`Cache-Control: no-store`、`Pragma: no-cache`；绑定错误/非法expiry为400，身份或用例拒绝403，依赖/事务故障503。错误不带请求值或底层诊断。专用Hertz TLS监听器仅注册Platform路由，使用标准transport读取真实TLS状态，限制请求body/read/write/idle，不挂普通access log、Session或公开认证/运维端点。默认关闭；主生成路由聚合中的相同路径也挂mTLS门禁，普通HTTP拒绝。
+
+typed `platform_token`配置含enabled/address/server_cert_file/server_key_file/client_ca_file/key_file/key_version/audit_file；AEAD文件用既有私有读取器，不生成替代密钥。启动编排装配Repo/UserReader/TxRunner/Keyring/Verifier/service与审计投递器，启用失败返回固定安全错误；后台监听失败不能默默降级。关闭取消投递、停监听后关sink。开启运行配置前必须先完成旧调用停止、0015/0016及实际原子迁移；关闭阶段不切换旧登录/撤销链路。
+
 兼容期不得把同一个 Secret 同时交给本地 Hash 和 Talos 两套验证器。
 
 ## 8. 验收标准

@@ -83,6 +83,7 @@ message Config {
   McpOauthConfig mcp_oauth = 73;
   // internal VerifyToken（mTLS）listener 配置（token internal service）。
   TokenVerifyConfig token_verify = 74;
+  PlatformTokenConfig platform_token = 79;
 
   // ---- 业务配置（media_crawler 专用）----
   // 抓取编排配置（python 路径 / 垫片 / 串行数 等）
@@ -377,6 +378,18 @@ message McpOauthConfig {
 message TokenVerifyConfig {
   bool enabled = 1;
   string address = 2;             // internal mTLS listener，如 :8889
+}
+
+// Dedicated encrypted custody/internal mTLS endpoint; disabled until cutover.
+message PlatformTokenConfig {
+  bool enabled = 1;
+  string address = 2;
+  string server_cert_file = 3;
+  string server_key_file = 4;
+  string client_ca_file = 5;
+  string key_file = 6; // private external 32-byte AEAD Secret; never generated
+  string key_version = 7;
+  string audit_file = 8; // absolute private durable JSONL path
 }
 
 // ============================================================================

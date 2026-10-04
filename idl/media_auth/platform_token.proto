@@ -1,0 +1,24 @@
+syntax = "proto3";
+package media_auth.platform_token;
+import "api.proto";
+option go_package = "media_auth/platform_token";
+
+// Dedicated mTLS-only listener. Not public OpenAPI/CLI. Caller identity comes
+// from the client certificate, never a message field or forwarded header.
+service PlatformTokenService {
+  rpc AcquirePlatformToken(AcquirePlatformTokenRequest) returns (PlatformTokenResponse) {
+    option (api.post) = "/internal/platform-token/acquire";
+  }
+  rpc IntrospectPlatformToken(IntrospectPlatformTokenRequest) returns (PlatformPrincipalResponse) {
+    option (api.post) = "/internal/platform-token/introspect";
+  }
+  // A lost response is an unknown result; do not automatically retry rotation.
+  rpc RotatePlatformToken(RotatePlatformTokenRequest) returns (PlatformTokenResponse) {
+    option (api.post) = "/internal/platform-token/rotate";
+  }
+}
+message AcquirePlatformTokenRequest { string user_id = 1; string purpose = 2; }
+message IntrospectPlatformTokenRequest { string token = 1; string purpose = 2; }
+message RotatePlatformTokenRequest { string user_id = 1; string purpose = 2; int64 expires_at = 3; }
+message PlatformTokenResponse { string token = 1; }
+message PlatformPrincipalResponse { bool active = 1; string user_id = 2; string credential_id = 3; }

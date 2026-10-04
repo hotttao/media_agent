@@ -14,6 +14,8 @@ import (
 // It never reads a header, body, session or delegation JWT for service identity.
 func PlatformCaller(verifier *platformmtls.Verifier) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
+		c.Header("Cache-Control", "no-store")
+		c.Header("Pragma", "no-cache")
 		conn, ok := c.GetConn().(network.ConnTLSer)
 		if !ok || verifier == nil {
 			c.AbortWithStatusJSON(consts.StatusForbidden, map[string]string{"error": "platform caller authentication failed"})

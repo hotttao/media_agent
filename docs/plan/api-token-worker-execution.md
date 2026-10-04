@@ -300,3 +300,18 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - domain-modeling补齐证书身份与context边界，不新增术语/ADR/持久化Workflow。实现标准库Verifier和Hertz连接中间件，独立Client CA、TLS1.3、ClientAuth与精确单URI SAN，拒绝普通HTTP及Header身份；验证结果不可跨Verifier复用，调用时重新检查有效期。
 - Auth全量Go测试、架构检查及隔离CA真实TLS握手/race测试通过：两种允许Caller、无证书/错误CA/CN-only/未知或多URI/错误用途（含Any而无ClientAuth）/过期/旧TLS版本及伪造Header；证据快照、配置克隆、过期复核、取消和缺失context门禁通过。5173只读访问HTTP200。
 - 本门禁只完成认证适配器，未启动运行内部监听器或开放新API；IDL/配置/证书部署、实际调用者、登录/WeCom/撤销、数据迁移和旧ServiceToken删除仍missing，P7保持未完成。UI未修改。
+
+### Platform内部HTTP接线门禁
+
+- [x] 独立IDL及生成DTO/client/router，不进入公开OpenAPI/CLI。
+- [x] handler固定错误/no-store、路由与handler双层可信context门禁，主HTTP无证书拒绝。
+- [x] typed配置、默认关闭的专用mTLS监听器与投递器启动/关闭接线。
+- [x] 隔离CA真实Hertz HTTPS链路与失败分支、全量Go/race/架构检查（用例为测试桩，不代替运行密文/审计验收）。
+- [ ] 运行证书/密钥、实际迁移、登录/WeCom/撤销及旧调用替换；未通过不开放运行配置。
+
+### 2026-10-04 · Platform内部HTTP接线验收
+
+- domain-modeling明确三项HTTP契约与错误/缓存边界；确保/用户撤销仍内部调用，不新增Secret公共接口。独立生成IDL/DTO/client/router，公开Swagger重新生成无差异。
+- typed Platform配置默认关闭；main装配独立Repo/UserReader/TxRunner/Keyring/Verifier/service及审计投递器，专用Hertz TLS监听器只注册Platform路由，限制body/读写/idle，失败不降级。证书读取拒绝symlink、写权限/公开私钥、空/过大/无效文件，不生成密钥。
+- Auth全量Go、真实Hertz HTTPS/race、共享认证/中间件race和架构检查通过；生成Config/DTO/client编译通过。真实连接测试使用隔离CA和用例测试桩，覆盖获取/内省/轮换、绑定/expiry/拒绝/安全错误/no-store、公共端点排除、无客户端证书和主HTTP伪造Header不调用用例。不能以此冒充运行环境凭据/审计端到端或独立CLI门禁。
+- 未重启/部署运行服务、未生成运行密钥/证书、未迁移旧凭据；5173 HTTP200，UI未修改。运行切换、实际迁移、登录/WeCom/用户撤销和旧ServiceToken删除继续missing，P7总体未完成。
