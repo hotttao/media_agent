@@ -9,6 +9,7 @@ import (
 )
 
 var ErrInvalidID = errors.New("agent configuration ID is required")
+var ErrIdentityUnavailable = errors.New("agent identity facts unavailable")
 
 type Service struct {
 	reader domain.AgentIdentityReader
@@ -27,8 +28,14 @@ func (s *Service) Resolve(ctx context.Context, id string) (*domain.AgentIdentity
 	if err != nil {
 		return nil, err
 	}
-	if value == nil || value.ConfigurationID != id || value.WorkspaceID == "" || value.OwnerUserID == "" || value.OrganizationID == "" || value.TeamID == "" || (value.WorkspaceState != "running" && value.WorkspaceState != "stopped") {
+	if value == nil || value.ConfigurationID != id || value.WorkspaceID == "" || value.OwnerUserID == "" || value.OrganizationID == "" || value.TeamID == "" {
+		return nil, ErrIdentityUnavailable
+	}
+	if value.WorkspaceState == "deleted" {
 		return nil, domain.ErrNotFound
+	}
+	if value.WorkspaceState != "running" && value.WorkspaceState != "stopped" {
+		return nil, ErrIdentityUnavailable
 	}
 	decision, err := s.teams.Authorize(ctx, value.OwnerUserID, value.TeamID, "view")
 	if err != nil {

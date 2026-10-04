@@ -3,6 +3,8 @@ name: api_token_revocation
 description: API Token 撤销命令与中断后的后台恢复
 participants:
   - media_auth/api_token
+  - media_control/agent_configuration
+  - media_auth/team
   - Talos
 domains:
   - api_token
@@ -16,7 +18,7 @@ domains:
 
 | 项目 | 内容 |
 |:---|:---|
-| 触发 | 当前 User 的撤销命令；后台扫描 revoking Token |
+| 触发 | 当前 User 的撤销命令；后台扫描 revoking Token；后台复核 Agent Token 当前委托关系 |
 | 前置条件 | 同步命令的 User 必须是 Token 的 subject；后台仅处理持久化撤销意图 |
 | 成功结果 | Talos Key 已撤销，本地 Token 为 revoked |
 | 失败结果 | 保留 revoking，验证拒绝，后台继续恢复 |
@@ -86,6 +88,41 @@ sequenceDiagram
 - 日志仅包含 Token Manager ID 和固定失败说明，不包含 Secret、HTTP 响应正文或错误原文。
 
 ## 范围与结果事件
+
+### Agent 委托失效的后台兜底
+
+```mermaid
+sequenceDiagram
+    participant S as Agent Access Reconciliation
+    participant D as API Token Repository
+    participant C as Control Agent Identity
+    participant O as Auth Team Authority
+    participant R as Issuance / Rotation / Revocation Recovery
+    S->>D: 按 ID 分页读取 Agent 候选元数据（无 Secret）
+    S->>C: 事务外查询当前配置、owner、企业及授权
+    C->>O: 固定内部服务身份查询当前 owner 的部门可见权限
+    O-->>C: 当前授权决定或查询失败
+    C-->>S: 完整身份事实、明确不存在或不可用
+    alt 明确不存在、已删除、owner/企业不匹配或 owner_authorized=false
+        S->>D: T3 开始：按 Agent Actor + 原 owner + 原企业保存撤销意图
+        D->>D: issuing → issuance_cleanup；active/rotating/expired → revoking
+        D-->>S: T3 提交（失败则回滚）
+        R->>D: 读取持久化清理意图
+        R->>R: 复用现有恢复流程，事务外清理 Talos Key
+    else 仍有效（含 stopped Workspace）
+        S-->>S: 不改变 Token
+    else 查询超时、取消、故障、畸形响应或未知状态
+        S-->>S: 不改变 Token；下一轮重试
+    end
+```
+
+步骤说明：候选仅为 `actor_type=agent` 的 issuing/active/rotating/expired，最多100条，ID keyset 扫描；单条有15秒期限，失败继续后页，扫完从头重试，启动立即运行、之后每10秒处理下一批。身份查询不能占用数据库事务；短事务只保存精确 Actor/owner/企业的撤销意图，不调 Talos。重复扫描幂等，晚到签发在后续扫描捕获；已提交的撤销意图不会因授权恢复而激活。进程重启不依赖内存游标恢复。
+
+Auth `AgentActorValidator.Assess` 区分明确失效与无法取得事实：只有 `(false,nil)` 可产生清理意图；交互验证对两者均拒绝。Control 使用专用内部服务凭据，不接受外部 Actor/owner 覆盖；日志只记录本地 Token ID 和固定原因，不记录凭据、来源正文或错误原文。数据库写失败保留原状态并重试；Talos 失败由既有恢复负责。
+
+404 必须符合身份入口固定的 `error=agent identity not found` 响应契约；普通代理/路由404不构成失效证据，按来源不可用重试。来源服务URL仅允许根路径。
+
+这是周期性兜底，不是生命周期事件的替代：可能遗漏两次扫描之间失效又恢复的关系，当前 Control 也没有独立 Agent disabled 事实。disabled/deleted/owner 解绑的可靠事件投递及消费仍为 `missing`，不能据此将完整生命周期门禁标记完成。
 
 本流程只负责当前映射 Key 的撤销；rotating 期间撤销会阻止成功提交，并由 [Rotation Workflow](../0009-api-token-rotation/api_token_rotation.md) 继续清理未知 replacement。创建补偿另有职责。Talos Rotate 不接受 request_id，也不返回可再次查询的 Secret，不能套用本流程盲目重试。
 

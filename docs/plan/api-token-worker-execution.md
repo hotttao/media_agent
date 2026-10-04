@@ -85,6 +85,8 @@
   - [x] Auth/Control实时校验、固定服务/路由代理、公开接入与业务资源权限检查，真实HTTP/CLI与撤销后拒绝门禁。
   - [ ] 代理审计记录User/Actor/credential/企业/Workspace、目标操作和结果，并通过trace_id核对落盘关联，不保存正文或凭据。
 - [ ] Agent disabled/deleted/owner 解绑触发 Token 撤销。
+  - [x] 当前委托关系后台兜底：权威失效与查询故障区分、短事务持久意图、分页/重启恢复、单元/race、隔离 PG 与真实 Talos 验收。
+  - [ ] 可靠生命周期事件投递/消费与独立 disabled 事实；轮询不替代这一门禁。
 - [ ] E2E 覆盖申请失败重试、代理调用和撤销。
 
 ## P7 · 删除旧 Service Token
@@ -193,6 +195,7 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 | Workflow/Template企业与Workspace资源归属 | Workflow / workflow、template | 当前定义仍为User归属，完整租户化需独立规格与迁移 | missing |
 | Agent 委托断言签名与请求绑定 | hertz_infra / Internal Identity JWT | 独立RSA/JWKS、精确audience、60秒TTL、方法/URI/body摘要及私有密钥读取 | covered |
 | Agent disabled/deleted/owner 解绑撤销 | Control + Auth | 权威生命周期事实、持久撤销意图/恢复 | missing |
+| Agent 当前委托关系周期复核 | Auth / api_token | 事务外权威查询、精确Actor撤销意图、既有Talos恢复；不替代生命周期事件 | covered |
 
 ### Auth Agent 校验接线
 
@@ -230,3 +233,11 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 真实`TestAgentProxyGateway`通过：Agent读Job、所属企业素材查询和临时纯文本素材创建/读取/删除，跨企业拒绝、User不能冒充Agent、禁止目标/Worker/注册表写路由、撤销后401及trace_id。测试只清理自己创建的Token/素材，不新增Workflow执行。
 - 独立CLI实际申请到0600新文件，`agent-client request`读取Job返回200及trace_id；User CLI撤销后同一Agent命令失败。现有User API Token、Agent显式申请、Worker Gateway和Request Correlation真实网关回归通过；5173入口HTTP200。
 - 自动创建编排、生命周期持久批量撤销、代理身份审计、P7旧ServiceToken清理与P5剩余门禁仍未完成。Workflow/Template租户模型保留missing；UI继续排除。
+
+### 2026-10-04 · Agent 撤销周期兜底验收
+
+- Auth新增Agent候选keyset扫描、事务外权威复核和短事务清理意图，复用Issuance/Rotation/Revocation恢复。单条失败继续后页、下一轮及重启重试，晚到签发不能激活已清理意图；权威查询故障不改Token。
+- Control不完整/未知身份事实改为503；Auth仅接受身份入口固定404错误契约，通用路由404不算删除，来源配置限根URL。stopped身份仍有效。
+- Auth/Control全量Go测试、关键race与架构检查通过；两项隔离PG/真实Talos测试通过（49.038s），Control事实由测试桩控制，不冒充真实生命周期事件验收。
+- 新Auth/Control镜像已部署并保持运行；真实HTTP的AgentIdentity、Agent申请、Agent代理、User Token生命周期、Worker认证边界与请求关联均通过。独立CLI `media_auth auth me`通过；5173页面HTTP200。未改UI、未启动Runtime、未提交或消费新的生成Workflow。
+- 周期兜底已covered；可靠disabled/deleted/owner解绑事件及独立disabled事实仍missing，不能以本轮完成标记P6整体完成。自动创建申请、代理审计、P7及P5剩余门禁继续保留。

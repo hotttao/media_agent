@@ -49,9 +49,6 @@ func TestIdentityClientErrorsAreSafe(t *testing.T) {
 			}
 			_, err = client.ResolveAgentIdentity(t.Context(), "config")
 			want := ErrUnavailable
-			if status == 404 {
-				want = ErrNotFound
-			}
 			if !errors.Is(err, want) || strings.Contains(err.Error(), "private-control-secret") || strings.Contains(err.Error(), "unsafe-db-body") {
 				t.Fatalf("unsafe error: %v", err)
 			}
@@ -69,10 +66,36 @@ func TestIdentityClientErrorsAreSafe(t *testing.T) {
 			t.Fatal("invalid ID accepted")
 		}
 	}
-	for _, url := range []string{"", "file:///secret", "http://user:secret@localhost", "http://localhost?secret=token"} {
+	for _, url := range []string{"", "file:///secret", "http://user:secret@localhost", "http://localhost?secret=token", "http://localhost/wrong-base"} {
 		if _, err := New(url, "private-control-secret", time.Second); !errors.Is(err, ErrInvalid) {
 			t.Fatal("unsafe configuration accepted")
 		}
+	}
+}
+
+func TestIdentityClientAcceptsOnlyExplicitNotFoundContract(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		want error
+	}{
+		{`{"error":"agent identity not found"}`, ErrNotFound},
+		{`{"error":"route not found"}`, ErrUnavailable},
+		{`<html>not found</html>`, ErrUnavailable},
+		{`{}`, ErrUnavailable},
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(tc.body))
+		}))
+		client, err := New(server.URL, "private-control-secret", time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := client.ResolveAgentIdentity(t.Context(), "config"); !errors.Is(err, tc.want) {
+			t.Fatal("generic 404 misclassified", err)
+		}
+		server.Close()
 	}
 }
 

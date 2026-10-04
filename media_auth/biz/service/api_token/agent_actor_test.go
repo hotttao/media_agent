@@ -24,6 +24,53 @@ func validAgentFacts() control.AgentIdentity {
 	return control.AgentIdentity{ConfigurationID: "config", ActorID: "Agent:config", OwnerUserID: "owner", OrganizationID: "org", TeamID: "team", WorkspaceID: "workspace", WorkspaceState: "running", OwnerAuthorized: true}
 }
 
+func TestAgentAssessmentDoesNotConfuseAuthorityOutageWithInvalidation(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		change             func(*agentAuthorityStub)
+		valid, unavailable bool
+	}{
+		{"valid", func(*agentAuthorityStub) {}, true, false},
+		{"runtime stopped", func(a *agentAuthorityStub) { a.facts.WorkspaceState = "stopped" }, true, false},
+		{"deleted", func(a *agentAuthorityStub) { a.facts.WorkspaceState = "deleted" }, false, false},
+		{"not found", func(a *agentAuthorityStub) { a.err = control.ErrNotFound }, false, false},
+		{"owner unbound", func(a *agentAuthorityStub) { a.facts.OwnerUserID = "other" }, false, false},
+		{"organization changed", func(a *agentAuthorityStub) { a.facts.OrganizationID = "other" }, false, false},
+		{"owner unauthorized", func(a *agentAuthorityStub) { a.facts.OwnerAuthorized = false }, false, false},
+		{"timeout", func(a *agentAuthorityStub) { a.err = context.DeadlineExceeded }, false, true},
+		{"upstream error", func(a *agentAuthorityStub) { a.err = errors.New("private upstream body") }, false, true},
+		{"unknown state", func(a *agentAuthorityStub) { a.facts.WorkspaceState = "unknown" }, false, true},
+		{"wrong identity", func(a *agentAuthorityStub) { a.facts.ConfigurationID = "other" }, false, true},
+		{"missing workspace", func(a *agentAuthorityStub) { a.facts.WorkspaceID = "" }, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &agentAuthorityStub{facts: validAgentFacts()}
+			tc.change(a)
+			v := NewAgentActorValidator(a)
+			valid, err := v.Assess(t.Context(), "Agent:config", "owner", "org")
+			if valid != tc.valid || errors.Is(err, control.ErrUnavailable) != tc.unavailable || (!tc.unavailable && err != nil) {
+				t.Fatalf("invalid assessment: valid=%v unavailable=%v", valid, errors.Is(err, control.ErrUnavailable))
+			}
+			if v.Validate(t.Context(), "Agent:config", "owner", "org") != tc.valid {
+				t.Fatal("authentication no longer fails closed")
+			}
+			if a.calls != 2 {
+				t.Fatal("authority facts were cached")
+			}
+		})
+	}
+	a := &agentAuthorityStub{facts: validAgentFacts()}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if valid, err := NewAgentActorValidator(a).Assess(ctx, "Agent:config", "owner", "org"); valid || !errors.Is(err, control.ErrUnavailable) || a.calls != 0 {
+		t.Fatal("cancelled lookup was treated as authoritative invalidation")
+	}
+	var absent *AgentActorValidator
+	if valid, err := absent.Assess(t.Context(), "Agent:config", "owner", "org"); valid || !errors.Is(err, control.ErrUnavailable) {
+		t.Fatal("missing authority was treated as identity deletion")
+	}
+}
+
 func TestAgentActorAuthorityFailsClosed(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

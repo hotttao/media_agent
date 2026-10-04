@@ -68,6 +68,8 @@ Agent Configuration 负责 Workspace 中 Agent 的期望配置，并从控制面
 
 ### 稳定委托身份
 
+不存在或已删除的配置/Workspace 返回404；已读取但字段缺失、配置ID不匹配或未知Workspace状态返回503，不能冒充不存在。Auth 后台以明确404作为撤销证据，因此来源不确定必须与确定失效区分；授权查询故障同样返回503。
+
 `Agent:<agent_configurations.id>` 是 API Token 的 Actor；不得使用类型标签 `agent_id`、Workspace ID、Session ID 或 Token ID。类型切换和配置版本递增不改变配置记录 ID。该事实由 Control 持有，Auth 不复制 Agent 配置表，也不信任签发请求提交的 owner/企业。
 
 内部身份解析仅返回配置 ID、Workspace ID、Workspace 的 owner/Organization/Team、desired_state 及当前 owner 的部门可见权限。身份解析是只读投影，不解密 Provider API Key、不获取 Runtime Context，也不签发 Token。已删除 Workspace 或未知配置返回 NotFound；上游 Team 授权服务错误返回不可用，不能当作授权成功。stopped 只表示运行环境停止，不等于身份删除；是否可执行业务仍由目标资源的 Workspace/action 授权决定。独立 Agent disabled 及 owner 解绑的撤销编排仍须在生命周期入口落实。

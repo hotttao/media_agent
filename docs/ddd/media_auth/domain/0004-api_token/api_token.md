@@ -143,6 +143,8 @@ issuing/issuance_cleanup 保存聚合内的持久创建意图，并使用按 ID 
 
 轮换重新验证当前 User、Organization membership 和委托 Actor 权威；Token 的本地 active 状态不能代替身份授权。撤销不要求身份仍 active，以便停用后继续清理凭据。
 
+Agent 后台复核仅以明确失效的 Control 事实保存精确 Actor/原 owner/企业的撤销意图；身份来源故障不算失效。`issuing` 进入 `issuance_cleanup`，已映射 Key 的 `active/rotating/expired` 进入 `revoking`。该周期兜底与外部调用时序见撤销 Workflow，可靠生命周期事件仍待实现。
+
 撤销在外部调用前提交 `revoking`，立即禁止验证；以 Token Manager ID 和 Talos Key ID 为稳定操作标识，后台恢复同一撤销意图。具体事务、重试与结果确认见 [API Token Revocation](../../workflow/0008-api-token-revocation/api_token_revocation.md)。
 
 轮换先提交 rotating 与操作记录，以操作 ID 标记 Talos replacement metadata；期限内正常提交后一次性返回 Secret。失败或超时按 [API Token Rotation](../../workflow/0009-api-token-rotation/api_token_rotation.md) 撤销旧 Key、枚举并清理本次 replacement，终态 revoked；不重发 Rotate，不持久化或重放 Secret。Actor 或 User 删除时后台命令幂等撤销全部关联 Token。

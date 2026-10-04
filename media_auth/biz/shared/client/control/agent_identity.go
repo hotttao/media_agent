@@ -4,6 +4,7 @@ package control
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -35,7 +36,7 @@ type Client struct {
 
 func New(baseURL, internalToken string, timeout time.Duration) (*Client, error) {
 	u, err := url.Parse(baseURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || internalToken == "" {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || internalToken == "" {
 		return nil, ErrInvalid
 	}
 	if timeout <= 0 {
@@ -66,7 +67,15 @@ func (c *Client) ResolveAgentIdentity(ctx context.Context, id string) (AgentIden
 	result, response, err := c.client.ResolveAgentIdentity(ctx, &pb.ResolveAgentIdentityRequest{AgentConfigurationId: id}, hconfig.WithRequestTimeout(remaining))
 	// Generated client errors may contain upstream bodies. Never return them.
 	if err == nil && ctx.Err() == nil && response != nil && response.StatusCode() == http.StatusNotFound {
-		return AgentIdentity{}, ErrNotFound
+		// A generic router/proxy 404 is not evidence that the Agent was deleted.
+		// Accept only the identity endpoint's explicit, bounded error contract.
+		var failure struct {
+			Error string `json:"error"`
+		}
+		if len(response.Body()) <= 4096 && json.Unmarshal(response.Body(), &failure) == nil && failure.Error == "agent identity not found" {
+			return AgentIdentity{}, ErrNotFound
+		}
+		return AgentIdentity{}, ErrUnavailable
 	}
 	if err != nil || ctx.Err() != nil || response == nil || response.StatusCode() != http.StatusOK || result == nil {
 		return AgentIdentity{}, ErrUnavailable

@@ -20,3 +20,6 @@
 ## 2026-10-03 · 稳定委托身份解析
 
 区分类型标签 agent_id 与配置记录的稳定 ID，以 AgentConfiguration ID 形成 Agent Actor。增加内部只读身份投影，回查 Workspace 归属和当前 owner 的部门权限，不返回 Provider 秘密。只读能力不创建 Application Workflow；Token 签发/撤销仍由既有跨服务 Workflow 协调。没有把运行环境 stopped 隐式改成身份停用。
+## 2026-10-04 · 失效事实与查询不确定性
+
+- 明确不存在/已删除返回404；不完整或未知身份事实返回503，防止后台误撤销。

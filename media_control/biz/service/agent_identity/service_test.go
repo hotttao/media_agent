@@ -59,19 +59,20 @@ func TestResolveFailsClosed(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		change func(*domain.AgentIdentity)
+		want   error
 	}{
-		{"configuration mismatch", func(v *domain.AgentIdentity) { v.ConfigurationID = "other" }},
-		{"missing workspace", func(v *domain.AgentIdentity) { v.WorkspaceID = "" }},
-		{"missing owner", func(v *domain.AgentIdentity) { v.OwnerUserID = "" }},
-		{"missing organization", func(v *domain.AgentIdentity) { v.OrganizationID = "" }},
-		{"missing team", func(v *domain.AgentIdentity) { v.TeamID = "" }},
-		{"deleted", func(v *domain.AgentIdentity) { v.WorkspaceState = "deleted" }},
-		{"unknown state", func(v *domain.AgentIdentity) { v.WorkspaceState = "unknown" }},
+		{"configuration mismatch", func(v *domain.AgentIdentity) { v.ConfigurationID = "other" }, ErrIdentityUnavailable},
+		{"missing workspace", func(v *domain.AgentIdentity) { v.WorkspaceID = "" }, ErrIdentityUnavailable},
+		{"missing owner", func(v *domain.AgentIdentity) { v.OwnerUserID = "" }, ErrIdentityUnavailable},
+		{"missing organization", func(v *domain.AgentIdentity) { v.OrganizationID = "" }, ErrIdentityUnavailable},
+		{"missing team", func(v *domain.AgentIdentity) { v.TeamID = "" }, ErrIdentityUnavailable},
+		{"deleted", func(v *domain.AgentIdentity) { v.WorkspaceState = "deleted" }, domain.ErrNotFound},
+		{"unknown state", func(v *domain.AgentIdentity) { v.WorkspaceState = "unknown" }, ErrIdentityUnavailable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := valid
 			tc.change(&v)
-			if _, err := New(readerStub{value: &v}, &teamStub{}).Resolve(t.Context(), "config"); !errors.Is(err, domain.ErrNotFound) {
+			if _, err := New(readerStub{value: &v}, &teamStub{}).Resolve(t.Context(), "config"); !errors.Is(err, tc.want) {
 				t.Fatalf("invalid facts accepted: %v", err)
 			}
 		})
@@ -79,7 +80,7 @@ func TestResolveFailsClosed(t *testing.T) {
 	if _, err := New(readerStub{}, &teamStub{}).Resolve(t.Context(), " "); !errors.Is(err, ErrInvalidID) {
 		t.Fatal("empty ID accepted")
 	}
-	if _, err := New(readerStub{}, &teamStub{}).Resolve(t.Context(), "config"); !errors.Is(err, domain.ErrNotFound) {
+	if _, err := New(readerStub{}, &teamStub{}).Resolve(t.Context(), "config"); !errors.Is(err, ErrIdentityUnavailable) {
 		t.Fatal("nil facts accepted")
 	}
 	upstream := errors.New("authorization unavailable")

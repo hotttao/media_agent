@@ -44,6 +44,11 @@
 - 采用专用 Gateway 凭据、Control 权威归属和 `agent.gateway` scope；幂等创建复用 Issuance，重复请求不交付 Secret。
 - Gateway 代理及停用撤销不因该接口完成而视为已实现。
 
+## 2026-10-04 · Agent 撤销兜底
+
+- 增加无 Secret 的 Agent 候选扫描，明确失效才持久化撤销；权威查询故障或未知响应不改 Token。
+- 复用已有签发/轮换/撤销恢复，周期扫描不冒充可靠生命周期事件。
+
 ## 2026-08-06 · Platform Token 拆分
 
 - Platform Token 从通用客户端凭证中拆出；它继续作为独立加密托管凭证，不纳入 Talos API Token 生命周期。

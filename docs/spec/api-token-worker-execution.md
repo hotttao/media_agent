@@ -221,6 +221,8 @@ Agent Actor 使用 `Agent:<agent_configurations.id>`，不是现有 `agent_id` �
 
 Auth 的 `biz/shared/client/control` 封装生成的 AgentIdentityService client，只向配置的内部地址发送固定 system 服务身份，不传用户 Cookie 或 API Token；5 秒总超时且不超过父请求期限，查询取消/错误/非200均拒绝。禁止把生成客户端可能包含来源响应正文的错误传给业务层，禁止缓存身份授权。配置为 `MEDIA_CONTROL_URL` 与 `CONTROL_INTERNAL_TOKEN`；缺少任一项时 Agent Validator 不装配，仍 fail closed。
 
+身份入口404只有携带固定 `error=agent identity not found` 契约才表示明确不存在；网关/路由的通用404当作来源不可用，不用于后台撤销。配置仅允许服务根URL，禁止误配路径前缀。
+
 `biz/service/api_token/AgentActorValidator` 精确匹配 Configuration ID、`Agent:<id>`、owner、企业、非空 Workspace/Team 及 owner_authorized，拒绝 deleted/未知 Workspace 状态。现有 Create/Verify/Rotate 统一调用 ActorValidator，Personal Worker 继续使用独立的 Worker Identity 权威，其他未知 Actor 类型不得借 Agent 校验通过。此接线不开放任意客户端提交 Actor 的签发 API，也不代表生命周期后台撤销或 Gateway 代理完成。
 
 ### 6.2 签发与代理
@@ -240,6 +242,8 @@ AgentTokenProvisioning 回查 Control，检查 stable Actor/config ID、当前 o
 创建 Agent 后，`media_agent_gateway` 使用稳定幂等键请求 `media_auth.CreateActorAPIToken`。`media_auth` 必须回查 Agent 的 owner、Organization 和状态；Gateway 不接受请求体覆盖 owner，也不保存 Secret。
 
 Agent 创建成功而 Token 申请失败时保留 Agent，返回 `token_provisioning_failed`，允许针对同一 Agent 重试。Agent disabled/deleted 或 owner 关系解除时撤销关联 Token。
+
+后台兜底：Auth 启动即按 ID 分页扫描 Agent issuing/active/rotating/expired 元数据，每批≤100、每条15秒期限，之后每10秒处理下一批。事务外查询 Control 当前身份；明确不存在、已删除、owner/企业变更或 owner_authorized=false 才在短事务内按 Actor+原owner+原企业准备清理。issuing→issuance_cleanup，其余→revoking，复用既有恢复清理 Talos。查询故障、取消、畸形响应、未知状态不改变 Token，交互验证仍拒绝；stopped 不等于 disabled。单条失败不阻塞后页、下一轮及重启从头重试。此轮询不保证捕获失效后迅速恢复的关系，也不实现尚无事实来源的 Agent disabled；可靠生命周期事件仍单独验收。
 
 Agent 运行时只调用 Agent Gateway。Gateway 验证 API Token、重新检查委托关系，再用 `sub=User + act.sub=Agent` 的内部身份代理目标服务。
 

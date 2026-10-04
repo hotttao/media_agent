@@ -242,6 +242,15 @@ go -C media-cli run . media_agent_gateway agent-client request \
 
 再用原User凭据执行`media_auth api-token revoke --id <this_test_token_id>`，确认Agent请求失败；不要以Agent Token调用管理API。代理只发往固定服务/业务路由，不提供公开内部JWKS命令。该门禁不证明自动创建编排、生命周期批量撤销或完整审计落盘已完成。
 
+### Agent 凭据撤销后台兜底
+
+`media_auth/e2e/agent_access_revocation_test.go` 使用隔离 PostgreSQL，覆盖候选状态/Actor过滤、精确owner/企业边界、权威故障不写撤销意图、晚到签发及重启。配置现有 Talos 地址后，还创建唯一测试 Agent Key，验证持久意图经重建的撤销流程收敛。Control 身份事实由测试桩控制，不能用此测试证明可靠生命周期事件或真实 Control 状态变更；不修改现有 Workspace/Agent/Token、不启动 Runtime。
+
+```bash
+MEDIA_E2E_TALOS_URL=<existing-private-talos-address> \
+go -C media_auth test -tags=e2e -race ./e2e -run '^TestAgentAccessRevocation' -count=1 -v
+```
+
 ### API Token 轮换恢复集成测试
 
 `media_auth/e2e/api_token_rotation_test.go` 使用 testcontainers 的隔离 PostgreSQL；设置 `MEDIA_E2E_TALOS_URL` 后还会连接已由仓库启动的 Talos Admin API。测试为唯一临时 User Actor 创建 Key，不使用测试账号的既有凭据；结束后撤销自己创建的 Key。

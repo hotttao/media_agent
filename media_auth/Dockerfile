@@ -28,7 +28,7 @@ COPY hertz_infra/ hertz_infra/
 COPY media_auth/ media_auth/
 
 # build 二进制。
-RUN cd media_auth && GOWORK=off CGO_ENABLED=0 go build -o /out/media_auth .
+RUN --mount=type=cache,target=/root/.cache/go-build cd media_auth && GOWORK=off CGO_ENABLED=0 go build -o /out/media_auth .
 
 # ── runtime ──
 FROM alpine:3.20

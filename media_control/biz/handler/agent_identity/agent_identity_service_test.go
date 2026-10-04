@@ -60,7 +60,7 @@ func TestResolveIdentityInternalBoundaryAndSafeErrors(t *testing.T) {
 		err  error
 		want int
 	}{
-		{domain.ErrNotFound, 404}, {service.ErrInvalidID, 400}, {errors.New("provider-secret-and-sql-diagnostics"), 503},
+		{domain.ErrNotFound, 404}, {service.ErrInvalidID, 400}, {service.ErrIdentityUnavailable, 503}, {errors.New("provider-secret-and-sql-diagnostics"), 503},
 	} {
 		stub.err = tc.err
 		w := ut.PerformRequest(h.Engine, "GET", "/internal/v1/agent-identities/config", nil,

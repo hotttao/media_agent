@@ -195,6 +195,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config) {
 				log.Fatal("init di: invalid Control identity configuration")
 			}
 			agentValidator = apitokenservice.NewAgentActorValidator(authority)
+			go workflow.NewAgentAccessRevocation(apiTokenRepo, agentValidator, apiTokenRepo, txRunner).Run(context.Background())
 			agenttokenhandler.Configure(workflow.NewAgentTokenProvisioning(authority, apiTokenSvc), os.Getenv("MEDIA_AUTH_AGENT_GATEWAY_TOKEN"))
 		}
 		apiTokenSvc.SetActorValidator(func(ctx context.Context, actorType domainapitoken.ActorType, actorID, userID, organizationID string) bool {

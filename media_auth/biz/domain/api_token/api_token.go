@@ -67,8 +67,15 @@ type RevocationSource interface {
 	ListRevoking(context.Context, string, int) ([]Token, error)
 }
 
-// ActorRevocationRepository stores cleanup intents only; the caller owns the
-// transaction with the actor's lifecycle fact. It does not contact Talos.
+// AgentRevocationSource exposes metadata only, including unfinished issuance.
+// Authority lookup happens outside repository transactions.
+type AgentRevocationSource interface {
+	ListAgentRevocationCandidates(context.Context, string, int) ([]Token, error)
+}
+
+// ActorRevocationRepository stores cleanup intents only. For local identities
+// the caller commits with the lifecycle fact; distributed authority is checked
+// outside the short intent transaction. It does not contact Talos.
 type ActorRevocationRepository interface {
 	PrepareActorRevocation(context.Context, ActorType, string, string, string) error
 }
