@@ -3,8 +3,11 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"media_agent/hertz_infra/authn/internaljwt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 )
 
@@ -24,6 +27,37 @@ func TestGetWorkspaceForUserCarriesAuthenticatedActor(t *testing.T) {
 	workspace, err := NewControlClient(server.URL, "service-secret").GetWorkspaceForUser(context.Background(), "ws-1", "owner")
 	if err != nil || workspace.OrganizationID != "org-1" || workspace.TeamID != "team-1" {
 		t.Fatalf("workspace validation failed: workspace=%+v err=%v", workspace, err)
+	}
+}
+
+func TestAgentWorkspaceAccessCannotChangeOwnerTenantOrWorkspace(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_, _ = w.Write([]byte(`{"id":"ws-1","organization_id":"org-1","team_id":"team-1"}`))
+	}))
+	defer server.Close()
+	c := NewControlClient(server.URL, "internal")
+	p := internaljwt.AgentPrincipal{UserID: "owner", ActorID: "Agent:configuration", OrganizationID: "org-1", WorkspaceID: "ws-1", CredentialID: "credential"}
+	ctx := internaljwt.ContextWithAgentPrincipal(context.Background(), p)
+	if _, err := c.GetWorkspaceForUser(ctx, "ws-1", "owner"); err != nil {
+		t.Fatal("valid delegated Workspace rejected", err)
+	}
+	for _, request := range []struct{ workspace, user string }{{"ws-2", "owner"}, {"ws-1", "other"}} {
+		if _, err := c.GetWorkspaceForUser(ctx, request.workspace, request.user); !errors.Is(err, ErrWorkspaceDelegationDenied) {
+			t.Fatal("changed Workspace or User accepted")
+		}
+	}
+	if calls.Load() != 1 {
+		t.Fatal("identity mismatch reached Control")
+	}
+	p.OrganizationID = "other-org"
+	ctx = internaljwt.ContextWithAgentPrincipal(context.Background(), p)
+	if _, err := c.GetWorkspaceForUser(ctx, "ws-1", "owner"); !errors.Is(err, ErrWorkspaceDelegationDenied) {
+		t.Fatal("foreign Organization accepted")
+	}
+	if allowed, err := c.CanUseWorkflow(ctx, "ws-1", "owner"); allowed || !errors.Is(err, ErrWorkspaceDelegationDenied) {
+		t.Fatal("cross-tenant execution allowed")
 	}
 }
 

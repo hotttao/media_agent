@@ -57,6 +57,12 @@ http:
       priority: 60
       middlewares: [oathkeeper-forward-auth]
       service: control
+    agent-proxy:
+      # Agent Gateway introspects the API Token and issues its own assertion.
+      # No Ory User/Worker mutation applies to this entry point.
+      rule: "Path(`/api/agent/v1/requests`)"
+      priority: 60
+      service: agent-api
     agent-client-management:
       rule: "PathPrefix(`/api/v1/agent-clients`)"
       priority: 60

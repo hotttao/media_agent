@@ -16,6 +16,7 @@ import (
 	batchrepo "media_agent/media_agent_gateway/biz/dal/repo/batch_run"
 	teamworkrepo "media_agent/media_agent_gateway/biz/dal/repo/teamwork_runtime"
 	agentclienthandler "media_agent/media_agent_gateway/biz/handler/agent_client"
+	agentproxyhandler "media_agent/media_agent_gateway/biz/handler/agent_proxy"
 	taskhandler "media_agent/media_agent_gateway/biz/handler/agent_task"
 	batchhandler "media_agent/media_agent_gateway/biz/handler/batch_run"
 	chathandler "media_agent/media_agent_gateway/biz/handler/chat"
@@ -82,6 +83,23 @@ func main() {
 		}
 		middleware.ConfigureAgentTokenManagement(agentTokens)
 		agentclienthandler.Configure(workflow.NewAgentTokenProvisioning(agentTokens, agentTokens))
+		if keyFile := os.Getenv("AGENT_SIGNING_KEY_FILE"); keyFile != "" {
+			signer, err := internaljwt.LoadAgentSigner(keyFile, os.Getenv("AGENT_JWT_ISSUER"))
+			if err != nil {
+				log.Fatal("invalid Agent signing configuration")
+			}
+			credentials, err := sharedclient.NewAgentCredentialClient(os.Getenv("MEDIA_AUTH_URL"), os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN"))
+			if err != nil {
+				log.Fatal("invalid Agent credential verification configuration")
+			}
+			forwarder, err := sharedclient.NewAgentHTTPForwarder(os.Getenv("MEDIA_WORKFLOW_URL"), os.Getenv("MEDIA_MATERIALS_URL"))
+			if err != nil {
+				log.Fatal("invalid Agent forwarding configuration")
+			}
+			agentproxyhandler.Configure(workflow.NewAgentAPIProxy(credentials, agentTokens, signer, forwarder), signer)
+		}
+	} else if os.Getenv("AGENT_SIGNING_KEY_FILE") != "" {
+		log.Fatal("Agent proxy requires Agent authority configuration")
 	}
 	store := repo.New(db)
 	fallbackControl := sharedclient.MockControl{

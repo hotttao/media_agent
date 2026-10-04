@@ -75,14 +75,15 @@
 - [x] Control 稳定 Agent Identity 内部解析：按 Configuration ID 定位，只读投影归属/当前 owner 授权，服务身份保护、无 Provider Secret；单测与真实 HTTP 门禁。
 - [x] Auth Agent ActorValidator：非缓存查询 Control，Create/Verify/Rotate 精确校验归属及当前授权；单测、部署后既有 User/Worker 链路回归。
 - [x] Auth 内部 Agent Token Provisioning：专用 Gateway 服务凭证、owner事实派生、仅 agent.gateway scope、持久签发与重复命令拒绝重放Secret；单测/真实Talos接口门禁。
-- [ ] 定义 Agent API Client/代理 IDL，不与 Agent Session Token 混用。
+- [x] 定义 Agent API Client/代理 IDL，不与 Agent Session Token 混用。
 - [ ] Agent 创建后由 Gateway 幂等调用 media_auth 创建 Actor Token。
   - [x] 现有配置的显式申请 IDL/Workflow/服务端身份接入、企业限制、公开路由及一次性 Secret 交付，HTTP与CLI门禁。
-- [ ] Gateway 只回传一次 Secret，不持久化 Secret。
-- [ ] Gateway 验证 Agent Token、校验 owner 委托并代理内部服务。
+- [x] Gateway 只回传一次 Secret，不持久化 Secret。
+- [x] Gateway 验证 Agent Token、校验 owner 委托并代理内部服务。
   - [x] 共享独立Gateway委托JWT签名/公钥JWKS、60秒精确audience、方法/URI/body摘要绑定与私有密钥加载，单元/race测试。
-  - [ ] Gateway密钥装配/公钥发布、目标服务Agent信任链和身份保留门禁。
-  - [ ] Auth/Control实时校验、固定服务/路由代理、公开接入与业务资源权限检查，真实HTTP/CLI与撤销后拒绝门禁。
+  - [x] Gateway密钥装配/公钥发布、目标服务Agent信任链和身份保留门禁。
+  - [x] Auth/Control实时校验、固定服务/路由代理、公开接入与业务资源权限检查，真实HTTP/CLI与撤销后拒绝门禁。
+  - [ ] 代理审计记录User/Actor/credential/企业/Workspace、目标操作和结果，并通过trace_id核对落盘关联，不保存正文或凭据。
 - [ ] Agent disabled/deleted/owner 解绑触发 Token 撤销。
 - [ ] E2E 覆盖申请失败重试、代理调用和撤销。
 
@@ -187,7 +188,9 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 | Agent Token 私有签发/幂等 | Auth / api_token | 专用凭据入口、Control 权威校验、复用 API Token Issuance | covered |
 | Agent 创建后申请/一次性回传 | Agent Gateway | Agent API Token Provisioning 的客户端编排 | missing |
 | 已有配置显式申请/一次性回传 | Agent Gateway | 公开管理入口、Control 企业限制、Auth 私有签发、CLI 0600文件 | covered |
-| Agent 委托代理 | Agent Gateway | 受限内部身份代理，不能开放任意 URL | missing |
+| Agent 委托代理 | Agent Gateway | 固定服务/路由、实时Auth/Control、独立JWT与资源权限，HTTP/CLI已验收 | covered |
+| Agent 委托调用审计归属 | Agent Gateway + 业务服务 | User/Actor/credential/企业/Workspace与结果关联，完整落盘验收 | missing |
+| Workflow/Template企业与Workspace资源归属 | Workflow / workflow、template | 当前定义仍为User归属，完整租户化需独立规格与迁移 | missing |
 | Agent 委托断言签名与请求绑定 | hertz_infra / Internal Identity JWT | 独立RSA/JWKS、精确audience、60秒TTL、方法/URI/body摘要及私有密钥读取 | covered |
 | Agent disabled/deleted/owner 解绑撤销 | Control + Auth | 权威生命周期事实、持久撤销意图/恢复 | missing |
 
@@ -219,3 +222,11 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - `internaljwt.AgentSigner` 使用独立RSA≥2048私钥、单服务audience及60秒TTL，携带User/Agent/企业/凭据ID，方法/URI/query/body全量绑定。私有PEM文件校验权限/大小/regular形态，JWKS仅公钥。
 - 新增单测/race覆盖跨服务/issuer拒绝、过期、修改方法/路径/query/body、Agent/Worker/User身份混用、缺少关键claims、扩大scope/role、过长TTL、外部URL/路径穿越/转义/fragment/换行、弱密钥及公开可读文件；`GOWORK=off go test -p 1 ./...` 通过。未创建持久测试签名密钥、未改运行服务信任链，5173首页仍HTTP200。
 - Gateway装配/公钥发布、目标服务Agent授权和真实代理HTTP/CLI尚未完成；不以签名/验证单测冒充整条代理链路。P6保持未完成，UI未修改。
+
+### 2026-10-04 · Agent 代理 HTTP 与 CLI 门禁
+
+- Gateway完成固定服务/路由代理、逐次Auth/Control核验、独立JWT装配及内部公钥发布；Materials/Workflow独立AgentVerifier保留被代表User与Actor，绑定方法、原始URI/query/body/Content-Type和Workspace。Materials逐次核验企业成员；Job创建保存企业/Workspace，查询先授权后同步Conductor，读写和列表限定owner/企业/Workspace并重验执行权限。
+- Gateway、Materials、Workflow全量单测通过；关键鉴权/代理/race及架构检查通过。三个服务已单独构建部署，未启动Runtime/观测后端；Gateway重启前确认Agent Task全为终态、待投递动作与River待执行任务为0。Traefik仅开放代理POST路径，内部公钥路径没有公开路由；签名密钥独立、0600，仅Gateway只读挂载并排除Git/Docker构建上下文。
+- 真实`TestAgentProxyGateway`通过：Agent读Job、所属企业素材查询和临时纯文本素材创建/读取/删除，跨企业拒绝、User不能冒充Agent、禁止目标/Worker/注册表写路由、撤销后401及trace_id。测试只清理自己创建的Token/素材，不新增Workflow执行。
+- 独立CLI实际申请到0600新文件，`agent-client request`读取Job返回200及trace_id；User CLI撤销后同一Agent命令失败。现有User API Token、Agent显式申请、Worker Gateway和Request Correlation真实网关回归通过；5173入口HTTP200。
+- 自动创建编排、生命周期持久批量撤销、代理身份审计、P7旧ServiceToken清理与P5剩余门禁仍未完成。Workflow/Template租户模型保留missing；UI继续排除。

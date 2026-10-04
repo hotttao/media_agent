@@ -1,6 +1,7 @@
 package internaljwt
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -25,9 +26,20 @@ const AgentAuthSource = "agent_api_token"
 
 var ErrAgentDelegation = errors.New("invalid Agent delegation")
 
-type AgentPrincipal struct{ UserID, ActorID, OrganizationID, CredentialID string }
+type AgentPrincipal struct{ UserID, ActorID, OrganizationID, CredentialID, WorkspaceID string }
+type agentPrincipalKey struct{}
+
+func ContextWithAgentPrincipal(ctx context.Context, p AgentPrincipal) context.Context {
+	return context.WithValue(ctx, agentPrincipalKey{}, p)
+}
+func AgentPrincipalFromContext(ctx context.Context) (AgentPrincipal, bool) {
+	p, ok := ctx.Value(agentPrincipalKey{}).(AgentPrincipal)
+	return p, ok
+}
+
 type AgentRequest struct {
 	Method, URI string
+	ContentType string
 	Body        []byte
 }
 
@@ -138,7 +150,7 @@ func (s *AgentSigner) Sign(principal AgentPrincipal, audience string, request Ag
 		return "", ErrAgentDelegation
 	}
 	now := s.now().UTC().Truncate(time.Second)
-	claims := Claims{PrincipalType: "user", OrganizationID: principal.OrganizationID, CredentialID: principal.CredentialID, Scope: "agent.gateway", AuthSource: AgentAuthSource, Role: "user", Actor: &Actor{Sub: principal.ActorID}, RequestMethod: request.Method, RequestURI: request.URI, RequestDigest: agentRequestDigest(request), RegisteredClaims: jwt.RegisteredClaims{Subject: "User:" + principal.UserID, Issuer: s.issuer, Audience: jwt.ClaimStrings{audience}, IssuedAt: jwt.NewNumericDate(now), NotBefore: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(AgentDelegationTTL)), ID: hex.EncodeToString(id)}}
+	claims := Claims{PrincipalType: "user", OrganizationID: principal.OrganizationID, WorkspaceID: principal.WorkspaceID, CredentialID: principal.CredentialID, Scope: "agent.gateway", AuthSource: AgentAuthSource, Role: "user", Actor: &Actor{Sub: principal.ActorID}, RequestMethod: request.Method, RequestURI: request.URI, RequestContentType: request.ContentType, RequestDigest: agentRequestDigest(request), RegisteredClaims: jwt.RegisteredClaims{Subject: "User:" + principal.UserID, Issuer: s.issuer, Audience: jwt.ClaimStrings{audience}, IssuedAt: jwt.NewNumericDate(now), NotBefore: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(AgentDelegationTTL)), ID: hex.EncodeToString(id)}}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = s.kid
 	raw, err := token.SignedString(s.key)
@@ -155,9 +167,9 @@ func ValidateAgentRequest(claims *Claims, request AgentRequest) (AgentPrincipal,
 		return AgentPrincipal{}, ErrAgentDelegation
 	}
 	user, ok := strings.CutPrefix(claims.Subject, "User:")
-	principal := AgentPrincipal{UserID: user, ActorID: claims.Actor.Sub, OrganizationID: claims.OrganizationID, CredentialID: claims.CredentialID}
+	principal := AgentPrincipal{UserID: user, ActorID: claims.Actor.Sub, OrganizationID: claims.OrganizationID, CredentialID: claims.CredentialID, WorkspaceID: claims.WorkspaceID}
 	lifetime := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
-	if !ok || !validAgentPrincipal(principal) || lifetime <= 0 || lifetime > AgentDelegationTTL || !claims.NotBefore.Time.Equal(claims.IssuedAt.Time) || !validAgentRequest(request) || claims.RequestMethod != request.Method || claims.RequestURI != request.URI {
+	if !ok || !validAgentPrincipal(principal) || lifetime <= 0 || lifetime > AgentDelegationTTL || !claims.NotBefore.Time.Equal(claims.IssuedAt.Time) || !validAgentRequest(request) || claims.RequestMethod != request.Method || claims.RequestURI != request.URI || claims.RequestContentType != request.ContentType {
 		return AgentPrincipal{}, ErrAgentDelegation
 	}
 	digest := agentRequestDigest(request)
@@ -172,7 +184,7 @@ func validAgentAudience(audience string) bool {
 }
 func validAgentPrincipal(p AgentPrincipal) bool {
 	actor, ok := strings.CutPrefix(p.ActorID, "Agent:")
-	return ok && validIdentityPart(actor) && validIdentityPart(p.UserID) && validIdentityPart(p.OrganizationID) && validIdentityPart(p.CredentialID)
+	return ok && validIdentityPart(actor) && validIdentityPart(p.UserID) && validIdentityPart(p.OrganizationID) && validIdentityPart(p.CredentialID) && validIdentityPart(p.WorkspaceID)
 }
 func validIdentityPart(value string) bool {
 	if len(value) == 0 || len(value) > 128 {
@@ -186,6 +198,11 @@ func validIdentityPart(value string) bool {
 	return true
 }
 func validAgentRequest(r AgentRequest) bool {
+	// Content-Type is forwarded as a header and must remain a single bounded
+	// value. Its exact bytes are also bound by the signed assertion.
+	if len(r.ContentType) > 1024 || strings.ContainsAny(r.ContentType, "\r\n\x00") {
+		return false
+	}
 	switch r.Method {
 	case "GET", "POST", "PUT", "PATCH", "DELETE":
 	default:

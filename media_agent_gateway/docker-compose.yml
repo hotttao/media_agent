@@ -88,6 +88,12 @@ services:
       MEDIA_CONTROL_URL: http://host.docker.internal:8007
       MEDIA_AUTH_URL: http://media_auth:8001
       MEDIA_AUTH_AGENT_GATEWAY_TOKEN: ${MEDIA_AUTH_AGENT_GATEWAY_TOKEN:-}
+      MEDIA_AUTH_INTERNAL_TOKEN: ${MEDIA_AUTH_INTERNAL_TOKEN:-dev-media-auth-internal-token}
+      MEDIA_WORKFLOW_URL: http://host.docker.internal:8002
+      MEDIA_MATERIALS_URL: http://host.docker.internal:8003
+      # Empty disables Agent proxy; the private key is never baked into the image.
+      AGENT_SIGNING_KEY_FILE: ${AGENT_SIGNING_KEY_FILE:-}
+      AGENT_JWT_ISSUER: ${AGENT_JWT_ISSUER:-urn:media:agent-gateway}
       INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
       INTERNAL_JWT_ISSUER: ${INTERNAL_JWT_ISSUER:-http://oathkeeper:4456/}
       CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
@@ -95,6 +101,7 @@ services:
       LOG_DIR: /media_logs/media-agent-gateway
     volumes:
       - ../media_logs/media-agent-gateway:/media_logs/media-agent-gateway
+      - ./.secrets:/run/secrets/agent-gateway:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks: [default, auth]

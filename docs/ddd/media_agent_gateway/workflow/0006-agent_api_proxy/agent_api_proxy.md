@@ -43,6 +43,12 @@ Gateway 不创建 Token、Job 或资源事实；目标写事务完全由资源�
 - 内部请求只构造签名 Authorization、Content-Type 和 Trace Context，不传原始 API Token、Cookie、Host、转发或内部服务凭据。目标固定于服务端配置及路由 allowlist；禁止任意 URL、内部/认证/Worker/运维路由及重定向跳转。
 - 目标服务将 User 与 Agent Principal 同时保留在请求上下文和审计维度。资源授权依旧回查当前事实，素材企业列表限于 JWT 企业；Workflow Workspace 必须属于被委托企业。
 
+## 接入与资源范围
+
+公开 `POST /api/agent/v1/requests` 仅由 Agent Gateway 验证原始 API Token，不经 User/Worker Token交换分支。请求显式声明 service、method、uri、content_type、body；service只允许配置的Workflow/Materials，uri只能匹配固定业务路由allowlist。响应是原业务status_code、content_type、body及trace_id的包络；业务拒绝不能被当作业务成功。Gateway不回传下游JWT、Cookie或重定向位置。二进制body以API DTO的bytes传输，不强制资源结果为JSON。
+
+JWT还绑定请求Content-Type和Control权威Workspace。Agent提交Job时以该企业/Workspace记录执行并检查当前Workspace的use_workflow授权；不能以请求体覆盖。Job读取/列表/变更限定被委托企业、Workspace及owner，并重新检查当前执行权限；查询先授权再同步Conductor状态。无企业或Workspace事实的旧Job不会以Agent身份放行。历史发布记录使用现有Workspace授权，并限制为被委托Workspace及企业。普通Workflow/Template定义当前仍是User归属模型，其企业/Workspace模型另行落实，不以代理实现冒充完成。
+
 ## 一致性、重试与失败
 
 无 Gateway 持久化状态流转或分布式事务。读取与写命令都只转发一次，不自动重试写请求。目标超时或客户端断线不回滚已提交的资源事实；调用者使用资源服务的幂等键或查询恢复，不能因请求失败再次创建 Job。

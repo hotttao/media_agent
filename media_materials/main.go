@@ -146,6 +146,12 @@ func main() {
 	if jwksURL := os.Getenv("INTERNAL_JWKS_URL"); jwksURL != "" {
 		authCfg.InternalJWTVerifier = internaljwt.NewVerifier(jwksURL, os.Getenv("INTERNAL_JWT_ISSUER"), "internal-api", nil)
 	}
+	if jwksURL := os.Getenv("AGENT_JWKS_URL"); jwksURL != "" {
+		if os.Getenv("AGENT_JWT_ISSUER") == "" {
+			log.Fatal("Agent JWT issuer is required")
+		}
+		authCfg.AgentJWTVerifier = internaljwt.NewVerifier(jwksURL, os.Getenv("AGENT_JWT_ISSUER"), "media-materials-agent", nil)
+	}
 	authMw := auth.New(authCfg)
 
 	h := suite.NewServer()

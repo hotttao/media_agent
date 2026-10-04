@@ -1,5 +1,15 @@
 # execution domain 变更记录
 
+## 2026-10-04 · Agent Workspace 执行隔离
+
+- Agent Job创建持久化企业/Workspace；读写限定可信owner、企业、Workspace并核验当前执行权限，查询先鉴权后同步Conductor。
+- 原生Job仓储不再丢弃已有企业/Workspace字段；列表查询追加受信隔离条件，不改写归属为空的历史记录。
+
+## 2026-10-03 · Agent 委托执行归属
+
+- Agent提交Job保留经Control核验的企业/Workspace并检查当前执行授权；Job读取、列表和操作追加企业限制，旧无企业Job拒绝。
+- 不把User归属的普通Workflow定义描述为已实现Workspace资源模型；该模型差距单独跟踪。
+
 ## 2026-10-02 · 历史已完成视频终态
 
 - 增加 `ImportCompletedExecution`：四个真实已登记输出同时成为成功 StepRun，Job 直接为 `succeeded`，没有 Conductor 实例；原视频时间与导入时间分离。

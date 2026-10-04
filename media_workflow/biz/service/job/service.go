@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	configpb "media_agent/hertz_gen/config"
+	"media_agent/hertz_infra/authn/internaljwt"
 	"media_agent/media_workflow/biz/dal"
 	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
 	domain "media_agent/media_workflow/biz/domain/job"
@@ -53,17 +54,48 @@ func NewService(jr domain.JobRepo, sr domain.StepRunRepo, tx dal.TxRunner, wfRep
 
 // —— SubmitJob ——
 type SubmitCommand struct {
+	OrganizationID  string
+	WorkspaceID     string
+	Delegated       bool
 	WorkflowID      string
 	WorkflowVersion int
 	Input           domain.JobInput
 	SubmittedBy     string
 }
 
+var ErrSubmitForbidden = errors.New("workflow execution access denied")
+var ErrSubmitAuthorityUnavailable = errors.New("workflow execution authorization unavailable")
+
 func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, error) {
+	if cmd.Delegated {
+		if cmd.SubmittedBy == "" || cmd.OrganizationID == "" || cmd.WorkspaceID == "" {
+			return nil, ErrSubmitForbidden
+		}
+		if s.historyWorkspaces == nil || s.resumeAccess == nil {
+			return nil, ErrSubmitAuthorityUnavailable
+		}
+		workspace, err := s.historyWorkspaces.GetWorkspaceForUser(ctx, cmd.WorkspaceID, cmd.SubmittedBy)
+		if err != nil {
+			return nil, ErrSubmitAuthorityUnavailable
+		}
+		if workspace == nil || workspace.ID != cmd.WorkspaceID || workspace.OrganizationID != cmd.OrganizationID {
+			return nil, ErrSubmitForbidden
+		}
+		allowed, err := s.resumeAccess.CanUseWorkflow(ctx, cmd.WorkspaceID, cmd.SubmittedBy)
+		if err != nil {
+			return nil, ErrSubmitAuthorityUnavailable
+		}
+		if !allowed {
+			return nil, ErrSubmitForbidden
+		}
+	}
 	// 加载 workflow
 	wf, err := s.wfRepo.Get(ctx, cmd.WorkflowID)
 	if err != nil {
 		return nil, fmt.Errorf("workflow %s: %w", cmd.WorkflowID, err)
+	}
+	if cmd.Delegated && wf.CreatedBy != cmd.SubmittedBy && wf.Visibility != wfdomain.VisibilityPublic {
+		return nil, ErrSubmitForbidden
 	}
 	// workflow_version is optional at the HTTP boundary. Zero means "use the
 	// current published version"; a non-zero value remains an optimistic lock.
@@ -88,6 +120,7 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 	// 创建 job + step_runs
 	jobID := "job_" + uuid.NewString()
 	job := &domain.Job{
+		OrganizationID: cmd.OrganizationID, WorkspaceID: cmd.WorkspaceID,
 		ID: jobID, Scope: wf.Scope, WorkflowID: wf.ID, WorkflowVersion: wf.Version,
 		Input: cmd.Input, Status: domain.JobPending, SubmittedBy: cmd.SubmittedBy,
 		SubmittedAt: time.Now(),
@@ -784,7 +817,53 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Job, []*domain.St
 	return s.jobRepo.GetWithStepRuns(ctx, id)
 }
 
+// Authorize the stored record before Get can reconcile Conductor state.
+// A delegated organization cannot access older Jobs with no tenant attribution.
+func (s *Service) GetForUser(ctx context.Context, id, userID, organizationID string) (*domain.Job, []*domain.StepRun, error) {
+	if userID == "" {
+		return nil, nil, gorm.ErrRecordNotFound
+	}
+	j, err := s.jobRepo.Get(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if j.SubmittedBy != userID || (organizationID != "" && j.OrganizationID != organizationID) {
+		return nil, nil, gorm.ErrRecordNotFound
+	}
+	if principal, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+		if principal.UserID != userID || principal.OrganizationID != j.OrganizationID || principal.WorkspaceID != j.WorkspaceID {
+			return nil, nil, gorm.ErrRecordNotFound
+		}
+		if s.resumeAccess == nil {
+			return nil, nil, ErrSubmitAuthorityUnavailable
+		}
+		allowed, err := s.resumeAccess.CanUseWorkflow(ctx, j.WorkspaceID, userID)
+		if err != nil {
+			return nil, nil, ErrSubmitAuthorityUnavailable
+		}
+		if !allowed {
+			return nil, nil, gorm.ErrRecordNotFound
+		}
+	}
+	return s.Get(ctx, id)
+}
+
 func (s *Service) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, int, error) {
+	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+		if s.resumeAccess == nil {
+			return nil, 0, ErrSubmitAuthorityUnavailable
+		}
+		allowed, err := s.resumeAccess.CanUseWorkflow(ctx, p.WorkspaceID, p.UserID)
+		if err != nil {
+			return nil, 0, ErrSubmitAuthorityUnavailable
+		}
+		if !allowed {
+			return nil, 0, ErrSubmitForbidden
+		}
+		q.SubmittedBy = p.UserID
+		q.OrganizationID = p.OrganizationID
+		q.WorkspaceID = p.WorkspaceID
+	}
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
 	}

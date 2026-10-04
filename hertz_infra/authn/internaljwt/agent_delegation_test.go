@@ -29,7 +29,7 @@ func delegationFixture(t *testing.T) (*AgentSigner, AgentPrincipal, AgentRequest
 	if err != nil {
 		t.Fatal(err)
 	}
-	return signer, AgentPrincipal{UserID: "owner", ActorID: "Agent:configuration", OrganizationID: "org", CredentialID: "credential"}, AgentRequest{Method: "POST", URI: "/api/v1/jobs?workspace_id=workspace", Body: []byte(`{"workflow_id":"wf"}`)}
+	return signer, AgentPrincipal{UserID: "owner", ActorID: "Agent:configuration", OrganizationID: "org", CredentialID: "credential", WorkspaceID: "workspace"}, AgentRequest{Method: "POST", URI: "/api/v1/jobs?workspace_id=workspace", ContentType: "application/json", Body: []byte(`{"workflow_id":"wf"}`)}
 }
 
 func TestAgentDelegationRoundTripAndRequestBinding(t *testing.T) {
@@ -53,10 +53,11 @@ func TestAgentDelegationRoundTripAndRequestBinding(t *testing.T) {
 		t.Fatal("assertion restrictions missing")
 	}
 	for _, changed := range []AgentRequest{
-		{Method: "GET", URI: request.URI, Body: request.Body},
-		{Method: request.Method, URI: "/api/v1/jobs/other", Body: request.Body},
-		{Method: request.Method, URI: "/api/v1/jobs?workspace_id=other", Body: request.Body},
-		{Method: request.Method, URI: request.URI, Body: []byte(`{"workflow_id":"other"}`)},
+		{Method: "GET", URI: request.URI, ContentType: request.ContentType, Body: request.Body},
+		{Method: request.Method, URI: "/api/v1/jobs/other", ContentType: request.ContentType, Body: request.Body},
+		{Method: request.Method, URI: "/api/v1/jobs?workspace_id=other", ContentType: request.ContentType, Body: request.Body},
+		{Method: request.Method, URI: request.URI, ContentType: request.ContentType, Body: []byte(`{"workflow_id":"other"}`)},
+		{Method: request.Method, URI: request.URI, ContentType: "application/octet-stream", Body: request.Body},
 	} {
 		if _, err := ValidateAgentRequest(claims, changed); !errors.Is(err, ErrAgentDelegation) {
 			t.Fatal("changed target request authorized")
@@ -104,6 +105,8 @@ func TestAgentDelegationRejectsInvalidClaims(t *testing.T) {
 		{"missing actor", func(c *Claims) { c.Actor = nil }},
 		{"non User subject", func(c *Claims) { c.Subject = "Service:owner" }},
 		{"missing org", func(c *Claims) { c.OrganizationID = "" }},
+		{"missing workspace", func(c *Claims) { c.WorkspaceID = "" }},
+		{"invalid workspace", func(c *Claims) { c.WorkspaceID = "../workspace" }},
 		{"missing credential", func(c *Claims) { c.CredentialID = "" }},
 		{"extra scope", func(c *Claims) { c.Scope = "agent.gateway api.access" }},
 		{"admin role", func(c *Claims) { c.Role = "admin" }},
@@ -140,6 +143,27 @@ func TestAgentDelegationRejectsInvalidClaims(t *testing.T) {
 	}
 }
 
+func TestAgentPrincipalContextPreservesIdentityAndParent(t *testing.T) {
+	type parentKey struct{}
+	parent, cancel := context.WithCancel(context.WithValue(context.Background(), parentKey{}, "parent"))
+	defer cancel()
+	if _, ok := AgentPrincipalFromContext(parent); ok {
+		t.Fatal("unmarked request has an Agent identity")
+	}
+	p := AgentPrincipal{UserID: "owner", ActorID: "Agent:configuration", OrganizationID: "org", WorkspaceID: "workspace", CredentialID: "credential"}
+	ctx := ContextWithAgentPrincipal(parent, p)
+	if got, ok := AgentPrincipalFromContext(ctx); !ok || got != p {
+		t.Fatal("Agent identity was not preserved")
+	}
+	if ctx.Value(parentKey{}) != "parent" {
+		t.Fatal("parent metadata was lost")
+	}
+	cancel()
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		t.Fatal("parent cancellation was lost")
+	}
+}
+
 func TestAgentDelegationSignerRejectsInvalidInputs(t *testing.T) {
 	signer, principal, request := delegationFixture(t)
 	for _, bad := range []AgentPrincipal{{}, {UserID: "owner", ActorID: "Worker:config", OrganizationID: "org", CredentialID: "key"}, {UserID: "owner", ActorID: "Agent:../config", OrganizationID: "org", CredentialID: "key"}} {
@@ -154,6 +178,13 @@ func TestAgentDelegationSignerRejectsInvalidInputs(t *testing.T) {
 	}
 	if _, err := signer.Sign(principal, "internal-api", request); !errors.Is(err, ErrAgentDelegation) {
 		t.Fatal("broad User audience signed")
+	}
+	for _, contentType := range []string{"application/json\r\nX-Forged: value", "application/json\x00", strings.Repeat("a", 1025)} {
+		changed := request
+		changed.ContentType = contentType
+		if _, err := signer.Sign(principal, "media-workflow-agent", changed); !errors.Is(err, ErrAgentDelegation) {
+			t.Fatal("invalid Content-Type signed")
+		}
 	}
 	if _, err := signer.Sign(principal, "media-workflow-agent", AgentRequest{Method: "CONNECT", URI: request.URI}); !errors.Is(err, ErrAgentDelegation) {
 		t.Fatal("tunnel method signed")

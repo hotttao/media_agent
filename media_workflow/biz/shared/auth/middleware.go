@@ -54,6 +54,7 @@ type Config struct {
 	MediaAuthInternalToken string // internal identity/team lookup credential
 	InternalJWTVerifier    *internaljwt.Verifier
 	WorkerJWTVerifier      *internaljwt.Verifier
+	AgentJWTVerifier       *internaljwt.Verifier
 	// DevUserID enables a local-only authenticated session when explicitly set.
 	// It is intentionally empty by default and must never be configured in prod.
 	DevUserID    string
@@ -282,6 +283,30 @@ func (m *Middleware) Handler() app.HandlerFunc {
 				ctx = context.WithValue(ctx, workerPrincipalKey{}, principal)
 				c.Next(ctx)
 				return
+			}
+			if m.cfg.AgentJWTVerifier != nil {
+				if claims, err := m.cfg.AgentJWTVerifier.Verify(ctx, bearer); err == nil {
+					// Legacy StepRun worker endpoints must never accept an Agent,
+					// even if an assertion was signed for that exact request.
+					if strings.HasPrefix(path, "/api/v1/step-runs/") && (path == "/api/v1/step-runs/claim" || strings.HasSuffix(path, "/complete") || strings.HasSuffix(path, "/fail")) {
+						c.JSON(consts.StatusUnauthorized, map[string]string{"error": "Worker identity required"})
+						c.Abort()
+						return
+					}
+					principal, err := internaljwt.ValidateAgentRequest(claims, internaljwt.AgentRequest{Method: string(c.Request.Header.Method()), URI: string(c.Request.URI().RequestURI()), ContentType: string(c.Request.Header.ContentType()), Body: c.Request.Body()})
+					if err != nil {
+						c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid Agent request binding"})
+						c.Abort()
+						return
+					}
+					ctx = internaljwt.ContextWithAgentPrincipal(ctx, principal)
+					ctx = context.WithValue(ctx, callerKey{}, &User{Sub: principal.UserID, Username: principal.UserID, Name: principal.UserID, Role: "user"})
+					if teams, _ := m.fetchTeams(ctx, principal.UserID); teams != nil {
+						ctx = context.WithValue(ctx, teamsKey{}, teams)
+					}
+					c.Next(ctx)
+					return
+				}
 			}
 			if m.cfg.InternalJWTVerifier != nil {
 				if claims, verifyErr := m.cfg.InternalJWTVerifier.Verify(ctx, bearer); verifyErr == nil {

@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"media_agent/hertz_infra/authn/internaljwt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 )
+
+var ErrWorkspaceDelegationDenied = errors.New("Agent Workspace access denied")
 
 // ControlClient checks Workspace ownership and permissions at media_control.
 // The acting user is carried by a service-authenticated header, never by the
@@ -32,6 +36,9 @@ func NewControlClient(baseURL, serviceToken string) *ControlClient {
 }
 
 func (c *ControlClient) GetWorkspaceForUser(ctx context.Context, workspaceID, userID string) (*WorkspaceContext, error) {
+	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok && (p.UserID != userID || p.WorkspaceID != workspaceID) {
+		return nil, ErrWorkspaceDelegationDenied
+	}
 	if c.baseURL == "" || c.token == "" || workspaceID == "" || userID == "" {
 		return nil, fmt.Errorf("workspace access client is not configured")
 	}
@@ -56,10 +63,18 @@ func (c *ControlClient) GetWorkspaceForUser(ctx context.Context, workspaceID, us
 	if result.ID != workspaceID || result.OrganizationID == "" || result.TeamID == "" {
 		return nil, fmt.Errorf("workspace context is incomplete")
 	}
+	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok && p.OrganizationID != result.OrganizationID {
+		return nil, ErrWorkspaceDelegationDenied
+	}
 	return &result, nil
 }
 
 func (c *ControlClient) CanUseWorkflow(ctx context.Context, workspaceID, userID string) (bool, error) {
+	if _, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+		if _, err := c.GetWorkspaceForUser(ctx, workspaceID, userID); err != nil {
+			return false, err
+		}
+	}
 	if c.baseURL == "" || c.token == "" || workspaceID == "" || userID == "" {
 		return false, fmt.Errorf("workspace access client is not configured")
 	}

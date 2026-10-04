@@ -16,6 +16,7 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 ## 边界
 
 ### 做什么
+- Agent委托的User、企业和Workspace来自独立验证的请求上下文。提交、查询和状态变更检查当前Workspace的use_workflow授权；列表和资源查询同时限定owner、企业与Workspace。Job查询先授权后同步Conductor状态，没有企业/Workspace事实的旧Job不对Agent放行。
 - 保存 Job 输入快照、StepRun 状态和最终业务资源 ID。
 - 通过 Outbox 启动对应 Conductor Workflow，以 `job_id` 作为 correlation/idempotency key。
 - 按 Capability 冻结的 Personal/Managed Execution Domain 领取 Conductor Task，持久化 WorkerDispatch 租约与 Worker Result Receipt。
@@ -86,6 +87,7 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 |:---|:---|:---|
 | id | text PK | Workflow Job ID |
 | workspace_id | text | 所属 Workspace |
+| organization_id | text | 所属企业；Agent提交从可信委托上下文派生 |
 | scope | text | 不可变业务范围 |
 | workflow_id | text | Workflow ID |
 | workflow_version | bigint | 执行使用的 Workflow 版本 |

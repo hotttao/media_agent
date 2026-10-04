@@ -1,0 +1,20 @@
+syntax = "proto3";
+package media_agent_gateway.agent_proxy;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_agent_gateway/agent_proxy";
+service AgentProxyService {
+ rpc ProxyAgentRequest(ProxyAgentRequestBody) returns (ProxyAgentResponse) {
+  option (api.post) = "/api/agent/v1/requests";
+  option (google.api.http) = { post: "/api/agent/v1/requests" body: "*" };
+ }
+ rpc GetAgentJWKS(GetAgentJWKSRequest) returns (AgentJWKS) {
+  option (api.get) = "/internal/.well-known/agent-jwks.json";
+  option (google.api.http) = { get: "/internal/.well-known/agent-jwks.json" };
+ }
+}
+message ProxyAgentRequestBody { string service = 1; string method = 2; string uri = 3; string content_type = 4; bytes body = 5; }
+message ProxyAgentResponse { int32 status_code = 1; string content_type = 2; bytes body = 3; string trace_id = 4; }
+message GetAgentJWKSRequest {}
+message AgentJWKS { repeated AgentJWK keys = 1; }
+message AgentJWK { string kty = 1; string use = 2; string alg = 3; string kid = 4; string n = 5; string e = 6; }

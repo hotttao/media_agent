@@ -222,6 +222,12 @@ func main() {
 		authCfg.InternalJWTVerifier = internaljwt.NewVerifier(jwksURL, os.Getenv("INTERNAL_JWT_ISSUER"), "internal-api", nil)
 		authCfg.WorkerJWTVerifier = internaljwt.NewVerifier(jwksURL, os.Getenv("INTERNAL_JWT_ISSUER"), "media-workflow", nil)
 	}
+	if jwksURL := os.Getenv("AGENT_JWKS_URL"); jwksURL != "" {
+		if os.Getenv("AGENT_JWT_ISSUER") == "" {
+			log.Fatal("Agent JWT issuer is required")
+		}
+		authCfg.AgentJWTVerifier = internaljwt.NewVerifier(jwksURL, os.Getenv("AGENT_JWT_ISSUER"), "media-workflow-agent", nil)
+	}
 	authMw := auth.New(authCfg)
 
 	h := suite.NewServer()

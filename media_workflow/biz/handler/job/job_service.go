@@ -11,6 +11,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 
 	pb "media_agent/hertz_gen/model/media_workflow/job"
+	"media_agent/hertz_infra/authn/internaljwt"
 	domain "media_agent/media_workflow/biz/domain/job"
 	jobsvc "media_agent/media_workflow/biz/service/job"
 	"media_agent/media_workflow/biz/shared/auth"
@@ -26,11 +27,29 @@ func SubmitJob(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	j, err := Svc.Submit(ctx, jobsvc.SubmitCommand{
+	command := jobsvc.SubmitCommand{
 		WorkflowID: req.GetWorkflowId(), WorkflowVersion: int(req.GetWorkflowVersion()),
 		Input: jobInputFromPB(req.GetInput()), SubmittedBy: auth.CallerID(ctx),
-	})
+	}
+	if principal, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+		command.Delegated = true
+		command.OrganizationID = principal.OrganizationID
+		command.WorkspaceID = principal.WorkspaceID
+		if principal.UserID != command.SubmittedBy {
+			c.String(consts.StatusForbidden, "Agent owner mismatch")
+			return
+		}
+	}
+	j, err := Svc.Submit(ctx, command)
 	if err != nil {
+		if errors.Is(err, jobsvc.ErrSubmitForbidden) {
+			c.String(consts.StatusForbidden, "workflow execution access denied")
+			return
+		}
+		if errors.Is(err, jobsvc.ErrSubmitAuthorityUnavailable) {
+			c.String(consts.StatusServiceUnavailable, "workflow execution authorization unavailable")
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -43,8 +62,12 @@ func GetJob(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	j, srs, err := Svc.Get(ctx, req.GetId())
+	j, srs, err := Svc.GetForUser(ctx, req.GetId(), auth.CallerID(ctx), delegatedOrganization(ctx))
 	if err != nil {
+		if errors.Is(err, jobsvc.ErrSubmitAuthorityUnavailable) {
+			c.String(consts.StatusServiceUnavailable, "workflow execution authorization unavailable")
+			return
+		}
 		c.String(consts.StatusNotFound, err.Error())
 		return
 	}
@@ -78,10 +101,20 @@ func ListJobs(ctx context.Context, c *app.RequestContext) {
 		pageSize = 50
 	}
 	items, total, err := Svc.List(ctx, domain.ListQuery{
-		Scope: req.GetScope(), WorkflowID: req.GetWorkflowId(), SubmittedBy: auth.CallerID(ctx), Status: req.GetStatus(),
+		OrganizationID: delegatedOrganization(ctx),
+		WorkspaceID:    delegatedWorkspace(ctx),
+		Scope:          req.GetScope(), WorkflowID: req.GetWorkflowId(), SubmittedBy: auth.CallerID(ctx), Status: req.GetStatus(),
 		Limit: pageSize, Offset: (page - 1) * pageSize,
 	})
 	if err != nil {
+		if errors.Is(err, jobsvc.ErrSubmitForbidden) {
+			c.String(consts.StatusForbidden, "workflow execution access denied")
+			return
+		}
+		if errors.Is(err, jobsvc.ErrSubmitAuthorityUnavailable) {
+			c.String(consts.StatusServiceUnavailable, "workflow execution authorization unavailable")
+			return
+		}
 		c.String(consts.StatusInternalServerError, err.Error())
 		return
 	}
@@ -415,8 +448,22 @@ func ownsJob(ctx context.Context, jobID string) bool {
 	if callerID == "" {
 		return false
 	}
-	job, _, err := Svc.Get(ctx, jobID)
+	job, _, err := Svc.GetForUser(ctx, jobID, callerID, delegatedOrganization(ctx))
 	return err == nil && job.SubmittedBy == callerID
+}
+
+func delegatedOrganization(ctx context.Context) string {
+	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+		return p.OrganizationID
+	}
+	return ""
+}
+
+func delegatedWorkspace(ctx context.Context) string {
+	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+		return p.WorkspaceID
+	}
+	return ""
 }
 
 func ownsStepRun(ctx context.Context, stepRunID string) bool {

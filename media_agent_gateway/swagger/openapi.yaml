@@ -6,6 +6,30 @@ info:
     title: ""
     version: 0.0.1
 paths:
+    /api/agent/v1/requests:
+        post:
+            tags:
+                - AgentProxyService
+            operationId: AgentProxyService_ProxyAgentRequest
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ProxyAgentRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProxyAgentResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/chat/session:
         get:
             tags:
@@ -530,8 +554,48 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /internal/.well-known/agent-jwks.json:
+        get:
+            tags:
+                - AgentProxyService
+            operationId: AgentProxyService_GetAgentJWKS
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentJWKS'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
 components:
     schemas:
+        AgentJWK:
+            type: object
+            properties:
+                kty:
+                    type: string
+                use:
+                    type: string
+                alg:
+                    type: string
+                kid:
+                    type: string
+                n:
+                    type: string
+                e:
+                    type: string
+        AgentJWKS:
+            type: object
+            properties:
+                keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentJWK'
         AgentRequestResponse:
             type: object
             properties:
@@ -809,6 +873,33 @@ components:
                     type: string
                 created_at:
                     type: string
+        ProxyAgentRequestBody:
+            type: object
+            properties:
+                service:
+                    type: string
+                method:
+                    type: string
+                uri:
+                    type: string
+                content_type:
+                    type: string
+                body:
+                    type: string
+                    format: bytes
+        ProxyAgentResponse:
+            type: object
+            properties:
+                status_code:
+                    type: integer
+                    format: int32
+                content_type:
+                    type: string
+                body:
+                    type: string
+                    format: bytes
+                trace_id:
+                    type: string
         ResolveAgentRequestRequest:
             type: object
             properties:
@@ -925,6 +1016,7 @@ components:
                     type: string
 tags:
     - name: AgentClientService
+    - name: AgentProxyService
     - name: AgentTaskService
     - name: BatchRunService
     - name: ChatService

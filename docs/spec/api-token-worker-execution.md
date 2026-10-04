@@ -253,6 +253,16 @@ Materials/Workflow分别配置独立 `AGENT_JWKS_URL,AGENT_JWT_ISSUER` 与精确
 
 密钥只允许单个未加密RSA PKCS8/PKCS1 PEM，文件必须是regular、至多64KiB且无group/other读写权限；错误不包含文件路径或密钥内容。kid使用公钥PKIX DER的SHA-256前128位，JWKS只发布kty/use/alg/kid/n/e，不发布私钥参数。请求URI上限4096、body上限8MiB；拒绝CONNECT/TRACE、非业务API、外部URL、fragment、转义路径、路径穿越和换行。共享签名器不等于业务路由allowlist，后者必须在代理调用前独立校验。
 
+### 6.4 Agent 代理接口与资源接入
+
+`POST /api/agent/v1/requests` 请求为 `service=workflow|materials,method,uri,content_type,body(bytes/base64)`，响应 `{status_code,content_type,body(bytes/base64),trace_id}`。Gateway直接验证opaque Agent API Token；公开Traefik只转发该路径，不能先按User凭据交换丢失Actor。Auth验证需当前active Agent、`agent.gateway`scope及未来过期时间；Gateway再查Control精确匹配Actor配置、owner/企业/授权，派生Workspace并签发请求绑定JWT。固定业务route/method allowlist排除认证/Worker/internal/运维/管理注册表写路由；固定后端root URL，不接受动态Host、完整URL或redirect，body/结果分别≤8MiB，业务调用只尝试一次。Content-Type也签入JWT，允许JSON、octet-stream及合法multipart boundary。
+
+`GET /internal/.well-known/agent-jwks.json`发布公钥，私钥路径由`AGENT_SIGNING_KEY_FILE`指定，issuer由`AGENT_JWT_ISSUER`指定；仅内部使用、不挂公开Traefik。AgentPrincipal/JWT追加非空workspace_id，目标服务从独立AgentJWTVerifier验证并将User/Actor/credential/org/Workspace全部保留在上下文。Materials组织范围仅取该企业，每次重新查询成员关系，不复用成员缓存；Workflow Job GET/list/操作按owner+企业+Workspace过滤，并核验当前use_workflow授权，GET必须先鉴权后同步Conductor。Agent提交以可信上下文存入Job企业/Workspace，不读取客户端同名字段。Control客户端拒绝切换委托User/Workspace及跨企业结果。Workflow/Template现有User归属定义不冒充企业模型；租户化另列missing。
+
+代理身份校验失败返回401/403，上游不可用503，不回传敏感来源错误；业务响应在包络中保留status_code，CLI必须识别业务失败。原始Token不进入下游，JWT、Cookie、Location或任意客户端身份/转发Header不回传。HTTP/CLI测试只创建临时Token和测试素材，撤销后代理拒绝，不启动Agent Runtime或生成Workflow任务。
+
+配置由三个服务Compose装配：Gateway固定Auth/Control/Workflow/Materials地址，签名私钥只读挂载在专用秘密目录，不进入Git或Docker构建上下文；`AGENT_SIGNING_KEY_FILE`为空时关闭代理，声明启用但配置无效时启动失败。两类业务服务仅配置内部公钥URL与issuer。CLI提供`media_agent_gateway agent-client request --service --method --uri [--body-json | --body-file --content-type]`；原始文件正文和响应均受8MiB限制，非成功业务状态不能作为CLI成功。
+
 ## 7. 迁移与兼容
 
 1. 先部署 Capability Target 字段和双 Domain 运行逻辑，不改变现有 Personal Worker API。

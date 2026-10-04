@@ -14,7 +14,7 @@ import (
 
 func agentClientCmd() *cobra.Command {
 	root := &cobra.Command{Use: "agent-client", Short: "Agent API Token 管理（不是 Session Token）"}
-	root.AddCommand(createAgentTokenCmd())
+	root.AddCommand(createAgentTokenCmd(), agentRequestCmd())
 	return root
 }
 

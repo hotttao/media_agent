@@ -76,12 +76,14 @@ type StepRunRepo interface {
 }
 
 type ListQuery struct {
-	Scope       string
-	WorkflowID  string
-	SubmittedBy string
-	Status      string
-	Limit       int
-	Offset      int
+	OrganizationID string
+	WorkspaceID    string
+	Scope          string
+	WorkflowID     string
+	SubmittedBy    string
+	Status         string
+	Limit          int
+	Offset         int
 }
 
 type ClaimQuery struct {

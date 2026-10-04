@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/datatypes"
+	"gorm.io/gen/field"
 	"gorm.io/gorm"
 
 	"media_agent/media_workflow/biz/dal"
@@ -26,6 +27,7 @@ func (r *JobRepo) Save(ctx context.Context, j *domain.Job, stepRuns []*domain.St
 	inputJSON, _ := json.Marshal(j.Input)
 	jobRow := &model.Job{
 		ID: j.ID, Scope: j.Scope, WorkflowID: j.WorkflowID, WorkflowVersion: j.WorkflowVersion,
+		OrganizationID: j.OrganizationID, WorkspaceID: j.WorkspaceID,
 		Origin: "native",
 		Input:  datatypes.JSON(inputJSON), Status: string(j.Status),
 		SubmittedBy: j.SubmittedBy, SubmittedAt: time.Now(),
@@ -92,6 +94,12 @@ func (r *JobRepo) GetByConductorWorkflowID(ctx context.Context, conductorWorkflo
 func (r *JobRepo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, int, error) {
 	Q := query.Use(dal.FromContext(ctx, r.db))
 	tx := Q.Job.WithContext(ctx)
+	if q.OrganizationID != "" {
+		tx = tx.Where(field.NewString("", "organization_id").Eq(q.OrganizationID))
+	}
+	if q.WorkspaceID != "" {
+		tx = tx.Where(field.NewString("", "workspace_id").Eq(q.WorkspaceID))
+	}
 	if q.SubmittedBy != "" {
 		tx = tx.Where(Q.Job.SubmittedBy.Eq(q.SubmittedBy))
 	}

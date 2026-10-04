@@ -53,6 +53,7 @@ type Config struct {
 	KratosPublicURL        string // Ory Kratos public URL；配置后浏览器会话优先使用 Kratos
 	MediaAuthInternalToken string // internal identity/team lookup credential
 	InternalJWTVerifier    *internaljwt.Verifier
+	AgentJWTVerifier       *internaljwt.Verifier
 	// DevUserID enables a local-only authenticated session when explicitly set.
 	// It is intentionally empty by default and must never be configured in prod.
 	DevUserID         string
@@ -269,6 +270,42 @@ func (m *Middleware) Handler() app.HandlerFunc {
 		authHeader := string(c.Request.Header.Peek("Authorization"))
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			bearer := strings.TrimPrefix(authHeader, "Bearer ")
+			if m.cfg.AgentJWTVerifier != nil {
+				if claims, err := m.cfg.AgentJWTVerifier.Verify(ctx, bearer); err == nil {
+					principal, err := internaljwt.ValidateAgentRequest(claims, internaljwt.AgentRequest{Method: string(c.Request.Header.Method()), URI: string(c.Request.URI().RequestURI()), ContentType: string(c.Request.Header.ContentType()), Body: c.Request.Body()})
+					if err != nil {
+						c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid Agent request binding"})
+						c.Abort()
+						return
+					}
+					organizationIDs, err := m.fetchOrganizationsLive(ctx, principal.UserID)
+					if err != nil {
+						c.JSON(consts.StatusServiceUnavailable, map[string]string{"error": "organization authorization unavailable"})
+						c.Abort()
+						return
+					}
+					member := false
+					for _, id := range organizationIDs {
+						if id == principal.OrganizationID {
+							member = true
+							break
+						}
+					}
+					if !member {
+						c.JSON(consts.StatusForbidden, map[string]string{"error": "Agent organization access denied"})
+						c.Abort()
+						return
+					}
+					ctx = internaljwt.ContextWithAgentPrincipal(ctx, principal)
+					ctx = context.WithValue(ctx, callerKey{}, &User{Sub: principal.UserID, Username: principal.UserID, Name: principal.UserID, Role: "user"})
+					ctx = context.WithValue(ctx, organizationsKey{}, []string{principal.OrganizationID})
+					if teams, _ := m.fetchTeams(ctx, principal.UserID); teams != nil {
+						ctx = context.WithValue(ctx, teamsKey{}, teams)
+					}
+					c.Next(ctx)
+					return
+				}
+			}
 			if m.cfg.InternalJWTVerifier != nil {
 				if claims, verifyErr := m.cfg.InternalJWTVerifier.Verify(ctx, bearer); verifyErr == nil {
 					if claims.AuthSource == "api_token" {
@@ -534,6 +571,14 @@ func (m *Middleware) fetchOrganizations(ctx context.Context, userID string) ([]s
 	}
 	if cached, ok := m.organizations.get(userID); ok {
 		return cached, nil
+	}
+	return m.fetchOrganizationsLive(ctx, userID)
+}
+
+// Agent delegation must not reuse a membership cache after access is removed.
+func (m *Middleware) fetchOrganizationsLive(ctx context.Context, userID string) ([]string, error) {
+	if userID == "" {
+		return nil, errors.New("user_id is required")
 	}
 	body, err := json.Marshal(map[string]string{"user_id": userID})
 	if err != nil {

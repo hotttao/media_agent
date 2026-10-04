@@ -224,6 +224,24 @@ go -C media-cli run . media_agent_gateway agent-client create-token \
 
 CLI 是独立门禁：核对新文件0600、管理列表中的 Agent/owner/企业/scope，并使用 User 管理 API 撤销本次 Token。该门禁只覆盖已有配置显式申请，不证明自动创建编排、Agent运行时代理或生命周期批量撤销已完成。Traefik当前关闭文件热加载，路由配置变更需要显式重启统一网关。
 
+### Agent 受限业务代理
+
+`TestAgentProxyGateway`使用User API Token申请临时Agent Token，经公开网关读取任务并创建/读取/删除一条临时纯文本素材，检查目标allowlist、身份类型、企业隔离、trace_id及撤销后拒绝。只撤销本次凭据、删除本次素材，不提交Workflow、不启动Runtime/Worker。沿用网关/User Token/Workspace环境变量：
+
+```bash
+go -C media-cli test ./e2e -run '^TestAgentProxyGateway$' -count=1 -v
+```
+
+CLI门禁先用User执行`agent-client create-token --env-out <new_private_file>`，核对0600后仅在Agent调用进程加载其中的`MEDIA_API_TOKEN`：
+
+```bash
+MEDIA_AGENT_GATEWAY_ADDR="$MEDIA_GATEWAY_ADDR" \
+go -C media-cli run . media_agent_gateway agent-client request \
+  --service workflow --method GET --uri '/api/v1/jobs?page_size=1'
+```
+
+再用原User凭据执行`media_auth api-token revoke --id <this_test_token_id>`，确认Agent请求失败；不要以Agent Token调用管理API。代理只发往固定服务/业务路由，不提供公开内部JWKS命令。该门禁不证明自动创建编排、生命周期批量撤销或完整审计落盘已完成。
+
 ### API Token 轮换恢复集成测试
 
 `media_auth/e2e/api_token_rotation_test.go` 使用 testcontainers 的隔离 PostgreSQL；设置 `MEDIA_E2E_TALOS_URL` 后还会连接已由仓库启动的 Talos Admin API。测试为唯一临时 User Actor 创建 Key，不使用测试账号的既有凭据；结束后撤销自己创建的 Key。

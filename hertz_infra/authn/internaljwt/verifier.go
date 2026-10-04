@@ -19,18 +19,20 @@ import (
 )
 
 type Claims struct {
-	PrincipalType  string `json:"principal_type"`
-	OrganizationID string `json:"organization_id,omitempty"`
-	CredentialID   string `json:"credential_id,omitempty"`
-	Scope          string `json:"scope,omitempty"`
-	AuthSource     string `json:"auth_source,omitempty"`
-	Username       string `json:"username,omitempty"`
-	Name           string `json:"name,omitempty"`
-	Role           string `json:"role,omitempty"`
-	Actor          *Actor `json:"act,omitempty"`
-	RequestMethod  string `json:"request_method,omitempty"`
-	RequestURI     string `json:"request_uri,omitempty"`
-	RequestDigest  string `json:"request_digest,omitempty"`
+	PrincipalType      string `json:"principal_type"`
+	OrganizationID     string `json:"organization_id,omitempty"`
+	CredentialID       string `json:"credential_id,omitempty"`
+	Scope              string `json:"scope,omitempty"`
+	AuthSource         string `json:"auth_source,omitempty"`
+	Username           string `json:"username,omitempty"`
+	Name               string `json:"name,omitempty"`
+	Role               string `json:"role,omitempty"`
+	Actor              *Actor `json:"act,omitempty"`
+	RequestMethod      string `json:"request_method,omitempty"`
+	RequestURI         string `json:"request_uri,omitempty"`
+	RequestDigest      string `json:"request_digest,omitempty"`
+	RequestContentType string `json:"request_content_type,omitempty"`
+	WorkspaceID        string `json:"workspace_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
