@@ -291,6 +291,14 @@ Materials/Workflow分别配置独立 `AGENT_JWKS_URL,AGENT_JWT_ISSUER` 与精确
 
 `tools/platform-token-migrate`只作为离线维护工具，参数`--config`、`--key-file`、`--key-version`、`--timeout`（默认2分钟）和`--apply`（默认false）。配置使用现有typed Config Loader，数据库开启静默日志，Secret/DSN不走命令行参数或输出；成功/演练仅JSON计数，错误固定安全文本。不自动应用schema、生成密钥、切换服务或清理普通ServiceToken。运行前必须停旧调用方，运行后部署新链路，不能在旧链路仍运行时执行apply。
 
+### 7.3 Platform Token 运行用例
+
+`biz/service/platform_token`独立确保/获取/内省/轮换/撤销用例，不依赖旧ServiceToken/Talos。注入Repository、User当前状态查询/行锁端口、TxRunner、AEAD、可信CallerVerifier与Clock/ID/Secret生成器。新Secret为tos_+64hex，独立生成器不复用旧Hash fallback。调用者来自Verifier，固定offline-task只允许Gateway/Control Schedule Worker；缺失/故障拒绝，禁止从客户端Header或命令caller字段取得。登录确保/用户撤销是内部Go能力，不提供公开Secret接口。
+
+User查询端口由auth DAL提供，锁定必须在上层事务中；同用户串行确保/轮换/撤销，内省锁User后重读Token防止晚到验证。确保有效当前须Open完整性复核；不存在才创建，过期先撤销再创建，解密故障不隐式换发。User不存在/停用/删除不得新发或验证；撤销允许终态User。Rotation显式替换并保留历史。事务错误/取消不得返回Secret；固定错误不包含底层诊断。
+
+0016添加固定列platform_token_audit_outbox（id/user_id/credential_id/operation/caller_service/purpose/occurred_at/delivered_at），约束枚举，无任意JSON或Secret；并保存lease_id/lease_until/attempts/next_attempt_at供后台恢复。issued/acquired/introspected/rotated/revoked成功事实在同一事务写入；审计失败回滚凭据变化。非空审计降级拒绝删除。写入不代表事件投递完成，后续投递Workflow须保留event ID、短事务领取lease、事务外publish、匹配lease确认、至少一次重试/恢复及幂等门禁。本阶段不增加公开API或修改运行环境接线，审计投递、mTLS/IDL/部署/撤销集成和实际迁移仍须完成。
+
 兼容期不得把同一个 Secret 同时交给本地 Hash 和 Talos 两套验证器。
 
 ## 8. 验收标准

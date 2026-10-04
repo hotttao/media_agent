@@ -6,6 +6,7 @@ dependencies:
 related_workflow:
     - agent_schedule_execution
     - platform_token_migration
+    - platform_audit_delivery
 ---
 
 ## 一句话职责
@@ -21,7 +22,7 @@ Platform Token 负责少数平台组件代表用户执行离线任务或调用�
 
 ### 不做什么
 - 不向 Agent、Plugin、自定义 MCP、公共 Edge 或普通业务 Worker 发放。
-- 不写入 River、Outbox、日志、Trace 或业务任务表。
+- 不把Secret写入 River、Outbox、日志、Trace 或业务任务表。
 
 ## 能力清单
 
@@ -31,12 +32,15 @@ Platform Token 负责少数平台组件代表用户执行离线任务或调用�
 | 内省令牌 | 验证长期委托并返回 Principal | `IntrospectPlatformToken` |
 | 轮换令牌 | 原子替换当前 active Token | `RotatePlatformToken` |
 | 撤销令牌 | 使用户长期委托失效 | `RevokePlatformToken` |
+| 登录确保 | 内部确保当前密文存在，不返回Secret | `EnsurePlatformToken` |
 
 ## 聚合与不变量
 
 Platform Token 是独立聚合，不复用 API Token/Talos 或旧 Service Token 仓储。密文使用 AES-256-GCM，每次随机12字节nonce；AAD绑定本表用途、不可变Token ID、User ID及密钥版本，解密后常量时间核对SHA-256。调换归属、密文、nonce、Hash或版本必须失败，错误不包含Token或底层加密细节。密钥仅由Secret/KMS提供，数据库不保存密钥，进程不能自动生成替代密钥来绕过解密失败。
 
 同一User至多一条未撤销记录；过期记录不能验证，但需先撤销再创建新当前记录。撤销不删除密文和历史，重复撤销幂等。用户/内部调用者授权与purpose校验由应用用例负责，仓储不将解密成功当作授权。
+
+写用例与校验均锁定当前User行，序列化同用户确保/轮换/撤销与账号状态更新。不存在或非active User不得确保、获取、轮换或验证；底层查询故障不能当作无Token创建。现有密文不可解密时禁止自动替换；只能显式轮换。取消或审计写入失败导致整笔事务回滚，不返回尚未提交的Secret。
 
 ## 数据模型
 
@@ -64,6 +68,27 @@ Platform Token 是独立聚合，不复用 API Token/Talos 或旧 Service Token 
 - `user_id WHERE revoked_at IS NULL` 部分唯一索引维护当前凭据不变量；过期判定不写入部分索引。
 - 不含明文列；有记录时down migration拒绝删表，不把密文回写裸明文。
 
+### `platform_token_audit_outbox`
+
+这是同事务的审计Outbox，不保存待交付Secret，也不是API Token/Talos事件。
+
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text PK | 审计ID |
+| user_id | text | 被代表User |
+| credential_id | text | 本次当前或被撤销凭据ID |
+| operation | text | issued/acquired/introspected/rotated/revoked |
+| caller_service | text | 可信接入层解析的服务身份或本地login/user-revocation用例 |
+| purpose | text | 固定offline-task/login-bootstrap/user-revocation |
+| occurred_at | timestamptz | 事实时间 |
+| delivered_at | timestamptz nullable | 后台确认投递时间，未投递为NULL |
+| lease_id | text nullable | 当前领取尝试ID |
+| lease_until | timestamptz nullable | 当前领取过期时间 |
+| attempts | integer | 已领取次数 |
+| next_attempt_at | timestamptz | 下次可领取时间 |
+
+约束：只允许固定操作/caller/purpose，无自由JSON载荷；无Secret/Hash/密文列。有审计历史时down拒绝删除。投递协调需要Workflow，不能在本用例事务内调用外部系统；本地Outbox写入不代表投递完成。消费者按event ID去重，至少一次投递保留重试/恢复门禁。
+
 ## 能力详细说明
 
 ### AcquirePlatformToken
@@ -72,12 +97,19 @@ Platform Token 是独立聚合，不复用 API Token/Talos 或旧 Service Token 
 2. 加载用户 active Token；不存在时按策略创建。
 3. 使用 key_version 对应密钥解密，只在响应内存返回并记录不含 Token 的审计事件。
 
+调用者只从注入的可信CallerVerifier取得，命令不接收caller字段；固定`offline-task`只允许`media_agent_gateway`或`media_control_schedule_worker`。CallerVerifier缺失/故障、未授权caller或purpose一律拒绝；不能使用普通Internal Token、请求Header或JWT claim自行声称服务身份。mTLS接入必须实现该Verifier，未接入前不能开放端点。
+
+### EnsurePlatformToken / IntrospectPlatformToken / RevokePlatformToken
+
+登录内部确保只返回error，不交付Secret；当前过期时先撤销再创建，当前有效时须验证密文完整性。内省先校验caller/purpose，再按Hash找记录、锁User、重读凭据检查当前事实与密文完整性，只返回User/credential元数据；未知/撤销/过期/停用返回inactive，查询或加密故障返回固定错误。用户撤销内部命令允许停用/已删除User，幂等撤销当前凭据，不创造替代凭据。
+
 ### RotatePlatformToken
 
-事务内撤销旧 Token、创建新 Token 与审计 Outbox；调用方不得假设旧 Token 在已开始请求中立即中断。
+事务内撤销旧 Token、创建新 Token 与审计Outbox；调用方不得假设旧 Token 在已开始请求中立即中断。显式轮换可以恢复不可解密当前凭据，不尝试输出其Secret。轮换响应丢失不得自动重试轮换，应先内省/查询当前事实。
 
 ## 关联关系
 
 - 依赖 auth 的当前User生命周期；不依赖 service_token。
 - 旧表到加密存储的迁移须先逐条验证ID/owner/Hash与密文可恢复，再原子转移事实；迁移编排和调用方切换是删除旧认证的前置门禁，不能以新表存在视为迁移完成。
 - [Platform Token Migration](../../workflow/0013-platform-token-migration/platform_token_migration.md)协调旧凭据到密文事实的同库原子转移，包含撤销历史，保留ID与时间，默认演练回滚。
+- [Platform Audit Delivery](../../workflow/0014-platform-audit-delivery/platform_audit_delivery.md)协调事务外审计投递、lease恢复及event ID幂等，不拥有或解密凭据。

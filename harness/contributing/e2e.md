@@ -136,6 +136,12 @@ go -C media_auth test -tags=e2e -race ./e2e -run '^TestPlatformToken' -count=1 -
 go -C media_auth test -tags=e2e -race ./e2e -run '^TestPlatformTokenMigration' -count=1 -v
 ```
 
+`platform_token_service_test.go`验证独立运行用例的同用户并发确保、过期替换、轮换/撤销历史、当前User停用/删除、跨User隔离、审计写入失败回滚、不可解密当前禁止隐式替换，以及读取后并发轮换的晚到内省拒绝。0016同时检查固定审计列、lease/attempt约束和非空历史down保护；不输出Secret。CallerVerifier使用显式测试桩，不能冒充mTLS或真实HTTP边界验收；此阶段不部署密钥、不切换认证或迁移运行数据，也不证明Outbox已投递。
+
+```bash
+go -C media_auth test -tags=e2e -race ./e2e -run '^TestPlatformTokenCore' -count=1 -v
+```
+
 ### Personal Worker 身份与撤销集成测试
 
 `media_auth/e2e/worker_identity*.go` 使用隔离 PostgreSQL，覆盖归属、状态 CAS、事务回滚、Actor/Organization 隔离、晚到签发恢复和降级迁移保护。真实 Talos 测试创建唯一临时 Worker Actor，验证停用事务提交后立即拒绝访问，重建撤销 Workflow 后 Talos Key 进入 revoked；只撤销测试自己创建的 Key，不使用或改动已有 Worker 凭据。

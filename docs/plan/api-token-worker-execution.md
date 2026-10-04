@@ -96,6 +96,8 @@
 - [ ] 明确 Platform Token 独立存储和调用方后，删除 `service_token` domain/policy/service/repo。
   - [x] 独立Platform Token密文聚合/0015 schema、版本化AEAD与归属防调换、DAL/隔离PG门禁。
   - [x] 离线原子迁移Workflow/工具：默认演练、保留撤销历史、冲突拒绝、整批回滚、重跑和隔离PG验收。
+  - [x] 独立运行用例：可信caller/purpose端口、User状态/并发行锁、确保/内省/轮换/撤销、元数据持久审计和PG门禁；不含mTLS接入/启动接线。
+  - [ ] Platform审计Outbox投递Workflow：lease/确认CAS、event ID至少一次、事务外发布、失败/重启恢复及落盘验收。
   - [ ] 旧Platform明文逐条验证、原子迁移与切换；部署外部密钥、受限内部调用者/purpose、用户撤销接线。
 - [ ] 删除旧 IDL、路由、生成代码与 `tos_` 本地 Hash 工具。
 - [ ] 删除旧表或改为只读迁移归档；历史 migration 保留可重放。
@@ -203,6 +205,8 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 | Agent 当前委托关系周期复核 | Auth / api_token | 事务外权威查询、精确Actor撤销意图、既有Talos恢复；不替代生命周期事件 | covered |
 | Platform Token 独立密文存储 | Auth / platform_token | 0015、AES-256-GCM、归属绑定、唯一性/事务/降级保护；尚未部署 | covered |
 | Platform Token 旧事实离线转移 | Auth / platform_token + 旧凭据投影 | Migration Workflow/维护工具，隔离PG与独立进程验收；运行数据尚未迁移 | covered |
+| Platform Token 单聚合运行用例 | Auth / platform_token | 独立service、User行锁、可信CallerVerifier端口、同事务审计Outbox；未接运行入口 | covered |
+| Platform Token 审计投递 | Auth / platform_token | Platform Audit Delivery，lease/CAS/至少一次恢复 | missing |
 | 登录/WeCom 确保 Platform Token | Auth / platform_token | 从旧混合 ServiceToken 接线切换到独立聚合 | missing |
 | 内部获取/校验 Platform Token | Auth / platform_token | 调用者身份与 purpose 限制、独立密文读取/验证 | missing |
 | 用户撤销及旧明文迁移 | Auth / platform_token | 外部密钥部署、逐条验证/原子迁移、撤销接线 | missing |
@@ -274,3 +278,11 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 离线工具typed Config Loader、私有外部Key及版本、有限deadline/信号取消、静默DB日志与固定安全错误；只输出计数，不传/打印Secret或DSN，不自动部署/生成密钥/应用schema。
 - Auth全量Go测试、Workflow/工具race和架构检查通过。全部Platform隔离PG race门禁通过（86.578s），包含105条跨页、并行提交、撤销历史、演练回滚、重跑、Hash/owner/空ID/历史冲突/不可解密目标与写入后取消；独立构建维护二进制验收默认演练、apply、重跑和错误脱敏。
 - 只读复核运行环境仍有67条旧Platform（59未撤销），无企业/scope附加值，platform_tokens尚不存在；本轮没有运行环境迁移或服务切换，5173 HTTP200。外部密钥部署、受限调用者/purpose、新运行时接线、实际迁移及删除旧ServiceToken仍missing，P7总体未完成；UI继续排除。
+
+### 2026-10-04 · Platform Token 独立运行用例验收
+
+- domain-modeling补齐当前User/并发及审计Outbox不变量，并创建0014 Platform Audit Delivery目标Workflow；用例只原子写凭据/审计，后台投递仍单独missing，不把Outbox写入算成已投递。
+- 独立service实现内部无Secret返回的确保、受限purpose获取/内省/轮换与内部用户撤销；CallerVerifier缺失/故障拒绝，客户端命令不接caller字段。User行锁协调状态更新和同用户并发；内省等待User锁后重读Hash，晚到旧凭据不复活。不可解密当前（包括已过期）禁止隐式换发，显式轮换才可恢复。
+- 0016固定审计Outbox仅存身份/操作/归属/purpose/时间及lease恢复字段，不含Secret/Hash/密文/任意payload；审计失败回滚凭据，不返回未提交Secret，非空历史拒绝down。所有用例错误固定安全值。
+- Auth全量Go测试、核心service/domain/crypto race及架构检查通过。全部Platform隔离PG race门禁通过（108.499s），包括旧迁移/独立工具回归、四项新用例门禁、并发确保/轮换晚到内省、过期/撤销/当前User状态/跨User、审计失败回滚、损坏当前明确恢复及DDL/降级保护。内部caller为测试桩，不是mTLS/HTTP认证验收。
+- 未部署Secret、0015/0016或新service接线，运行数据库仍version14/dirty=false，未改写67条旧凭据；5173 HTTP200。审计投递、真实mTLS/IDL、登录/WeCom/用户撤销接线、实际数据迁移及旧ServiceToken删除继续未完成，P7总体未完成；UI不在本轮范围内。
