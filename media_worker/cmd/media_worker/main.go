@@ -25,6 +25,9 @@ func main() {
 	capabilityList := flag.String("capabilities", envOr("MEDIA_WORKER_CAPABILITIES", ""), "comma-separated capability key@version allowlist")
 	fixtureAssetsURL := flag.String("fixture-assets-url", envOr("MEDIA_WORKER_FIXTURE_ASSETS_URL", "http://192.168.2.38"), "media_ai fixture asset service base URL (test profile only)")
 	fixtureVideoResultURL := flag.String("fixture-video-result-url", envOr("MEDIA_WORKER_FIXTURE_VIDEO_RESULT_URL", ""), "pre-uploaded target-storage video URL for the historical fixture")
+	fixtureModelResultURL := flag.String("fixture-model-result-url", envOr("MEDIA_WORKER_FIXTURE_MODEL_RESULT_URL", ""), "pre-uploaded target-storage model image URL (test profile only)")
+	fixtureStyleResultURL := flag.String("fixture-style-result-url", envOr("MEDIA_WORKER_FIXTURE_STYLE_RESULT_URL", ""), "pre-uploaded target-storage style image URL (test profile only)")
+	fixtureFirstFrameResultURL := flag.String("fixture-first-frame-result-url", envOr("MEDIA_WORKER_FIXTURE_FIRST_FRAME_RESULT_URL", ""), "pre-uploaded target-storage first-frame image URL (test profile only)")
 	flag.Parse()
 	if *gatewayURL == "" {
 		log.Fatal("MEDIA_GATEWAY_URL or -gateway-url is required")
@@ -41,6 +44,15 @@ func main() {
 	}
 	if err := executor.SetVideoResultURL(*fixtureVideoResultURL); err != nil {
 		log.Fatal(err)
+	}
+	for key, resultURL := range map[string]string{
+		"media.image.model":       *fixtureModelResultURL,
+		"media.image.style":       *fixtureStyleResultURL,
+		"media.image.first_frame": *fixtureFirstFrameResultURL,
+	} {
+		if err := executor.SetResultURL(key, resultURL); err != nil {
+			log.Fatal(err)
+		}
 	}
 	capabilities := fixture.Capabilities()
 	capabilities, err = selectCapabilities(capabilities, *capabilityList)

@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"testing"
@@ -46,15 +47,24 @@ func TestWorkflowPersonalWorkerFixture(t *testing.T) {
 	}
 	request("GET", "/api/auth/me", nil, &user)
 	var jobs struct {
+		Total int `json:"total"`
 		Items []struct {
 			Status int    `json:"status"`
 			Owner  string `json:"submitted_by"`
 		} `json:"items"`
 	}
-	request("GET", "/api/v1/jobs?page_size=200", nil, &jobs)
-	for _, job := range jobs.Items {
-		if job.Owner == user.ID && (job.Status == 1 || job.Status == 2 || job.Status == 3) {
-			t.Fatal("current User has unfinished jobs; audit before starting the single sample")
+	for page := 1; ; page++ {
+		request("GET", fmt.Sprintf("/api/v1/jobs?page_size=200&page=%d", page), nil, &jobs)
+		for _, job := range jobs.Items {
+			if job.Owner == user.ID && (job.Status == 1 || job.Status == 2 || job.Status == 3) {
+				t.Fatal("current User has unfinished jobs; audit before starting the single sample")
+			}
+		}
+		if page*200 >= jobs.Total {
+			break
+		}
+		if len(jobs.Items) == 0 || page >= 1000 {
+			t.Fatal("could not audit the full queue before starting the single sample")
 		}
 	}
 	var workflow struct {

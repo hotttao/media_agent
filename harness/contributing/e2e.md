@@ -243,6 +243,17 @@ go -C media-cli test ./e2e -run '^TestWorkflowPersonalWorkerFixture$' -count=1 -
 
 沿用上文网关/User API Token/Organization 环境变量。当前用户有未结束 Job 时拒绝提交。失败/超时保留执行供排查，不能自动重提；使用 `MEDIA_E2E_SAMPLE_JOB_ID=<existing-job-id>` 仅验收已有执行。样本完成后须用户确认，再迁移其他 Workflow 数据。
 
+### 已完成 Workflow 输出只读验收
+
+`TestWorkflowCompletedOutputsGateway` 读取指定的已有四节点成功 Job，检查当前用户归属、每个节点成功且有产物、产物 Object Path 属于测试企业，再以不携带 API Token/Cookie 的独立 HTTP 客户端请求短时存储 URL。四个输出必须分别返回 `206 bytes 0-0/<positive-size>`，前三个为图片、最后一个为视频；不跟随重定向，不打印签名 URL。不提交、恢复、审批 Job，不启动 Worker。该门禁不代替新的四节点执行或前端预览验收。
+
+```bash
+MEDIA_E2E_COMPLETED_JOB_ID=<existing-completed-four-node-job-id> \
+go -C media-cli test ./e2e -run '^TestWorkflowCompletedOutputsGateway$' -count=1 -v
+```
+
+环境变量沿用网关/User API Token/Organization 配置。`TestWorkflowCompletedOutputsProbeContract` 是独立本地桩测试，验证只读请求数量、企业查询参数与存储请求不携带凭据；不能代替实际媒体可读门禁。
+
 ### 历史发布记录只读验收
 
 使用上文 User API Token 和统一网关环境变量，指定已导入记录及 Workspace。该测试读取真实成员 Job，实际下载样本媒体并重算 SHA-256，检查未认证访问及 Workspace 隔离；不创建 Job、不启动 Worker。

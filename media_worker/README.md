@@ -29,6 +29,15 @@ go -C media_worker run ./cmd/media_worker
 
 首次单流程验收前应检查现有待执行任务；fixture会消费当前User的Personal Capability任务，不能在未核对队列时宣称仅执行一个样本。`worker-identity disable/delete`分别停用/软删除身份并撤销关联Token；当前版本不重新激活身份。
 
+完整四节点对象存储联调需在启动前提供四个**已摄取到目标企业存储**的旧结果 URL：
+
+- `MEDIA_WORKER_FIXTURE_MODEL_RESULT_URL`：模特图。
+- `MEDIA_WORKER_FIXTURE_STYLE_RESULT_URL`：风格图。
+- `MEDIA_WORKER_FIXTURE_FIRST_FRAME_RESULT_URL`：首帧图。
+- `MEDIA_WORKER_FIXTURE_VIDEO_RESULT_URL`：视频。
+
+URL 通过 Materials API 在测试开始前重新解析，短期签名可能过期，不提交或打印 URL。放在私有环境中，而非进程命令行参数；Worker 不需要 User 上传凭据。覆盖结果仍带 `mock=true` 和旧样本 provenance，不能当作真实生成结果。未配置某个结果时仍使用旧资源服务的对应固定样本，只适合诊断旧链路，不代表目标对象存储验收。配置完成后再启动 Worker，不在轮询期间修改配置。
+
 ```bash
 MEDIA_GATEWAY_URL=http://192.168.2.41:18080 \
 MEDIA_WORKER_API_TOKEN=talos_xxx \

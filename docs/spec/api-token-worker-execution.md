@@ -10,6 +10,8 @@
 - Personal/Managed Worker 的 Conductor Domain 隔离；
 - Agent 创建时的 API Token 申请。
 
+验收范围修订（2026-10-04）：上述为完整设计范围，不代表全部纳入当前开发。用户明确将 Agent 创建后的自动 Token 申请留在后续场景；其可靠生命周期撤权事件也不作为本轮完成条件。既有 Agent 实现保留，不继续扩大创建流程。当前验收聚焦 User/Worker API Token、Worker 执行与 Workflow/素材历史迁移；UI 按用户指令暂停。
+
 Platform Token、Web Session、OAuth Token 和 Agent Session Token 不纳入 API Token 聚合。Renderer/Finalizer 继续由 `media_workflow` internal worker 执行，不属于 Capability Execution Target。
 
 ## 2. 身份与凭证契约

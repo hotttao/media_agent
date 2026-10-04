@@ -4,6 +4,32 @@
 >
 > 领域依据：ADR 0017、ADR 0018，以及 `media_auth/api_token`、`media_workflow/execution_capability`、`media_workflow/execution`。
 
+## 当前验收边界（2026-10-04 用户范围纠正）
+
+当前推进 User/Personal Worker API Token、Managed/Internal Worker 隔离、Workflow 执行与结果回写、素材和历史生成链迁移。全部 UI 实现等待用户的新设计，不在当前开发范围。
+
+P6 保留既有实现与后续设计，但 **Agent 创建后自动申请 Token、可靠生命周期事件及其重试验收属于后续阶段，不阻塞当前验收**。不得因本计划仍有未勾选项而继续扩展 Agent 创建流程。
+
+旧 Binding/Reachability 及旧 Template/claim 协议测试不等于当前实现契约；素材第一阶段明确不实现 Binding。它们的失败/Skip 必须如实保留，但恢复这些旧接口不是本轮验收要求。生成输出仍须按当前 Generated Asset/Object Path 契约验证，不能用旧发布协议测试替代。
+
+本轮仍需逐项取证的边界包括 Worker 跨企业 Dispatch 拒绝、请求级日志关联和原生输出媒体可用性。HTTP trace 关联不能冒充异步 Job/Outbox/Conductor 全生命周期关联。历史迁移保留一条来源成片 404 的异常，不伪造成片或隐藏失败。
+
+### 已完成执行的结果可用性复验
+
+- 2026-10-04 经真实统一网关只读复核原生四节点样本 `job_4b90d93f-30bf-4248-b60c-e4e93d80c733` 与历史续跑样本 `job_f90ede43-8bd6-45a5-bc6a-445e2402f33d`：Job succeeded，四个 StepRun succeeded 且有输出。已发布四节点 Workflow 可读取，Vite 5173 HTTP 200；客户端 media_worker 当前未运行，不能据此声称现在提交即可自动完成。
+- 新增 `TestWorkflowCompletedOutputsGateway`，以历史续跑样本真实验收三个图片产物与视频产物：目标企业 Object Path、短时 URL 可读、独立无凭据存储请求、Range 206 与正确 image/png、video/mp4 类型均通过。样本前三张图片是历史导入，视频是原生续跑产物；不将该结果冒充四节点全部原生生成验收或前端预览验收。
+- 本地 `TestWorkflowCompletedOutputsProbeContract` race 通过，核对六个只读网关请求、四个独立媒体请求及凭据不传播到存储。media-cli 全模块测试通过；未配置服务的 E2E 为 Skip，不算已验收。
+- 本轮未创建/审批/恢复 Job、未启动 Worker/采集器、未修改 UI 或既有凭据。P5 全项保持待核对，不因本次结果可读门禁整体勾选。
+
+### 四节点原生执行与受控媒体闭环（2026-10-04）
+
+- 补齐客户端 fixture 的三个图片结果覆盖配置，与既有视频覆盖一起返回预先迁移到目标企业存储的确定结果；保留 mock provenance，不实现真实模型 Provider 或生产上传。
+- 单流程门禁修正队列清点的分页遗漏：启动前核对该 User 全部 251 条 Job，没有 status 1/2/3 的待运行/执行/待确认记录，而非只检查第一页。121 个导入未完成组不会被本次批量恢复。
+- 启动独立 media_worker，经统一网关/API Token 执行发布的 `wf_793446b8-c078-4735-8a18-3b40a579f2f5@1`。`TestWorkflowPersonalWorkerFixture` 真实通过（22.68s），仅新增 `job_e42f2f8c-4469-4c65-8fd6-715cae098c25`；model_image/style_image/first_frame/video 均 succeeded，四个产物各自持久化为 origin=native 并关联本次 Job。
+- 随后对同一 Job 执行 `TestWorkflowCompletedOutputsGateway` 真实通过：四个产物均有目标企业 Object Path，三张图片 image/png、一个视频 video/mp4 各自返回 Range 206。不是以历史导入的图片冒充本次执行输出，也不以 succeeded 状态代替媒体可用性。
+- media_worker 全模块 race、media-cli 全模块测试及 diff 检查通过。Worker HTTP 错误不再保留/输出上游正文，防止重试日志泄露签名 URL/任务输入/凭据。
+- 单流程完成后通过 SIGINT 停止此次 fixture Worker，其他后端继续运行，5173 可访问。未批量续跑历史 Job、未启动观测后端、未修改 UI。原生产物在此指本次执行登记的资源，不代表真实模型生成；生产 Provider 和 UI 仍不计入本次通过项。
+
 ## P1 · Capability Target 与 IR
 
 - [x] migration 增加 `execution_target`、`managed_pool_key` 和约束，旧数据回填 Personal。
@@ -70,7 +96,7 @@
 - [x] 为测试 User 签发受限测试环境 API Token，Secret 仅保存到未跟踪的 `.env`；HTTP/CLI E2E 支持 Bearer API Token，不再要求预先模拟登录。
 - [ ] 覆盖撤销、scope、Organization、Actor disabled 和 trace_id 联调测试。
 
-## P6 · Agent Token 申请与代理
+## P6 · Agent Token 申请与代理（后续阶段，非本轮阻塞项）
 
 - [x] Control 稳定 Agent Identity 内部解析：按 Configuration ID 定位，只读投影归属/当前 owner 授权，服务身份保护、无 Provider Secret；单测与真实 HTTP 门禁。
 - [x] Auth Agent ActorValidator：非缓存查询 Control，Create/Verify/Rotate 精确校验归属及当前授权；单测、部署后既有 User/Worker 链路回归。

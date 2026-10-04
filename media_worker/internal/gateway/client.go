@@ -21,11 +21,10 @@ type Client struct {
 type HTTPError struct {
 	Method, Path string
 	StatusCode   int
-	Body         string
 }
 
 func (e *HTTPError) Error() string {
-	return fmt.Sprintf("worker gateway %s %s: status=%d body=%s", e.Method, e.Path, e.StatusCode, e.Body)
+	return fmt.Sprintf("worker gateway %s %s: status=%d", e.Method, e.Path, e.StatusCode)
 }
 
 func New(baseURL, apiToken string) *Client {
@@ -150,8 +149,9 @@ func (c *Client) doJSONStatus(ctx context.Context, method, path string, body, ou
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		responseBody, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		return response.StatusCode, &HTTPError{Method: method, Path: path, StatusCode: response.StatusCode, Body: string(responseBody)}
+		// Gateway errors may contain task inputs or credentials; do not retain
+		// their response bodies in errors that the client logs during retries.
+		return response.StatusCode, &HTTPError{Method: method, Path: path, StatusCode: response.StatusCode}
 	}
 	if output != nil && response.StatusCode != http.StatusNoContent {
 		if err := json.NewDecoder(response.Body).Decode(output); err != nil {

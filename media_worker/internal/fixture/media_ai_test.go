@@ -63,3 +63,50 @@ func TestFixtureCanReturnPreuploadedVideoResult(t *testing.T) {
 		t.Fatalf("fixture did not return controlled video: output=%+v err=%v", output, err)
 	}
 }
+
+func TestFixtureAllCapabilitiesUseControlledResults(t *testing.T) {
+	executor, err := NewExecutor("https://legacy.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, capability := range Capabilities() {
+		resultURL := "https://storage.example/materials/org/scope/" + capability.Key + "?signature=test-only"
+		if err := executor.SetResultURL(capability.Key, resultURL); err != nil {
+			t.Fatal(err)
+		}
+		for _, invalid := range []string{"/relative", "file:///tmp/result", "https://user:secret@example.test/result", "https://example.test/result#fragment"} {
+			if err := executor.SetResultURL(capability.Key, invalid); err == nil || strings.Contains(err.Error(), invalid) {
+				t.Fatal("unsafe override accepted or exposed in error")
+			}
+		}
+		output, err := executor.Execute(gateway.Task{CapabilityKey: capability.Key, CapabilityVersion: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if output["candidates"].([]map[string]any)[0]["url"] != resultURL {
+			t.Fatal("controlled result was not preserved after invalid configuration")
+		}
+		provenance := output["provenance"].(map[string]any)
+		if provenance["mock"] != true || provenance["source"] != source {
+			t.Fatal("controlled result lost mock provenance")
+		}
+		if err := executor.SetResultURL(capability.Key, ""); err != nil {
+			t.Fatal(err)
+		}
+		fallback, err := executor.Execute(gateway.Task{CapabilityKey: capability.Key, CapabilityVersion: 1})
+		if err != nil || !strings.HasPrefix(fallback["candidates"].([]map[string]any)[0]["url"].(string), "https://legacy.example/") {
+			t.Fatal("cleared override did not restore the existing fixture")
+		}
+	}
+	for _, key := range []string{"media_render_template_v1", "media_finalize_step_v1", "unknown"} {
+		if err := executor.SetResultURL(key, "https://storage.example/result"); err == nil {
+			t.Fatal("internal or unknown task accepted as a fixture Capability")
+		}
+		if _, err := executor.Execute(gateway.Task{CapabilityKey: key, CapabilityVersion: 1}); err == nil {
+			t.Fatal("internal or unknown task was executed by the client Worker")
+		}
+	}
+	if _, err := executor.Execute(gateway.Task{CapabilityKey: "media.image.model", CapabilityVersion: 2}); err == nil {
+		t.Fatal("unknown Capability Version accepted")
+	}
+}

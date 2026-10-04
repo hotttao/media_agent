@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -50,6 +51,19 @@ func TestClientReturnsTypedHTTPError(t *testing.T) {
 	var httpErr *HTTPError
 	if !errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusGone {
 		t.Fatalf("Complete() error = %#v", err)
+	}
+}
+
+func TestClientHTTPErrorDoesNotRetainResponseSecrets(t *testing.T) {
+	const secret = "test-only-response-secret"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, secret, http.StatusUnauthorized)
+	}))
+	defer server.Close()
+	err := New(server.URL, "test-only-token").Register(context.Background(), "instance", nil)
+	var typed *HTTPError
+	if !errors.As(err, &typed) || typed.StatusCode != http.StatusUnauthorized || strings.Contains(err.Error(), secret) {
+		t.Fatal("HTTP status lost or upstream body leaked")
 	}
 }
 
