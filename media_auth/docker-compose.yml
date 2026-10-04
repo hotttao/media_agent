@@ -24,6 +24,7 @@ services:
       # Dedicated write credential, disabled unless explicitly configured.
       MEDIA_AUTH_AGENT_GATEWAY_TOKEN: ${MEDIA_AUTH_AGENT_GATEWAY_TOKEN:-}
       LOG_DIR: /media_logs/media-auth
+      PLATFORM_TOKEN_ENABLED: ${PLATFORM_TOKEN_ENABLED:-false}
     volumes:
     - ../media_logs/media-auth:/media_logs/media-auth
     extra_hosts:

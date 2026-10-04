@@ -36,10 +36,13 @@ _testmain.go
 dumped_hertz_remote_config.json
 /tmp
 media_logs/.cookies/
+media_logs/media-auth/platform-audit/
 media_auth/tmp/
 media-cli/.cookies/
 media_agent_gateway/.secrets/
 media_agent_gateway/.env.agent-proxy.local
+media_auth/.secrets/
+media_auth/.env.platform-token.local
 # go build 产物（各 app 二进制）
 /media_crawler/media_crawler
 /media_auth/media_auth

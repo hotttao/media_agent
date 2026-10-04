@@ -122,6 +122,18 @@ CLI 提供 `api-token create/list/rotate/revoke`。创建和轮换要求 `--env-
 
 ### Platform Token 独立密文存储集成测试
 
+运行环境 mTLS 门禁使用预启动 Auth；先完成[维护切换](../../media_auth/script/platform-token-operations.md)，再执行：
+
+```bash
+MEDIA_PLATFORM_TOKEN_ADDR=https://<Auth-private-IP>:8890 \
+MEDIA_AUTH_PRIVATE_ADDR=http://<Auth-private-IP>:8001 \
+MEDIA_PLATFORM_TEST_MATERIAL_DIR=/absolute/path/to/media_auth/.secrets/platform-token \
+MEDIA_PLATFORM_AUDIT_FILE=/absolute/path/to/media_logs/media-auth/platform-audit/events.jsonl \
+  go -C media-cli test ./e2e -run '^TestPlatformTokenMTLSRuntime$' -count=1 -v
+```
+
+该测试需要读取私有审计文件的授权身份；普通用户不可读时，应构建测试二进制并以授权身份执行，不能放宽 0600 权限。证书验证使用 `media_auth` ServerName，不关闭 TLS 校验。测试创建独立随机密码 User，获取/轮换/内省和真实异步文件落盘，不触碰原测试账号凭据，不启动服务或采集器。缺配置明确 Skip，文件不可读明确失败，不冒充已通过。
+
 专用监听器的本地接线测试位于`media_auth/platform_runtime_test.go`：隔离CA/临时证书、真实Hertz HTTPS连接和生成路由，检查认证context/no-store/安全错误、普通HTTP伪造Header拒绝以及公共路由排除。用例使用测试桩，无运行数据库或旧凭据操作；这是接线门禁，不代替下述真实存储/用例测试或部署后的HTTP/CLI门禁。`biz/shared/platformmtls`另覆盖真实TLS握手证书边界及安全文件读取。
 
 `platform_lifecycle_test.go`使用隔离PG验证完整历史的startup只读门禁，以及实际Kratos映射/密文确保和用户撤销的事务回滚、重试确认、审计原子性与恢复不复活。共享fixture直接执行SQL文件，不创建golang-migrate版本表；readiness测试先验证缺失拒绝，再显式创建版本/dirty夹具。不会修改运行数据或模拟真实企微/浏览器登录，不代替运行部署门禁。

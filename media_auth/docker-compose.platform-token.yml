@@ -1,0 +1,37 @@
+# Explicit opt-in; ordinary disabled Auth needs no certificate/key files.
+# Compose paths are relative to the first file, media_auth/docker-compose.yml.
+services:
+  media_auth:
+    expose:
+      - "8890"
+    environment:
+      PLATFORM_TOKEN_ENABLED: ${PLATFORM_TOKEN_ENABLED:-true}
+      PLATFORM_TOKEN_ADDR: :8890
+      PLATFORM_TOKEN_CERT_FILE: /run/platform-token/server.pem
+      PLATFORM_TOKEN_TLS_KEY_FILE: /run/platform-token/server-key.pem
+      PLATFORM_TOKEN_CLIENT_CA_FILE: /run/platform-token/client-ca.pem
+      PLATFORM_TOKEN_KEY_FILE: /run/platform-token/custody-v1.key
+      PLATFORM_TOKEN_KEY_VERSION: v1
+      PLATFORM_TOKEN_AUDIT_FILE: /media_logs/media-auth/platform-audit/events.jsonl
+    volumes:
+      # No CA issuing key or client private keys in the Auth workload.
+      - type: bind
+        source: ./.secrets/platform-token/server.pem
+        target: /run/platform-token/server.pem
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/platform-token/server-key.pem
+        target: /run/platform-token/server-key.pem
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/platform-token/client-ca.pem
+        target: /run/platform-token/client-ca.pem
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/platform-token/custody-v1.key
+        target: /run/platform-token/custody-v1.key
+        read_only: true
+        bind: {create_host_path: false}

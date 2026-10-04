@@ -1,5 +1,8 @@
 .git
+media_logs
 media_auth/.env.agent-gateway.local
+media_auth/.env.platform-token.local
+**/.secrets
 media_agent_gateway/.secrets
 media_agent_gateway/.env.agent-proxy.local
 media_workflow/.env*

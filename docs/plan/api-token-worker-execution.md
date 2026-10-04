@@ -203,13 +203,13 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 | Agent 委托断言签名与请求绑定 | hertz_infra / Internal Identity JWT | 独立RSA/JWKS、精确audience、60秒TTL、方法/URI/body摘要及私有密钥读取 | covered |
 | Agent disabled/deleted/owner 解绑撤销 | Control + Auth | 权威生命周期事实、持久撤销意图/恢复 | missing |
 | Agent 当前委托关系周期复核 | Auth / api_token | 事务外权威查询、精确Actor撤销意图、既有Talos恢复；不替代生命周期事件 | covered |
-| Platform Token 独立密文存储 | Auth / platform_token | 0015、AES-256-GCM、归属绑定、唯一性/事务/降级保护；尚未部署 | covered |
-| Platform Token 旧事实离线转移 | Auth / platform_token + 旧凭据投影 | Migration Workflow/维护工具，隔离PG与独立进程验收；运行数据尚未迁移 | covered |
-| Platform Token 单聚合运行用例 | Auth / platform_token | 独立service、User行锁、可信CallerVerifier端口、同事务审计Outbox；未接运行入口 | covered |
-| Platform Token 审计投递 | Auth / platform_token | Platform Audit Delivery，lease/CAS/至少一次恢复，隔离PG与真实文件验收；未接运行入口 | covered |
-| 登录/WeCom 确保 Platform Token | Auth / platform_token | 从旧混合 ServiceToken 接线切换到独立聚合 | missing |
-| 内部获取/校验 Platform Token | Auth / platform_token | 调用者身份与 purpose 限制、独立密文读取/验证 | missing |
-| 用户撤销及旧明文迁移 | Auth / platform_token | 外部密钥部署、逐条验证/原子迁移、撤销接线 | missing |
+| Platform Token 独立密文存储 | Auth / platform_token | 0015、AES-256-GCM、归属绑定、唯一性/事务/降级保护；已部署 | covered |
+| Platform Token 旧事实离线转移 | Auth / platform_token + 旧凭据投影 | Migration Workflow/维护工具；运行67条原子转移，演练/重跑验收 | covered |
+| Platform Token 单聚合运行用例 | Auth / platform_token | 独立service、User行锁、真实mTLS CallerVerifier、同事务审计Outbox；已接入口 | covered |
+| Platform Token 审计投递 | Auth / platform_token | Platform Audit Delivery，lease/CAS/至少一次恢复；运行私有文件已落盘 | covered |
+| 登录/WeCom 确保 Platform Token | Auth / platform_token | 独立聚合接线、隔离PG生命周期验收及真实注册；真实企微外部回调未验收 | covered（外部回调待验收） |
+| 内部获取/校验 Platform Token | Auth / platform_token | 私有mTLS监听器、调用者/purpose限制、获取/内省/轮换真实HTTP验收 | covered |
+| 用户撤销及旧明文迁移 | Auth / platform_token | 密钥外部备份、67条原子转移；用户撤销接线及隔离PG事务验收 | covered（真实用户删除未执行） |
 
 ### Auth Agent 校验接线
 
@@ -330,3 +330,13 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - typed Platform配置默认关闭；main装配独立Repo/UserReader/TxRunner/Keyring/Verifier/service及审计投递器，专用Hertz TLS监听器只注册Platform路由，限制body/读写/idle，失败不降级。证书读取拒绝symlink、写权限/公开私钥、空/过大/无效文件，不生成密钥。
 - Auth全量Go、真实Hertz HTTPS/race、共享认证/中间件race和架构检查通过；生成Config/DTO/client编译通过。真实连接测试使用隔离CA和用例测试桩，覆盖获取/内省/轮换、绑定/expiry/拒绝/安全错误/no-store、公共端点排除、无客户端证书和主HTTP伪造Header不调用用例。不能以此冒充运行环境凭据/审计端到端或独立CLI门禁。
 - 未重启/部署运行服务、未生成运行密钥/证书、未迁移旧凭据；5173 HTTP200，UI未修改。运行切换、实际迁移、登录/WeCom/用户撤销和旧ServiceToken删除继续missing，P7总体未完成。
+
+### 2026-10-04 · Platform运行切换与真实HTTP验收
+
+- 新Auth镜像已部署；先关闭Platform正常应用0015/0016，再停止旧写入者完成维护迁移，最后启用私有8890。运行schema version16/dirty=false，Auth持续运行且RestartCount=0；未启动观测后端或提交生成Job。
+- 本地测试CA/客户端证书和托管密钥由拒绝覆盖的初始化脚本生成，忽略且排除Docker构建上下文。Auth仅挂载四份服务端材料；密钥独立备份在仓库外，初始化已有目录明确拒绝，原密钥与备份一致。生产需受控PKI/Secret管理，不以本地CA冒充工作负载身份平台。
+- 维护工具默认演练验证67条、回滚后旧67/新0；显式apply原子迁移67条，元数据指纹核对ID/归属/创建/过期/撤销历史一致，原59条未撤销。旧Platform剩余0、35条普通旧ServiceToken不变；重跑apply返回零行。未输出Secret/Hash/密文，未更改原测试账号密码或凭据。
+- 真实`TestPlatformTokenMTLSRuntime`通过（2.20s）：专用随机密码测试User、Gateway/Schedule证书获取同一当前凭据、内省归属、purpose/未知owner拒绝、轮换与旧凭据失效、无证书TLS握手拒绝、普通HTTP401，以及真实后台审计落盘/no-store/无Secret。普通HTTP先被公共internal-auth guard拒绝；不能把401断言写成mTLS handler的403。私有审计文件0600，验收以授权读取身份运行；缺配置Skip不算通过，文件不可读明确失败。
+- 测试前两次尝试分别暴露HTTP拒绝码预期错误和宿主审计读取权限，均已修正测试，不降低认证或文件权限。通过后的Outbox核对18条已投递、0待投递（含前次测试事实）；专用测试账户保留用于诊断，其轮换凭据一小时过期。
+- 真实网关API Token、Agent签发/代理/代理审计、Worker接口五项回归通过（15.716s）；独立CLI `media_auth auth me`通过，5173 HTTP200。Auth全量Go、真实监听器/mTLS/中间件race及架构检查通过；维护接线与复现步骤见`media_auth/script/platform-token-operations.md`和E2E规范。
+- P7不整体完成：普通ServiceToken代码/路由/CLI/本地Hash回退尚未整体删除；当前无既有Gateway/Control Platform调用者适配器可验收，未来实际接入需独立门禁。真实企微回调/用户删除未执行；既有隔离PG生命周期证明不能冒充这些运行流程。P6其他missing、P5整体门禁和Workflow租户模型仍未完成；UI继续排除。
