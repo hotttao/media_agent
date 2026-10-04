@@ -130,6 +130,12 @@ go -C media_auth test -tags=e2e -race ./e2e -run '^TestPlatformToken' -count=1 -
 
 该存储门禁不能代替后续旧明文迁移、启动接线、内部调用者/purpose、撤销以及HTTP/CLI验收；加密与防调换单测位于`biz/shared/platformcipher`。
 
+`platform_token_migration_test.go`另覆盖105条跨页/撤销历史、默认演练回滚、并行提交与重跑、目标复用、普通ServiceToken不变，以及坏Hash/空ID/缺owner/历史冲突/不可解密目标/取消后整批回滚。独立构建并执行`tools/platform-token-migrate`，验证默认不提交、显式apply和固定错误。只对隔离数据库操作，测试密钥/config为临时0600文件，捕获输出不打印；不迁移运行环境数据、不启动或切换业务服务。
+
+```bash
+go -C media_auth test -tags=e2e -race ./e2e -run '^TestPlatformTokenMigration' -count=1 -v
+```
+
 ### Personal Worker 身份与撤销集成测试
 
 `media_auth/e2e/worker_identity*.go` 使用隔离 PostgreSQL，覆盖归属、状态 CAS、事务回滚、Actor/Organization 隔离、晚到签发恢复和降级迁移保护。真实 Talos 测试创建唯一临时 Worker Actor，验证停用事务提交后立即拒绝访问，重建撤销 Workflow 后 Talos Key 进入 revoked；只撤销测试自己创建的 Key，不使用或改动已有 Worker 凭据。

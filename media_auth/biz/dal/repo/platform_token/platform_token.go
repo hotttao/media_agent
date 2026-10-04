@@ -40,6 +40,16 @@ func (r *Repo) GetCurrent(ctx context.Context, user string) (domain.Token, error
 	return toDomain(row), mapNotFound(err)
 }
 
+// GetIncludingRevoked is only used to compare immutable migration history.
+func (r *Repo) GetIncludingRevoked(ctx context.Context, id string) (domain.Token, error) {
+	if !domain.ValidIdentity(id) {
+		return domain.Token{}, domain.ErrInvalid
+	}
+	var row model.PlatformToken
+	err := dal.FromContext(ctx, r.db).WithContext(ctx).Where("id = ?", id).First(&row).Error
+	return toDomain(row), mapNotFound(err)
+}
+
 func (r *Repo) GetByHash(ctx context.Context, hash []byte) (domain.Token, error) {
 	if len(hash) != 32 {
 		return domain.Token{}, domain.ErrInvalid

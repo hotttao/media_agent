@@ -95,6 +95,7 @@
 
 - [ ] 明确 Platform Token 独立存储和调用方后，删除 `service_token` domain/policy/service/repo。
   - [x] 独立Platform Token密文聚合/0015 schema、版本化AEAD与归属防调换、DAL/隔离PG门禁。
+  - [x] 离线原子迁移Workflow/工具：默认演练、保留撤销历史、冲突拒绝、整批回滚、重跑和隔离PG验收。
   - [ ] 旧Platform明文逐条验证、原子迁移与切换；部署外部密钥、受限内部调用者/purpose、用户撤销接线。
 - [ ] 删除旧 IDL、路由、生成代码与 `tos_` 本地 Hash 工具。
 - [ ] 删除旧表或改为只读迁移归档；历史 migration 保留可重放。
@@ -201,6 +202,7 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 | Agent disabled/deleted/owner 解绑撤销 | Control + Auth | 权威生命周期事实、持久撤销意图/恢复 | missing |
 | Agent 当前委托关系周期复核 | Auth / api_token | 事务外权威查询、精确Actor撤销意图、既有Talos恢复；不替代生命周期事件 | covered |
 | Platform Token 独立密文存储 | Auth / platform_token | 0015、AES-256-GCM、归属绑定、唯一性/事务/降级保护；尚未部署 | covered |
+| Platform Token 旧事实离线转移 | Auth / platform_token + 旧凭据投影 | Migration Workflow/维护工具，隔离PG与独立进程验收；运行数据尚未迁移 | covered |
 | 登录/WeCom 确保 Platform Token | Auth / platform_token | 从旧混合 ServiceToken 接线切换到独立聚合 | missing |
 | 内部获取/校验 Platform Token | Auth / platform_token | 调用者身份与 purpose 限制、独立密文读取/验证 | missing |
 | 用户撤销及旧明文迁移 | Auth / platform_token | 外部密钥部署、逐条验证/原子迁移、撤销接线 | missing |
@@ -264,3 +266,11 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 按既有ADR-0007实现独立聚合、DAL及0015 schema。AES-256-GCM绑定ID/用户/密钥版本；SHA-256校验、随机nonce、受限外部密钥文件读取，不隐式生成密钥。密文表不含Secret列，每用户至多一个未撤销记录（过期也须先显式撤销），非空历史拒绝降级删除。
 - Auth全量Go测试及架构检查通过；加密/领域race单测通过；隔离PostgreSQL的两项race集成测试通过（29.203s），覆盖并发冲突、跨用户隔离、过期/撤销/替换、事务回滚、SQL约束和降级保护。
 - 本阶段未部署密钥、未应用0015到运行环境、未改写67条凭据、未切换认证链路。没有新增公开API，故本门禁不冒充HTTP/CLI或内部调用者认证验收。下一阶段仍须原子迁移和调用者/purpose接线后再删除旧ServiceToken；P7总体保持未完成，UI不在范围内。
+
+### 2026-10-04 · Platform Token 离线迁移验收
+
+- domain-modeling增加0013迁移Workflow，明确两侧事实、锁/事务边界、默认演练及提交未知结果恢复；实现位于biz/workflow，SQL与事务连接留在DAL，无公开API。
+- 默认演练执行完整加密/写入/回读/删除但回滚；apply同事务提交全部转移，保留ID/归属/Hash/创建/过期/撤销历史，只删除已验证Platform行，普通ServiceToken不变。目标同ID事实一致才复用，其他冲突不覆盖。SQL按C collation keyset分页，失败不跳过记录。
+- 离线工具typed Config Loader、私有外部Key及版本、有限deadline/信号取消、静默DB日志与固定安全错误；只输出计数，不传/打印Secret或DSN，不自动部署/生成密钥/应用schema。
+- Auth全量Go测试、Workflow/工具race和架构检查通过。全部Platform隔离PG race门禁通过（86.578s），包含105条跨页、并行提交、撤销历史、演练回滚、重跑、Hash/owner/空ID/历史冲突/不可解密目标与写入后取消；独立构建维护二进制验收默认演练、apply、重跑和错误脱敏。
+- 只读复核运行环境仍有67条旧Platform（59未撤销），无企业/scope附加值，platform_tokens尚不存在；本轮没有运行环境迁移或服务切换，5173 HTTP200。外部密钥部署、受限调用者/purpose、新运行时接线、实际迁移及删除旧ServiceToken仍missing，P7总体未完成；UI继续排除。

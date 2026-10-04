@@ -285,6 +285,12 @@ Materials/Workflow分别配置独立 `AGENT_JWKS_URL,AGENT_JWT_ISSUER` 与精确
 
 独立表/加密核心验证通过仍不代表已迁移：旧Platform行逐条校验与原子转移、Secret部署、purpose-bound内部接入/调用方、撤销事件接线及旧Hash分支删除须另行完成。此阶段不更新当前服务启动逻辑或生产数据，不新增公开取回凭据接口。
 
+### 7.2 Platform Token 离线迁移
+
+`biz/workflow/platform_token_migration.go`通过TxRunner、旧迁移仓储及密文仓储协调同库原子迁移；仓储SQL位于DAL。锁定两表写入后按旧ID keyset分页100条，含全部撤销历史。校验ID/owner/创建时间及Secret SHA-256与原Hash一致，Seal后保存原ID/owner/Hash/创建/过期/撤销时间。目标同ID存在时不覆盖，必须Open成功且全部原事实一致。每行密文回读验证后删除对应旧Platform行，最后提交；任何失败/取消整批回滚。普通ServiceToken不改变。默认演练也执行全部步骤但最终回滚；完成后重跑0条。
+
+`tools/platform-token-migrate`只作为离线维护工具，参数`--config`、`--key-file`、`--key-version`、`--timeout`（默认2分钟）和`--apply`（默认false）。配置使用现有typed Config Loader，数据库开启静默日志，Secret/DSN不走命令行参数或输出；成功/演练仅JSON计数，错误固定安全文本。不自动应用schema、生成密钥、切换服务或清理普通ServiceToken。运行前必须停旧调用方，运行后部署新链路，不能在旧链路仍运行时执行apply。
+
 兼容期不得把同一个 Secret 同时交给本地 Hash 和 Talos 两套验证器。
 
 ## 8. 验收标准

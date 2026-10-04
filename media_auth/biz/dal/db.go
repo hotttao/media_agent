@@ -28,14 +28,25 @@ import (
 // database.enabled=false 时返回 (nil, nil)——调用方可无条件初始化，禁用时不阻断启动。
 // 当前 driver 仅支持 postgres；新增 mysql/sqlite 在此分支扩展。
 func NewDB(cfg *configpb.DatabaseConfig) (*gorm.DB, error) {
+	return newDB(cfg, gormlogger.Default.LogMode(gormlogger.Warn), false)
+}
+
+// NewMaintenanceDB disables SQL logging for sensitive offline transfers.
+// The tool must also avoid printing the returned infrastructure error.
+func NewMaintenanceDB(cfg *configpb.DatabaseConfig) (*gorm.DB, error) {
+	return newDB(cfg, gormlogger.Default.LogMode(gormlogger.Silent), true)
+}
+
+func newDB(cfg *configpb.DatabaseConfig, logger gormlogger.Interface, disablePing bool) (*gorm.DB, error) {
 	if cfg == nil || !cfg.GetEnabled() {
 		return nil, nil
 	}
 	switch cfg.GetDriver() {
 	case "postgres", "": // 默认 postgres
 		db, err := gorm.Open(postgres.Open(cfg.GetDsn()), &gorm.Config{
-			Logger:         gormlogger.Default.LogMode(gormlogger.Warn),
-			TranslateError: true, // 把底层唯一/外键冲突翻译为 gorm.ErrDuplicatedKey/ErrForeignKeyViolation，便于 repo 用 errors.Is 判定
+			Logger:               logger,
+			DisableAutomaticPing: disablePing,
+			TranslateError:       true, // 把底层唯一/外键冲突翻译为 gorm.ErrDuplicatedKey/ErrForeignKeyViolation，便于 repo 用 errors.Is 判定
 		})
 		if err != nil {
 			return nil, fmt.Errorf("dal: open postgres: %w", err)

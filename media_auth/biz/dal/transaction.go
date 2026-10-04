@@ -38,13 +38,20 @@ func NewTxRunner(db *gorm.DB) TxRunner {
 // RunInTx 在一个事务内执行 fn：fn 返回 error 回滚，nil 提交。
 // 把 tx 塞进 ctx（WithTx），下游 repo 经 FromContext 取 tx。
 func (r *txRunner) RunInTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return fn(WithTx(ctx, tx))
 	})
 }
 
 // ctxKey 是 ctx 中携带 *gorm.DB（事务 tx）的 key 类型，避免导出冲突。
 type ctxKey struct{}
+
+// InTransaction lets maintenance repositories reject unsafe nontransactional
+// locking/deletion. It does not expose the underlying connection.
+func InTransaction(ctx context.Context) bool {
+	tx, ok := ctx.Value(ctxKey{}).(*gorm.DB)
+	return ok && tx != nil
+}
 
 // WithTx 把事务 tx 关联到 ctx，返回新 ctx。供 TxRunner.RunInTx 内部使用。
 func WithTx(ctx context.Context, tx *gorm.DB) context.Context {
