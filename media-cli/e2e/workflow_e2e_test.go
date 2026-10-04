@@ -1,4 +1,6 @@
 // workflow_e2e_test.go — media_workflow HTTP e2e 测试。
+// Retained legacy Template/claim protocol gate: credentials now use API Token,
+// but this is not acceptance of the current Compiler/Personal Worker contract.
 //
 // 前提：media_auth + media_materials + media_workflow server 已起。
 //
@@ -7,13 +9,12 @@
 //	MEDIA_AUTH_ADDR=http://127.0.0.1:8001 \
 //	MEDIA_MATERIALS_ADDR=http://127.0.0.1:8003 \
 //	MEDIA_WORKFLOW_ADDR=http://127.0.0.1:8002 \
-//	MEDIA_AUTH_E2E_USER=smoke MEDIA_AUTH_E2E_PASS=smoke123 \
+//	MEDIA_GATEWAY_ADDR=... MEDIA_API_TOKEN=... MEDIA_E2E_ORGANIZATION_ID=... \
 //	go test ./e2e/ -run TestWorkflowE2E -v
 package e2e
 
 import (
 	"encoding/json"
-	"net/http"
 	"os"
 	"testing"
 )
@@ -28,50 +29,18 @@ func skipIfNoWorkflowServer(t *testing.T) string {
 }
 
 func TestWorkflowE2E(t *testing.T) {
-	authAddr := skipIfNoServer(t)
-	matAddr := skipIfNoMaterialsServer(t)
-	wfAddr := skipIfNoWorkflowServer(t)
-	user := envOr("MEDIA_AUTH_E2E_USER", "smoke")
-	pass := envOr("MEDIA_AUTH_E2E_PASS", "smoke123")
-
-	// 1. media_auth login + 创建 service token
-	authClient := httpClient(t)
-	uid := login(t, authClient, authAddr, user, pass)
-
-	status, body := doJSON(t, authClient, "POST", authAddr+"/api/auth/tokens", map[string]string{"name": "e2e_workflow"})
-	if status != 201 {
-		t.Fatalf("create service token: status=%d body=%s", status, body)
-	}
-	var tokResp struct {
-		Token string `json:"token"`
-	}
-	if err := json.Unmarshal(body, &tokResp); err != nil || tokResp.Token == "" {
-		t.Fatalf("token unmarshal: err=%v body=%s", err, body)
-	}
-
-	// HTTP client with Bearer
-	wfClient := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	matClient := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	_ = matClient
-	_ = matAddr
+	f := newMaterialsAPIFixture(t)
+	wfAddr, uid, token := f.gateway, f.user, f.token
 
 	// 2. 创建 template（scope=ai_clothing，output_asset_kind=first_frame）
-	status, body = doJSON(t, wfClient, "POST", wfAddr+"/api/v1/templates?scope=ai_clothing&created_by="+uid, map[string]any{
-		"name":               "e2e_template",
-		"prompt_body":        "以 {scene.url} 为场景生成首帧图",
-		"output_asset_kind":  "first_frame",
-		"platform":           "gpt",
-		"gen_way":            "i2i",
-		"needs_confirm":      true,
-		"candidate_count":    2,
+	status, body := doJSONBearer(t, wfAddr, "POST", "/api/v1/templates?scope=ai_clothing&created_by="+uid, token, map[string]any{
+		"name":              "e2e_template",
+		"prompt_body":       "以 {scene.url} 为场景生成首帧图",
+		"output_asset_kind": "first_frame",
+		"platform":          "gpt",
+		"gen_way":           "i2i",
+		"needs_confirm":     true,
+		"candidate_count":   2,
 		"inputs": []map[string]any{
 			{"name": "scene", "resource_type": "MATERIAL", "required": true},
 		},
@@ -89,9 +58,9 @@ func TestWorkflowE2E(t *testing.T) {
 	t.Logf("created template id=%s version=%d", tpl.ID, tpl.Version)
 
 	// 3. 创建 workflow（单步 DAG）
-	status, body = doJSON(t, wfClient, "POST", wfAddr+"/api/v1/workflows?scope=ai_clothing&created_by="+uid, map[string]any{
-		"name":             "e2e_workflow",
-		"output_step_key":  "gen",
+	status, body = doJSONBearer(t, wfAddr, "POST", "/api/v1/workflows?scope=ai_clothing&created_by="+uid, token, map[string]any{
+		"name":            "e2e_workflow",
+		"output_step_key": "gen",
 		"steps": []map[string]any{
 			{
 				"key":              "gen",
@@ -117,9 +86,9 @@ func TestWorkflowE2E(t *testing.T) {
 	t.Logf("created workflow id=%s version=%d", wf.ID, wf.Version)
 
 	// 4. validate workflow（不保存）
-	status, body = doJSON(t, wfClient, "POST", wfAddr+"/api/v1/workflows/validate", map[string]any{
-		"scope":            "ai_clothing",
-		"output_step_key":  "gen",
+	status, body = doJSONBearer(t, wfAddr, "POST", "/api/v1/workflows/validate", token, map[string]any{
+		"scope":           "ai_clothing",
+		"output_step_key": "gen",
 		"steps": []map[string]any{
 			{
 				"key":              "gen",
@@ -146,7 +115,7 @@ func TestWorkflowE2E(t *testing.T) {
 	}
 
 	// 5. submit job（带自包含 bundle）
-	status, body = doJSON(t, wfClient, "POST", wfAddr+"/api/v1/jobs?workflow_id="+wf.ID+"&submitted_by="+uid, map[string]any{
+	status, body = doJSONBearer(t, wfAddr, "POST", "/api/v1/jobs?workflow_id="+wf.ID+"&submitted_by="+uid, token, map[string]any{
 		"workflow_version": wf.Version,
 		"input": map[string]any{
 			"material": []map[string]any{
@@ -167,7 +136,7 @@ func TestWorkflowE2E(t *testing.T) {
 	t.Logf("submitted job id=%s status=%s", job.JobID, job.Status)
 
 	// 6. get job（应含 step_runs）
-	status, body = doJSON(t, wfClient, "GET", wfAddr+"/api/v1/jobs/"+job.JobID, nil)
+	status, body = doJSONBearer(t, wfAddr, "GET", "/api/v1/jobs/"+job.JobID, token, nil)
 	if status != 200 {
 		t.Fatalf("get job: status=%d body=%s", status, body)
 	}
@@ -176,8 +145,8 @@ func TestWorkflowE2E(t *testing.T) {
 			Status string `json:"status"`
 		} `json:"job"`
 		StepRuns []struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
+			ID      string `json:"id"`
+			Status  string `json:"status"`
 			StepKey string `json:"step_key"`
 		} `json:"step_runs"`
 	}
@@ -195,7 +164,7 @@ func TestWorkflowE2E(t *testing.T) {
 	t.Logf("step_run id=%s key=%s status=%s", sr.ID, sr.StepKey, sr.Status)
 
 	// 7. claim step_run（模拟 worker）
-	status, body = doJSON(t, wfClient, "POST", wfAddr+"/api/v1/step-runs/claim", map[string]any{
+	status, body = doJSONBearer(t, wfAddr, "POST", "/api/v1/step-runs/claim", token, map[string]any{
 		"platform":  "gpt",
 		"gen_way":   "i2i",
 		"worker_id": "e2e_worker",
@@ -215,7 +184,7 @@ func TestWorkflowE2E(t *testing.T) {
 	t.Logf("claimed step_run id=%s prompt=%q asset_kind=%s", claim.StepRunID, claim.RenderedPrompt, claim.AssetKind)
 
 	// 8. complete step_run（2 候选，needs_confirm=true → NEED_CONFIRM）
-	status, body = doJSON(t, wfClient, "POST", wfAddr+"/api/v1/step-runs/"+claim.StepRunID+"/complete", map[string]any{
+	status, body = doJSONBearer(t, wfAddr, "POST", "/api/v1/step-runs/"+claim.StepRunID+"/complete", token, map[string]any{
 		"candidates": []map[string]any{
 			{"index": 1, "url": "https://example.com/out1.png", "is_primary": true},
 			{"index": 2, "url": "https://example.com/out2.png"},
@@ -236,7 +205,7 @@ func TestWorkflowE2E(t *testing.T) {
 	t.Logf("completed → status=%s", completed.Status)
 
 	// 9. confirm step_run（选第 1 个）
-	status, body = doJSON(t, wfClient, "POST", wfAddr+"/api/v1/step-runs/"+claim.StepRunID+"/confirm", map[string]any{
+	status, body = doJSONBearer(t, wfAddr, "POST", "/api/v1/step-runs/"+claim.StepRunID+"/confirm", token, map[string]any{
 		"selected_index": 1,
 	})
 	if status != 200 {
@@ -258,7 +227,7 @@ func TestWorkflowE2E(t *testing.T) {
 	t.Logf("confirmed → status=%s output_asset_id=%s", confirmed.Status, confirmed.OutputAssetID)
 
 	// 10. get job → 应 succeeded（单步 DAG，sink succeeded → job succeeded）
-	status, body = doJSON(t, wfClient, "GET", wfAddr+"/api/v1/jobs/"+job.JobID, nil)
+	status, body = doJSONBearer(t, wfAddr, "GET", "/api/v1/jobs/"+job.JobID, token, nil)
 	if status != 200 {
 		t.Fatalf("get job final: status=%d", status)
 	}
@@ -271,11 +240,8 @@ func TestWorkflowE2E(t *testing.T) {
 	t.Logf("job final status=%s", jobDetail.Job.Status)
 
 	// 11. cleanup: delete workflow + template
-	doJSON(t, wfClient, "DELETE", wfAddr+"/api/v1/workflows/"+wf.ID, nil)
-	doJSON(t, wfClient, "DELETE", wfAddr+"/api/v1/templates/"+tpl.ID, nil)
-
-	// revoke token
-	doJSON(t, authClient, "DELETE", authAddr+"/api/auth/tokens/"+tokResp.Token, nil)
+	doJSONBearer(t, wfAddr, "DELETE", "/api/v1/workflows/"+wf.ID, token, nil)
+	doJSONBearer(t, wfAddr, "DELETE", "/api/v1/templates/"+tpl.ID, token, nil)
 
 	t.Log("✅ media_workflow e2e passed")
 }

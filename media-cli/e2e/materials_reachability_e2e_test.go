@@ -1,28 +1,21 @@
 // materials_reachability_e2e_test.go - media_materials reachability + bindings_end_at
 // + media_gen publish 跨服务集成 HTTP e2e 测试。
 //
-// 前提：media_auth + media_materials server 已起；media_gen publish 测试还需 media_gen server。
-//   - 内部 RPC（/api/internal/v1/reachability:* / generated-assets:upsert）跳过 auth 中间件
-//     （materials main.go SkipPrefixes 含 /api/internal/），可直接裸 HTTP 调用。
-//   - 公开 API（/api/v1/*）走 auth 中间件，需 Bearer service token（从 media_auth /api/service-tokens 建）。
-//
-// 用环境变量指定地址：MEDIA_AUTH_ADDR / MEDIA_MATERIALS_ADDR / MEDIA_GEN_ADDR；未设则 skip。
-// 用 MEDIA_AUTH_E2E_USER / MEDIA_AUTH_E2E_PASS 指定已 seed 的测试账号。
-//
-// 运行：
-//
-//	MEDIA_AUTH_ADDR=http://127.0.0.1:8001 \
-//	MEDIA_MATERIALS_ADDR=http://127.0.0.1:8003 \
-//	MEDIA_GEN_ADDR=http://127.0.0.1:8005 \
-//	MEDIA_AUTH_E2E_USER=smoke MEDIA_AUTH_E2E_PASS=smoke123 \
-//	go test ./e2e/ -run TestMaterialsReachability -v
+// Public requests use MEDIA_GATEWAY_ADDR / MEDIA_API_TOKEN /
+// MEDIA_E2E_ORGANIZATION_ID; no simulated login or legacy credential CRUD.
+// Private RPC tests additionally require MEDIA_MATERIALS_PRIVATE_ADDR.
+// These retained feature gates deliberately fail if Binding/Reachability is
+// disabled; current CRUD acceptance does not imply those features are covered.
+// Publish integration additionally requires a prestarted MEDIA_GEN_ADDR.
 package e2e
 
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -65,53 +58,43 @@ func doJSONBearer(t *testing.T, addr, method, path, token string, body any) (int
 	return resp.StatusCode, respBody
 }
 
-// materialsBearerToken 在 media_auth 创建 service token 并返回（用于调 materials 公开 API）。
-// 复用现有 e2e 的 login + doJSON 工具：login 拿 session cookie，POST /api/service-tokens 建 token。
-func materialsBearerToken(t *testing.T, authAddr, user, pass string) (uid, token string) {
+// materialsBearerToken borrows the provisioned API Token without mutating it.
+func materialsBearerToken(t *testing.T) (uid, token string) {
 	t.Helper()
-	authClient := httpClient(t)
-	uid = login(t, authClient, authAddr, user, pass)
+	f := newMaterialsAPIFixture(t)
+	return f.user, f.token
+}
 
-	status, body := doJSON(t, authClient, "POST", authAddr+"/api/service-tokens", map[string]string{
-		"name": "e2e_materials_reach_" + time.Now().Format("150405"),
-	})
-	if status != 201 {
-		t.Fatalf("create service token: status=%d body=%s", status, body)
+func materialsPrivateAddress(t *testing.T) string {
+	t.Helper()
+	addr := os.Getenv("MEDIA_MATERIALS_PRIVATE_ADDR")
+	if addr == "" {
+		t.Skip("configure private Materials RPC address")
 	}
-	var tokResp struct {
-		Token string `json:"token"`
-	}
-	if err := json.Unmarshal(body, &tokResp); err != nil || tokResp.Token == "" {
-		t.Fatalf("token unmarshal: err=%v body=%s", err, body)
-	}
-	t.Logf("got service token: %s...", tokResp.Token[:12])
-	return uid, tokResp.Token
+	return addr
 }
 
 // TestMaterialsReachability 驱动 materials reachability 全流程：
 //
-//	Setup: login + service token + 创建 vip + material + binding
+//	Setup: provisioned API Token + 创建 vip + material + binding
 //	AssetReachability（MATERIAL，public material）-> reachable=true
 //	AssetReachability（MATERIAL，不存在 id）-> blocked + NOT_FOUND
 //	ResolveAssetByKind（virtual_ip, vip_id, scene）-> MATERIAL + material_id
 //	AssetRead（MATERIAL, material_id）-> url
 //	Cleanup
 func TestMaterialsReachability(t *testing.T) {
-	authAddr := skipIfNoServer(t)
-	matAddr := skipIfNoMaterialsServer(t)
-	user := envOr("MEDIA_AUTH_E2E_USER", "smoke")
-	pass := envOr("MEDIA_AUTH_E2E_PASS", "smoke123")
-
-	uid, token := materialsBearerToken(t, authAddr, user, pass)
+	privateAddr := materialsPrivateAddress(t)
+	uid, token := materialsBearerToken(t)
+	matAddr := os.Getenv("MEDIA_GATEWAY_ADDR")
 	scope := "ai_clothing"
 
 	// Setup: 创建 virtual_ip（public，便于 reachability 不依赖 caller team）
-	status, body := doJSONBearer(t, matAddr, "POST", "/api/v1/virtual-ips?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
-		"name":       "e2e_reach_vip",
-		"avatar_url": "https://example.com/avatar.png",
-		"visibility": "public",
+	status, body := materialsGatewayRequest(t, matAddr, "POST", "/api/v1/virtual-ips?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
+		"name":               "e2e_reach_vip",
+		"avatar_object_path": "ai_clothing/e2e/avatar.png",
+		"visibility":         "public",
 	})
-	if status != 200 {
+	if status != 201 {
 		t.Fatalf("create vip: status=%d body=%s", status, body)
 	}
 	var vip struct {
@@ -121,16 +104,16 @@ func TestMaterialsReachability(t *testing.T) {
 		t.Fatalf("create vip unmarshal: err=%v body=%s", err, body)
 	}
 	t.Logf("created vip id=%s", vip.ID)
-	defer doJSONBearer(t, matAddr, "DELETE", "/api/v1/virtual-ips/"+vip.ID, token, nil)
+	defer materialsGatewayRequest(t, matAddr, "DELETE", "/api/v1/virtual-ips/"+vip.ID, token, nil)
 
 	// 创建 material（public scene，owner=uid）
-	status, body = doJSONBearer(t, matAddr, "POST", "/api/v1/materials?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
-		"name":       "e2e_reach_scene",
-		"asset_kind": "scene",
-		"url":        "https://example.com/scene.png",
-		"visibility": "public",
+	status, body = materialsGatewayRequest(t, matAddr, "POST", "/api/v1/materials?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
+		"name":        "e2e_reach_scene",
+		"asset_kind":  "scene",
+		"object_path": "ai_clothing/e2e/scene.png",
+		"visibility":  "public",
 	})
-	if status != 200 {
+	if status != 201 {
 		t.Fatalf("create material: status=%d body=%s", status, body)
 	}
 	var mat struct {
@@ -140,10 +123,10 @@ func TestMaterialsReachability(t *testing.T) {
 		t.Fatalf("create material unmarshal: err=%v body=%s", err, body)
 	}
 	t.Logf("created material id=%s", mat.ID)
-	defer doJSONBearer(t, matAddr, "DELETE", "/api/v1/materials/"+mat.ID, token, nil)
+	defer materialsGatewayRequest(t, matAddr, "DELETE", "/api/v1/materials/"+mat.ID, token, nil)
 
 	// 绑定 material <-> virtual_ip
-	status, _ = doJSONBearer(t, matAddr, "POST", "/api/v1/materials/"+mat.ID+"/bindings?bound_by="+uid, token, map[string]any{
+	status, _ = materialsGatewayRequest(t, matAddr, "POST", "/api/v1/materials/"+mat.ID+"/bindings?bound_by="+uid, token, map[string]any{
 		"owner_kind": "virtual_ip",
 		"owner_id":   vip.ID,
 	})
@@ -154,7 +137,7 @@ func TestMaterialsReachability(t *testing.T) {
 	// 1. AssetReachability（MATERIAL，可达）
 	// internal RPC 跳过 auth，可直接裸 doJSON 调用。
 	internalClient := &http.Client{Timeout: 30 * time.Second}
-	reachStatus, reachBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/asset", map[string]any{
+	reachStatus, reachBody := doJSON(t, internalClient, "POST", privateAddr+"/api/internal/v1/reachability:asset", map[string]any{
 		"user_id":        uid,
 		"workflow_scope": scope,
 		"refs": []map[string]any{
@@ -185,7 +168,7 @@ func TestMaterialsReachability(t *testing.T) {
 	}
 
 	// 2. AssetReachability（MATERIAL，不存在 id）-> NOT_FOUND
-	reachStatus, reachBody = doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/asset", map[string]any{
+	reachStatus, reachBody = doJSON(t, internalClient, "POST", privateAddr+"/api/internal/v1/reachability:asset", map[string]any{
 		"user_id":        uid,
 		"workflow_scope": scope,
 		"refs": []map[string]any{
@@ -206,7 +189,7 @@ func TestMaterialsReachability(t *testing.T) {
 	}
 
 	// 3. ResolveAssetByKind（virtual_ip, vip_id, scene）-> MATERIAL + material_id
-	resolveStatus, resolveBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/resolve-asset", map[string]any{
+	resolveStatus, resolveBody := doJSON(t, internalClient, "POST", privateAddr+"/api/internal/v1/reachability:resolve-asset", map[string]any{
 		"owner_kind": "virtual_ip",
 		"owner_id":   vip.ID,
 		"asset_kind": "scene",
@@ -230,7 +213,7 @@ func TestMaterialsReachability(t *testing.T) {
 	t.Logf("resolve asset by kind: %s/%s -> %s", "virtual_ip", vip.ID, resolveResp.AssetID)
 
 	// 4. AssetRead（MATERIAL, material_id）-> url
-	readStatus, readBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/read", map[string]any{
+	readStatus, readBody := doJSON(t, internalClient, "POST", privateAddr+"/api/internal/v1/reachability:read", map[string]any{
 		"resource_type": "MATERIAL",
 		"id":            mat.ID,
 	})
@@ -245,13 +228,13 @@ func TestMaterialsReachability(t *testing.T) {
 	if err := json.Unmarshal(readBody, &readResp); err != nil {
 		t.Fatalf("asset read unmarshal: %v body=%s", err, readBody)
 	}
-	if readResp.URL != "https://example.com/scene.png" {
-		t.Errorf("asset read: url=%q, want https://example.com/scene.png", readResp.URL)
+	if readResp.URL != "ai_clothing/e2e/scene.png" {
+		t.Errorf("asset read: url=%q, want ai_clothing/e2e/scene.png", readResp.URL)
 	}
 	t.Logf("asset read: url=%s", readResp.URL)
 
 	// 5. CheckVirtualIPAccessible（vip_id, scope）-> accessible
-	vipCheckStatus, vipCheckBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/virtual-ip", map[string]any{
+	vipCheckStatus, vipCheckBody := doJSON(t, internalClient, "POST", privateAddr+"/api/internal/v1/reachability:virtual-ip", map[string]any{
 		"user_id":        uid,
 		"workflow_scope": scope,
 		"virtual_ip_id":  vip.ID,
@@ -270,20 +253,20 @@ func TestMaterialsReachability(t *testing.T) {
 
 	// 6. CheckProductAccessible（scope mismatch）
 	// 先建一个 ai_clothing product，再用 scope=other_scope 检查
-	prodStatus, prodBody := doJSONBearer(t, matAddr, "POST", "/api/v1/products?scope="+scope+"&created_by="+uid, token, map[string]any{
+	prodStatus, prodBody := materialsGatewayRequest(t, matAddr, "POST", "/api/v1/products?scope="+scope+"&created_by="+uid, token, map[string]any{
 		"name":            "e2e_reach_product",
 		"target_audience": "test",
 	})
-	if prodStatus != 200 {
+	if prodStatus != 201 {
 		t.Fatalf("create product: status=%d body=%s", prodStatus, prodBody)
 	}
 	var prod struct {
 		ID string `json:"id"`
 	}
 	json.Unmarshal(prodBody, &prod)
-	defer doJSONBearer(t, matAddr, "DELETE", "/api/v1/products/"+prod.ID, token, nil)
+	defer materialsGatewayRequest(t, matAddr, "DELETE", "/api/v1/products/"+prod.ID, token, nil)
 
-	prodCheckStatus, prodCheckBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/product", map[string]any{
+	prodCheckStatus, prodCheckBody := doJSON(t, internalClient, "POST", privateAddr+"/api/internal/v1/reachability:product", map[string]any{
 		"workflow_scope": scope,
 		"product_id":     prod.ID,
 	})
@@ -300,7 +283,7 @@ func TestMaterialsReachability(t *testing.T) {
 	}
 
 	// scope mismatch
-	prodMismatchStatus, _ := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/product", map[string]any{
+	prodMismatchStatus, _ := doJSON(t, internalClient, "POST", privateAddr+"/api/internal/v1/reachability:product", map[string]any{
 		"workflow_scope": "other_scope",
 		"product_id":     prod.ID,
 	})
@@ -309,7 +292,7 @@ func TestMaterialsReachability(t *testing.T) {
 	}
 	json.Unmarshal(prodCheckBody, &prodAccResp) // re-read
 	// 重新读 mismatch 响应
-	prodMismatchBody := doJSONRaw(t, internalClient, "POST", matAddr+"/api/internal/v1/reachability/product", map[string]any{
+	prodMismatchBody := doJSONRaw(t, internalClient, "POST", privateAddr+"/api/internal/v1/reachability:product", map[string]any{
 		"workflow_scope": "other_scope",
 		"product_id":     prod.ID,
 	})
@@ -323,11 +306,6 @@ func TestMaterialsReachability(t *testing.T) {
 	} else {
 		t.Logf("check product mismatch: reason=%s", mismatchResp.Reason)
 	}
-
-	// revoke token（best-effort，不阻塞测试结果）
-	authClient := httpClient(t)
-	login(t, authClient, authAddr, user, pass)
-	doJSON(t, authClient, "DELETE", authAddr+"/api/service-tokens/"+token, nil)
 
 	t.Log("✅ materials reachability e2e passed")
 }
@@ -343,27 +321,23 @@ func doJSONRaw(t *testing.T, c *http.Client, method, url string, body any) []byt
 // TestMaterialsBindingsEndAt 验证 owner（virtual_ip）软删时 material_bindings 置 bindings_end_at，
 // ListByOwner 不再返回已失效的 binding。
 //
-//	Setup: login + service token + 创建 vip + material + binding
+//	Setup: provisioned API Token + 创建 vip + material + binding
 //	ListByOwner（virtual_ip, vip_id）-> 含 material
 //	Delete vip -> 触发 EndBindingsForOwner（material_bindings.bindings_end_at = now）
 //	ListByOwner（virtual_ip, vip_id）-> 空（binding 已失效）
 //	Cleanup material
 func TestMaterialsBindingsEndAt(t *testing.T) {
-	authAddr := skipIfNoServer(t)
-	matAddr := skipIfNoMaterialsServer(t)
-	user := envOr("MEDIA_AUTH_E2E_USER", "smoke")
-	pass := envOr("MEDIA_AUTH_E2E_PASS", "smoke123")
-
-	uid, token := materialsBearerToken(t, authAddr, user, pass)
+	uid, token := materialsBearerToken(t)
+	matAddr := os.Getenv("MEDIA_GATEWAY_ADDR")
 	scope := "ai_clothing"
 
 	// 创建 vip
-	status, body := doJSONBearer(t, matAddr, "POST", "/api/v1/virtual-ips?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
-		"name":       "e2e_bindend_vip",
-		"avatar_url": "https://example.com/avatar.png",
-		"visibility": "public",
+	status, body := materialsGatewayRequest(t, matAddr, "POST", "/api/v1/virtual-ips?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
+		"name":               "e2e_bindend_vip",
+		"avatar_object_path": "ai_clothing/e2e/avatar.png",
+		"visibility":         "public",
 	})
-	if status != 200 {
+	if status != 201 {
 		t.Fatalf("create vip: status=%d body=%s", status, body)
 	}
 	var vip struct {
@@ -373,15 +347,16 @@ func TestMaterialsBindingsEndAt(t *testing.T) {
 		t.Fatalf("create vip unmarshal: err=%v body=%s", err, body)
 	}
 	t.Logf("created vip id=%s", vip.ID)
+	defer materialsGatewayRequest(t, matAddr, "DELETE", "/api/v1/virtual-ips/"+vip.ID, token, nil)
 
 	// 创建 material
-	status, body = doJSONBearer(t, matAddr, "POST", "/api/v1/materials?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
-		"name":       "e2e_bindend_scene",
-		"asset_kind": "scene",
-		"url":        "https://example.com/scene.png",
-		"visibility": "public",
+	status, body = materialsGatewayRequest(t, matAddr, "POST", "/api/v1/materials?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
+		"name":        "e2e_bindend_scene",
+		"asset_kind":  "scene",
+		"object_path": "ai_clothing/e2e/scene.png",
+		"visibility":  "public",
 	})
-	if status != 200 {
+	if status != 201 {
 		t.Fatalf("create material: status=%d body=%s", status, body)
 	}
 	var mat struct {
@@ -391,10 +366,10 @@ func TestMaterialsBindingsEndAt(t *testing.T) {
 		t.Fatalf("create material unmarshal: err=%v body=%s", err, body)
 	}
 	t.Logf("created material id=%s", mat.ID)
-	defer doJSONBearer(t, matAddr, "DELETE", "/api/v1/materials/"+mat.ID, token, nil)
+	defer materialsGatewayRequest(t, matAddr, "DELETE", "/api/v1/materials/"+mat.ID, token, nil)
 
 	// 绑定 material <-> vip
-	status, _ = doJSONBearer(t, matAddr, "POST", "/api/v1/materials/"+mat.ID+"/bindings?bound_by="+uid, token, map[string]any{
+	status, _ = materialsGatewayRequest(t, matAddr, "POST", "/api/v1/materials/"+mat.ID+"/bindings?bound_by="+uid, token, map[string]any{
 		"owner_kind": "virtual_ip",
 		"owner_id":   vip.ID,
 	})
@@ -403,7 +378,7 @@ func TestMaterialsBindingsEndAt(t *testing.T) {
 	}
 
 	// ListByOwner -> 含 material
-	listStatus, listBody := doJSONBearer(t, matAddr, "GET", "/api/v1/materials/by-owner?owner_kind=virtual_ip&owner_id="+vip.ID, token, nil)
+	listStatus, listBody := materialsGatewayRequest(t, matAddr, "GET", "/api/v1/materials/by-owner?owner_kind=virtual_ip&owner_id="+vip.ID, token, nil)
 	if listStatus != 200 {
 		t.Fatalf("list by owner (before delete): status=%d body=%s", listStatus, listBody)
 	}
@@ -421,14 +396,14 @@ func TestMaterialsBindingsEndAt(t *testing.T) {
 	t.Logf("list by owner (before delete): %d items", len(byOwner.Items))
 
 	// Delete vip -> 触发 EndBindingsForOwner
-	delStatus, _ := doJSONBearer(t, matAddr, "DELETE", "/api/v1/virtual-ips/"+vip.ID, token, nil)
+	delStatus, _ := materialsGatewayRequest(t, matAddr, "DELETE", "/api/v1/virtual-ips/"+vip.ID, token, nil)
 	if delStatus != 200 {
 		t.Fatalf("delete vip: status=%d", delStatus)
 	}
 	t.Logf("deleted vip id=%s (should have ended bindings)", vip.ID)
 
 	// ListByOwner -> 空（binding 已失效）
-	listStatus, listBody = doJSONBearer(t, matAddr, "GET", "/api/v1/materials/by-owner?owner_kind=virtual_ip&owner_id="+vip.ID, token, nil)
+	listStatus, listBody = materialsGatewayRequest(t, matAddr, "GET", "/api/v1/materials/by-owner?owner_kind=virtual_ip&owner_id="+vip.ID, token, nil)
 	if listStatus != 200 {
 		t.Fatalf("list by owner (after delete): status=%d body=%s", listStatus, listBody)
 	}
@@ -441,11 +416,6 @@ func TestMaterialsBindingsEndAt(t *testing.T) {
 		t.Logf("list by owner (after delete): 0 items (bindings_end_at applied correctly)")
 	}
 
-	// revoke token
-	authClient := httpClient(t)
-	login(t, authClient, authAddr, user, pass)
-	doJSON(t, authClient, "DELETE", authAddr+"/api/service-tokens/"+token, nil)
-
 	t.Log("✅ materials bindings_end_at e2e passed")
 }
 
@@ -454,60 +424,71 @@ func TestMaterialsBindingsEndAt(t *testing.T) {
 //
 // 前提：media_auth + media_materials + media_gen server 全部已起。
 //
-//	Setup: login + service token
+//	Setup: provisioned API Token
 //	UpsertGeneratedAsset（internal RPC，media_type=VIDEO, asset_kind=final_video）
 //	GetGeneratedAsset（公开 API，验 asset 存在）
 //	media_gen PublishVideo（asset_id, target=xhs）-> SUCCEEDED（mock）
 //	Cleanup
 func TestMaterialsGenPublishIntegration(t *testing.T) {
-	authAddr := skipIfNoServer(t)
-	matAddr := skipIfNoMaterialsServer(t)
+	privateAddr := materialsPrivateAddress(t)
+	matAddr := os.Getenv("MEDIA_GATEWAY_ADDR")
 	genAddr := skipIfNoGenServer(t) // 来自 media_gen_e2e_test.go
-	user := envOr("MEDIA_AUTH_E2E_USER", "smoke")
-	pass := envOr("MEDIA_AUTH_E2E_PASS", "smoke123")
-
-	uid, token := materialsBearerToken(t, authAddr, user, pass)
+	uid, token := materialsBearerToken(t)
 	scope := "ai_clothing"
+	assetURL := os.Getenv("MEDIA_E2E_VIDEO_OUTPUT_URL")
+	if assetURL == "" {
+		t.Skip("configure a real native-storage video fixture URL in the test organization")
+	}
+	// The current contract derives organization from a real source container.
+	productStatus, productBody := materialsGatewayRequest(t, matAddr, "POST", "/api/v1/products?scope="+scope, token, map[string]any{"name": "e2e-publish-source"})
+	var source struct {
+		ID string `json:"id"`
+	}
+	if productStatus != 201 || json.Unmarshal(productBody, &source) != nil || source.ID == "" {
+		t.Fatalf("publish source fixture unavailable: status=%d", productStatus)
+	}
+	defer materialsGatewayRequest(t, matAddr, "DELETE", "/api/v1/products/"+source.ID, token, nil)
+	runKey := fmt.Sprintf("publish-e2e-%d", time.Now().UnixNano())
 
 	// 1. UpsertGeneratedAsset（internal RPC，skip auth）
-	// media_type=VIDEO, asset_kind=final_video, source_virtual_ip_id 为空（无容器也允许）
+	// Requires an existing native video object; no fabricated external URL.
 	internalClient := &http.Client{Timeout: 30 * time.Second}
-	assetURL := "https://example.com/e2e_video_" + time.Now().Format("150405") + ".mp4"
-	upsertStatus, upsertBody := doJSON(t, internalClient, "POST", matAddr+"/api/internal/v1/generated-assets:upsert", map[string]any{
-		"scope":            scope,
-		"asset_kind":       "final_video",
-		"name":             "e2e_gen_video",
-		"url":              assetURL,
-		"owner_user_id":    uid,
-		"visibility":       "public",
-		"job_id":           "job_e2e_test",
-		"step_run_id":      "sr_e2e_test",
-		"template_id":      "tpl_e2e_test",
-		"template_version": 1,
+	upsertStatus, upsertBody := doJSON(t, internalClient, "POST", privateAddr+"/api/internal/v1/generated-assets:upsert", map[string]any{
+		"scope":             scope,
+		"asset_kind":        "final_video",
+		"name":              "e2e_gen_video",
+		"url":               assetURL,
+		"owner_user_id":     uid,
+		"visibility":        "public",
+		"job_id":            "job_" + runKey,
+		"step_run_id":       "sr_" + runKey,
+		"template_id":       "tpl_" + runKey,
+		"template_version":  1,
+		"source_product_id": source.ID,
 	})
 	if upsertStatus != 200 {
-		t.Fatalf("upsert generated asset: status=%d body=%s", upsertStatus, upsertBody)
+		t.Fatalf("upsert generated asset: status=%d", upsertStatus)
 	}
 	var upsertResp struct {
 		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(upsertBody, &upsertResp); err != nil || upsertResp.ID == "" {
-		t.Fatalf("upsert generated asset unmarshal: err=%v body=%s", err, upsertBody)
+		t.Fatal("upsert generated asset did not return identity")
 	}
 	assetID := upsertResp.ID
-	t.Logf("upserted generated_asset id=%s url=%s", assetID, assetURL)
-	defer doJSONBearer(t, matAddr, "DELETE", "/api/v1/generated-assets/"+assetID, token, nil)
+	defer materialsGatewayRequest(t, matAddr, "DELETE", "/api/v1/generated-assets/"+assetID, token, nil)
 
 	// 2. GetGeneratedAsset（公开 API，带 Bearer）-> 验 asset 存在 + url
-	getStatus, getBody := doJSONBearer(t, matAddr, "GET", "/api/v1/generated-assets/"+assetID, token, nil)
+	getStatus, getBody := materialsGatewayRequest(t, matAddr, "GET", "/api/v1/generated-assets/"+assetID, token, nil)
 	if getStatus != 200 {
 		t.Fatalf("get generated asset: status=%d body=%s", getStatus, getBody)
 	}
 	var genAsset struct {
-		ID        string `json:"id"`
-		AssetKind string `json:"asset_kind"`
-		URL       string `json:"url"`
-		Scope     string `json:"scope"`
+		ID         string `json:"id"`
+		AssetKind  string `json:"asset_kind"`
+		URL        string `json:"url"`
+		ObjectPath string `json:"object_path"`
+		Scope      string `json:"scope"`
 	}
 	if err := json.Unmarshal(getBody, &genAsset); err != nil {
 		t.Fatalf("get generated asset unmarshal: %v body=%s", err, getBody)
@@ -518,8 +499,8 @@ func TestMaterialsGenPublishIntegration(t *testing.T) {
 	if genAsset.AssetKind != "final_video" {
 		t.Errorf("get generated asset: asset_kind=%q, want final_video", genAsset.AssetKind)
 	}
-	if genAsset.URL != assetURL {
-		t.Errorf("get generated asset: url=%q, want %q", genAsset.URL, assetURL)
+	if genAsset.URL != "" || genAsset.ObjectPath == "" {
+		t.Error("native video must persist its object path, not an external or signed URL")
 	}
 	t.Logf("got generated_asset id=%s asset_kind=%s", genAsset.ID, genAsset.AssetKind)
 
@@ -556,11 +537,6 @@ func TestMaterialsGenPublishIntegration(t *testing.T) {
 		t.Errorf("publish video: publish_url=%q should contain asset_id %q", pubResult.PublishURL, assetID)
 	}
 	t.Logf("cross-service publish: asset=%s -> media_gen publish_url=%s", assetID, pubResult.PublishURL)
-
-	// revoke token
-	authClient := httpClient(t)
-	login(t, authClient, authAddr, user, pass)
-	doJSON(t, authClient, "DELETE", authAddr+"/api/service-tokens/"+token, nil)
 
 	t.Log("✅ materials + media_gen cross-service publish e2e passed")
 }

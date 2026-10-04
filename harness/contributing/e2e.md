@@ -120,6 +120,14 @@ go -C media-cli run . media_auth api-token list
 
 CLI 提供 `api-token create/list/rotate/revoke`。创建和轮换要求 `--env-out` 指向新文件，Secret 只写该文件（0600），控制台只返回元数据。测试不会输出 Secret；`.env` 不得提交。旧的本地 Session 测试仍适用于没有启用 Ory 的独立服务环境。
 
+Materials公开门禁 `TestMaterialsE2E` 和上传门禁 `TestLibraryObjectUploadE2E` 使用同一预置API Token，不需要Cookie、密码或 `MEDIA_MATERIALS_ADDR`。三类资源测试只清理自己创建的资源，不撤销借用凭据；上传重试验证路径/校验和相同、不同内容409。上传对象保留在测试企业对象存储中，本轮没有对象删除API，不直接绕过服务删除底层数据。
+
+```bash
+go -C media-cli test ./e2e -run '^(TestMaterialsE2E|TestLibraryObjectUploadE2E)$' -count=1 -v
+```
+
+`TestMaterialsReachability` / `TestMaterialsBindingsEndAt` 保留Binding、按owner解析和绑定失效断言；这两项在当前里程碑会因未实现Binding路由而失败，不能以CRUD绿色冒充覆盖。前者另需 `MEDIA_MATERIALS_PRIVATE_ADDR`，私有可达性路径使用IDL规定的冒号，不经公共网关；服务的禁用中间件仍生效，不绕过。`TestMaterialsGenPublishIntegration` 另需预启动的 `MEDIA_GEN_ADDR` 以及测试企业已有的真实 `MEDIA_E2E_VIDEO_OUTPUT_URL`，缺配置为Skip，不是发布验收通过。创建唯一来源Product/生成记录，清理测试记录，不删除借用视频对象。旧Workflow测试的凭据已切换，但旧Template/claim等协议仍须单独适配当前Compiler/Worker契约，不代表完整执行验收。
+
 ### Platform Token 独立密文存储集成测试
 
 旧验证退役门禁 `TestLegacyTokenVerificationRetirement` 通过三个服务的私有 HTTP 地址核对已移除的RPC返回404、旧Bearer拒绝及Session/API Token内省仍可用。被测服务预先启动；测试不读取旧Secret、不连接数据库、不模拟登录：

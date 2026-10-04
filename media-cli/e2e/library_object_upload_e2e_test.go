@@ -1,7 +1,6 @@
 // library_object_upload_e2e_test.go verifies the public gateway upload path.
 // Services are managed outside the test per harness/contributing/e2e.md.
-// MEDIA_E2E_KRATOS_SESSION_COOKIE is the value of an authenticated
-// ory_kratos_session cookie obtained through the normal login UI.
+// Borrow MEDIA_API_TOKEN; no browser session or simulated login is required.
 package e2e
 
 import (
@@ -22,49 +21,49 @@ func TestLibraryObjectUploadE2E(t *testing.T) {
 	if gatewayAddr == "" {
 		t.Skip("MEDIA_GATEWAY_ADDR 未设，跳过网关上传 e2e")
 	}
-	organizationID := os.Getenv("MEDIA_MATERIALS_E2E_ORGANIZATION_ID")
+	organizationID := os.Getenv("MEDIA_E2E_ORGANIZATION_ID")
 	if organizationID == "" {
-		t.Skip("MEDIA_MATERIALS_E2E_ORGANIZATION_ID 未设，跳过网关上传 e2e")
+		t.Skip("MEDIA_E2E_ORGANIZATION_ID 未设，跳过网关上传 e2e")
 	}
-	kratosSession := os.Getenv("MEDIA_E2E_KRATOS_SESSION_COOKIE")
-	if kratosSession == "" {
-		t.Skip("MEDIA_E2E_KRATOS_SESSION_COOKIE 未设，跳过需要 Ory 会话的网关上传 e2e")
+	apiToken := os.Getenv("MEDIA_API_TOKEN")
+	if apiToken == "" {
+		t.Skip("MEDIA_API_TOKEN 未设，跳过网关上传 e2e")
 	}
 
 	pngA := []byte("\x89PNG\r\n\x1a\ne2e-image-a")
 	pngB := []byte("\x89PNG\r\n\x1a\ne2e-image-b")
 	idempotencyKey := fmt.Sprintf("e2e-%d", time.Now().UnixNano())
-	firstStatus, firstBody := uploadLibraryObject(t, gatewayAddr, kratosSession, organizationID, idempotencyKey, pngA)
+	firstStatus, firstBody := uploadLibraryObject(t, gatewayAddr, apiToken, organizationID, idempotencyKey, pngA)
 	if firstStatus != http.StatusOK {
-		t.Fatalf("first upload: status=%d body=%s", firstStatus, firstBody)
+		t.Fatalf("first upload: status=%d", firstStatus)
 	}
 	var first struct {
 		ObjectPath string `json:"object_path"`
 		Checksum   string `json:"checksum"`
 	}
 	if err := json.Unmarshal(firstBody, &first); err != nil || first.ObjectPath == "" || first.Checksum == "" {
-		t.Fatalf("decode first upload: err=%v body=%s", err, firstBody)
+		t.Fatal("first upload did not return object metadata")
 	}
 
-	retryStatus, retryBody := uploadLibraryObject(t, gatewayAddr, kratosSession, organizationID, idempotencyKey, pngA)
+	retryStatus, retryBody := uploadLibraryObject(t, gatewayAddr, apiToken, organizationID, idempotencyKey, pngA)
 	if retryStatus != http.StatusOK {
-		t.Fatalf("idempotent retry: status=%d body=%s", retryStatus, retryBody)
+		t.Fatalf("idempotent retry: status=%d", retryStatus)
 	}
 	var retry struct {
 		ObjectPath string `json:"object_path"`
 		Checksum   string `json:"checksum"`
 	}
 	if err := json.Unmarshal(retryBody, &retry); err != nil || retry.ObjectPath != first.ObjectPath || retry.Checksum != first.Checksum {
-		t.Fatalf("retry result differs: err=%v first=%+v body=%s", err, first, retryBody)
+		t.Fatal("retry object identity or checksum differs")
 	}
 
-	conflictStatus, _ := uploadLibraryObject(t, gatewayAddr, kratosSession, organizationID, idempotencyKey, pngB)
+	conflictStatus, _ := uploadLibraryObject(t, gatewayAddr, apiToken, organizationID, idempotencyKey, pngB)
 	if conflictStatus != http.StatusConflict {
 		t.Fatalf("same idempotency key with different content: status=%d, want 409", conflictStatus)
 	}
 }
 
-func uploadLibraryObject(t *testing.T, gatewayAddr, kratosSession, organizationID, idempotencyKey string, data []byte) (int, []byte) {
+func uploadLibraryObject(t *testing.T, gatewayAddr, apiToken, organizationID, idempotencyKey string, data []byte) (int, []byte) {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -84,7 +83,7 @@ func uploadLibraryObject(t *testing.T, gatewayAddr, kratosSession, organizationI
 	if err != nil {
 		t.Fatalf("new upload request: %v", err)
 	}
-	req.Header.Set("Cookie", "ory_kratos_session="+kratosSession)
+	req.Header.Set("Authorization", "Bearer "+apiToken)
 	req.Header.Set("Idempotency-Key", idempotencyKey)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	client := &http.Client{Timeout: 30 * time.Second}

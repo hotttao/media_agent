@@ -1,4 +1,5 @@
 // workflow_need_confirm_e2e_test.go - need_confirm + media_gen worker claim + ConfirmStepRun。
+// Retained legacy worker protocol gate; not current Personal Worker acceptance.
 //
 // 与 TestWorkflowFull 区别：
 //   - template needs_confirm=true, candidate_count=4
@@ -9,7 +10,7 @@
 // 运行：
 //
 //	MEDIA_AUTH_ADDR=... MEDIA_MATERIALS_ADDR=... MEDIA_WORKFLOW_ADDR=... MEDIA_GEN_ADDR=... \
-//	MEDIA_AUTH_E2E_USER=e2e-smoke MEDIA_AUTH_E2E_PASS=smoke123 \
+//	MEDIA_GATEWAY_ADDR=... MEDIA_API_TOKEN=... MEDIA_E2E_ORGANIZATION_ID=... \
 //	go test ./e2e/ -run TestWorkflowNeedConfirm -v
 package e2e
 
@@ -29,13 +30,10 @@ func TestWorkflowNeedConfirm(t *testing.T) {
 	if authAddr == "" || matAddr == "" || wfAddr == "" || genAddr == "" {
 		t.Skip("需 MEDIA_AUTH/MATERIALS/WORKFLOW/GEN_ADDR 全设")
 	}
-	user := envOr("MEDIA_AUTH_E2E_USER", "e2e-smoke")
-	pass := envOr("MEDIA_AUTH_E2E_PASS", "smoke123")
 	scope := "ai_clothing"
 	ts := time.Now().Format("0102150405")
 
-	uid, token := materialsBearerToken(t, authAddr, user, pass)
-	t.Logf("login uid=%s", uid)
+	uid, token := materialsBearerToken(t)
 
 	// 1. create material + vip
 	_, matBody := doJSONBearer(t, matAddr, "POST", "/api/v1/materials?scope="+scope+"&owner_user_id="+uid, token, map[string]any{

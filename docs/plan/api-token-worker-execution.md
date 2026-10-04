@@ -106,11 +106,13 @@
     - [x] OAuth Client Secret解耦旧tos_生成器，保留现有Secret、PKCE/state及grant规则。
     - [x] 0017只读归档、隔离PG保真/写拒绝/迁移阻断/down门禁，历史测试固定schema16。
     - [x] IDL与失效生成物清理，重生成路由聚合、GORM Query和Swagger。
-    - [ ] 迁移旧Materials HTTP测试为API Token/统一网关，并按当前组织归属与内部RPC契约恢复覆盖。
+    - [x] 迁移Materials公开CRUD/上传为预置API Token与统一网关，验证组织/归属、三类资源生命周期、分页与上传幂等；其余旧测试删除旧凭据CRUD和前缀日志。
+    - [ ] 恢复旧Binding/Reachability/生成发布及旧Workflow协议门禁；当前里程碑未实现部分保持失败/缺配置Skip，不冒充已覆盖。
     - [x] 部署新Auth并核对35条历史数量、归档状态、接口404和独立Platform/API Token/CLI门禁；字段保真由隔离PG验证，运行环境未完成前后字段指纹比较。
 - [x] 删除旧表或改为只读迁移归档；历史 migration 保留可重放。
 - [ ] 更新 OpenAPI、CLI、配置、部署和所有文档引用。
-- [ ] 运行全仓 `make arch-check`、相关模块 `go test ./...` 和 E2E。
+- [ ] 对提供目标的服务逐一运行 `make arch-check`、相关模块 `go test ./...` 和 E2E（根目录/CLI没有arch-check目标）。
+  - [x] Auth/Workflow/Materials/Control/Agent Gateway/Gen/Crawler/Example八服务架构检查。
 
 ## 实施顺序与提交边界
 
@@ -367,3 +369,12 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 新Auth镜像已部署，schema17/dirty=false、RestartCount=0、旧Platform0/普通历史35、归档触发器ALWAYS。运行字段指纹前置查询使用错误列名而失败，故只确认历史数量未变；不声称完成运行前后字段保真比对，也不为补验而解除归档。
 - HTTP旧CRUD（经网关）、旧验证RPC、独立Platform mTLS/真实审计（2.21s）、API Token、Agent签发/代理/跨服务审计、Worker凭据门禁通过。第一次组合运行因测试日志根目录/凭据注入配置错误失败和Skip，纠正后相应三项通过（19.731s）；其他四项各自通过，不把失败组合记为整体通过。独立CLI me及5173 HTTP200通过，服务保持运行；未启动观测后端或生成Job。
 - P7仍未整体完成：旧Materials HTTP门禁仍依赖旧CRUD，须按API Token/组织归属/内部RPC现契约重构，不能删除测试冒充覆盖。P6/P5及Workflow租户模型其他missing保留；UI排除，用户`ui_workflow/DESIGN.md`未修改。
+
+### 2026-10-04 · Materials API Token 接口门禁切换
+
+- 共用只读测试身份夹具：从统一网关`/api/auth/me`取得User ID，不模拟登录、不申请/撤销借用Token，不输出凭据前缀。组织查询自动注入但保留显式跨企业负例；本地HTTP adapter另验证认证Header与无Cookie，并与部署验收区分。
+- `TestMaterialsE2E`按现IDL重构三类资源CRUD、调用者归属防伪造、跨企业404、更新落库、分页、软删后不可读；原Binding断言仍由两个专用旧门禁保留，不因拆分而宣称整体覆盖。上传改用API Token，确认同Key相同对象/不同内容409，不输出签名URL或响应正文。
+- 旧Reachability测试改为冒号路径、私有Materials地址、object_path、组织查询及201创建；生成发布使用唯一测试记录、真实Product来源及预置的真实视频对象，不复用固定step_run_id或虚构外部URL。现有旧Workflow三项移除凭据创建/撤销与前缀日志；其旧Template/Worker协议尚未适配、未提交生成Job，不声称执行验收。
+- 真实组合HTTP门禁`TestMaterialsE2E|TestLibraryObjectUploadE2E|TestAPITokenGateway|TestLegacyTokenCRUDRetirement`四项通过（10.569s），CLI me成功、5173 HTTP200。较早包含Binding的组合明确失败：两个测试都在绑定阶段404，创建的测试资源随清理回收；不能把后续仅选已实现能力的绿色结果当成全量验收。
+- 本地测试夹具race通过（1.211s）、CLI全模块Go测试通过；未配置的运行门禁会Skip，因此后者只证明编译/本地测试，不能代替上述真实HTTP结果。八个提供arch-check目标的服务均通过；CLI/root无此目标，执行失败后以服务级命令核对，不宣称不存在的根命令成功。
+- 代码证据：`idl/media_materials/material.proto`无Binding/owner-list RPC；`biz/router/reachability/middleware.go`主动milestoneDisabled、主程序未装配Flow。DDD中Binding标注不在第一阶段CRUD范围，本轮不绕过里程碑或恢复未加组织校验的旧Flow。Binding/Reachability及发布集成仍需独立后续规格/实现/验收，保持未完成；P7全仓门禁、P6/P5与Workflow租户missing不变。UI未修改，服务常驻，观测后端未启动。

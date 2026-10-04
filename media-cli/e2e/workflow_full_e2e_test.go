@@ -1,7 +1,8 @@
 // workflow_full_e2e_test.go - 核心链路 e2e:素材 -> 模板 -> workflow -> SubmitJob -> claim -> complete -> 验产物。
+// Retained legacy protocol gate; not current Compiler/Personal Worker acceptance.
 //
 // 覆盖最复杂的业务链路(见梳理):
-//  1. login + service token
+//  1. borrow configured API Token
 //  2. create material + virtual_ip(media_materials)
 //  3. create template + publish(media_workflow)
 //  4. create workflow + publish
@@ -17,7 +18,7 @@
 //	MEDIA_AUTH_ADDR=http://127.0.0.1:8001 \
 //	MEDIA_MATERIALS_ADDR=http://127.0.0.1:8003 \
 //	MEDIA_WORKFLOW_ADDR=http://127.0.0.1:8002 \
-//	MEDIA_AUTH_E2E_USER=smoke MEDIA_AUTH_E2E_PASS=smoke123 \
+//	MEDIA_GATEWAY_ADDR=... MEDIA_API_TOKEN=... MEDIA_E2E_ORGANIZATION_ID=... \
 //	go test ./e2e/ -run TestWorkflowFull -v
 package e2e
 
@@ -25,8 +26,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 	"testing"
+	"time"
 )
 
 // TestWorkflowFull 核心链路:素材 -> 模板 -> workflow -> submit -> claim -> complete -> 验产物。
@@ -37,18 +38,15 @@ func TestWorkflowFull(t *testing.T) {
 	if authAddr == "" || matAddr == "" || wfAddr == "" {
 		t.Skip("MEDIA_AUTH_ADDR / MEDIA_MATERIALS_ADDR / MEDIA_WORKFLOW_ADDR 未设,跳过(需先起服务)")
 	}
-	user := envOr("MEDIA_AUTH_E2E_USER", "smoke")
-	pass := envOr("MEDIA_AUTH_E2E_PASS", "smoke123")
 	scope := "ai_clothing"
 	ts := time.Now().Format("0102150405")
 
-	// 1. login + service token
-	uid, token := materialsBearerToken(t, authAddr, user, pass)
-	t.Logf("login uid=%s token=%s...", uid, token[:12])
+	// Borrow the configured API Token; never log credential prefixes.
+	uid, token := materialsBearerToken(t)
 
 	// 2. create material(scene 图)+ virtual_ip
 	matStatus, matBody := doJSONBearer(t, matAddr, "POST", "/api/v1/materials?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
-		"name": "e2e_scene_"+ts, "asset_kind": "scene", "url": "https://mock/scene.jpg", "visibility": "public",
+		"name": "e2e_scene_" + ts, "asset_kind": "scene", "url": "https://mock/scene.jpg", "visibility": "public",
 	})
 	if matStatus != http.StatusOK {
 		t.Fatalf("create material: status=%d body=%s", matStatus, matBody)
@@ -61,7 +59,7 @@ func TestWorkflowFull(t *testing.T) {
 	defer doJSONBearer(t, matAddr, "DELETE", "/api/v1/materials/"+mat.ID, token, nil)
 
 	vipStatus, vipBody := doJSONBearer(t, matAddr, "POST", "/api/v1/virtual-ips?scope="+scope+"&owner_user_id="+uid, token, map[string]any{
-		"name": "e2e_vip_"+ts, "avatar_url": "https://mock/avatar.jpg", "visibility": "public",
+		"name": "e2e_vip_" + ts, "avatar_url": "https://mock/avatar.jpg", "visibility": "public",
 	})
 	if vipStatus != http.StatusOK {
 		t.Fatalf("create virtual_ip: status=%d body=%s", vipStatus, vipBody)
@@ -75,7 +73,7 @@ func TestWorkflowFull(t *testing.T) {
 
 	// 3. create template(Go template prompt_body + needs_confirm=false 单候选)
 	tplStatus, tplBody := doJSONBearer(t, wfAddr, "POST", "/api/v1/templates?scope="+scope+"&created_by="+uid, token, map[string]any{
-		"name": "e2e_template_"+ts, "prompt_body": "生成 {{.scene.url}} 的图",
+		"name": "e2e_template_" + ts, "prompt_body": "生成 {{.scene.url}} 的图",
 		"inputs": []map[string]any{
 			{"name": "scene", "resource_type": "MATERIAL", "required": true, "display_order": 1},
 		},
@@ -102,7 +100,7 @@ func TestWorkflowFull(t *testing.T) {
 
 	// 4. create workflow(单 step gen,引用 template,binding scene = WORKFLOW_INPUT)
 	wfStatus, wfBody := doJSONBearer(t, wfAddr, "POST", "/api/v1/workflows?scope="+scope+"&created_by="+uid, token, map[string]any{
-		"name": "e2e_workflow_"+ts, "output_step_key": "gen",
+		"name": "e2e_workflow_" + ts, "output_step_key": "gen",
 		"steps": []map[string]any{
 			{
 				"key": "gen", "name": "gen", "step_order": 1,
@@ -145,7 +143,7 @@ func TestWorkflowFull(t *testing.T) {
 	}
 	var job struct {
 		JobID  string `json:"job_id"`
-		Status int `json:"status"`
+		Status int    `json:"status"`
 	}
 	json.Unmarshal(jobBody, &job)
 	t.Logf("submitted job id=%s status=%d", job.JobID, job.Status)
