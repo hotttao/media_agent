@@ -6,6 +6,7 @@ package ids
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 )
 
 // New 生成 16 字节（32 hex 字符）的随机 ID。失败 panic（rand 故障属不可恢复）。
@@ -15,4 +16,14 @@ func New() string {
 		panic("ids: crypto/rand failed: " + err.Error())
 	}
 	return hex.EncodeToString(b)
+}
+
+// NewChecked is for recoverable background workflows. It never exposes the
+// random source diagnostic or requires any credential/encryption dependency.
+func NewChecked() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", errors.New("identifier generation unavailable")
+	}
+	return hex.EncodeToString(b), nil
 }

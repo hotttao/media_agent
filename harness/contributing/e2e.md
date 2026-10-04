@@ -142,6 +142,14 @@ go -C media_auth test -tags=e2e -race ./e2e -run '^TestPlatformTokenMigration' -
 go -C media_auth test -tags=e2e -race ./e2e -run '^TestPlatformTokenCore' -count=1 -v
 ```
 
+`platform_audit_delivery_test.go`验证真实PostgreSQL的SKIP LOCKED、lease到期/新旧CAS、终态、attempts饱和及数据库实际时钟防止旧时间确认；并用临时0600 JSONL文件验证事务外写入+Sync、确认失败后关闭/重开sink与投递器重建、稳定event ID重投，以及单项失败不阻塞其他归属。读取只检查固定元数据，不打印完整日志；不会读取/解密凭据或启动观测后端，不替代运行环境启动接线和真实内部认证验收。文件sink允许重复event ID，读取需跳过空行、隔离损坏行并去重。
+
+```bash
+go -C media_auth test -tags=e2e -race ./e2e -run '^TestPlatformAudit' -count=1 -v
+# 凭据存储/用例/迁移/投递一并回归
+go -C media_auth test -tags=e2e -race ./e2e -run '^TestPlatform(Audit|Token)' -count=1 -v
+```
+
 ### Personal Worker 身份与撤销集成测试
 
 `media_auth/e2e/worker_identity*.go` 使用隔离 PostgreSQL，覆盖归属、状态 CAS、事务回滚、Actor/Organization 隔离、晚到签发恢复和降级迁移保护。真实 Talos 测试创建唯一临时 Worker Actor，验证停用事务提交后立即拒绝访问，重建撤销 Workflow 后 Talos Key 进入 revoked；只撤销测试自己创建的 Key，不使用或改动已有 Worker 凭据。

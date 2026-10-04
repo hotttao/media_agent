@@ -37,3 +37,20 @@ func (e AuditEvent) Valid() bool {
 type AuditWriter interface {
 	AppendAudit(context.Context, AuditEvent) error
 }
+
+type AuditDelivery struct {
+	Event      AuditEvent
+	LeaseID    string
+	LeaseUntil time.Time
+	Attempts   int
+}
+
+type AuditOutbox interface {
+	ClaimAudit(context.Context, string, time.Time, time.Time, int) ([]AuditDelivery, error)
+	ConfirmAudit(context.Context, string, string, time.Time) (bool, error)
+	RetryAudit(context.Context, string, string, time.Time, time.Time) (bool, error)
+}
+
+type AuditSink interface {
+	Publish(context.Context, AuditEvent) error
+}

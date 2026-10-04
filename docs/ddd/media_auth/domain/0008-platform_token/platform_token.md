@@ -89,6 +89,10 @@ Platform Token 是独立聚合，不复用 API Token/Talos 或旧 Service Token 
 
 约束：只允许固定操作/caller/purpose，无自由JSON载荷；无Secret/Hash/密文列。有审计历史时down拒绝删除。投递协调需要Workflow，不能在本用例事务内调用外部系统；本地Outbox写入不代表投递完成。消费者按event ID去重，至少一次投递保留重试/恢复门禁。
 
+领取只选pending且到期事件，`FOR UPDATE SKIP LOCKED`后同事务写新lease并递增attempts（饱和而不溢出）。确认/退避仅匹配未投递且未过期的当前event/lease，失败CAS不覆盖其他投递器；delivered终态不重置。仓储不自行开事务，所有claim/确认/失败安排都必须传上层事务context。
+
+过期检查至少使用数据库实际时钟，不能只用等待数据库前截取的进程时间，让已经过期的旧lease再次确认。
+
 ## 能力详细说明
 
 ### AcquirePlatformToken

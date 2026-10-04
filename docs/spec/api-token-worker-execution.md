@@ -299,6 +299,16 @@ User查询端口由auth DAL提供，锁定必须在上层事务中；同用户�
 
 0016添加固定列platform_token_audit_outbox（id/user_id/credential_id/operation/caller_service/purpose/occurred_at/delivered_at），约束枚举，无任意JSON或Secret；并保存lease_id/lease_until/attempts/next_attempt_at供后台恢复。issued/acquired/introspected/rotated/revoked成功事实在同一事务写入；审计失败回滚凭据变化。非空审计降级拒绝删除。写入不代表事件投递完成，后续投递Workflow须保留event ID、短事务领取lease、事务外publish、匹配lease确认、至少一次重试/恢复及幂等门禁。本阶段不增加公开API或修改运行环境接线，审计投递、mTLS/IDL/部署/撤销集成和实际迁移仍须完成。
 
+### 7.4 Platform审计投递
+
+Domain增加AuditDelivery（固定Event、lease ID/until、attempts）、Outbox的Claim/Confirm/Retry端口及Sink.Publish。DAL以现有0016表为事实源：Tx内SKIP LOCKED领取due pending（lease为空或已到期）、写入新lease、attempts饱和递增；Confirm/Retry须匹配event ID、当前lease、未投递且lease_until>当前时间。Confirm置delivered并清lease；Retry清lease且设置下次时间。不保存错误原文，不在repo自行开启事务。
+
+`biz/workflow/platform_audit_delivery.go`逐条claim、事务外publish、短事务确认/失败安排；每轮默认20条，lease30秒、timeout5秒、interval1秒，配置必须有界且timeout小于lease。单项错误继续，1至256秒指数退避，取消保留lease待到期，不丢事件。未确认或晚到结果不算成功，固定错误不携带原元数据/诊断。
+
+`biz/shared/platformaudit`仅标准库实现固定JSONL Record及私有文件sink（不依赖Domain）；Workflow adapter映射DomainEvent。打开时拒绝symlink/非regular/非私有文件和可被group/other写的父目录；写完整一行并Sync才确认，短写/Sync失败返回固定错误。允许重复event ID，未知确认可重投；不声称恰好一次或不可篡改账本。测试用临时文件验收真正落盘及关闭/重开，不输出完整日志或凭据。本阶段不启动服务/观测后端或修改运行认证；部署路径/启动接线随后续Platform切换完成。
+
+Confirm/Retry以`GREATEST(传入时刻, clock_timestamp())`检查有效lease，防止数据库等待后使用过时进程时间。sink仅接受绝对路径；写前与Sync后核对当前路径/FD一致及私有权限，重命名/替换不默默确认旧文件。每次记录增加换行边界隔离此前短写末行；读取时跳过空行、隔离非法行，再按event ID去重。
+
 兼容期不得把同一个 Secret 同时交给本地 Hash 和 Talos 两套验证器。
 
 ## 8. 验收标准
