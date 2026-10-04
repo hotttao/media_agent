@@ -8,8 +8,10 @@ import (
 	"mime/multipart"
 	"net/url"
 	"strings"
+	"time"
 
 	"media_agent/hertz_infra/authn/internaljwt"
+	"media_agent/hertz_infra/delegationaudit"
 	"media_agent/media_agent_gateway/biz/shared/client"
 )
 
@@ -35,42 +37,102 @@ type AgentAPIProxy struct {
 	authority   AgentTokenAuthority
 	signer      AgentRequestSigner
 	forwarder   AgentProxyForwarder
+	audit       delegationaudit.Recorder
 }
 
 func NewAgentAPIProxy(credentials AgentCredentialVerifier, authority AgentTokenAuthority, signer AgentRequestSigner, forwarder AgentProxyForwarder) *AgentAPIProxy {
-	return &AgentAPIProxy{credentials: credentials, authority: authority, signer: signer, forwarder: forwarder}
+	return NewAgentAPIProxyWithAudit(credentials, authority, signer, forwarder, delegationaudit.LogRecorder{})
 }
 
-func (w *AgentAPIProxy) Execute(ctx context.Context, credential string, request AgentProxyRequest) (AgentProxyResponse, error) {
+func NewAgentAPIProxyWithAudit(credentials AgentCredentialVerifier, authority AgentTokenAuthority, signer AgentRequestSigner, forwarder AgentProxyForwarder, audit delegationaudit.Recorder) *AgentAPIProxy {
+	if audit == nil {
+		audit = delegationaudit.LogRecorder{}
+	}
+	return &AgentAPIProxy{credentials: credentials, authority: authority, signer: signer, forwarder: forwarder, audit: audit}
+}
+
+func (w *AgentAPIProxy) Execute(ctx context.Context, credential string, request AgentProxyRequest) (response AgentProxyResponse, resultErr error) {
+	started := time.Now()
+	event := delegationaudit.Event{Event: "agent_proxy_request", Phase: "gateway", Stage: "request_validation", Outcome: "invalid_request", StatusCode: 400}
+	defer func() {
+		panicValue := recover()
+		if panicValue != nil {
+			event.StatusCode, event.Outcome = 500, "panic"
+		}
+		event.DurationMS = time.Since(started).Milliseconds()
+		recorder := delegationaudit.Recorder(delegationaudit.LogRecorder{})
+		if w != nil && w.audit != nil {
+			recorder = w.audit
+		}
+		recorder.Record(ctx, event)
+		if panicValue != nil {
+			panic(panicValue)
+		}
+	}()
 	audience, ok := agentProxyAudience(request)
 	if !ok {
 		return AgentProxyResponse{}, ErrAgentProxyInvalid
 	}
+	event.Service, event.Method, event.RouteTemplate = request.Service, request.Request.Method, agentProxyRouteTemplate(request)
+	event.Stage, event.Outcome, event.StatusCode = "credential_verification", "unavailable", 503
 	if w == nil || w.credentials == nil || w.authority == nil || w.signer == nil || w.forwarder == nil {
 		return AgentProxyResponse{}, ErrAgentProxyUnavailable
 	}
 	p, err := w.credentials.VerifyAgentCredential(ctx, credential)
 	if err != nil {
+		if errors.Is(err, client.ErrAgentCredentialRejected) {
+			event.Outcome, event.StatusCode = "credential_rejected", 401
+		}
 		return AgentProxyResponse{}, err
 	}
 	configuration, ok := strings.CutPrefix(p.ActorID, "Agent:")
+	event.Stage, event.Outcome, event.StatusCode = "identity_validation", "forbidden", 403
 	if !ok || !validConfigurationID(configuration) || p.UserID == "" || p.OrganizationID == "" || p.CredentialID == "" {
 		return AgentProxyResponse{}, ErrAgentProxyForbidden
 	}
+	p.WorkspaceID = "" // Auth's credential facts cannot assert a current Workspace.
+	event.SetPrincipal(p)
+	event.Stage, event.Outcome, event.StatusCode = "authority_lookup", "unavailable", 503
 	facts, err := w.authority.ResolveAgentIdentity(ctx, configuration)
 	if err != nil {
+		if errors.Is(err, client.ErrAgentTokenForbidden) || errors.Is(err, client.ErrAgentTokenNotFound) {
+			event.Outcome, event.StatusCode = "forbidden", 403
+		}
 		return AgentProxyResponse{}, err
 	}
 	if facts.ConfigurationID != configuration || facts.ActorID != p.ActorID || facts.OwnerUserID != p.UserID || facts.OrganizationID != p.OrganizationID || facts.WorkspaceID == "" || facts.TeamID == "" || !facts.OwnerAuthorized || (facts.State != "running" && facts.State != "stopped") {
+		event.Outcome, event.StatusCode = "forbidden", 403
 		return AgentProxyResponse{}, ErrAgentProxyForbidden
 	}
 	// Workspace is authoritative Control state, never a client-supplied claim.
 	p.WorkspaceID = facts.WorkspaceID
+	event.SetPrincipal(p)
+	event.Stage, event.Outcome, event.StatusCode = "request_signing", "unavailable", 503
 	assertion, err := w.signer.Sign(p, audience, request.Request)
 	if err != nil {
 		return AgentProxyResponse{}, ErrAgentProxyUnavailable
 	}
-	return w.forwarder.ForwardAgentRequest(internaljwt.ContextWithAgentPrincipal(ctx, p), request, assertion)
+	event.Stage, event.Outcome, event.StatusCode, event.ResultUnknown = "business_forwarding", "upstream_unavailable", 503, true
+	response, resultErr = w.forwarder.ForwardAgentRequest(internaljwt.ContextWithAgentPrincipal(ctx, p), request, assertion)
+	if resultErr == nil {
+		event.Stage, event.Outcome, event.StatusCode, event.ResultUnknown = "business_response", delegationaudit.ResponseOutcome(response.StatusCode), response.StatusCode, false
+	} else if ctx.Err() != nil {
+		event.Outcome = "cancelled"
+	}
+	return response, resultErr
+}
+
+// Use only validated server-owned route words, never resource IDs or queries.
+func agentProxyRouteTemplate(r AgentProxyRequest) string {
+	u, _ := url.ParseRequestURI(r.Request.URI) // allowlist already validated it
+	parts := strings.Split(strings.TrimPrefix(u.Path, "/api/v1/"), "/")
+	if len(parts) > 1 && !(parts[0] == "workflows" && parts[1] == "validate") {
+		parts[1] = ":id"
+	}
+	if len(parts) > 3 {
+		parts[3] = ":ref"
+	}
+	return "/api/v1/" + strings.Join(parts, "/")
 }
 
 // Match explicit business routes, never an arbitrary URL or service prefix.

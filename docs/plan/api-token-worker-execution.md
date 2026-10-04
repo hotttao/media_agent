@@ -83,7 +83,9 @@
   - [x] 共享独立Gateway委托JWT签名/公钥JWKS、60秒精确audience、方法/URI/body摘要绑定与私有密钥加载，单元/race测试。
   - [x] Gateway密钥装配/公钥发布、目标服务Agent信任链和身份保留门禁。
   - [x] Auth/Control实时校验、固定服务/路由代理、公开接入与业务资源权限检查，真实HTTP/CLI与撤销后拒绝门禁。
-  - [ ] 代理审计记录User/Actor/credential/企业/Workspace、目标操作和结果，并通过trace_id核对落盘关联，不保存正文或凭据。
+  - [x] 代理审计记录User/Actor/credential/企业/Workspace、目标操作和结果，并通过trace_id核对落盘关联，不保存正文或凭据。
+    - [x] 类型化脱敏事件、Gateway各阶段与业务服务可信JWT边界接入、失败/取消/异常测试。
+    - [x] 部署后真实HTTP/CLI及Gateway、Materials、Workflow日志的trace_id与身份关联核对。
 - [ ] Agent disabled/deleted/owner 解绑触发 Token 撤销。
   - [x] 当前委托关系后台兜底：权威失效与查询故障区分、短事务持久意图、分页/重启恢复、单元/race、隔离 PG 与真实 Talos 验收。
   - [ ] 可靠生命周期事件投递/消费与独立 disabled 事实；轮询不替代这一门禁。
@@ -191,7 +193,7 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 | Agent 创建后申请/一次性回传 | Agent Gateway | Agent API Token Provisioning 的客户端编排 | missing |
 | 已有配置显式申请/一次性回传 | Agent Gateway | 公开管理入口、Control 企业限制、Auth 私有签发、CLI 0600文件 | covered |
 | Agent 委托代理 | Agent Gateway | 固定服务/路由、实时Auth/Control、独立JWT与资源权限，HTTP/CLI已验收 | covered |
-| Agent 委托调用审计归属 | Agent Gateway + 业务服务 | User/Actor/credential/企业/Workspace与结果关联，完整落盘验收 | missing |
+| Agent 委托调用审计归属 | Agent Gateway + 业务服务 | 请求级脱敏应用日志，可信身份/真实业务状态，HTTP与CLI按trace_id落盘核对 | covered |
 | Workflow/Template企业与Workspace资源归属 | Workflow / workflow、template | 当前定义仍为User归属，完整租户化需独立规格与迁移 | missing |
 | Agent 委托断言签名与请求绑定 | hertz_infra / Internal Identity JWT | 独立RSA/JWKS、精确audience、60秒TTL、方法/URI/body摘要及私有密钥读取 | covered |
 | Agent disabled/deleted/owner 解绑撤销 | Control + Auth | 权威生命周期事实、持久撤销意图/恢复 | missing |
@@ -241,3 +243,11 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - Auth/Control全量Go测试、关键race与架构检查通过；两项隔离PG/真实Talos测试通过（49.038s），Control事实由测试桩控制，不冒充真实生命周期事件验收。
 - 新Auth/Control镜像已部署并保持运行；真实HTTP的AgentIdentity、Agent申请、Agent代理、User Token生命周期、Worker认证边界与请求关联均通过。独立CLI `media_auth auth me`通过；5173页面HTTP200。未改UI、未启动Runtime、未提交或消费新的生成Workflow。
 - 周期兜底已covered；可靠disabled/deleted/owner解绑事件及独立disabled事实仍missing，不能以本轮完成标记P6整体完成。自动创建申请、代理审计、P7及P5剩余门禁继续保留。
+
+### 2026-10-04 · Agent 代理审计验收
+
+- domain-modeling明确请求级日志而非事务性账本：Gateway各阶段与目标服务可信JWT请求边界记录固定schema、已验证身份、服务端路由模板、业务状态/耗时及trace_id，不记URI/query/body/Header/Token/JWT或错误原文；失败、取消、异常保留结果不确定语义，不重试写请求。
+- `hertz_infra/delegationaudit`及Gateway编排/Materials与Workflow认证边界接入完成；共享库与三个服务全量Go测试、关键race及各服务架构检查通过。
+- 三个新镜像部署并保持运行；真实`TestAgentProxyAuditGateway`检查Gateway与两类业务服务的实际JSON落盘日志，成功请求和素材企业隔离404均正确关联身份/trace_id，且不包含Secret或query。
+- 独立CLI通过新文件0600申请临时Agent Token、调用任务只读接口，两侧日志同trace_id `a7b25ec1e69dd5101fb8aa19ce66920f`；随后用User撤销该Token，Agent CLI再调用失败。HTTP的Agent申请/代理、User Token生命周期、Worker认证边界及请求关联5项回归通过（14.377s）。
+- 审计能力covered，不代表P6整体完成；自动创建申请、可靠生命周期事件、P7旧ServiceToken清理及P5剩余门禁仍missing。UI继续排除，5173 HTTP200；未启动Runtime或观测后端，未提交生成Job。

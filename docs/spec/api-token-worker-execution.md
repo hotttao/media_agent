@@ -265,6 +265,8 @@ Materials/Workflow分别配置独立 `AGENT_JWKS_URL,AGENT_JWT_ISSUER` 与精确
 
 代理身份校验失败返回401/403，上游不可用503，不回传敏感来源错误；业务响应在包络中保留status_code，CLI必须识别业务失败。原始Token不进入下游，JWT、Cookie、Location或任意客户端身份/转发Header不回传。HTTP/CLI测试只创建临时Token和测试素材，撤销后代理拒绝，不启动Agent Runtime或生成Workflow任务。
 
+`hertz_infra/delegationaudit`提供类型化事件与上下文日志Recorder，复用应用JSON日志/文件轮转。Gateway编排每次退出记录`agent_proxy_request`，目标服务JWT请求绑定成功后通过defer记录`agent_business_request`（包括资源授权拒绝）。字段为phase/stage/outcome/service/method/route_template/status_code/duration_ms、已验证User/Actor/credential/org/Workspace、当前trace_id与result_unknown；route仅使用服务端模板，不保存原URI/query/正文/Header/错误。Gateway未验证凭据不写身份，Workspace仅在Control匹配后填入。业务状态与包络HTTP状态区分；转发后超时/取消标记结果不明，不能声称资源回滚。未验证JWT或未绑定代理包络的请求仅有接入HTTP日志。默认启用日志，不启动观测后端；不是原子业务审计账本。
+
 配置由三个服务Compose装配：Gateway固定Auth/Control/Workflow/Materials地址，签名私钥只读挂载在专用秘密目录，不进入Git或Docker构建上下文；`AGENT_SIGNING_KEY_FILE`为空时关闭代理，声明启用但配置无效时启动失败。两类业务服务仅配置内部公钥URL与issuer。CLI提供`media_agent_gateway agent-client request --service --method --uri [--body-json | --body-file --content-type]`；原始文件正文和响应均受8MiB限制，非成功业务状态不能作为CLI成功。
 
 ## 7. 迁移与兼容

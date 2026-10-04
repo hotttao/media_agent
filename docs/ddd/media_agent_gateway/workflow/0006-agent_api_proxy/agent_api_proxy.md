@@ -29,6 +29,8 @@ sequenceDiagram
     B->>B: Verify dedicated issuer/audience/expiry/Actor/request digest
     B->>B: Authorize current User/Organization/Workspace/resource
     B-->>G: Business status and result
+    B->>B: Record verified delegation + resource response + trace_id
+    G->>G: Record verification stage, known identity and proxy outcome + trace_id
     G-->>C: Result; no JWT/Secret echoed
 ```
 
@@ -64,5 +66,13 @@ JWT还绑定请求Content-Type和Control权威Workspace。Agent提交Job时以�
 | 目标结果不明 | 安全的网关错误 | 查业务结果；不重发、补偿或自动取消 |
 
 ## 结果事件
+
+### 调用审计
+
+Gateway每次进入代理编排记录一条 `agent_proxy_request`；业务服务在请求绑定验证成功后记录一条 `agent_business_request`，包含随后发生的资源授权拒绝。记录阶段、固定目标服务、HTTP方法、服务端路由模板、状态码、耗时、User/Actor/credential/企业/Workspace与同一trace_id。Gateway仅在凭据验证成功后填身份，Workspace仅取已核验Control事实；未认证请求不能从请求体/错误/客户端Header推导身份。业务服务身份仅来自已验证的委托JWT。
+
+不记录原始URI、查询参数、正文、响应内容、Token/JWT、Header或错误原文。Gateway收到业务4xx/5xx时记录真实业务状态，不能以包络200误报成功；转发后取消/超时记为结果不确定，不自动重试或认定业务回滚。未配置代理、缺少Bearer或无法绑定包络仍由接入层HTTP日志覆盖，不伪造Actor审计。业务服务没有验证通过的JWT时不记录可信Actor；Gateway保留目标拒绝的状态。
+
+审计使用既有结构化、按文件轮转的应用日志，关闭OTel后端时仍有本地trace_id。它不是领域事件、事务性账本或不可篡改合规审计存储；日志失败不改变已提交资源事实，不为审计新增数据库或Outbox。
 
 无。业务写入产生的事件归目标 Domain；Gateway 只记录无 Secret/JWT/body 的调用审计和 Trace Context。

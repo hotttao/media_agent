@@ -31,6 +31,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/golang-jwt/jwt/v5"
 	"media_agent/hertz_infra/authn/internaljwt"
+	"media_agent/hertz_infra/delegationaudit"
 )
 
 // User 是注入 ctx 的鉴权主体（与 media_auth auth.Session 对齐）。
@@ -278,6 +279,7 @@ func (m *Middleware) Handler() app.HandlerFunc {
 						c.Abort()
 						return
 					}
+					defer delegationaudit.BusinessOutcome(ctx, principal, "materials", string(c.Request.Header.Method()), c.FullPath(), c.Response.StatusCode)()
 					organizationIDs, err := m.fetchOrganizationsLive(ctx, principal.UserID)
 					if err != nil {
 						c.JSON(consts.StatusServiceUnavailable, map[string]string{"error": "organization authorization unavailable"})

@@ -242,6 +242,17 @@ go -C media-cli run . media_agent_gateway agent-client request \
 
 再用原User凭据执行`media_auth api-token revoke --id <this_test_token_id>`，确认Agent请求失败；不要以Agent Token调用管理API。代理只发往固定服务/业务路由，不提供公开内部JWKS命令。该门禁不证明自动创建编排、生命周期批量撤销或完整审计落盘已完成。
 
+### Agent 委托调用落盘审计
+
+`TestAgentProxyAuditGateway`额外配置本地挂载日志根目录，读取真实Gateway、Workflow、Materials的JSON应用日志，验证同一trace_id下的User/Actor/credential/企业/Workspace与业务状态（包括拒绝响应），且审计不包含Secret或query。只申请/撤销测试Token、读取业务资源，不启动观测后端或生成任务：
+
+```bash
+MEDIA_E2E_AGENT_AUDIT_LOG_DIR=/absolute/path/to/media_agent/media_logs \
+go -C media-cli test ./e2e -run '^TestAgentProxyAuditGateway$' -count=1 -v
+```
+
+沿用User API Token、网关与Workspace配置；日志目录必须可读。CLI另以临时Agent Token执行`agent-client request`，再按凭据管理ID在两侧审计日志核对trace_id；不得输出Token、响应正文或完整日志。审计是请求日志，不代替可靠业务事件或不可篡改账本。
+
 ### Agent 凭据撤销后台兜底
 
 `media_auth/e2e/agent_access_revocation_test.go` 使用隔离 PostgreSQL，覆盖候选状态/Actor过滤、精确owner/企业边界、权威故障不写撤销意图、晚到签发及重启。配置现有 Talos 地址后，还创建唯一测试 Agent Key，验证持久意图经重建的撤销流程收敛。Control 身份事实由测试桩控制，不能用此测试证明可靠生命周期事件或真实 Control 状态变更；不修改现有 Workspace/Agent/Token、不启动 Runtime。
