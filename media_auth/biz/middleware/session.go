@@ -1,8 +1,5 @@
-// session.go：session 鉴权中间件（cookie JWT 验签 + Bearer service token + 注入 ctx + 滑动续期 + skip list）。
-//
-// 对齐 agent-platform browser-service/src/index.ts 的 auth 中间件：
-//  1. Bearer service token（tos_xxx）→ 调 token.Service.VerifyToken → 注入 Session
-//  2. Cookie JWT（httpOnly cookie `token`）→ 本地 HS256 验签 → 注入 Session + 滑动续期
+// session.go: trusted Internal JWT or separately verified Cookie Session.
+// Unaccepted Bearer credentials never fall back to old Hash checks or Cookies.
 //
 // 归 middleware 层（基础设施）：验签独立于 auth 业务逻辑，所有 domain 的受保护路由共用。
 // Session 经 ctx 向下传递，service/handler 用 SessionFromContext(ctx) 取。
@@ -34,9 +31,6 @@ type sessionCtxKey struct{}
 // globalSigner 供 callback handler（skip list 内）手动验 cookie 取 Session。
 // 由 Session(signer) 在装配时设置。
 var globalSigner *session.Signer
-
-// globalTokenSvc 供 Bearer service token 验证。由 SessionWithToken 在装配时设置。
-var globalTokenSvc *tokenservice.Service
 
 type kratosIdentityRepo interface {
 	ResolveKratosIdentity(ctx context.Context, identityID, email, displayName string, platformAdmin bool) (auth.User, error)
@@ -74,9 +68,10 @@ var skipAllPaths = map[string]bool{
 	"/api/auth/wecom/callback":        true,
 	"/api/oauth/token":                true,
 	"/api/oauth/userinfo":             true,
-	// internal token API 不经 cookie/session；每个 handler 校验内部凭证。
-	"/internal/token/verify":           true,
-	"/internal/token/platform":         true,
+	// Retired paths bypass Session only to return router 404, never a credential.
+	"/internal/token/verify":   true,
+	"/internal/token/platform": true,
+	// Active private introspection handlers check their own internal credential.
 	"/internal/token/session":          true,
 	"/internal/token/api-token:verify": true,
 	// Dedicated Agent Gateway credential is checked by this handler, fail closed.
@@ -108,11 +103,9 @@ func Session(signer *session.Signer) app.HandlerFunc {
 	return sessionMiddleware(signer, nil)
 }
 
-// SessionWithToken 返回 session 鉴权中间件（cookie JWT + Bearer service token）。
-// signer 用于 cookie JWT 验签；tokenSvc 用于 Bearer service token 验证。
+// SessionWithToken checks Cookie signatures and current User/auth_version.
 func SessionWithToken(signer *session.Signer, tokenSvc *tokenservice.Service) app.HandlerFunc {
 	globalSigner = signer
-	globalTokenSvc = tokenSvc
 	return sessionMiddleware(signer, tokenSvc)
 }
 
@@ -120,7 +113,6 @@ func SessionWithToken(signer *session.Signer, tokenSvc *tokenservice.Service) ap
 // boundary and resolves their Kratos subject to a stable business User.
 func SessionWithInternalJWT(signer *session.Signer, tokenSvc *tokenservice.Service, repo kratosIdentityRepo, verifier *internaljwt.Verifier, kratosURL, kratosAdminURL string) app.HandlerFunc {
 	globalSigner = signer
-	globalTokenSvc = tokenSvc
 	base := sessionMiddleware(signer, tokenSvc)
 	return func(ctx context.Context, c *app.RequestContext) {
 		authHeader := string(c.Request.Header.Peek("Authorization"))
@@ -130,7 +122,7 @@ func SessionWithInternalJWT(signer *session.Signer, tokenSvc *tokenservice.Servi
 		}
 		claims, err := verifier.Verify(ctx, strings.TrimPrefix(authHeader, "Bearer "))
 		if err != nil {
-			base(ctx, c) // opaque service-token fallback
+			abortUnauthorized(c, "invalid internal identity")
 			return
 		}
 		if claims.AuthSource == "api_token" {
@@ -255,26 +247,11 @@ func sessionMiddleware(signer *session.Signer, tokenSvc *tokenservice.Service) a
 			}
 		}
 
-		// 1. Bearer service token（tos_xxx）— 对齐 agent-platform verifyServiceToken
-		if tokenSvc != nil {
-			authHeader := string(c.Request.Header.Peek("Authorization"))
-			if strings.HasPrefix(authHeader, "Bearer ") {
-				bearer := strings.TrimPrefix(authHeader, "Bearer ")
-				result, err := tokenSvc.VerifyToken(ctx, bearer)
-				if err != nil || !result.Active {
-					abortUnauthorized(c, "invalid service token")
-					return
-				}
-				sess := &auth.Session{
-					Sub:      result.Sub,
-					Username: result.Username,
-					Name:     result.Name,
-					Role:     result.Role,
-				}
-				ctx = context.WithValue(ctx, sessionCtxKey{}, sess)
-				c.Next(ctx)
-				return
-			}
+		// Unaccepted external Bearer credentials cannot be reinterpreted as a
+		// Cookie-authenticated call. Exchange opaque API Tokens at the gateway.
+		if len(c.Request.Header.Peek("Authorization")) != 0 {
+			abortUnauthorized(c, "invalid internal identity")
+			return
 		}
 
 		// 2. Cookie JWT（httpOnly cookie `token`）— 本地 HS256 验签

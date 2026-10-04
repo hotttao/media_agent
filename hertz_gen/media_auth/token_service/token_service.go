@@ -17,11 +17,7 @@ var (
 )
 
 type Client interface {
-	VerifyToken(context context.Context, req *token.VerifyTokenRequest, reqOpt ...config.RequestOption) (resp *token.VerifyTokenResponse, rawResponse *protocol.Response, err error)
-
-	GetPlatformToken(context context.Context, req *token.GetPlatformTokenRequest, reqOpt ...config.RequestOption) (resp *token.GetPlatformTokenResponse, rawResponse *protocol.Response, err error)
-
-	VerifySession(context context.Context, req *token.VerifySessionRequest, reqOpt ...config.RequestOption) (resp *token.VerifyTokenResponse, rawResponse *protocol.Response, err error)
+	VerifySession(context context.Context, req *token.VerifySessionRequest, reqOpt ...config.RequestOption) (resp *token.VerifySessionResponse, rawResponse *protocol.Response, err error)
 
 	VerifyApiToken(context context.Context, req *token.VerifyApiTokenRequest, reqOpt ...config.RequestOption) (resp *token.VerifyApiTokenResponse, rawResponse *protocol.Response, err error)
 }
@@ -41,52 +37,8 @@ func NewTokenServiceClient(hostUrl string, ops ...Option) (Client, error) {
 	}, nil
 }
 
-func (s *TokenServiceClient) VerifyToken(context context.Context, req *token.VerifyTokenRequest, reqOpt ...config.RequestOption) (resp *token.VerifyTokenResponse, rawResponse *protocol.Response, err error) {
-	httpResp := &token.VerifyTokenResponse{}
-	ret, err := s.client.r().
-		setContext(context).
-		setQueryParams(map[string]interface{}{}).
-		setPathParams(map[string]string{}).
-		addHeaders(map[string]string{}).
-		setFormParams(map[string]string{}).
-		setFormFileParams(map[string]string{}).
-		setBodyParam(req).
-		setRequestOption(reqOpt...).
-		setResult(httpResp).
-		execute("POST", "/internal/token/verify")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	resp = httpResp
-	rawResponse = ret.rawResponse
-	return resp, rawResponse, nil
-}
-
-func (s *TokenServiceClient) GetPlatformToken(context context.Context, req *token.GetPlatformTokenRequest, reqOpt ...config.RequestOption) (resp *token.GetPlatformTokenResponse, rawResponse *protocol.Response, err error) {
-	httpResp := &token.GetPlatformTokenResponse{}
-	ret, err := s.client.r().
-		setContext(context).
-		setQueryParams(map[string]interface{}{}).
-		setPathParams(map[string]string{}).
-		addHeaders(map[string]string{}).
-		setFormParams(map[string]string{}).
-		setFormFileParams(map[string]string{}).
-		setBodyParam(req).
-		setRequestOption(reqOpt...).
-		setResult(httpResp).
-		execute("POST", "/internal/token/platform")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	resp = httpResp
-	rawResponse = ret.rawResponse
-	return resp, rawResponse, nil
-}
-
-func (s *TokenServiceClient) VerifySession(context context.Context, req *token.VerifySessionRequest, reqOpt ...config.RequestOption) (resp *token.VerifyTokenResponse, rawResponse *protocol.Response, err error) {
-	httpResp := &token.VerifyTokenResponse{}
+func (s *TokenServiceClient) VerifySession(context context.Context, req *token.VerifySessionRequest, reqOpt ...config.RequestOption) (resp *token.VerifySessionResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &token.VerifySessionResponse{}
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{}).
@@ -136,15 +88,7 @@ func ConfigDefaultClient(ops ...Option) (err error) {
 	return
 }
 
-func VerifyToken(context context.Context, req *token.VerifyTokenRequest, reqOpt ...config.RequestOption) (resp *token.VerifyTokenResponse, rawResponse *protocol.Response, err error) {
-	return defaultClient.VerifyToken(context, req, reqOpt...)
-}
-
-func GetPlatformToken(context context.Context, req *token.GetPlatformTokenRequest, reqOpt ...config.RequestOption) (resp *token.GetPlatformTokenResponse, rawResponse *protocol.Response, err error) {
-	return defaultClient.GetPlatformToken(context, req, reqOpt...)
-}
-
-func VerifySession(context context.Context, req *token.VerifySessionRequest, reqOpt ...config.RequestOption) (resp *token.VerifyTokenResponse, rawResponse *protocol.Response, err error) {
+func VerifySession(context context.Context, req *token.VerifySessionRequest, reqOpt ...config.RequestOption) (resp *token.VerifySessionResponse, rawResponse *protocol.Response, err error) {
 	return defaultClient.VerifySession(context, req, reqOpt...)
 }
 

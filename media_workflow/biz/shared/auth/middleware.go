@@ -1,7 +1,7 @@
 // Package auth 给 media_materials / media_workflow 提供 OAuth client + auth 中间件。
 //
 // 对齐 agent-platform browser-service/src/index.ts 的 auth 模式：
-//  1. Bearer service token（tos_xxx）→ 调 media_auth GET /api/auth/me 验证 → 注入 User
+//  1. Trusted gateway JWT; unknown Bearer is rejected without remote fallback
 //  2. Cookie JWT（httpOnly cookie）→ 本地 HS256 验签（materials/workflow 自己的 jwt_secret）→ 注入 User
 //
 // OAuth login 流程：
@@ -47,7 +47,7 @@ type Config struct {
 	JWTSecret              string // materials/workflow 共享的 JWT secret（与 media_auth 不同）
 	CookieName             string // cookie 名（默认 "mw_token"）
 	JWTExpiresSec          int    // session JWT 有效期（默认 7 天）
-	MediaAuthURL           string // media_auth base URL（OAuth + service token 验证）
+	MediaAuthURL           string // media_auth base URL（OAuth + identity lookup）
 	ServiceURL             string // 本服务 base URL（OAuth callback redirect_uri）
 	OAuthClientID          string // 在 media_auth 注册的 OAuth client_id
 	OAuthClientSecret      string // OAuth client_secret（机密 client 必填）
@@ -109,37 +109,6 @@ func CallerID(ctx context.Context) string {
 func TeamsFromContext(ctx context.Context) []string {
 	t, _ := ctx.Value(teamsKey{}).([]string)
 	return t
-}
-
-// —— service token 缓存 ——
-type tokenCacheEntry struct {
-	user      *User
-	expiresAt time.Time
-}
-type tokenCache struct {
-	mu      sync.Mutex
-	entries map[string]tokenCacheEntry
-	ttl     time.Duration
-}
-
-func newTokenCache(ttl time.Duration) *tokenCache {
-	return &tokenCache{entries: map[string]tokenCacheEntry{}, ttl: ttl}
-}
-
-func (c *tokenCache) get(token string) (*User, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e, ok := c.entries[token]
-	if !ok || time.Now().After(e.expiresAt) {
-		return nil, false
-	}
-	return e.user, true
-}
-
-func (c *tokenCache) set(token string, user *User) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries[token] = tokenCacheEntry{user: user, expiresAt: time.Now().Add(c.ttl)}
 }
 
 // —— PKCE 状态存储 ——
@@ -224,7 +193,6 @@ func (c *teamCache) set(userID string, teams []string) {
 // Middleware auth 中间件实例。
 type Middleware struct {
 	cfg       *Config
-	cache     *tokenCache
 	teams     *teamCache
 	pkce      *pkceStore
 	http      *http.Client
@@ -240,7 +208,6 @@ func New(cfg *Config) *Middleware {
 	}
 	return &Middleware{
 		cfg:       cfg,
-		cache:     newTokenCache(60 * time.Second),
 		teams:     newTeamCache(60 * time.Second),
 		pkce:      newPKCEStore(),
 		http:      &http.Client{Timeout: 10 * time.Second},
@@ -269,7 +236,7 @@ func (m *Middleware) Handler() app.HandlerFunc {
 			}
 		}
 
-		// 1. Bearer service token → 调 media_auth /api/auth/me
+		// 1. Only trusted gateway assertions can authenticate a Bearer call.
 		authHeader := string(c.Request.Header.Peek("Authorization"))
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			bearer := strings.TrimPrefix(authHeader, "Bearer ")
@@ -347,20 +314,20 @@ func (m *Middleware) Handler() app.HandlerFunc {
 					return
 				}
 			}
-			user, err := m.verifyServiceToken(ctx, bearer)
-			if err != nil || user == nil {
-				c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid service token"})
-				c.Abort()
-				return
-			}
-			ctx = context.WithValue(ctx, callerKey{}, user)
-			// 异步取 teams（不阻塞请求；teams 为空时 service 跳过 team 校验）
-			go m.prefetchTeams(user.Sub)
-			c.Next(ctx)
+			// Opaque API Tokens are exchanged at the gateway, never here.
+			// An untrusted Bearer cannot fall back to a Cookie or Auth lookup.
+			c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal identity"})
+			c.Abort()
 			return
 		}
 		if workerRoute {
 			c.JSON(consts.StatusUnauthorized, map[string]string{"error": "missing worker identity"})
+			c.Abort()
+			return
+		}
+
+		if authHeader != "" {
+			c.JSON(consts.StatusUnauthorized, map[string]string{"error": "invalid internal identity"})
 			c.Abort()
 			return
 		}
@@ -516,17 +483,6 @@ func (m *Middleware) resolveKratosIdentity(ctx context.Context, identityID, emai
 	return &user, nil
 }
 
-// prefetchTeams 异步预热 team 缓存（service token 路径用）。
-func (m *Middleware) prefetchTeams(userID string) {
-	if cached, ok := m.teams.get(userID); ok {
-		_ = cached
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	m.fetchTeams(ctx, userID)
-}
-
 // fetchTeams 调 media_auth POST /internal/teams:byUser 取 caller 的 team ID 列表（带缓存）。
 // 供 team 可见性校验（material/generated_asset/virtual_ip 的 visibility=team 分支）。
 // 失败时返回 nil 不阻塞请求（team 校验降级为 false，不影响 private/public）。
@@ -565,44 +521,6 @@ func (m *Middleware) fetchTeams(ctx context.Context, userID string) ([]string, e
 	}
 	m.teams.set(userID, out.TeamIDs)
 	return out.TeamIDs, nil
-}
-
-// verifyServiceToken 调 media_auth GET /api/auth/me with Bearer token。
-func (m *Middleware) verifyServiceToken(ctx context.Context, token string) (*User, error) {
-	if cached, ok := m.cache.get(token); ok {
-		return cached, nil
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.cfg.MediaAuthURL+"/api/auth/me", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := m.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("verify service token: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("media_auth /api/auth/me: status %d", resp.StatusCode)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	var me struct {
-		ID       string `json:"id"`
-		Sub      string `json:"sub"`
-		Username string `json:"username"`
-		Name     string `json:"name"`
-		Role     string `json:"role"`
-	}
-	if err := json.Unmarshal(body, &me); err != nil {
-		return nil, fmt.Errorf("decode /api/auth/me: %w", err)
-	}
-	sub := me.Sub
-	if sub == "" {
-		sub = me.ID
-	}
-	user := &User{Sub: sub, Username: me.Username, Name: me.Name, Role: me.Role}
-	m.cache.set(token, user)
-	return user, nil
 }
 
 // verifyJWT 本地 HS256 验签。

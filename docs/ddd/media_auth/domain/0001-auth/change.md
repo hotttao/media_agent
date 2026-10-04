@@ -13,3 +13,7 @@
 # 2026-10-04 · Platform生命周期切换
 
 本地/LDAP登录、注册和可信Kratos用户解析只注入独立密文无Secret确保，最多5秒、固定安全日志、失败不改变认证结果；关闭配置不回退旧明文服务。用户撤销同事务覆盖新密文聚合，避免遗漏浏览器真实入口。
+
+# 2026-10-04 · 旧凭据验证退役
+
+普通业务认证移除旧ServiceToken Hash/远程`/api/auth/me`旁路与成功凭据缓存；失败Bearer不得降级Cookie。旧验证/Platform读取RPC退出IDL，Session introspection保留User当前状态与版本校验。独立Platform私有mTLS链路与API Token/Talos验证不变。

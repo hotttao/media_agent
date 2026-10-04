@@ -178,6 +178,10 @@ verifySession(cookie):
 4. `disabled -> active` 清空 `disabled_at` 并再次递增 `auth_version`；旧凭证和旧 Session 不复活，用户必须重新登录或重新创建委托凭证。
 5. 请求把 User 设置为其当前状态视为幂等成功；任何从 `deleted` 出发的状态修改返回冲突。
 
+### 业务入口凭证边界
+
+业务入口接受边缘交换后的受信 Internal Identity JWT，或过渡期独立 Cookie Session；不能通过旧 ServiceToken Hash 查询构造用户会话。Bearer 验证失败不得降级使用 Cookie。Session introspection 仅以当前 User 的 active 状态与 auth_version 决定有效性，不依赖旧 ServiceToken 仓储；Platform Token 属于独立私有托管用例，不作为普通业务入口的 Bearer。
+
 ## 关联关系
 
 ### 依赖的 domain

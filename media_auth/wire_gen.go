@@ -157,9 +157,8 @@ func InitDI(db *gorm.DB, cfg *configpb.Config, platform *platformRuntime) {
 	teaminternalhandler.KetoClient = ketoClient
 	teaminternalhandler.KetoEnforce = strings.EqualFold(os.Getenv("KETO_ENFORCE"), "true")
 
-	// internal token service：复用 service_token TokenRepo + auth UserRepo（不新建 domain）。
-	tokenSvc := tokenservice.NewService(stRepo, userRepo)
-	tokenSvc.SetMembershipValidator(membershipValidator)
+	// Session introspection reads current User state, never legacy credentials.
+	tokenSvc := tokenservice.NewService(userRepo)
 	tokenhandler.TokenSvc = tokenSvc
 	workerIdentityRepo := dalworkeridentity.NewRepo(db)
 	workerIdentitySvc := workeridentityservice.NewService(workerIdentityRepo)
@@ -223,7 +222,7 @@ func InitDI(db *gorm.DB, cfg *configpb.Config, platform *platformRuntime) {
 		log.Println("init di: TALOS_URL is empty, api token service unavailable")
 	}
 
-	// 重新装配 session middleware（支持 cookie JWT + Bearer service token）。
+	// Cookie Session state checks; external Bearer must go through the gateway.
 	SessionMiddleware = middleware.SessionWithToken(signer, tokenSvc)
 	if jwksURL := os.Getenv("INTERNAL_JWKS_URL"); jwksURL != "" {
 		verifier := internaljwt.NewVerifier(jwksURL, os.Getenv("INTERNAL_JWT_ISSUER"), "internal-api", nil)

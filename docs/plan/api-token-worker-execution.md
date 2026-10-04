@@ -98,8 +98,10 @@
   - [x] 离线原子迁移Workflow/工具：默认演练、保留撤销历史、冲突拒绝、整批回滚、重跑和隔离PG验收。
   - [x] 独立运行用例：可信caller/purpose端口、User状态/并发行锁、确保/内省/轮换/撤销、元数据持久审计和PG门禁；不含mTLS接入/启动接线。
   - [x] Platform审计Outbox投递Workflow：lease/确认CAS、event ID至少一次、事务外发布、失败/重启恢复及落盘验收；运行环境启动接线随后续切换完成。
-  - [ ] 旧Platform明文逐条验证、原子迁移与切换；部署外部密钥、受限内部调用者/purpose、用户撤销接线。
+  - [x] 旧Platform明文逐条验证、原子迁移与切换；部署外部密钥、受限内部调用者/purpose、用户撤销接线（真实mTLS/HTTP/审计门禁已验收）。
 - [ ] 删除旧 IDL、路由、生成代码与 `tos_` 本地 Hash 工具。
+  - [x] 先移除旧验证/Platform读取RPC和Auth/Workflow/Materials普通Bearer回退；保留Session与OAuth能力并验证失败不降级Cookie。
+  - [ ] 再删除旧CRUD/CLI/Swagger、domain/policy/service及非维护DAL；归档旧事实并保留历史migration与专用维护投影。
 - [ ] 删除旧表或改为只读迁移归档；历史 migration 保留可重放。
 - [ ] 更新 OpenAPI、CLI、配置、部署和所有文档引用。
 - [ ] 运行全仓 `make arch-check`、相关模块 `go test ./...` 和 E2E。
@@ -340,3 +342,12 @@ P1 -> P2 -> P3 -> P4 -> P5 -> P6 -> P7
 - 测试前两次尝试分别暴露HTTP拒绝码预期错误和宿主审计读取权限，均已修正测试，不降低认证或文件权限。通过后的Outbox核对18条已投递、0待投递（含前次测试事实）；专用测试账户保留用于诊断，其轮换凭据一小时过期。
 - 真实网关API Token、Agent签发/代理/代理审计、Worker接口五项回归通过（15.716s）；独立CLI `media_auth auth me`通过，5173 HTTP200。Auth全量Go、真实监听器/mTLS/中间件race及架构检查通过；维护接线与复现步骤见`media_auth/script/platform-token-operations.md`和E2E规范。
 - P7不整体完成：普通ServiceToken代码/路由/CLI/本地Hash回退尚未整体删除；当前无既有Gateway/Control Platform调用者适配器可验收，未来实际接入需独立门禁。真实企微回调/用户删除未执行；既有隔离PG生命周期证明不能冒充这些运行流程。P6其他missing、P5整体门禁和Workflow租户模型仍未完成；UI继续排除。
+
+### 2026-10-04 · 旧验证RPC与Bearer旁路退役
+
+- domain-modeling按事实入口整理覆盖表：长期API验证归Talos，Platform获取归私有密文/mTLS，Session内省归User当前状态/版本纯读；旧CRUD和历史归档保持missing。同步Auth领域、API Token Verification、spec与P7拆解，不改UI或用户DESIGN.md。
+- token IDL删除VerifyToken/GetPlatformToken及专属DTO，Session响应保持1..6字段wire编号，7..12及旧字段名reserved；按既有hz工具重新生成model/client/router，删除失效handler与middleware hook。Session查询service不再依赖旧TokenRepo/Hash或membership。
+- Auth/Workflow/Materials普通业务入口移除旧Hash/远程Auth me回退以及原始Secret缓存、专用异步team预取。未知Bearer、大小写变体和其他未经接受的Authorization不得降级为同时携带的Cookie；可信JWT和独立Cookie/OAuth入口保留。User停用/删除、版本不符、读失败会使Session inactive。
+- 三个服务全量Go、认证边界单测/race、Auth根接线race、生成包编译与各服务架构检查通过；CLI全量测试通过（未配置运行地址的HTTP测试明确Skip，不算运行验收）。实际HTTP退役测试先在旧镜像上因旧RPC401而失败，新镜像通过（0.18s），证明旧RPC404、三个服务旧Bearer401以及Session/API Token内省仍存在且拒绝非法凭据。
+- Auth/Workflow/Materials新镜像已部署，三个RestartCount=0、schema16/dirty=false；旧Platform0、旧普通ServiceToken35保持不变，Platform审计pending0。独立mTLS获取/轮换/内省/真实落盘回归通过（2.10s）；统一网关API Token、Agent签发/代理/审计、Worker五项回归通过（18.000s），独立CLI me与5173 HTTP200通过。未启动观测后端或提交生成Job。
+- 本项只完成P7验证边界删除；旧CRUD/domain/policy/service、非维护DAL与Hash工具、Swagger及旧表归档仍须完成，不能以认证旁路关闭标记P7全部完成。旧测试中仍调用CRUD的Materials HTTP门禁须改用API Token/统一网关；当前已用API Token的五项网关门禁不替代它们。

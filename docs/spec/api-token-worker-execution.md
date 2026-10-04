@@ -119,6 +119,22 @@ Talos Client `RecoverIssue` 与正常 `Issue` 分离：必须提供非空 reques
 
 ## 4. Capability Execution Target
 
+### 旧凭据验证退役边界
+
+- `idl/media_auth/token.proto` 删除 `VerifyToken`、`GetPlatformToken` RPC 及专属 request/response；Session RPC 保留独立 `VerifySessionResponse`，字段编号兼容既有会话客户端。API Token RPC 不变。
+- Auth 的 `biz/service/token` 仅依赖 UserRepo 提供当前会话状态/版本查询，移除旧TokenRepo、Hash、membership和Platform获取；DI不再为会话校验注入旧凭据仓储。
+- Auth 本地Cookie中间件遇到未经受信JWT中间件验证的Bearer直接401，不查旧Hash也不降级Cookie。Workflow/Materials移除Bearer回调Auth `/api/auth/me`、其原始Token缓存及仅用于该路径的异步预取；可信JWT、Kratos和OAuth路径不变。
+- 重新生成DTO/client/router；对应旧handler及失效测试删除或替换。旧CRUD和归档清理属于下一删除门禁，不能把验证路径删除当作P7整体完成。
+
+| 原能力/事实入口 | 目标上下文/Domain/聚合或读模型 | Workflow | 状态 |
+|:---|:---|:---|:---|
+| 旧ServiceToken Hash验证/普通Bearer远程验证及缓存 | Auth/api_token/Principal，由Talos验证；业务服务只验可信JWT | API Token Verification | deprecated-with-reason：统一长期凭证，禁止本地旁路 |
+| 旧Platform RPC明文读取 | Auth/platform_token/Token | 私有mTLS单聚合获取 | covered |
+| 旧Session内省 | Auth/auth/User当前状态与auth_version读模型 | 无，纯读 | covered |
+| 旧ServiceToken创建/列表/撤销、CLI/Swagger | Auth/api_token/Token元数据 | Issuance/Rotation/Revocation | missing：旧CRUD代码仍须删除 |
+| 旧用户删除时的凭据清理 | Auth/platform_token及api_token | User Access Revocation | covered，新链路已接；旧清理代码待退役 |
+| 旧表普通35条凭据历史及维护工具 | Auth迁移只读投影，不作认证事实 | Platform Token Migration | missing：归档与仅维护DAL收口待完成 |
+
 ### 4.1 持久模型
 
 `execution_capabilities` 增加：

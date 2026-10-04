@@ -122,6 +122,18 @@ CLI 提供 `api-token create/list/rotate/revoke`。创建和轮换要求 `--env-
 
 ### Platform Token 独立密文存储集成测试
 
+旧验证退役门禁 `TestLegacyTokenVerificationRetirement` 通过三个服务的私有 HTTP 地址核对已移除的RPC返回404、旧Bearer拒绝及Session/API Token内省仍可用。被测服务预先启动；测试不读取旧Secret、不连接数据库、不模拟登录：
+
+```bash
+MEDIA_AUTH_PRIVATE_ADDR=http://<Auth-private-IP>:8001 \
+MEDIA_WORKFLOW_PRIVATE_ADDR=http://<Workflow-private-IP>:8002 \
+MEDIA_MATERIALS_PRIVATE_ADDR=http://<Materials-private-IP>:8003 \
+MEDIA_AUTH_INTERNAL_TOKEN=<configured-private-introspection-credential> \
+  go -C media-cli test ./e2e -run '^TestLegacyTokenVerificationRetirement$' -count=1 -v
+```
+
+凭据从忽略的env文件注入，不把实际值写在命令记录中。此门禁不代替网关API Token成功流程、独立CLI门禁或旧CRUD/归档清理验收。各服务中间件单测另使用有效Cookie验证失败Bearer及大小写/其他Authorization变体均不得降级，且不会向旧Auth请求身份。
+
 运行环境 mTLS 门禁使用预启动 Auth；先完成[维护切换](../../media_auth/script/platform-token-operations.md)，再执行：
 
 ```bash

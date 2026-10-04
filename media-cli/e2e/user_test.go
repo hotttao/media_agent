@@ -62,11 +62,11 @@ func TestUserE2E(t *testing.T) {
 	t.Run("Internal_token_API_is_protected_and_legacy_platform_read_is_disabled", func(t *testing.T) {
 		internalToken := envOr("MEDIA_AUTH_INTERNAL_TOKEN", "dev-media-auth-internal-token")
 		status, _ := doInternalJSON(t, addr+"/internal/token/platform", `{"user_id":"`+registeredID+`"}`, "")
-		if status != 401 {
-			t.Fatalf("internal endpoint without credential: want 401, got %d", status)
+		if status != 404 {
+			t.Fatalf("retired internal endpoint without credential: want 404, got %d", status)
 		}
 		status, body := doInternalJSON(t, addr+"/internal/token/platform", `{"user_id":"`+registeredID+`"}`, internalToken)
-		if status != 500 || strings.Contains(string(body), "tos_") {
+		if status != 404 || strings.Contains(string(body), "tos_") {
 			t.Fatalf("legacy platform read must fail closed: status=%d", status)
 		}
 		u, _ := url.Parse(addr)

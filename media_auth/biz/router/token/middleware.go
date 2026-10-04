@@ -21,16 +21,6 @@ func _tokenMw() []app.HandlerFunc {
 	return nil
 }
 
-func _verifytokenMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _getplatformtokenMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
 func _verifysessionMw() []app.HandlerFunc {
 	// your code...
 	return nil

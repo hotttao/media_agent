@@ -14,21 +14,10 @@ import "api.proto";
 // 本 proto 只写 (api.post) 给 hz 生成路由用,不写 google.api.http(不进 swagger)。
 option go_package = "media_auth/token";
 
-// TokenService —— 供下游服务验证 opaque Bearer service token。
-//
-// service token 是 opaque(仅存 SHA-256 hash),下游无法本地验,故调本接口。
-// 明文 token 永不出 media_auth 边界（内部 sha256 后查 service_tokens.token_hash）。
-// cookie / bearer JWT 由各服务用共享 JWT_SECRET 本地 HS256 验,不走本接口。
+// TokenService provides private session and Talos API Token introspection.
+// Platform custody uses its separate mTLS service, not these endpoints.
 service TokenService {
-  // POST /internal/token/verify —— 校验 token 并解析为鉴权主体
-  rpc VerifyToken(VerifyTokenRequest) returns(VerifyTokenResponse) {
-    option (api.post) = "/internal/token/verify";
-  };
-  // POST /internal/token/platform —— 供旧 control-plane 获取用户 Platform Token。
-  rpc GetPlatformToken(GetPlatformTokenRequest) returns(GetPlatformTokenResponse) {
-    option (api.post) = "/internal/token/platform";
-  };
-  rpc VerifySession(VerifySessionRequest) returns(VerifyTokenResponse) {
+  rpc VerifySession(VerifySessionRequest) returns(VerifySessionResponse) {
     option (api.post) = "/internal/token/session";
   };
   // POST /internal/token/api-token:verify —— 通过 Talos 验证 API Token，返回委托主体。
@@ -37,8 +26,6 @@ service TokenService {
   };
 }
 
-message GetPlatformTokenRequest { string user_id = 1; }
-message GetPlatformTokenResponse { string token = 1; }
 message VerifySessionRequest { string token = 1; }
 
 message VerifyApiTokenRequest { string token = 1; }
@@ -58,29 +45,15 @@ message VerifyApiTokenResponse {
   map<string, string> ext = 10;
 }
 
-message VerifyTokenRequest {
-  // tos_xxx 明文;media_auth 内部 sha256 后查 service_tokens.token_hash,
-  // 明文永不出 media_auth 边界。
-  string token = 1;
-  // 可选提示,目前固定 service_token;预留未来统一校验 JWT。
-  string token_type_hint = 2;
-}
-
-message VerifyTokenResponse {
+message VerifySessionResponse {
   bool active = 1;
-  // = service_tokens.created_by（调用方据此识别 token 持有者）
+  // Business User ID; field numbers preserve the session wire contract.
   string sub = 2;
-  // svc:{name}
   string username = 3;
   string name = 4;
-  // 固定 user
   string role = 5;
-  // service_token
+  // session
   string token_type = 6;
-  string credential_id = 7;
-  string organization_id = 8;
-  string scope = 9;
-  int64 exp = 10;
-  string auth_source = 11;
-  map<string, string> ext = 12;
+  reserved 7 to 12;
+  reserved "credential_id", "organization_id", "scope", "exp", "auth_source", "ext";
 }
