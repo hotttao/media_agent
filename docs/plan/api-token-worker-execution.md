@@ -30,6 +30,13 @@ P6 保留既有实现与后续设计，但 **Agent 创建后自动申请 Token�
 - media_worker 全模块 race、media-cli 全模块测试及 diff 检查通过。Worker HTTP 错误不再保留/输出上游正文，防止重试日志泄露签名 URL/任务输入/凭据。
 - 单流程完成后通过 SIGINT 停止此次 fixture Worker，其他后端继续运行，5173 可访问。未批量续跑历史 Job、未启动观测后端、未修改 UI。原生产物在此指本次执行登记的资源，不代表真实模型生成；生产 Provider 和 UI 仍不计入本次通过项。
 
+### 审批、重试与结果回写隔离复验（2026-10-04）
+
+- Domain/Job Service/Compiler/Finalizer/Worker Gateway 五个包的 race 测试通过，覆盖多候选必须审批、单候选 ApprovalAlways、候选选择、重新生成、取消及失败重试。此处是领域/服务与编译契约测试，不将其写成新的真实用户审批旅程通过。
+- 新增隔离 PostgreSQL `TestPersonalDispatchAuthorizationIsolation`，七个维度 × heartbeat/complete/fail 通过：其他 User、企业、Worker Actor、凭据、进程实例、错误 auth source 和 attempt 被拒绝。实际数据库确认未写 Inbox、未延长 lease 或改变 Dispatch status，且没有调用 Conductor；正确身份回写与重放只持久化一条收据。企业隔离已在业务层真实仓储验证，不将传入的 Principal 测试事实冒充第二企业 API Token 的真实网关验收。
+- `TestDispatchInboxConcurrentReplayAndDeliveryRetry` race 通过，验证八并发相同结果、相反操作冲突、投递失败保留收据与恢复重试；Conductor 为注入桩，只有仓储是实际隔离 PostgreSQL。
+- 两项 PostgreSQL 门禁合计 47.210s 通过，临时数据库按 fixture 清理；Workflow 全模块 Go 测试及服务架构检查通过。未改变运行账号/凭据/任务、未启动客户端 Worker 或观测后端、未修改 UI。
+
 ## P1 · Capability Target 与 IR
 
 - [x] migration 增加 `execution_target`、`managed_pool_key` 和约束，旧数据回填 Personal。

@@ -231,6 +231,15 @@ go -C media-cli test ./e2e -run '^TestWorkflowWorkerGatewayAPIToken$' -count=1 -
 
 Worker Gateway 边界测试为现有企业创建临时稳定 Worker 身份和 poll-only API Token，通过网关验证有效注册、User 不能冒充 Worker、scope 不足拒绝，以及撤销后注册/轮询立即拒绝。只清理本次创建的身份和凭据；不模拟登录，不调用旧 Service Token 接口，不用有效 Token 领取队列任务，不替代完整 Worker 执行门禁。
 
+业务授权的独立 PostgreSQL 门禁为 `TestPersonalDispatchAuthorizationIsolation`：隔离真实仓储与结果 Inbox，逐项改变 User、Organization、Worker Actor、credential、instance、auth source、attempt，对 heartbeat/complete/fail 三种操作断言拒绝；拒绝后无结果、无 lease/status 变化、无 Conductor 调用。正确身份 complete 与重复请求仅保存一条收据，由持久投递器处理，不在 HTTP 请求内推进 Conductor。它不创建真实运行环境的企业/身份，也不证明网关能验证第二企业 Token；网关交换与撤销依赖上面的独立 HTTP 门禁。
+
+```bash
+go -C media_workflow test -tags=e2e -race ./e2e \
+  -run '^(TestPersonalDispatchAuthorizationIsolation|TestDispatchInboxConcurrentReplayAndDeliveryRetry)$' -count=1 -v
+```
+
+后一个门禁在同样的隔离 PostgreSQL 验证八个并发结果重放得到同一收据、complete/fail 冲突、Conductor 暂时失败后收据保留，以及重试后提交。Conductor adapter 在该用例为故障注入桩，不冒充真实 Conductor 网络故障验收；完整执行另按下文单样本门禁验证。
+
 ### Personal Worker 单样本执行门禁
 
 真实 Personal Worker 单流程门禁需要先按 `media_worker/README.md` 启动独立客户端，再显式执行；测试本身不模拟 Worker，不启动服务，不输出凭据或签名资源 URL：
