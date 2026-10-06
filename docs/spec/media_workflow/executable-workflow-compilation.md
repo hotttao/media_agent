@@ -1,5 +1,27 @@
 # Executable Workflow 编译实现规格
 
+## 审批的执行重试周期
+
+Review Delivery使用独立ApprovalTaskEngine端口，`CompleteApprovalTask(workflowID, frozenTaskID, output)`直接映射Conductor `POST /api/tasks`，不按引用名再次GET/解析；旧CompleteTask-by-reference不作为新Outbox投递路径。没有精确端口则释放当前claim并保留固定故障码，不静默回退。空实例或Task ID拒绝；该改动不向客户端开放内部Task提交权限。
+
+migration021给step_run_reviews增加可空非负accepted_retry_count；已有记录保持null且不改摘要。新DecideReview在读取Job后冻结retry_count，并在AcceptReview的Job→Step锁内核对；同键原决定重放先于当前周期检查。ReviewDecision存在该字段时将标记对象`{"accepted_retry_count":N}`追加至原摘要数组，null沿用旧格式；字段不可修改，带周期事实的迁移不得降级删除。
+
+后台发现新Review周期不等于当前Job时，只标记failed/execution_retried，不调用引擎。投影以Engine.Get之前冻结的Job周期比较Review：更早周期忽略、更晚周期拒绝，同周期继续数字generation与精确HUMAN检查。读取到旧null周期不能当成0或回填；重试后同轮必须由已完成且精确匹配的HUMAN证明，否则保留安全拒绝。未知旧周期不参与自动恢复推断。该契约不改变公开IDL、产物结果键或权限边界，不替代可靠Retry命令及rerun与本地计数之间的窗口恢复。
+
+## Conductor 注册一致性校验
+
+发布在保存 Compilation、注册 Task Definition 前，通过只读 metadata GET 查询编译结果对应的精确 name/version；404 才表示未注册，其他查询错误拒绝继续。已存在版本按 Compiler 的规范 JSON 比较摘要；冲突不能覆盖。额外字段只允许已验证的 Conductor 默认值、空扩展及审计时间；非默认的异步、可选、延迟、变量/输入模板和关闭 schema 校验等配置不得因结构解码忽略。任务树中的循环、并行分支、条件分支也要递归检查。
+
+注册 Workflow 时再次检查精确版本；已有一致结果不写入，缺失才发送一次 PUT，之后必须读回并验证。PUT 响应不明确但读回一致可确认成功；查不到、查询不可用或内容变化均不能标记 registered，也不自动重发未知写入。错误只保留稳定码，不保存上游 body、URL 或业务载荷。
+
+此过程不提供上游 CAS：并发外部作者可在两次查询之间改写 metadata，完整发布仍须冻结的本地 Compilation、可靠注册意图和所有注册者的版本隔离。Workflow metadata 校验不能替代 Task Definition 的共享契约保护。
+
+Task Definition 注册先校验同批名称无矛盾，再逐名GET。仅404代表缺失；查询失败拒绝继续。既有名称必须匹配被冻结的description、重试次数/策略/间隔、超时与response timeout；未知非空执行扩展（inputTemplate、schema、并发/限流、隔离等）拒绝。允许Conductor审计字段与经锁定源码/实际服务确认的默认字段；请求省略值按引擎默认规范化，服务显式零值不能被当成“省略”。taskStatusListenerEnabled必须为默认true，backoffScaleFactor和rateLimitFrequencyInSeconds必须为默认1。
+
+整批预检通过后，仅一次POST创建缺失子集，不PUT更新同名任务。无论POST是否返回成功，都以逐名GET验证完整契约；提交成功但响应丢失可通过原定义对账收口，未确认则保留失败，不盲目重写。TaskDefinition不同内容必须使用新Capability Version对应的新task name；同名旧定义不会原位修复。这仍不是上游CAS或发布后台恢复，外部注册者并发修改窗口需另行协调。
+
+本地Compilation以 `(workflow_id,workflow_version)` 首次插入冻结。重复Save只有ID、Conductor名称/版本、DefinitionHash、IR及Definition JSON内容均一致才成功；JSONB比较忽略对象键顺序/空白，不忽略数组顺序或值类型。重放不重置状态、创建时间、注册时间或错误记录。不同冻结内容返回Compilation冲突，必须发布新版本。MarkRegistered保持首次注册时间；已registered后晚到MarkFailed仅保留成功事实，缺失ID不能假报标记成功。migration020在数据库层限制冻结字段修改及registered状态/时间/错误的回退，未改写既有编译数据；本地约束不等同于发布Outbox、TaskDefinition冻结或上游metadata的CAS。
+
 ## 联调发布兼容性
 
 Capability Task input 在 Invocation Mapping 之外固定包含 `job_id=${workflow.input.job_id}`、原始 `step_key`、`capability_key` 和 `capability_version`。Worker Gateway 使用这些字段加载并核对 Job、StepRun 和执行实例；不从 task reference 名字推断缺失归属。缺字段的历史联调样本先经 `CancelJob` 结束，再通过现有迁移工具创建/发布新样本，成功后归档旧 Workflow；不修改旧 Compilation 或 Conductor 执行快照。
@@ -7,6 +29,16 @@ Capability Task input 在 Invocation Mapping 之外固定包含 `job_id=${workfl
 真实 Worker 单样本 HTTP 门禁位于 `media-cli/e2e/workflow_personal_worker_fixture_test.go`，显式开启才能提交一次。设置 `MEDIA_E2E_SAMPLE_JOB_ID` 时只查询/确认已有执行，绝不再次提交。测试使用 User API Token 访问统一网关，外部独立运行的 media_worker 使用 Worker API Token；内部渲染/收口任务仍由 media_workflow 执行。多候选审批由测试模拟用户调用确认接口，不能由 Worker 自批。普通单测不消费测试环境队列。
 
 ## 范围
+
+### 本轮功能收口（2026-10-04）
+
+原生 Submit 对 Product 主图、Virtual IP 各图片、Material 与 Asset URL 校验 `MEDIA_STORAGE_PUBLIC_ENDPOINT`、`/media/materials/<organization_id>/` 路径和当前可读性，持久化为 `object_path:<path>`。复制输入后转换，不修改调用者对象。纯文本 Material 的空 URL 不解析。Personal Worker Gateway 在实际交付和租约重取时解析稳定引用，Job、Conductor 和 Dispatch 均不因重签改写；原生内容中的 `gen_` 普通字符串不能作为历史 Generated Asset 查询。对象不可用、外企业对象或签发地址即将过期时拒绝交付。
+
+Managed Runtime 复用同一对象解析与稳定 Dispatch 快照，企业来自 Job，不能从 Conductor Task 的任意字段派生。内部服务端解析使用 Materials 服务凭据，不为 Managed Worker 新增 API Token。
+
+交付时，服务端用已知输入引用和已解析的媒体引用替换渲染结果 `prompt` 中的引用，不在客户端重新渲染模板，也不解析提示词中的任意外部 URL。上游产物的链接只有匹配受控存储来源及 Job 企业命名空间时才重新签发。Retry 的输入覆盖按 Job 对应 Compilation/IR 和冻结 Template Version 派生的 Schema 校验，媒体重新验证后冻结；Retry History 也保存冻结输入，不记录临时签名。错误发生在重跑命令和状态修改之前。
+
+先完成普通 User 的新建执行链路，暂缓历史数据核对、迁移及 UI 实现，不扩展 Agent 生命周期。SubmitJob 必须提供目标 Workspace；服务端通过 Control 校验当前用户的 Workspace 访问及 `use_workflow` 权限，并派生 Job 企业归属。请求的企业选择与 API Token 绑定企业均不能越过 Workspace 的真实企业；未绑定企业的浏览器身份也不能省略 Workspace。Personal Worker 交付前必须匹配 Job owner、企业和执行实例，企业归属为空或不匹配时不创建 Dispatch。
 
 本规格定义 `media_workflow` 从业务 Workflow 发布到 Conductor Definition 的两阶段编译，以及内部模板渲染 Worker。FlowGram 文档、业务 Workflow DSL、Executable Workflow IR 和 Conductor Definition 必须分层，不互相充当事实源。
 
@@ -56,7 +88,13 @@ Expression 初期只允许：
 2. Capability SIMPLE Task：`prompt` 引用 Renderer 输出，其他参数由 Invocation Mapping 直接降低；
 3. 候选持久化、审批/重生成及唯一 `output_resource_id` 收口。
 
+预期单候选且策略为 `when_multiple_candidates` 时，Capability 后仍编译运行期 `SWITCH`，依据实际 `candidates.length` 决定是否进入 HUMAN；不能因为预期为 1 而删除多候选审批路径。预期多候选或 `always` 则直接进入 HUMAN。Finalize 在审批分支完成后使用唯一选中候选；自动单候选分支允许选中候选为 null，由 Finalize 收口该唯一候选。旧 Compilation/Definition 不原位覆盖，修复后的编译结果通过新版本发布生效。
+
 保持现有拓扑波次策略。Definition 不包含 Job ID、密钥、Token、二进制或临时 URL。Definition canonical JSON 用于 SHA-256 hash。
+
+每个 Step 编译为 `DO_WHILE(Renderer -> Capability -> HUMAN 或动态审批 SWITCH) -> Finalize`。循环条件仅在本轮 HUMAN 输出 `decision=regenerate` 时成立，自动单候选没有 HUMAN 则结束循环。循环内引用采用原始 Step Key 的十六进制编码，形如 `step_<hex-key>_invoke`；只允许 Conductor 在尾部添加 `__<positive-iteration>`，避免与其循环引用解析冲突。Finalize 保留循环外稳定引用供后继使用。
+
+对账按 Step Key 选最新轮任务，不能依赖任务数组顺序；完成旧轮的审批输出不再触发 needs_confirm，旧失败不覆盖新轮。确认与重新生成先读取真实执行，找到该节点最新轮 `IN_PROGRESS` 的 HUMAN 精确引用；确认输出 `decision=accept` 和选中候选，重新生成输出 `decision=regenerate`。旧无循环定义只能确认，重新生成返回明确不支持错误，不尝试终止整个 Workflow。
 
 ## Renderer Worker
 
@@ -71,6 +109,8 @@ Worker 属于 `media_workflow`，与 API 共用代码库但以独立进程部署
 ```
 
 纯 Renderer 位于 Template Domain；Conductor poll/ack 位于基础设施适配层，Worker workflow 负责二者编排。Renderer 不查询 `media_materials`、不调用 Provider、不决定 Capability 参数顺序。同一输入必须确定性输出；缺少字段、模板语法错误或不允许的字段访问返回稳定错误码。
+
+新编译 Renderer 输入增加 `feedback_mode=last_regeneration_v1`、`generation=${<loop>.output.iteration}`、`previous_generation=${<approval>.iteration}`、`previous_review=${<approval>.output}`。Renderer 在本轮 HUMAN 创建之前调度，这两项审批引用应取紧邻前轮；必须在真实 Conductor 验证，不依靠静态引用猜测。首轮 generation=1，审批引用为空；后续要求 previous_generation=generation-1 且 previous_review.decision=regenerate，否则拒绝。不能复用其他节点、非相邻轮或 accept 的反馈。首轮基础提示词不变；新轮重新渲染冻结模板，反馈非空时追加 `\n\n用户重新生成反馈（本轮）：\n<feedback>`。原文最多 8192 字节，不作为模板执行，不累计较早反馈，完整结果参与 prompt_digest。旧 Renderer 输入没有 feedback mode 时保持原行为。
 
 ## Worker Execution Target
 
@@ -115,7 +155,7 @@ Completion/Failure 验证 Principal 绑定、attempt、lease、输出 schema 与
 
 ### 对象传输
 
-Definition 与持久任务只保存 Object Path。领取时生成短时 presigned GET/PUT URL；Worker 上传后回传 Object Path、checksum、content_type、size 和 provenance，不能提交任意外部 URL。Provider URL 必须先摄取到受控存储。Finalize 校验对象后，以 `(step_run_id, attempt)` 幂等登记唯一 Generated Asset。
+Definition 与持久任务只保存 Object Path。领取时生成短时 presigned GET/PUT URL；Worker 上传后回传 Object Path、checksum、content_type、size 和 provenance，不能提交任意外部 URL。Provider URL 必须先摄取到受控存储。Finalize 校验对象后，按原生生成结果登记规格，以稳定 StepRun ID 与 `result_key=SHA256(JSON([ConductorWorkflowID,StepRunID,当前轮唯一成功CapabilityTaskID]))` 登记该轮独立 Generated Asset。同轮重放原ID，新成功能力任务新ID，StepRun指向最新接受结果，旧产物保留。Worker Dispatch attempt 与 Finalize重试任务ID不是产物轮次身份；完整约束见 `docs/spec/generation-result-idempotency.md`。
 
 ## 持久化与版本
 
@@ -151,7 +191,43 @@ Template 与 Template Version 增加 `capability_key`、`capability_version` 和
 
 ## 人工审批运行时契约
 
+### 用户 CLI
+
+`media_workflow job get --id <job>` 返回 Job 状态和节点摘要；`step-run get --id <step>` 返回节点状态、候选数量、选中数组位置、输出资源 ID 及最近 Review 回执。两者不打印候选 URL、动态输入或渲染提示词。
+
+`step-run retry --id <failed_step> --reason <optional_text>` 使用既有公开 Retry API，成功须为 200 且响应 StepRun ID 与请求匹配；只打印安全摘要（含 retry_count）。不接受输入覆盖，不冒充持久审批决定，也不自动重试 HTTP 请求。错误或响应不明确时提示先查询 Job/StepRun；当前 Retry API 尚无持久幂等命令，不能把重复发送视为安全恢复。与 HTTP 重试门禁分开验证独立 CLI 进程完整流程。
+
+`step-run confirm --id <step> --selected-index <array-position> --idempotency-key <stable-key>` 与 `step-run regenerate --id <step> --feedback <optional-text> --idempotency-key <stable-key>` 调用公开网关 API，成功须为 202 且有 Review 回执。显式稳定键必填，同一决定网络重试复用；新决定使用新键。凭据从既有 API Token 配置取得，禁止请求身份覆盖或输出上游原始错误。CLI 与 Go HTTP 测试分别验收，查询/终态重放不能代替新执行门禁。
+
+### 持久化决定与恢复
+
+SubmitJobReq 的 `idempotency_key` 位于字段 7，保持可选；Handler 仅绑定可信作用域并交给 Submit，摘要冲突固定返回 409，不返回原始请求或上游错误。`media_workflow submit-job --idempotency-key <stable-key>` 透传该键；CLI 仍通过当前授权的库资源读取/解析组装输入并确定发布版本，资源内容或发布版本改变可能导致冲突，不提供离线冻结请求重放。CLI 不自动重试；响应不明确时提示查询执行或复用同键，不能自动产生新键。生成 Hertz Client 在错误时可能丢弃 rawResponse 并将 status/body 包成 JSON 错误，CLI 只检查 status_code，不展示 body。
+
+公开 Submit 可选 idempotency_key；省略保持每次新提交，提供时要求 1–160 个可见 ASCII 字符（不含空格）。migration 019 `job_submissions` 持有 `(submitted_by, organization_id, workspace_id, idempotency_key)` 主键、唯一 Job 外键 RESTRICT、64 位小写十六进制 request_digest、created_at。`SubmissionRepo.GetSubmission(ctx,key,lock)` 在首次接受事务内用完整作用域 SHA-256 的 64 位值取得事务级 advisory lock 后二次查询；非事务 lock/save 拒绝。Save 验证 Job owner/企业/Workspace、native 与初次启动记录已存在。摘要由 Workflow ID、请求版本（含 0）、规范化稳定媒体输入产生，不能持久化签名 URL；同键不同参数返回 409，同键同参数返回原 Job 当前状态。授权每次重验，重放先于当前 Workflow/媒体读取；同键并发必须只保存一个完整聚合。HTTP/CLI 接线与真实并发另行验收。
+
+普通 Submit 启动落库新增 migration 017 `execution_starts`，由 Execution Job Repository 持有。`ExecutionStart` 冻结 Job ID、引擎 Definition 名称/版本、Compilation hash、correlation=Job ID、workflow_input 与 task_domains JSON，以及规范化 JSON 摘要。EnqueueStart 必须使用保存 Job/StepRun 的调用方事务，只有无实例 native pending Job 可写，Compilation hash 同时绑定至 Job。
+
+ClaimStart 使用 SKIP LOCKED 和新 UUID token，queued/uncertain 均可领取；MarkStartSent 只允许有效 token/两分钟内租约且 Job 仍 pending 的 queued→uncertain。事务外发送一次 Start 后，FinishStart 同事务写 Job running/实例及命令 started，必须匹配冻结摘要、token、租约；ReleaseStartClaim 只保存固定码和十秒退避，不改变 queued/uncertain。回滚与降级保护不得丢失启动事实。当前引擎不保证启动去重，后台恢复 uncertain 只查询原实例，不再发送。取消与实例终止接线、公开 Submit 幂等、进程重启以及实际部署单流程另行验收；仓储实现不等于功能已上线。
+
+迁移 018 扩展启动取消状态：cancel_pending 必须有实例，cancelled 可有已清理实例。`CancelInitialStart` 锁 Job 后锁启动记录，同事务取消 Job；queued 清除 claim 转 cancelled，started 清除 claim 转 cancel_pending，uncertain 保留状态供只读恢复。重复 cancelled Job 返回原事实，其他终态拒绝取消；无初次启动记录返回未接管，由原有路径处理。Claim/Release 包含 cancel_pending。`FinishCancelledStart` 只允许 cancelled Job、uncertain/cancel_pending、有效 claim/摘要及匹配实例，记录 cancelled 清除租约，不修改 Job。后台 uncertain 只查询原实例；cancel_pending 使用已冻结实例 ID。先 Get 引擎状态，非终态才 Terminate，再 Get 确认终态才收口；终止响应丢失保留义务，下一轮先读，不盲目再次终止。取消实例查询无结果不标完成。在线接线与真实故障恢复需单独验收。
+
+失败 Step Retry 从最新生成轮 Renderer 开始，前提是本地 Job 与 Conductor 均为失败终态且未超过次数上限。Adapter 保留任务 `seq` 的缺失语义（可空整数，不以默认 0 冒充已知顺序）。rerun 前检查其他业务节点：按 seq 会被删除、保留但未完成会被重开、缺失顺序或未知 SIMPLE/HUMAN 均拒绝直接重跑；拒绝不能变更 StepRun/Job/Retry History 或调用 rerun。已完成且位于目标之前的节点保持原样。
+
+这是并行恢复开发期间的防误执行保护，不代表支持全部 DAG Retry。完整恢复需从冻结 Compilation/IR 派生受影响集合，持久化幂等重试意图和保留的产物引用/反馈，由后台协调引擎及本地状态；不得重跑无关已完成 Capability。不能将旧 historical restore 入口直接开放给原生 Job，或更换用户/Workspace 实现恢复。
+
+状态投影在调用 Engine.Get 前捕获 Job ID、ConductorWorkflowID、RetryCount 的值副本；本地 Job→Step 锁内重读当前聚合，不匹配则停止该次投影。外部产物保存前检查一次，保存后本地 Output/Status 事务内再检查；不能在数据库事务中请求引擎或素材服务。校验发现过期后不再调用素材服务或改写节点、审批、终态，Get/List 返回重新读取的当前持久状态，不向用户暴露过期快照错误。若 Retry 在外部保存期间发生，只阻止后续本地收口，不能撤销已经发生的外部副作用。该校验只识别已经持久化的 Retry 边界，不能代替 Retry 意图与引擎的可靠协调，也不能证明重试 POST 后、本地次数增加前的窗口已解决。
+
+`POST /api/v1/step-runs/:step_run_id/confirm` 接收 `selected_index`（候选数组位置）和可选 `idempotency_key`；`regenerate` 接收可选 `idempotency_key`、`feedback`。新调用方每次业务决定生成稳定键（不超过 160 字节），网络重试复用，不同决定或生成轮换新键。显式同键同决定在任务终态后仍返回原回执；不同内容 409。无键兼容只对当前精确 HUMAN 去重，不保证跨轮重放。反馈最多 8192 字节，冻结原文并参与幂等比较；HUMAN input 必须声明 `feedback_mode=last_regeneration_v1` 才接受非空反馈。旧定义非空反馈 400，无反馈重新生成仍兼容。
+
+成功返回 202 StepRun，增加 `last_review_id` 与 `last_review_status=pending|applied|failed`；这是最近决定的回执，不是当前轮待审批标志。当前权限拒绝 403、授权装配不可用 503；身份从网关可信上下文获取。后台每秒领取一条命令，单次投递超时 20 秒，临时错误退避十秒、租约两分钟回收。服务重启不删除 pending 命令。投影在本地事务内锁 Job→StepRun 后复核精确任务 Review，Job waiting 状态在 Job 锁内按步骤重新计算，外部查询不得占用该事务。
+
+`media_workflow.step_run_reviews` 保存 Job/StepRun、精确 Conductor Workflow/Task ID 与引用、generation、decided_by、idempotency_key、decision、候选快照、冻结 output JSON、request digest 和 pending/applied/failed 状态。同轮唯一键为 `(step_run_id, conductor_task_id)`，命令唯一键为 `(step_run_id, idempotency_key)`。同键同内容返回原决定，同键异内容及同轮另一键拒绝。
+
+应用层 TxRunner 开启本地事务；Repository 使用传入事务锁定 Job→StepRun，校验 owner、执行实例、need_confirm 与候选快照，再插入 Review 并把步骤改为已接收决定的 claimed 状态。命令领取使用单条 `UPDATE ... FOR UPDATE SKIP LOCKED ... RETURNING`，过期阈值两分钟，产生新 claim token。完成/失败/释放都必须匹配 token；重放不能重写原 payload，失败原因只保存稳定码，不存完整上游错误。Review pending 时投影不能重新暴露该轮为可确认。
+
+投递过程不持有数据库事务。先查询精确任务，COMPLETED 且输出匹配则只补记 applied；RUNNING/HUMAN IN_PROGRESS 才提交。任务替换、取消或相反决定返回 failed；暂时错误保留 pending，退避后重试。数据库回滚须同时撤销 Review 与步骤状态；迁移回滚不得删除已有 Review 审计。
+
 - Semantic Compiler 在 IR 中冻结 `candidate_count` 与 `approval_required`；Template 多候选/`needs_confirm` 或 Step `approval_policy=always` 均要求审批。
 - Backend Compiler 在 Capability task 后插入 Conductor `HUMAN` task。`media_worker` 只返回 candidates，不消费 HUMAN、render_template 或 finalize 内部任务。
 - media_workflow 对账 HUMAN task input，投影 `StepRun=need_confirm`；用户确认后以 `selected_candidate` 完成 HUMAN task，Finalize 形成唯一输出并登记 Generated Asset。
-- 用户选择重新生成时，从当前 Step 的 Capability task rerun，清空本次候选并返回 running；不把重新生成误当失败重试。
+- 用户选择重新生成时，完成当前循环 HUMAN 的 `regenerate` 决定；下一轮独立生成，旧轮结果只保留审计，不取消旁路、不调用非终态 rerun，也不把重新生成误当失败重试。

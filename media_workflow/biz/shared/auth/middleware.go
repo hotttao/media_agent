@@ -36,10 +36,11 @@ import (
 
 // User 是注入 ctx 的鉴权主体（与 media_auth auth.Session 对齐）。
 type User struct {
-	Sub      string `json:"sub"`
-	Username string `json:"username"`
-	Name     string `json:"name"`
-	Role     string `json:"role"`
+	OrganizationID string `json:"-"`
+	Sub            string `json:"sub"`
+	Username       string `json:"username"`
+	Name           string `json:"name"`
+	Role           string `json:"role"`
 }
 
 // Config auth 中间件配置。
@@ -290,7 +291,7 @@ func (m *Middleware) Handler() app.HandlerFunc {
 						if role == "" {
 							role = "user"
 						}
-						user := &User{Sub: userID, Username: userID, Name: userID, Role: role}
+						user := &User{Sub: userID, Username: userID, Name: userID, Role: role, OrganizationID: claims.OrganizationID}
 						ctx = context.WithValue(ctx, callerKey{}, user)
 						teamIDs, _ := m.fetchTeams(ctx, user.Sub)
 						if teamIDs != nil {

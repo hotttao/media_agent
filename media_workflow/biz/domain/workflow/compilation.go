@@ -2,8 +2,11 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+var ErrCompilationConflict = errors.New("workflow version already has a different frozen compilation")
 
 type Compilation struct {
 	ID               string
@@ -21,6 +24,8 @@ type Compilation struct {
 }
 
 type CompilationRepo interface {
+	// Save inserts once or replays the identical frozen payload. It never
+	// overwrites a version's identity, IR, definition or registration state.
 	Save(ctx context.Context, compilation *Compilation) error
 	MarkRegistered(ctx context.Context, id string) error
 	MarkFailed(ctx context.Context, id, message string) error

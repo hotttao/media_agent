@@ -148,15 +148,26 @@ material ↔ virtual_ip / material ↔ product 的 N:N 绑定。
 
 约束：PK `(source_material_id, target_material_id, relation_kind)`；两端必须同 Organization、同 Scope，且 Asset Kind 分别为 pose、movement。关系与 Material 同属 asset domain，在一个本地事务内整组替换。
 
-## UpsertGeneratedAsset 与 retry 的 name 语义
+## UpsertGeneratedAsset 与生成结果身份
 
-generated_asset 唯一键 `(organization_id, scope, asset_kind, name) WHERE deleted_at IS NULL`。`name` 是**业务维度稳定标识**（如 `model_image_v1`），不是 attempt 标识。
+generated_asset 保留唯一键 `(organization_id, scope, asset_kind, name) WHERE deleted_at IS NULL`。原生新结果使用包含结果身份的稳定名称；名称不作为跨轮覆盖入口。
 
-- **Upsert 语义**：按 `(organization_id, scope, asset_kind, name)` upsert--存在则更新（覆盖 object_path / metadata / 生成记录字段），不存在则插入。用于 step 首次产出。
-- **Retry 覆盖语义**：retry 重跑同一 StepRun 时，新 attempt 产物**复用同一 name**，经 upsert 覆盖该 generated_asset 行的 object_path / metadata / 生成记录字段；旧 attempt 的 object_path 由 execution 写入 `retry_history`（保留可追溯），generated_asset 行本身被覆盖。
-- **若需保留旧 attempt 产物为独立 asset**：调用方在 retry 时传新 name（如 `model_image_v1_retry2`），upsert 落新行；name 增量策略由调用方决定，本 domain 不自动加 attempt 后缀。
+- 每个 Generation Result 对应独立、不可变 Generated Asset；Retry 不覆盖上一轮的资源 ID、对象或内容，已存在资源引用不改变含义。
+- `(step_run_id, result_key)` 的登记回执属于 asset 聚合，一次事务内创建 Asset 与回执；同键同稳定摘要返回原 Asset ID，同键不同内容或来源拒绝。
+- 相同媒体对象可被不同轮 Generated Asset 引用，不以内容相同推断结果身份相同。业务节点当前指向哪个产物由 Execution 管理，不由 Materials 保存“最新结果”别名。
+- 软删除不会清除登记回执或允许同键重新生成新 Asset。历史记录保留原身份，不伪造轮次、不合并或覆盖。
 
-> 即：name 是业务维度稳定标识，retry 默认覆盖同一业务产物；attempt 维度的历史由 execution 的 `retry_history` 承载，不在 generated_assets 表膨胀行。
+### 生成结果登记回执
+
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| step_run_id | text | 稳定业务节点来源；跨服务逻辑引用 |
+| result_key | text | 当前被接受生成结果的稳定身份 |
+| asset_id | text | 对应不可变 Generated Asset |
+| request_digest | text | 规范化对象引用、内容及可信来源的摘要 |
+| created_at | timestamptz | 首次登记时间 |
+
+主键 `(step_run_id, result_key)`，asset_id 唯一并引用本库 Generated Asset；并发首次登记只创建一个资源。回执不得随 Retry、网络断线或软删除而改写。不建立对 Workflow 数据库的 FK。
 
 ## 校验细则
 

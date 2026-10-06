@@ -111,6 +111,7 @@ message UpsertGeneratedAssetReq {
   int32 template_version = 12;
   string source_virtual_ip_id = 13;
   string source_product_id = 14;
+  string result_key = 15;
 }
 
 message UpsertGeneratedAssetResp {

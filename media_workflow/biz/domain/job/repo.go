@@ -30,6 +30,12 @@ type CapabilityTaskEngine interface {
 	UpdateCapabilityTask(ctx context.Context, result CapabilityTaskResult) error
 }
 
+// ApprovalTaskEngine submits to an immutable engine task identity. Reference
+// names can be reused during Retry and must never redirect a durable decision.
+type ApprovalTaskEngine interface {
+	CompleteApprovalTask(ctx context.Context, workflowID, taskID string, output map[string]any) error
+}
+
 type CapabilityTask struct {
 	TaskType, ReferenceTaskName, TaskID, WorkflowInstanceID string
 	RetryCount                                              int
@@ -50,6 +56,7 @@ type EngineExecution struct {
 }
 
 type EngineTask struct {
+	Sequence          *int
 	TaskID            string
 	TaskType          string
 	ReferenceTaskName string

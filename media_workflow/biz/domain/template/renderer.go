@@ -21,6 +21,7 @@ type RenderRequest struct {
 	TemplateVersion int            `json:"template_version"`
 	Body            string         `json:"body"`
 	Context         map[string]any `json:"context"`
+	Feedback        string         `json:"feedback,omitempty"`
 }
 
 type RenderResult struct {
@@ -32,6 +33,9 @@ type RenderResult struct {
 // JSON prevents callers from exposing Go methods or executable values to the
 // text/template engine. No custom functions are registered.
 func Render(req RenderRequest) (RenderResult, error) {
+	if len(req.Feedback) > 8192 {
+		return RenderResult{}, ErrInvalidRenderContext
+	}
 	contextJSON, err := json.Marshal(req.Context)
 	if err != nil {
 		return RenderResult{}, fmt.Errorf("%w: %v", ErrInvalidRenderContext, err)
@@ -51,6 +55,10 @@ func Render(req RenderRequest) (RenderResult, error) {
 	}
 
 	prompt := rendered.String()
+	if req.Feedback != "" {
+		// Feedback is data, not template source. Do not parse or execute it.
+		prompt += "\n\n用户重新生成反馈（本轮）：\n" + req.Feedback
+	}
 	digest := sha256.Sum256([]byte(prompt))
 	return RenderResult{Prompt: prompt, PromptDigest: "sha256:" + hex.EncodeToString(digest[:])}, nil
 }

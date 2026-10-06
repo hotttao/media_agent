@@ -18,6 +18,7 @@ type UpsertCommand struct {
 	TeamID            string
 	JobID             string
 	StepRunID         string
+	ResultKey         string // Immutable successful generation identity; empty only for legacy callers.
 	TemplateID        string
 	TemplateVersion   int
 	SourceVirtualIPID string

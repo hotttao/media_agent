@@ -41,6 +41,11 @@ type Task struct {
 	SubWorkflowParam  *SubWorkflowParam `json:"subWorkflowParam,omitempty"`
 	JoinOn            []string          `json:"joinOn,omitempty"`
 	ForkTasks         [][]Task          `json:"forkTasks,omitempty"`
+	EvaluatorType     string            `json:"evaluatorType,omitempty"`
+	Expression        string            `json:"expression,omitempty"`
+	DecisionCases     map[string][]Task `json:"decisionCases,omitempty"`
+	LoopOver          []Task            `json:"loopOver,omitempty"`
+	LoopCondition     string            `json:"loopCondition,omitempty"`
 }
 
 type SubWorkflowParam struct {

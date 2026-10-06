@@ -30,3 +30,7 @@
 - 客户端 `media_worker` 仅执行版本化 Capability Task，并显式拒绝内部 Task Definition。
 - 发布流程持久化 IR、Conductor Definition 与哈希后注册到 Conductor；Job 通过冻结的 compilation 启动并投影执行状态。
 - 使用 `media_ai` 的单个完整视频样本验证八步流程和并行动作视频分支；全量迁移等待用户确认。
+## 2026-10-06 · 发布接受与注册恢复解耦
+
+- 明确TX1接受、事务外注册、TX2收口及请求断线/进程重启/冲突/过期claim行为。
+- 冻结完整TaskDefinition注册参数，避免恢复时重新编译导致同版本契约变化。

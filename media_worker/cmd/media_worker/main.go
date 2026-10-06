@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -26,8 +28,11 @@ func main() {
 	fixtureAssetsURL := flag.String("fixture-assets-url", envOr("MEDIA_WORKER_FIXTURE_ASSETS_URL", "http://192.168.2.38"), "media_ai fixture asset service base URL (test profile only)")
 	fixtureVideoResultURL := flag.String("fixture-video-result-url", envOr("MEDIA_WORKER_FIXTURE_VIDEO_RESULT_URL", ""), "pre-uploaded target-storage video URL for the historical fixture")
 	fixtureModelResultURL := flag.String("fixture-model-result-url", envOr("MEDIA_WORKER_FIXTURE_MODEL_RESULT_URL", ""), "pre-uploaded target-storage model image URL (test profile only)")
+	fixtureModelResultURLs := flag.String("fixture-model-result-urls", envOr("MEDIA_WORKER_FIXTURE_MODEL_RESULT_URLS", ""), "JSON array of distinct pre-uploaded model image URLs (test profile only)")
 	fixtureStyleResultURL := flag.String("fixture-style-result-url", envOr("MEDIA_WORKER_FIXTURE_STYLE_RESULT_URL", ""), "pre-uploaded target-storage style image URL (test profile only)")
 	fixtureFirstFrameResultURL := flag.String("fixture-first-frame-result-url", envOr("MEDIA_WORKER_FIXTURE_FIRST_FRAME_RESULT_URL", ""), "pre-uploaded target-storage first-frame image URL (test profile only)")
+	fixtureFailStep := flag.String("fixture-fail-step", envOr("MEDIA_WORKER_FIXTURE_FAIL_STEP", ""), "step to fail once per Job (test profile only)")
+	fixtureFailCall := flag.String("fixture-fail-call", envOr("MEDIA_WORKER_FIXTURE_FAIL_CALL", "1"), "distinct dispatch number to fail, one to eight (test profile only)")
 	flag.Parse()
 	if *gatewayURL == "" {
 		log.Fatal("MEDIA_GATEWAY_URL or -gateway-url is required")
@@ -42,6 +47,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if *fixtureFailStep != "" {
+		call, err := strconv.Atoi(*fixtureFailCall)
+		if err != nil || executor.SetFailureOnce(*fixtureFailStep, call) != nil {
+			log.Fatal("fixture failure requires a step and call between one and eight")
+		}
+	}
 	if err := executor.SetVideoResultURL(*fixtureVideoResultURL); err != nil {
 		log.Fatal(err)
 	}
@@ -51,6 +62,18 @@ func main() {
 		"media.image.first_frame": *fixtureFirstFrameResultURL,
 	} {
 		if err := executor.SetResultURL(key, resultURL); err != nil {
+			log.Fatal(err)
+		}
+	}
+	if *fixtureModelResultURLs != "" {
+		if *fixtureModelResultURL != "" {
+			log.Fatal("configure either single or multiple model results, not both")
+		}
+		urls, err := parseFixtureResultURLs(*fixtureModelResultURLs)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := executor.SetResultURLs("media.image.model", urls); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -78,6 +101,14 @@ func main() {
 	log.Printf("media_worker started: worker_id=%s profile=%s capabilities=%d", *workerID, *profile, len(capabilities))
 	<-ctx.Done()
 	wg.Wait()
+}
+
+func parseFixtureResultURLs(raw string) ([]string, error) {
+	var urls []string
+	if json.Unmarshal([]byte(raw), &urls) != nil || len(urls) < 2 || len(urls) > 8 {
+		return nil, errors.New("multiple fixture results require a JSON string array of two to eight URLs")
+	}
+	return urls, nil
 }
 
 func runCapability(ctx context.Context, client *gateway.Client, workerID string, capability gateway.Capability, executor *fixture.Executor) {

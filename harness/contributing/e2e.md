@@ -265,7 +265,79 @@ go -C media-cli run . media_workflow submit-job --dry-run \
 
 `--asset 'input_name=<generated_asset_id>'` 选择schema声明的产物输入；不按类型自动挑记录。请求身份来自同一套`MEDIA_API_TOKEN`，不再支持手填`--user-id`。dry-run只输出输入计数/版本摘要，没有短时URL。该CLI门禁不替代HTTP执行/结果及审批门禁，也不作为前端旅程验收。
 
+四节点 `TestWorkflowPersonalWorkerFixture` 可显式设置 `MEDIA_E2E_REGENERATE_STEP_KEY=model_image`，对该节点第一次审批调用重新生成，第二次审批再确认，并要求最终四节点成功。测试 Workflow 应把该节点配置为 `always`；其他环境变量及外部 fixture Worker 沿用单样本门禁。必须先审计用户待执行队列，不原位修改已发布 Compilation；测试结束停止 fixture Worker，不停止常驻后端。此门禁只证明实际单候选审批/重新生成链路，不替代多候选业务 API、并发决定、持久化 Outbox 和故障恢复测试。
+
+该样本审批命令使用显式稳定幂等键并重复提交，要求返回同一 Review 回执。完成后可设置 `MEDIA_E2E_REVIEW_JOB_ID=<该样本 Job ID>`，运行 `go -C media-cli test ./e2e -run '^TestWorkflowReviewReceiptsGateway$' -count=1 -v`；它只重放已有决定，验证终态 202/applied 原回执与相反决定 409，不创建或重新执行任务。User Token 和网关配置沿用上述门禁，凭证禁止输出。
+
+可设置 `MEDIA_E2E_REGENERATE_FEEDBACK=<测试反馈>` 验证反馈决定的同键重放，并检查下一轮 `rendered_prompt` 的纯文本反馈后缀。需要新发布且声明 `last_regeneration_v1` 的定义；旧定义不原位升级，非空反馈明确拒绝。该 HTTP 门禁仍使用外部 fixture Worker，不证明模型理解反馈的生成质量。
+
+多候选门禁设置 `MEDIA_E2E_MULTIPLE_STEP_KEY=model_image` 和 `MEDIA_E2E_SELECT_CANDIDATE=1`；外部 Worker 使用私有 `MEDIA_WORKER_FIXTURE_MODEL_RESULT_URLS` 返回两个不同受控图片对象。每次审批必须确有两候选，完成后校验选中数组位置与最终 Generated Asset 对象路径；不复制同一图片伪造多个候选。新 Workflow 可用 when_multiple_candidates 检验预期数量与实际数量不一致的 HUMAN 分支。测试结果仍明确为 mock，不能当作模型生成质量验收。
+
+失败重试 HTTP 门禁另设置 `MEDIA_E2E_RETRY_STEP_KEY=model_image`，独立 Worker 显式配置 `MEDIA_WORKER_FIXTURE_FAIL_STEP=model_image`、`MEDIA_WORKER_FIXTURE_FAIL_CALL=2`，配合上述重新生成门禁。只有观察到 Job FAILED 且指定 StepRun FAILED，才发出一次用户 Retry；第二次失败直接报错，不自动重提 Job。最终该 StepRun 的 retry_count 必须为 1，反馈仍存在，四节点全部成功。失败夹具不代替网络响应丢失、持久化重试意图或并行恢复门禁；此测试也不证明独立 CLI 重试成功链路。
+
+独立 CLI 门禁使用同一套网关/User Token 配置，`APP_ENV=local MEDIA_WORKFLOW_ADDR="$MEDIA_GATEWAY_ADDR" MEDIA_MATERIALS_ADDR="$MEDIA_GATEWAY_ADDR"`：
+
+```bash
+go -C media-cli run . media_workflow job get --id <job_id>
+go -C media-cli run . media_workflow step-run get --id <step_run_id>
+go -C media-cli run . media_workflow step-run confirm --id <step_run_id> --selected-index 1 --idempotency-key <stable_accept_key>
+go -C media-cli run . media_workflow step-run regenerate --id <step_run_id> --feedback '<feedback>' --idempotency-key <stable_regenerate_key>
+```
+
+确认与重新生成是互斥决定，不能用上例对同轮都提交；验收已有完成样本时复用已保存的原键/原内容，只重放对应 Review，不执行新一轮。重复确认返回同一回执，同键相反决定必须失败。CLI 默认不打印 URL 或 prompt，测试凭据不得出现在命令参数或输出中。
+
 ### 已完成 Workflow 输出只读验收
+
+独立 CLI 失败重试完整门禁为 `TestWorkflowRetryCLI`。先在 media-cli 根构建二进制，再审计队列、启动独立 fixture Worker（失败节点 model_image、失败序号 1，多候选为两个受控图片）。沿用网关、User API Token、企业、Workspace 和已发布四节点 Workflow 的环境配置：
+
+```bash
+go -C media-cli build -o /tmp/media-agent-cli-workflow-retry-test .
+MEDIA_E2E_RETRY_CLI_SAMPLE=1 \
+MEDIA_E2E_CLI_BINARY=/tmp/media-agent-cli-workflow-retry-test \
+  go -C media-cli test ./e2e -run '^TestWorkflowRetryCLI$' -count=1 -v -timeout=3m
+```
+
+门禁不启动 Worker、不模拟 Worker、不模拟登录；通过独立 CLI 进程执行 dry-run、唯一 Submit、查询、失败节点 Retry、候选 Confirm，最后要求四节点产物均存在且模型节点 retry_count=1。测试设置 CLI 工作目录为 media-cli 根以加载配置，捕获但不打印失败输出。失败保留 Job，不能重复执行门禁造成另一条 Job；结束后停止测试 Worker，再用只读产物门禁验收。该测试不是重试意图持久化、并行恢复或真实模型质量证明。
+
+普通启动的协议门禁位于 `media_workflow/e2e/start_idempotency_test.go`，只创建唯一命名 HUMAN 技术流程，结束时终止本次实例并删除本次定义，不消费用户队列：
+
+Workflow 注册协议门禁：`MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 go -C media_workflow test -tags=e2e -race ./e2e -run '^TestConductorRegistrationFrozenDefinition$' -count=1 -v -timeout=90s`。仅创建唯一技术 HUMAN 定义，用代理丢弃实际 PUT 成功响应；要求读回精确版本恢复、同内容重放不写、不同内容拒绝且原定义不变。结束只删测试定义，不启动实例/Worker、不修改共享 Task Definition 或运行用户 Compilation。它不证明 Publication 本地事务、后台重试或公开 HTTP/CLI 发布接线。
+
+原生初次启动仓储门禁为 `go -C media_workflow test -tags=e2e -race ./e2e -run '^TestExecutionStartOutboxPersistence$' -count=1 -v -timeout=2m`。它仅在 testcontainers PostgreSQL 应用迁移（含 017/018），验证 Job/StepRun/启动记录同事务、唯一性、lease fencing、发送前标记、不可盲重发的不确定状态、回执绑定原子性、未发送取消不再领取、重复取消、uncertain 晚到绑定不复活、cancel_pending 原实例清理与审计降级保护。不调用 Conductor、不创建运行用户 Job、不部署服务；不代替公开 Submit、后台投递或实际进程重启验收。
+
+产物投影持久层门禁：`go -C media_workflow test -tags=e2e -race ./e2e -run '^TestExecutionProjectionAtomicPersistence$' -count=1 -v -timeout=2m`。隔离 PostgreSQL 使用真实 Service/Repository/Tx，状态实际更新后注入错误，要求产物引用与成功状态共同回滚；下一次查询恢复，终态读取不重复 Upsert；模拟素材调用期间取消后不得复活 Job。Engine 快照和 Materials 返回是控制端口，该门禁不证明真实 Conductor/Materials 网络恢复、公开 HTTP、CLI 或运行部署。
+
+同一门禁还覆盖 Invoke 状态写入后失败时，候选清空被一起回滚；以及 Engine 旧快照读取后取消，Render/Invoke/Finalize/Approval 不再修改已取消聚合。不能据此宣称跨 Retry 轮次的过期快照已被 epoch 隔离。
+
+该门禁现亦在引擎读取旧快照后，实际持久化 RetryHistory/RetryCount，再检查 Render/Invoke/Finalize/Approval/Job status 投影被拒绝、查询返回当前 running 状态且不调用素材端口。这只证明本地已经增加次数后的边界；引擎 rerun 与本地接受之间的窗口、素材端按生成轮次去重和真实网络恢复仍是独立门禁。
+
+公开提交回执持久层门禁为 `go -C media_workflow test -tags=e2e -race ./e2e -run '^TestSubmissionAcceptancePersistence$' -count=1 -v -timeout=2m`。隔离 PostgreSQL 应用迁移 019，八路并发同键只接受同一完整聚合；检查回滚、不同摘要冲突、终态原回执、三层作用域隔离、事务要求、回执归属与降级审计保护。不启动 Conductor、不改运行用户数据；不代替服务端归一化/授权重放、HTTP/CLI 或部署验收。
+
+公开 HTTP 提交门禁：配置网关/User API Token、`MEDIA_E2E_SUBMIT_SOURCE_JOB_ID`（已有可读完整输入样本）与 `MEDIA_E2E_SUBMIT_IDEMPOTENCY_SAMPLE=1`，运行 `go -C media-cli test ./e2e -run '^TestWorkflowSubmitIdempotencyGateway$' -count=1 -v -timeout=2m`。八请求共享一次新意图，必须返回同一个 Job；等待后台启动、取消，仅修改媒体签名后重放原 cancelled 状态，改请求版本返回409。仅取消已确认属于本门禁的 Job，不启动模型 Worker，不把取消样本当作四节点完成证明。
+
+独立 CLI 门禁：先构建 CLI，配置绝对路径 `MEDIA_E2E_CLI_BINARY`、网关/User Token、企业/Workspace/已发布四节点 fixture Workflow，以及 `MEDIA_E2E_SUBMIT_CLI_SAMPLE=1`；运行 `go -C media-cli test ./e2e -run '^TestWorkflowSubmitIdempotencyCLI$' -count=1 -v -timeout=2m`。三个独立进程使用同键提交：首次、运行期间重放、取消后重放返回原 Job；只创建一个取消专用样本，不启动 Worker。命令失败不自动重发，私有 stdout/stderr 不输出；资源组装读取与 HTTP 并发门禁不是同一项证明。
+
+启动投递/取消恢复的真实引擎门禁为 `MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 go -C media_workflow test -tags=e2e -race ./e2e -run '^TestExecutionStartDeliveryCancellationRecovery$' -count=1 -v -timeout=3m`。使用真实 Conductor、隔离 PostgreSQL 与唯一 HUMAN 技术定义，仅在代理注入已提交响应丢失/即时查询不可用；覆盖未发送取消、未知启动只查询恢复、未知启动后取消、终止响应丢失后只读终态收口。每条已发送样本只有一个 Start，取消样本只有一个 Terminate；定义与实例仅清理测试创建的目标。不调用真实模型，不等同公开 HTTP/CLI 单流程或独立进程崩溃验收。
+
+独立进程恢复门禁：`MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 go -C media_workflow test -tags=e2e -race ./e2e -run '^TestExecutionStartRealProcessRestart$' -count=1 -v -timeout=3m`。子进程在真实持久领取、真实 Start 提交、本地绑定前，或真实 Terminate 提交、清理落盘前直接退出；另一个进程只使用数据库/引擎事实恢复。只提前隔离夹具租约，不修改运行 Job 时间。已提交动作的重复调用会使恢复子进程退出 88，防止被临时错误路径吞掉。mark-before-send 另作为安全边界：恢复仍 uncertain/pending、无实例，不重发；通过该断言不证明能自动启动，更不替代兼容引擎的启动去重门禁或在线 API 容器重启。
+
+```bash
+MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 \
+  go -C media_workflow test -tags=e2e ./e2e \
+  -run '^TestConductorStart(CommittedResponseLossRecovery|IdempotencyContract)$' -count=1 -v -timeout=90s
+```
+
+响应丢失门禁使用真实上游，仅在反向代理丢弃成功响应，要求 correlation 恢复同一 ID 且只有一次 Start。幂等门禁要求同一 `RETURN_EXISTING` 键在活动/终态都返回原实例；当前 3.32.4 镜像该门禁失败，不能开启不确定 Start 的自动重发或宣称可靠启动已完成。此门禁不替代 Submit 的数据库 Outbox、用户 API 或实际进程重启验收。
+
+审批内部故障恢复协议门禁位于 `media_workflow/e2e/review_outbox_test.go`，连接预启动 Conductor 和 testcontainers 隔离 PostgreSQL，不改运行用户数据：
+
+```bash
+MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 \
+  go -C media_workflow test -tags=e2e ./e2e \
+  -run '^TestReviewDeliveryReal(ProcessRestart|ConductorLostResponse)$' -count=1 -v -timeout=3m
+```
+
+`ProcessRestart` 使用两个独立测试子进程：领取后直接退出，以及真实提交成功、回执落盘前直接退出。恢复进程回收旧 lease；已提交场景禁止再次提交，只查询原 HUMAN。为避免等待两分钟，仅推进隔离夹具的 lease 到期时间。连接字符串通过子进程环境传入，不打印捕获的子进程输出。该门禁不替代用户 HTTP、后台服务装配或部署中 API 容器重启验收。
 
 `TestWorkflowCompletedOutputsGateway` 读取指定的已有四节点成功 Job，检查当前用户归属、每个节点成功且有产物、产物 Object Path 属于测试企业，再以不携带 API Token/Cookie 的独立 HTTP 客户端请求短时存储 URL。四个输出必须分别返回 `206 bytes 0-0/<positive-size>`，前三个为图片、最后一个为视频；不跟随重定向，不打印签名 URL。不提交、恢复、审批 Job，不启动 Worker。该门禁不代替新的四节点执行或前端预览验收。
 
@@ -422,3 +494,35 @@ MEDIA_E2E_TALOS_URL="http://${issuance_talos_ip}:4420" \
 
 - 不再提供 media-cli `e2e` 编排子命令（用 docker-compose 直管，更灵活）
 - 接口无关测试（migration / 事务 / 纯算法）继续用 `<app>/e2e/` 的 go test + testcontainers
+
+### Materials 生成结果登记持久化
+
+在 `media_materials/` 内执行：
+
+```bash
+GOWORK=off go test -tags=e2e ./e2e -run 'TestGeneration(ResultReceipt|RegistrationService)Persistence' -race -count=1 -v
+```
+
+两项门禁分别覆盖 Repository 键锁/八路并发/共享事务回滚/不可变约束/软删除与降级保护，以及实际 Service + Repository 的同轮去重、新轮独立 ID、新 Service 实例重放和来源校验。测试只创建并清理自己的 PostgreSQL 容器，不读写业务库。来源和对象存储是受控端口，不证明运行服务的 HTTP、真实 Storage 或 Workflow/Conductor 联调；接口级验证仍需独立 HTTP 与 CLI 门禁。
+
+补充执行：
+
+```bash
+GOWORK=off go test -tags=e2e ./e2e -run '^TestGenerationRegistration(HTTPReplayPersistence|RealProcessRestart)$' -race -count=1
+```
+
+前者用Hertz `ut`覆盖实际IDL/路由/内部鉴权/handler与持久层，丢弃首个成功响应后重放；不是TCP断链测试。后者在真正子进程提交后直接退出，再由另一子进程恢复；重放时任何Asset保存或Storage访问均导致专用失败退出码，必须原ID且仍仅一份Asset/回执。禁止输出私有DSN、子进程原始错误或签名URL。仅测试持久化与进程恢复，不启动业务HTTP服务，也不替代网关与完整CLI门禁。
+
+`TestGenerationRegistrationTCPLostResponse` 再通过受控TCP故障适配器，在真实handler提交后关闭socket；显式同键请求返回原回执且两表仍各1行。该适配器将网络请求转给Hertz `ut`，不等同于部署业务服务或网关的断网测试。Workflow `biz/shared/client` 的注册协议单元测试单独验证真实客户端不自动重发、ResultKey/内部Token透传与错误不泄露，不能用其模拟提供者冒充Materials持久化证明。
+
+### Workflow 冻结编译持久化
+
+审批周期门禁在 `media_workflow/` 内运行 `go test -tags=e2e ./e2e -run '^(TestReviewRetryEpochPersistence|TestExecutionProjectionAtomicPersistence)$' -race -count=1`，覆盖真实接受事务锁内周期校验、原键重放不重绑定、同数字generation跨Retry的旧Review隔离、epoch持久化/不可变与降级保护。引擎快照受控，AppendRetryHistory仅代表已提交本地边界，不证明实际rerun窗口恢复。新审批由标准服务冻结epoch，旧null记录不回填。
+
+`MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 go test -tags=e2e ./e2e -run '^(TestReviewDeliveryRealConductorLostResponse|TestReviewDeliveryRealProcessRestart)$' -race -count=1` 另验证冻结HUMAN Task ID的真实提交、丢响应后精确查询与进程恢复。禁止以Task Reference重新查找后提交新任务，不向客户端开放此内部接口。
+
+在 `media_workflow/` 内运行 `go test -tags=e2e ./e2e -run '^TestCompilationFrozenPersistence$' -race -count=1`。真实隔离PostgreSQL验证8路同内容并发只插入1条、调用方事务回滚、JSON键顺序/空白重放、不同IR/Definition/hash/引擎身份冲突、不重置生命周期、首次注册时间不变与晚到失败不回退；migration020另限制直接SQL修改冻结内容/成功状态/注册时间。注册失败可对原冻结内容重新注册成功，新Workflow版本可保存独立编译记录。测试不调用Conductor，不改业务库、不启动Worker，不替代Publication Outbox或用户发布HTTP/CLI验收。
+
+`MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 go test -tags=e2e ./e2e -run '^TestConductorTaskDefinitionFrozenRegistration$' -race -count=1` 使用独立技术TaskDefinition名称并在结束后清理，代理将实际POST成功响应替换成503，验证GET原定义恢复、重放0额外写入、不同契约拒绝且不PUT。无业务实例/Worker/模型执行或用户任务元数据改写。
+
+设置 `MEDIA_E2E_EXISTING_TASK_DEFINITIONS=1` 并运行 `TestConductorPublishedTaskDefinitionsCompatibility`，对当前四节点样本的6个TaskDefinition作只读兼容预检；测试代理禁止任何非GET请求，存在冲突时不能修复线上定义。该门禁只适用于文档样本契约，不是其他用户Capability的通用政策。

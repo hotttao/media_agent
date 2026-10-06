@@ -190,6 +190,8 @@ const (
 
 ### Render 接口
 
+执行期纯渲染可接收重新生成反馈：先以冻结 Template Version 与 Context 渲染基础提示词，再将不超过 8192 字节的反馈按普通文本附加；反馈不参与模板解析，不修改模板或 Context。最终 SHA-256 摘要覆盖完整提示词。反馈的节点归属与轮次校验由 workflow_execution 内部任务编排负责，不由 Template Domain 查询执行记录。
+
 ```go
 type ResolvedSlot struct {
     Name        string

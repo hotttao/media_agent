@@ -46,7 +46,12 @@ func (Handler) Execute(input Input) (Output, error) {
 		return Output{}, errors.New("capability returned no candidates")
 	}
 	if input.SelectedCandidate != nil {
-		return finalize(input, *input.SelectedCandidate)
+		for _, candidate := range input.Candidates {
+			if candidate == *input.SelectedCandidate {
+				return finalize(input, candidate)
+			}
+		}
+		return Output{}, errors.New("selected candidate does not belong to the current generation")
 	}
 	if len(input.Candidates) > 1 || input.ApprovalPolicy == "always" {
 		return Output{}, ErrApprovalRequired

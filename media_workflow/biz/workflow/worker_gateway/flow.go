@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -51,6 +53,7 @@ type FailCommand struct {
 }
 
 type Flow struct {
+	StorageOrigin  string
 	Dispatches     jobdomain.DispatchRepo
 	Jobs           jobdomain.JobRepo
 	StepRuns       jobdomain.StepRunRepo
@@ -109,7 +112,22 @@ func (f *Flow) Poll(ctx context.Context, cmd PollCommand) (*jobdomain.WorkerDisp
 	}
 	now := f.now()
 	if existing, err := f.Dispatches.FindActive(ctx, cmd.UserID, cmd.OrganizationID, cmd.CredentialID, cmd.WorkerInstanceID, cmd.CapabilityKey, cmd.CapabilityVersion, now); err == nil {
-		return existing, nil
+		job, err := f.Jobs.Get(ctx, existing.JobID)
+		if err != nil {
+			return nil, err
+		}
+		if job.OrganizationID == "" || job.OrganizationID != cmd.OrganizationID || job.SubmittedBy != cmd.UserID || job.Status.IsTerminal() || job.ConductorWorkflowID != existing.ConductorWorkflowID {
+			return nil, ErrForbidden
+		}
+		var input map[string]any
+		if err := json.Unmarshal(existing.InputJSON, &input); err != nil {
+			return nil, err
+		}
+		resolved, err := f.resolveInputRefs(ctx, job, input)
+		if err != nil {
+			return nil, fmt.Errorf("resolve task inputs: %w", err)
+		}
+		return dispatchForDelivery(existing, resolved)
 	} else if !errors.Is(err, jobdomain.ErrDispatchNotFound) {
 		return nil, err
 	}
@@ -134,19 +152,17 @@ func (f *Flow) Poll(ctx context.Context, cmd PollCommand) (*jobdomain.WorkerDisp
 	if err != nil {
 		return nil, fmt.Errorf("load task job: %w", err)
 	}
-	if job.SubmittedBy != cmd.UserID || job.ConductorWorkflowID != task.WorkflowInstanceID || job.Status.IsTerminal() {
+	if job.OrganizationID == "" || job.OrganizationID != cmd.OrganizationID ||
+		job.SubmittedBy != cmd.UserID || job.ConductorWorkflowID != task.WorkflowInstanceID || job.Status.IsTerminal() {
 		return nil, ErrForbidden
 	}
 	stepRun, err := f.StepRuns.GetByJobAndStepKey(ctx, jobID, stepKey)
 	if err != nil {
 		return nil, fmt.Errorf("load task step run: %w", err)
 	}
-	if job.Origin == "legacy_import" {
-		resolved, err := f.resolveImportedInputRefs(ctx, job, task.Input)
-		if err != nil {
-			return nil, fmt.Errorf("resolve historical task inputs: %w", err)
-		}
-		task.Input = resolved
+	resolved, err := f.resolveInputRefs(ctx, job, task.Input)
+	if err != nil {
+		return nil, fmt.Errorf("resolve task inputs: %w", err)
 	}
 	inputJSON, err := json.Marshal(task.Input)
 	if err != nil {
@@ -157,28 +173,57 @@ func (f *Flow) Poll(ctx context.Context, cmd PollCommand) (*jobdomain.WorkerDisp
 		attempt = 1
 	}
 	deliveredAt := now
-	return f.Dispatches.Create(ctx, &jobdomain.WorkerDispatch{
+	dispatch, err := f.Dispatches.Create(ctx, &jobdomain.WorkerDispatch{
 		ID: "dispatch_" + uuid.NewString(), ConductorTaskID: task.TaskID, ConductorWorkflowID: task.WorkflowInstanceID,
 		JobID: jobID, StepRunID: stepRun.ID, Attempt: attempt,
 		CapabilityKey: capability.Key, CapabilityVersion: capability.Version,
-		UserID: cmd.UserID, OrganizationID: cmd.OrganizationID, CredentialID: cmd.CredentialID,
+		UserID: job.SubmittedBy, OrganizationID: job.OrganizationID, CredentialID: cmd.CredentialID,
 		ActorID: cmd.ActorID, AuthSource: cmd.AuthSource,
 		WorkerInstanceID: cmd.WorkerInstanceID, Status: jobdomain.DispatchDelivered,
 		InputJSON: inputJSON, LeaseExpiresAt: now.Add(f.lease()), DeliveredAt: &deliveredAt,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return dispatchForDelivery(dispatch, resolved)
 }
 
-func (f *Flow) resolveImportedInputRefs(ctx context.Context, job *jobdomain.Job, input map[string]any) (map[string]any, error) {
-	if f.ImportedAssets == nil {
-		return nil, errors.New("historical asset resolver is not configured")
+// Copy the delivery envelope: transport credentials must not replace the
+// stable references held by the repository or Conductor task snapshot.
+func dispatchForDelivery(dispatch *jobdomain.WorkerDispatch, input map[string]any) (*jobdomain.WorkerDispatch, error) {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return nil, err
 	}
+	delivery := *dispatch
+	delivery.InputJSON = encoded
+	return &delivery, nil
+}
+
+func (f *Flow) resolveInputRefs(ctx context.Context, job *jobdomain.Job, input map[string]any) (map[string]any, error) {
 	cache := map[string]string{}
 	var resolve func(any) (any, error)
 	resolve = func(value any) (any, error) {
 		switch item := value.(type) {
 		case string:
-			if strings.HasPrefix(item, "object_path:") {
-				objectPath := strings.TrimPrefix(item, "object_path:")
+			reference := item
+			// An upstream result can carry an old storage signature. Reissue
+			// only URLs from the configured storage origin, never arbitrary URLs.
+			if f.StorageOrigin != "" {
+				base, baseErr := url.Parse(f.StorageOrigin)
+				u, urlErr := url.Parse(item)
+				if baseErr == nil && urlErr == nil && u.Scheme == base.Scheme && u.Host == base.Host && u.Host != "" {
+					if u.User != nil || u.Fragment != "" || !strings.HasPrefix(u.Path, "/media/materials/"+job.OrganizationID+"/") || path.Clean(u.Path) != u.Path || strings.Contains(u.Path, "\\") {
+						return nil, ErrForbidden
+					}
+					reference = "object_path:" + strings.TrimPrefix(u.Path, "/media/")
+				}
+			}
+			if strings.HasPrefix(reference, "object_path:") {
+				if f.ImportedAssets == nil {
+					return nil, errors.New("execution storage resolver is not configured")
+				}
+				objectPath := strings.TrimPrefix(reference, "object_path:")
 				if !strings.HasPrefix(objectPath, "materials/"+job.OrganizationID+"/") || path.Clean(objectPath) != objectPath || strings.Contains(objectPath, "\\") {
 					return nil, ErrForbidden
 				}
@@ -195,8 +240,11 @@ func (f *Flow) resolveImportedInputRefs(ctx context.Context, job *jobdomain.Job,
 				cache[item] = resolved.URL
 				return resolved.URL, nil
 			}
-			if !strings.HasPrefix(item, "gen_") {
+			if job.Origin != "legacy_import" || !strings.HasPrefix(item, "gen_") {
 				return item, nil
+			}
+			if f.ImportedAssets == nil {
+				return nil, errors.New("historical asset resolver is not configured")
 			}
 			if cached := cache[item]; cached != "" {
 				return cached, nil
@@ -225,6 +273,12 @@ func (f *Flow) resolveImportedInputRefs(ctx context.Context, job *jobdomain.Job,
 		case map[string]any:
 			out := make(map[string]any, len(item))
 			for key, child := range item {
+				if key == "prompt" {
+					if _, ok := child.(string); ok {
+						out[key] = child
+						continue
+					}
+				}
 				result, err := resolve(child)
 				if err != nil {
 					return nil, err
@@ -240,7 +294,49 @@ func (f *Flow) resolveImportedInputRefs(ctx context.Context, job *jobdomain.Job,
 	if err != nil {
 		return nil, err
 	}
-	return result.(map[string]any), nil
+	out := result.(map[string]any)
+	// Pure template rendering may embed a frozen .url inside the prompt.
+	// Substitute only known media references, not arbitrary URLs or scripts.
+	if prompt, ok := input["prompt"].(string); ok {
+		var refs []string
+		if job.Input.Product != nil {
+			refs = append(refs, job.Input.Product.ImageURL)
+		}
+		if vip := job.Input.VirtualIP; vip != nil {
+			refs = append(refs, vip.AvatarURL, vip.FullBodyURL, vip.ThreeViewURL, vip.NineViewURL)
+		}
+		for _, material := range job.Input.Materials {
+			refs = append(refs, material.URL)
+		}
+		for _, asset := range job.Input.Assets {
+			refs = append(refs, asset.URL)
+		}
+		for _, ref := range refs {
+			if ref == "" || !strings.Contains(prompt, ref) {
+				continue
+			}
+			if _, err := resolve(ref); err != nil {
+				return nil, err
+			}
+		}
+		keys := make([]string, 0, len(cache))
+		for ref := range cache {
+			keys = append(keys, ref)
+		}
+		// Longest first prevents a shorter media path replacing a prefix of
+		// another input's reference. Lexical tie-break keeps it deterministic.
+		sort.Slice(keys, func(i, j int) bool {
+			if len(keys[i]) != len(keys[j]) {
+				return len(keys[i]) > len(keys[j])
+			}
+			return keys[i] < keys[j]
+		})
+		for _, ref := range keys {
+			prompt = strings.ReplaceAll(prompt, ref, cache[ref])
+		}
+		out["prompt"] = prompt
+	}
+	return out, nil
 }
 
 func (f *Flow) Heartbeat(ctx context.Context, principal Principal, dispatchID, workerInstanceID string, attempt int) (*jobdomain.WorkerDispatch, error) {

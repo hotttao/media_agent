@@ -284,6 +284,8 @@ func newTestService(needsConfirm bool) (*Service, *mockJobRepo, *mockStepRunRepo
 	}}
 	tplLookup := &mockTplConfirm{needsConfirm: needsConfirm}
 	svc := NewService(jobRepo, srRepo, nil, wfLookup, tplLookup, &mockMaterialsClient{}, nil, nil, nil)
+	svc.resumeStorageOrigin = "https://example.test"
+	svc.resumeURLVerifier = func(context.Context, string) error { return nil }
 	return svc, jobRepo, srRepo
 }
 
@@ -316,11 +318,16 @@ func makeClaimedStepRun(repo *mockStepRunRepo, needsConfirm bool) *domain.StepRu
 
 func TestSubmit_OmittedWorkflowVersionUsesCurrent(t *testing.T) {
 	svc, _, _ := newTestService(false)
+	svc.wfRepo.(*mockWorkflowLookup).wf.CreatedBy = "u1"
+	authority := &submitAuthority{workspace: &client.WorkspaceContext{ID: "workspace", OrganizationID: "org"}, allowed: true}
+	svc.historyWorkspaces = authority
+	svc.resumeAccess = authority
 
 	job, err := svc.Submit(context.Background(), SubmitCommand{
+		OrganizationID: "org", WorkspaceID: "workspace",
 		WorkflowID: "wf1",
 		Input: domain.JobInput{Materials: []domain.MaterialData{{
-			Name: "scene", URL: "https://example.test/scene.png",
+			Name: "scene", URL: "https://example.test/media/materials/org/scene.png",
 		}}},
 		SubmittedBy: "u1",
 	})
@@ -334,9 +341,13 @@ func TestSubmit_OmittedWorkflowVersionUsesCurrent(t *testing.T) {
 
 func TestSubmit_ExplicitStaleWorkflowVersionRejected(t *testing.T) {
 	svc, _, _ := newTestService(false)
+	svc.wfRepo.(*mockWorkflowLookup).wf.CreatedBy = "u1"
+	authority := &submitAuthority{workspace: &client.WorkspaceContext{ID: "workspace", OrganizationID: "org"}, allowed: true}
+	svc.historyWorkspaces = authority
+	svc.resumeAccess = authority
 
 	_, err := svc.Submit(context.Background(), SubmitCommand{
-		WorkflowID: "wf1", WorkflowVersion: 2,
+		WorkflowID: "wf1", WorkflowVersion: 2, SubmittedBy: "u1", OrganizationID: "org", WorkspaceID: "workspace",
 	})
 	if err == nil {
 		t.Fatal("expected stale workflow version to be rejected")
@@ -876,17 +887,17 @@ func TestConductorApprovalConfirmAndFinalize(t *testing.T) {
 		ReferenceTaskName: "step__s1__finalize", Status: "COMPLETED", Output: map[string]any{
 			"output_resource": map[string]any{"url": "b.png", "content": "approved"},
 		},
-	}}}
+	}, {TaskID: "invoke-1", ReferenceTaskName: "step__s1__invoke", Status: "COMPLETED"}}}
 	job, steps, err = svc.Get(context.Background(), "job1")
 	if err != nil || job.Status != domain.JobSucceeded || steps[0].Status != domain.SRSucceeded || steps[0].OutputAssetID != "gen_fake_id" {
 		t.Fatalf("approved step was not finalized: job=%#v steps=%#v err=%v", job, steps, err)
 	}
 }
 
-func TestConductorRegenerateRerunsCapabilityTask(t *testing.T) {
+func TestConductorRegenerateCompletesCurrentLoopApproval(t *testing.T) {
 	svc, jobRepo, srRepo := newTestService(false)
 	engine := &mockWorkflowEngine{execution: &domain.EngineExecution{Status: "RUNNING", Tasks: []domain.EngineTask{{
-		TaskID: "invoke-1", ReferenceTaskName: "step__s1__invoke", Status: "COMPLETED",
+		TaskID: "approval-2", ReferenceTaskName: "step_7331_approval__2", Status: "IN_PROGRESS",
 	}}}}
 	svc.engine = engine
 	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", WorkflowID: "wf1", Status: domain.JobNeedConfirm, ConductorWorkflowID: "execution-1"}
@@ -895,8 +906,8 @@ func TestConductorRegenerateRerunsCapabilityTask(t *testing.T) {
 	sr.Candidates = []domain.Candidate{{Index: 0, URL: "a.png"}}
 
 	updated, err := svc.Regenerate(context.Background(), "sr1")
-	if err != nil || engine.rerunTaskID != "invoke-1" || updated.Status != domain.SRBlocked || len(updated.Candidates) != 0 {
-		t.Fatalf("regenerate failed: updated=%#v task=%q err=%v", updated, engine.rerunTaskID, err)
+	if err != nil || engine.rerunTaskID != "" || engine.terminated || engine.completedRef != "step_7331_approval__2" || engine.completedOutput["decision"] != "regenerate" || updated.Status != domain.SRBlocked || len(updated.Candidates) != 0 {
+		t.Fatalf("regenerate failed: updated=%#v completed=%q err=%v", updated, engine.completedRef, err)
 	}
 }
 

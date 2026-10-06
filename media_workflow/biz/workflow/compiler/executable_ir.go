@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	template "media_agent/media_workflow/biz/domain/template"
+	"media_agent/media_workflow/biz/shared/taskref"
 	"media_agent/media_workflow/biz/workflow/executable"
 )
 
@@ -130,8 +131,9 @@ func lowerExecutableStep(step executable.ExecutableStepIR) ([]Task, error) {
 	for slot, ref := range step.Context {
 		context[slot] = lowerValueRef(ref)
 	}
-	renderRef := "step__" + sanitize(step.Key) + "__render"
-	invokeRef := "step__" + sanitize(step.Key) + "__invoke"
+	renderRef := taskref.Reference(step.Key, "render")
+	loopRef := taskref.Reference(step.Key, "loop")
+	invokeRef := taskref.Reference(step.Key, "invoke")
 	capabilityInput := make(map[string]any, len(step.Invocation))
 	for name, expression := range step.Invocation {
 		value, err := lowerInvocation(expression, step.Context, renderRef)
@@ -148,8 +150,12 @@ func lowerExecutableStep(step executable.ExecutableStepIR) ([]Task, error) {
 		{
 			Name: RenderTemplateTaskName, TaskReferenceName: renderRef, Type: "SIMPLE",
 			InputParameters: map[string]any{
-				"template": map[string]any{"id": step.Template.ID, "version": step.Template.Version, "body": step.Template.Body},
-				"context":  context,
+				"template":            map[string]any{"id": step.Template.ID, "version": step.Template.Version, "body": step.Template.Body},
+				"context":             context,
+				"feedback_mode":       "last_regeneration_v1",
+				"generation":          fmt.Sprintf("${%s.output.iteration}", loopRef),
+				"previous_generation": fmt.Sprintf("${%s.iteration}", approvalRef(step.Key)),
+				"previous_review":     fmt.Sprintf("${%s.output}", approvalRef(step.Key)),
 			},
 		},
 		{Name: step.Capability.ConductorTaskDef, TaskReferenceName: invokeRef, Type: "SIMPLE", InputParameters: capabilityInput},
@@ -159,18 +165,35 @@ func lowerExecutableStep(step executable.ExecutableStepIR) ([]Task, error) {
 		"output_asset_kind": step.OutputAssetKind, "approval_policy": step.ApprovalPolicy, "reuse_policy": step.ReusePolicy,
 		"job_id": "${workflow.input.job_id}",
 	}
-	if step.ApprovalRequired {
-		tasks = append(tasks, Task{
-			Name: "human_approval_" + sanitize(step.Key), TaskReferenceName: approvalRef(step.Key), Type: "HUMAN",
-			InputParameters: map[string]any{
-				"step_key": step.Key, "candidates": fmt.Sprintf("${%s.output.candidates}", invokeRef),
-				"approval_policy": step.ApprovalPolicy, "job_id": "${workflow.input.job_id}",
-			},
-		})
-		finalizeInput["selected_candidate"] = fmt.Sprintf("${%s.output.selected_candidate}", approvalRef(step.Key))
+	approval := Task{
+		Name: "human_approval_" + sanitize(step.Key), TaskReferenceName: approvalRef(step.Key), Type: "HUMAN",
+		InputParameters: map[string]any{
+			"step_key": step.Key, "candidates": fmt.Sprintf("${%s.output.candidates}", invokeRef),
+			"approval_policy": step.ApprovalPolicy, "job_id": "${workflow.input.job_id}",
+			"feedback_mode": "last_regeneration_v1",
+		},
 	}
-	tasks = append(tasks, Task{Name: FinalizeStepTaskName, TaskReferenceName: finalizeRef(step.Key), Type: "SIMPLE", InputParameters: finalizeInput})
-	return tasks, nil
+	if step.ApprovalRequired || step.ApprovalPolicy == "always" || step.CandidateCount > 1 {
+		tasks = append(tasks, approval)
+	} else {
+		// Expected candidate_count is not a guarantee about Provider output.
+		// Actual multiple candidates must always wait for a human decision.
+		tasks = append(tasks, Task{
+			Name: "approval_gate_" + sanitize(step.Key), TaskReferenceName: taskref.Reference(step.Key, "gate"), Type: "SWITCH",
+			EvaluatorType: "javascript", Expression: "($.candidates && $.candidates.length > 1) ? 'review' : 'automatic'",
+			InputParameters: map[string]any{"candidates": fmt.Sprintf("${%s.output.candidates}", invokeRef)},
+			DecisionCases:   map[string][]Task{"review": {approval}, "automatic": {}},
+		})
+	}
+	finalizeInput["selected_candidate"] = fmt.Sprintf("${%s.output.selected_candidate}", approvalRef(step.Key))
+	// Read the current iteration snapshot, not the latest HUMAN across all
+	// iterations: a subsequent automatic round must not reuse an earlier
+	// regenerate decision and loop forever.
+	condition := fmt.Sprintf("(function(){ var round = $.%s[$.%s.iteration]; return !!(round && round.%s && round.%s.decision === 'regenerate'); })();", loopRef, loopRef, approvalRef(step.Key), approvalRef(step.Key))
+	return []Task{
+		{Name: "generation_loop_" + sanitize(step.Key), TaskReferenceName: loopRef, Type: "DO_WHILE", LoopOver: tasks, LoopCondition: condition},
+		{Name: FinalizeStepTaskName, TaskReferenceName: finalizeRef(step.Key), Type: "SIMPLE", InputParameters: finalizeInput},
+	}, nil
 }
 
 func lowerInvocation(expression template.InvocationExpression, context map[string]executable.ValueRef, renderRef string) (any, error) {
@@ -221,7 +244,7 @@ func lowerAssetRef(ref executable.ValueRef) any {
 }
 
 func finalizeRef(stepKey string) string { return "step__" + sanitize(stepKey) + "__finalize" }
-func approvalRef(stepKey string) string { return "step__" + sanitize(stepKey) + "__approval" }
+func approvalRef(stepKey string) string { return taskref.Reference(stepKey, "approval") }
 
 func executableWaves(byKey map[string]executable.ExecutableStepIR) ([][]executable.ExecutableStepIR, error) {
 	indegree := make(map[string]int, len(byKey))

@@ -13,9 +13,14 @@ related_workflow:
 
 Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以业务数据库记录权威状态，并由 Conductor 持久编排技术任务。
 
+### 生成结果与节点引用不变量
+
+StepRun 是稳定业务节点，一次被接受的 Generation Result 是独立结果身份。每轮登记独立 Generated Asset；StepRun.output_asset_id 仅引用当前选定结果，不通过更新旧 Asset 表达 Retry。能力生成结果身份在同轮投递、Finalize 技术重试及落库重试期间保持不变；新能力生成轮次使用新身份。同键不同结果拒绝，旧结果和已存在产物引用不被覆盖。产物事实由 Materials asset 聚合维护，Execution 只在本地事务中原子维护当前引用与节点成功状态。
+
 ## 边界
 
 ### 做什么
+- 普通 User 提交也必须指定可访问且具有 `use_workflow` 权限的 Workspace；由 Control 派生并冻结企业归属。API Token 绑定企业与请求选择都不能越过真实 Workspace 企业。Personal Worker 领取时必须同时匹配 Job owner、企业及 Conductor 实例；企业归属为空时拒绝交付。
 - Agent委托的User、企业和Workspace来自独立验证的请求上下文。提交、查询和状态变更检查当前Workspace的use_workflow授权；列表和资源查询同时限定owner、企业与Workspace。Job查询先授权后同步Conductor状态，没有企业/Workspace事实的旧Job不对Agent放行。
 - 保存 Job 输入快照、StepRun 状态和最终业务资源 ID。
 - 通过 Outbox 启动对应 Conductor Workflow，以 `job_id` 作为 correlation/idempotency key。
@@ -47,6 +52,8 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 
 ## 聚合与不变量
 
+原生 Job 的初次启动参数是 Execution 聚合的不可变事实，随 Job/StepRun 一起提交。启动记录的 `queued→uncertain→started` 与 Job 的 pending/running 区分；不确定发送不允许自动回 queued。每个原生 Job 只能有一条初始启动记录，绑定实例与 started 必须同事务完成，晚到或过期租约不能覆盖当前实例或取消状态。外部调用由 Workflow 协调。
+
 | 聚合根 | 包含对象 | 一致性边界 | 核心不变量 |
 |:---|:---|:---|:---|
 | Job | StepRun、Step Review Decision | 单次执行状态推进 | 每个 StepRun 最终只有一个 output_resource_id；未确认多候选不能解锁后继；每个 review attempt 只能接受一个决定 |
@@ -56,8 +63,12 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 - 单 Candidate 在 `approval_policy=always` 时进入 needs_confirm；否则自动确认并形成唯一输出。
 - Product 输入快照同时包含 Product ID 与执行时选中的图片 URL；`asset_ref` 指向图片而非 Product ID，避免把业务标识传给图片生成能力。
 - `accept(candidate)` 与 `regenerate(feedback)` 是互斥的 Step Review Decision。
+- regenerate 反馈最多 8192 字节，按原文冻结并参与命令摘要与幂等比较。确认不能携带反馈；目标定义必须声明支持反馈才可接受非空反馈。反馈只影响本节点紧邻下一轮，不修改 Template Version 或 Invocation Mapping。
 - accept 只有在下游确认 Candidate 并完成业务资源登记后，才把 StepRun 置为 succeeded。
+- 已提交决定以不透明 Review ID 和投递状态作为回执；`pending` 不表示仍可再次审批，`applied` 不表示步骤已产出业务资源。同键异内容冲突，显式同键重放在任务进入下一轮或终态后仍返回原决定，且仍受当前权限约束。
 - regenerate 保留旧候选审计，递增 StepRun attempt 后重新派发；它不是 failed 状态的 Retry。
+- 单节点失败 Retry 只影响目标及依赖下游，不得再次执行无关已完成旁支。引擎任务顺序不等于业务依赖；冻结依赖图与输出由 Execution 维护，引擎恢复由 Workflow 协调。无法隔离时拒绝直接重跑，不修改重试计数、候选、历史或状态。
+- 同一节点的新一轮生成与能力 Task 的失败重试分别识别；重新生成不增加失败 `retry_count`。审计保留旧轮，当前候选、确认状态与输出只能来自最新轮；其他并行节点及已完成上游不改变。
 - WorkerDispatch 是独立聚合，避免长轮询、心跳和高频租约更新锁住 Job；它只保存 Job/StepRun ID，不直接修改 Job 内部对象。
 - 任务归属必须在 Conductor poll 前通过 Execution Domain 隔离，禁止先从共享队列领取再检查 owner。
 - Personal Domain 从 `submitted_by` 派生；Managed Domain 从受控 Worker Pool 配置派生。Capability Task 必须服从其冻结 Target，不能跨类型或回退到 `NO_DOMAIN`。
@@ -81,13 +92,52 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 
 ## 数据模型
 
+### `execution_starts`
+
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text | 初次启动记录身份 |
+| job_id | text | 唯一原生 Job |
+| workflow_name | text | 冻结的引擎 Definition 名称 |
+| workflow_version | integer | 冻结的引擎 Definition 版本 |
+| compilation_hash | text | 冻结的 Definition hash |
+| correlation_id | text | 等于 Job ID 的唯一启动关联 |
+| workflow_input | jsonb | 包含 job_id 的稳定输入，不保存签名 |
+| task_domains | jsonb | 冻结的能力任务执行域 |
+| payload_digest | text | 全部启动语义的 SHA-256 摘要 |
+| status | text | queued / uncertain / started / cancel_pending / cancelled |
+| claim_token | text nullable | 每次领取独立标识 |
+| claimed_at | timestamptz nullable | 两分钟租约起点 |
+| delivery_attempts | integer | 领取次数，不是业务重试次数 |
+| next_attempt_at | timestamptz | 退避后的下一次领取时间 |
+| conductor_workflow_id | text nullable | 已确认的原实例 |
+| last_error | text | 固定错误码，无上游正文 |
+| created_at | timestamptz | 记录创建时间 |
+| updated_at | timestamptz | 投递状态更新时间 |
+
+同库 Job 外键 RESTRICT；Job 与 correlation 唯一；状态和租约成对约束；started/cancel_pending 必须有实例，queued/uncertain 不保存实例，cancelled 可保存经终止对账的实例，未发送取消则无实例。取消 Job 与 queued→cancelled 或 started→cancel_pending 同事务，uncertain 保留查询义务；后台清理不得复活 Job。已有记录的降级不得删除启动审计。历史 Resume 不写此表；普通 Retry 需独立定义尝试身份，不能复用初次启动记录。
+
+### `job_submissions`
+
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| submitted_by | text | 经认证的 User |
+| organization_id | text | 当前授权企业 |
+| workspace_id | text | 当前授权 Workspace |
+| idempotency_key | text | 一次提交意图，1–160 个可见 ASCII 字符，不含空格 |
+| request_digest | text | 规范化提交语义 SHA-256 |
+| job_id | text | 首次接受的唯一 Job，外键 RESTRICT |
+| created_at | timestamptz | 首次接受时间 |
+
+提交回执与 Job 接受为同一一致性边界。主键为 User/企业/Workspace/key，Job 唯一；身份和摘要不可变。同键重放不是 Retry，不改变 Job 状态。首次接受必须同事务锁键、二次查询、保存聚合与回执；降级不得丢失回执。
+
 ### `jobs`
 
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
 | id | text PK | Workflow Job ID |
 | workspace_id | text | 所属 Workspace |
-| organization_id | text | 所属企业；Agent提交从可信委托上下文派生 |
+| organization_id | text | 所属企业；普通提交由授权后的 Workspace 派生，Agent 提交还需匹配可信委托企业 |
 | scope | text | 不可变业务范围 |
 | workflow_id | text | Workflow ID |
 | workflow_version | bigint | 执行使用的 Workflow 版本 |
@@ -132,20 +182,31 @@ Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以�
 |:---|:---|:---|
 | id | text PK | Step Review Decision ID |
 | step_run_id | text | StepRun ID |
-| attempt | integer | 被确认的 StepRun attempt |
+| job_id | text | 所属 Job；事务内校验 StepRun 与 Job 的关联 |
+| conductor_workflow_id / conductor_task_id / task_reference_name | text | 精确审批目标；不向客户端暴露 Conductor 身份 |
+| generation | integer | 生成轮次；旧无循环审批为 0，循环轮次从 1 开始 |
+| accepted_retry_count | integer nullable | 审批接受时冻结的Execution Retry Epoch；非负，旧记录未知为null，不回填 |
 | decision | text | accept/regenerate |
-| candidate_id | text nullable | accept 时的下游 Candidate ID |
+| selected_index | integer nullable | accept 时在本轮候选快照内选中的位置 |
 | feedback | text nullable | regenerate 时传给下游的用户反馈 |
 | decided_by | text | 当前 User ID |
 | idempotency_key | text | 用户确认命令幂等键 |
 | status | text | pending/applied/failed |
+| candidates_snapshot / output_json | jsonb | 被审批候选与不可变技术决定命令；用于重放和内容核对 |
+| request_digest | text | 决定内容摘要；同一幂等键不能改变决定 |
+| claim_token / claimed_at | text / timestamptz nullable | 本次后台领取的 fencing 身份与租约时间 |
+| delivery_attempts / next_attempt_at / last_error | integer / timestamptz / text nullable | 后台投递次数、退避和不含原始上游响应的稳定错误 |
+| updated_at / applied_at | timestamptz / timestamptz nullable | 技术决定提交时间；不等于业务步骤完成时间 |
 | created_at | timestamptz | 创建时间 |
 
 #### 约束与索引
 
-- `UNIQUE (step_run_id, attempt)`，同一 attempt 只能存在一个有效决定。
+- `UNIQUE (step_run_id, conductor_task_id)`，同一实际审批任务只能存在一个有效决定；生成轮和技术失败重试不能混作同一个 attempt。
 - `UNIQUE (step_run_id, idempotency_key)`，重复提交返回同一决定。
-- candidate_id 只在 accept 时必填，feedback 只在 regenerate 时使用。
+- selected_index 只在 accept 时必填，feedback 只在 regenerate 时使用。
+- Review 与退出待确认状态在同一聚合事务内提交；Repository 透传应用层事务，不在数据库锁中调用 Conductor。后台写入必须匹配本次 claim token，过期领取者不能覆盖新 claim。
+
+新审批的accepted_retry_count必须等于Job锁内当前retry_count，且参与决定摘要；同键重放保持原周期和原摘要。Retry前的决定继续保留审计但不能影响新周期；同周期不能被较老数字generation/审批Task投影回退。未知旧周期不等同于0；其摘要保持原格式，遇到同轮重试歧义时拒绝自动解释，不删除旧Review。
 
 ### `worker_dispatches`
 
@@ -191,6 +252,8 @@ Job 和 StepRun 使用 ULID；下游幂等键由 `step_run_id + attempt` 派生�
 ## 能力详细说明
 
 ### SubmitJob
+
+媒体输入的持久化快照使用企业内 Frozen Storage Reference，不保存临时签名 URL；提交前验证受控来源及可读性。Dispatch 也保存稳定输入，实际交付与同一租约重取时再生成临时媒体 URL；解析失败不能作为可执行输入交付。
 
 1. 校验 Workflow published、Workspace/Scope 一致、material/asset 与 Input Schema 的 `asset_kind` 匹配且输入可达。
 2. 事务内保存 Job、全部 StepRun 和 `StartConductorWorkflow` Outbox。

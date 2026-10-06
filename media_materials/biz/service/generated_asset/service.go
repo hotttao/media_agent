@@ -26,7 +26,11 @@ var ErrImportConflict = errors.New("historical generated asset source conflict")
 
 // Service generated_asset 用例编排。产物由 workflow 落（Upsert）；前端只读 + 删。
 type Service struct {
-	repo               domain.Repo
+	repo     domain.Repo
+	results  domain.ResultRepo
+	resultTx interface {
+		RunInTx(context.Context, func(context.Context) error) error
+	}
 	nativeOutputOrigin string
 	nativeOutputBucket string
 	historyStorage     interface {
@@ -93,6 +97,14 @@ func NewService(repo domain.Repo, products interface {
 // Upsert 由 media_workflow 调用：落产物 + 生成记录字段。
 // asset_kind 校验（resource_type=ASSET）由 workflow 侧 BatchGetAssetKind 已做；此处只兜底非空。
 func (s *Service) Upsert(ctx context.Context, cmd UpsertCommand) (*domain.GeneratedAsset, error) {
+	if cmd.ResultKey != "" {
+		if err := domain.ValidateResultIdentity(cmd.StepRunID, cmd.ResultKey); err != nil {
+			return nil, err
+		}
+		if s.results == nil || s.resultTx == nil {
+			return nil, errors.New("generation result persistence is not configured")
+		}
+	}
 	if strings.TrimSpace(cmd.AssetKind) == "" {
 		return nil, errors.New("asset_kind is required")
 	}
@@ -102,10 +114,12 @@ func (s *Service) Upsert(ctx context.Context, cmd UpsertCommand) (*domain.Genera
 	if cmd.JobID == "" || cmd.StepRunID == "" || cmd.TemplateID == "" {
 		return nil, errors.New("job_id / step_run_id / template_id are required")
 	}
-	if existing, err := s.repo.GetByStepRun(ctx, cmd.StepRunID); err == nil {
-		return existing, nil
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("lookup existing generated_asset: %w", err)
+	if cmd.ResultKey == "" {
+		if existing, err := s.repo.GetByStepRun(ctx, cmd.StepRunID); err == nil {
+			return existing, nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("lookup existing generated_asset: %w", err)
+		}
 	}
 	var organizationID string
 	if cmd.SourceProductID != "" {
@@ -144,17 +158,6 @@ func (s *Service) Upsert(ctx context.Context, cmd UpsertCommand) (*domain.Genera
 		if s.historyStorage == nil || s.assetKinds == nil {
 			return nil, errors.New("native output storage is not configured")
 		}
-		kind, mediaType, status, err := s.assetKinds.Lookup(ctx, cmd.AssetKind)
-		if err != nil || kind != "ASSET" || status != "ENABLED" && status != "SYSTEM" {
-			return nil, errors.New("output asset kind is not enabled")
-		}
-		info, err := s.historyStorage.Stat(ctx, objectPath)
-		if err != nil || info.SizeBytes <= 0 || !sha256Pattern.MatchString(info.Checksum) ||
-			mediaType == "IMAGE" && !strings.HasPrefix(info.ContentType, "image/") ||
-			mediaType == "VIDEO" && !strings.HasPrefix(info.ContentType, "video/") ||
-			mediaType != "IMAGE" && mediaType != "VIDEO" {
-			return nil, errors.New("native output object is unavailable or has the wrong media type")
-		}
 	}
 	vis := domain.Visibility(cmd.Visibility)
 	if vis == "" {
@@ -173,6 +176,14 @@ func (s *Service) Upsert(ctx context.Context, cmd UpsertCommand) (*domain.Genera
 	}
 	if objectPath != "" {
 		a.URL = ""
+	}
+	if cmd.ResultKey != "" {
+		return s.registerResult(ctx, cmd.ResultKey, a)
+	}
+	if objectPath != "" {
+		if err := s.verifyResultObject(ctx, a); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.repo.Save(ctx, a); err != nil {
 		return nil, fmt.Errorf("save generated_asset: %w", err)

@@ -80,7 +80,7 @@ Workflow 域负责存储「一组有序 Step 通过 SlotBinding 串联而成的 
 | scope | text not null | 业务范围；1:1；不可改 |
 | name | text not null | 工作流名；(scope,name,version) 唯一 |
 | description | text nullable | 描述 |
-| status | text not null | draft/published/archived |
+| status | text not null | draft/publishing/published/publish_failed/archived |
 | visibility | text not null | 可见性；private / team / public；默认 private |
 | version | int not null | 版本号；默认 1，update 自增 |
 | output_step_key | text not null | 唯一 sink 的 step.key |
@@ -101,6 +101,24 @@ Workflow 域负责存储「一组有序 Step 通过 SlotBinding 串联而成的 
 | created_at, registered_at | 审计时间 |
 
 只有 `status=registered` 的记录允许 SubmitJob。发布流程与冲突恢复见 [conductor_compilation](../../workflow/0003-conductor-compilation/conductor_compilation.md)。
+
+### `workflow_publications`
+
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text PK | 持久发布意图回执 |
+| workflow_id / workflow_version | text / integer | 源Workflow不可变版本，组合唯一 |
+| compilation_id | text | 冻结Compilation同库引用，删除受限 |
+| requested_by | text | 接受时的Workflow拥有者 |
+| definition_hash | text | 冻结编译摘要 |
+| definition_json / task_definitions_json | jsonb | 后台注册的完整冻结命令，不重读模板或能力 |
+| payload_digest | text | 身份与规范JSON内容摘要 |
+| status | text | pending/registered/failed/superseded |
+| claim_token / claimed_at | text / timestamptz nullable | 领取fencing身份与租约 |
+| delivery_attempts / next_attempt_at / last_error | integer / timestamptz / text nullable | 投递次数、退避和安全错误码 |
+| created_at / updated_at / finished_at | timestamptz | 意图审计时间 |
+
+接受意图必须在调用方事务内锁Workflow，核对owner、version、draft与Compilation身份，保存Compilation/意图并置publishing；版本同内容重放保持原记录和状态，不重置重试。完成采用Workflow→Intent锁序并校验当前claim和摘要，将注册成功与源published原子提交；源改变只置superseded。不可恢复冲突置failed/publish_failed。所有冻结字段不可变，含意图数据的降级不得删除审计。外部注册不在聚合事务内执行。
 
 ### Tables — `workflow_grants`
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"media_agent/media_worker/internal/gateway"
 )
@@ -20,8 +21,44 @@ var capabilities = []gateway.Capability{
 func Capabilities() []gateway.Capability { return append([]gateway.Capability(nil), capabilities...) }
 
 type Executor struct {
-	baseURL    string
-	resultURLs map[string]string
+	baseURL           string
+	resultURLs        map[string][]string
+	failureMu         sync.Mutex
+	failureStep       string
+	failureCall       int
+	failureCounts     map[string]int
+	failureDispatches map[string]bool
+}
+
+// SetFailureOnce is an explicit test-only fault: fail the Nth distinct
+// dispatch for a step in each Job. Re-delivery preserves the same outcome.
+// Configure before polling; no internal server task can enter this executor.
+func (e *Executor) SetFailureOnce(step string, call int) error {
+	if strings.TrimSpace(step) == "" || call < 1 || call > 8 {
+		return fmt.Errorf("fixture failure requires a step and call between one and eight")
+	}
+	e.failureStep, e.failureCall = step, call
+	e.failureCounts = make(map[string]int)
+	e.failureDispatches = make(map[string]bool)
+	return nil
+}
+
+func (e *Executor) shouldFail(task gateway.Task) bool {
+	step, _ := task.Input["step_key"].(string)
+	job, _ := task.Input["job_id"].(string)
+	if e.failureStep == "" || step != e.failureStep || job == "" || task.DispatchID == "" {
+		return false
+	}
+	e.failureMu.Lock()
+	defer e.failureMu.Unlock()
+	key := job + ":" + task.DispatchID
+	if failed, exists := e.failureDispatches[key]; exists {
+		return failed
+	}
+	e.failureCounts[job]++
+	failed := e.failureCounts[job] == e.failureCall
+	e.failureDispatches[key] = failed
+	return failed
 }
 
 func NewExecutor(baseURL string) (*Executor, error) {
@@ -29,7 +66,7 @@ func NewExecutor(baseURL string) (*Executor, error) {
 	if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return nil, fmt.Errorf("fixture asset base must be an HTTP(S) URL without credentials, query or fragment")
 	}
-	return &Executor{baseURL: strings.TrimRight(baseURL, "/"), resultURLs: make(map[string]string)}, nil
+	return &Executor{baseURL: strings.TrimRight(baseURL, "/"), resultURLs: make(map[string][]string)}, nil
 }
 
 // SetVideoResultURL points the historical video fixture at a pre-uploaded
@@ -43,6 +80,15 @@ func (e *Executor) SetVideoResultURL(raw string) error {
 // A signed query is allowed; credentials/fragments and internal tasks are not.
 // The server remains responsible for validating storage ownership and MIME.
 func (e *Executor) SetResultURL(capabilityKey, raw string) error {
+	if raw == "" {
+		return e.SetResultURLs(capabilityKey, nil)
+	}
+	return e.SetResultURLs(capabilityKey, []string{raw})
+}
+
+// SetResultURLs configures distinct already-stored candidates for a fixture.
+// Validate the whole configuration before replacing any existing result.
+func (e *Executor) SetResultURLs(capabilityKey string, urls []string) error {
 	supported := false
 	for _, capability := range capabilities {
 		if capability.Key == capabilityKey {
@@ -53,15 +99,26 @@ func (e *Executor) SetResultURL(capabilityKey, raw string) error {
 	if !supported {
 		return fmt.Errorf("fixture result override requires a supported Capability")
 	}
-	if raw == "" {
+	if len(urls) == 0 {
 		delete(e.resultURLs, capabilityKey)
 		return nil
 	}
-	u, err := url.Parse(raw)
-	if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.Fragment != "" {
-		return fmt.Errorf("fixture result must be an HTTP(S) storage URL without credentials or fragment")
+	if len(urls) > 8 {
+		return fmt.Errorf("fixture supports at most eight candidates")
 	}
-	e.resultURLs[capabilityKey] = raw
+	seen := map[string]bool{}
+	for _, raw := range urls {
+		u, err := url.Parse(raw)
+		if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.Fragment != "" {
+			return fmt.Errorf("fixture result must be an HTTP(S) storage URL without credentials or fragment")
+		}
+		object := u.Scheme + "://" + u.Host + u.EscapedPath()
+		if seen[object] {
+			return fmt.Errorf("fixture candidates must use distinct storage objects")
+		}
+		seen[object] = true
+	}
+	e.resultURLs[capabilityKey] = append([]string(nil), urls...)
 	return nil
 }
 
@@ -73,15 +130,25 @@ func (e *Executor) Execute(task gateway.Task) (map[string]any, error) {
 	if resourceURL == "" && content == "" {
 		return nil, fmt.Errorf("media_ai fixture does not support capability %q", task.CapabilityKey)
 	}
+	if e.shouldFail(task) {
+		return nil, fmt.Errorf("explicit fixture capability failure")
+	}
+	candidates := []map[string]any{{"index": 0, "url": resourceURL, "content": content, "is_primary": true}}
+	if urls := e.resultURLs[task.CapabilityKey]; len(urls) > 1 {
+		candidates = make([]map[string]any, len(urls))
+		for i, resultURL := range urls {
+			candidates[i] = map[string]any{"index": i, "url": resultURL, "content": "", "is_primary": i == 0}
+		}
+	}
 	return map[string]any{
-		"candidates": []map[string]any{{"index": 0, "url": resourceURL, "content": content, "is_primary": true}},
+		"candidates": candidates,
 		"provenance": map[string]any{"profile": "media_ai_fixture", "source": source, "mock": true},
 	}, nil
 }
 
 func (e *Executor) fixtureResult(task gateway.Task) (string, string) {
-	if resultURL := e.resultURLs[task.CapabilityKey]; resultURL != "" {
-		return resultURL, ""
+	if urls := e.resultURLs[task.CapabilityKey]; len(urls) > 0 {
+		return urls[0], ""
 	}
 	base := e.baseURL
 	switch task.CapabilityKey {

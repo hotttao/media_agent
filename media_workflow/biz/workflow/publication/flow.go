@@ -2,7 +2,10 @@ package publication
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
@@ -21,11 +24,98 @@ type Flow struct {
 	Capabilities capabilitydomain.Repo
 	Compilations workflowdomain.CompilationRepo
 	Conductor    *conductor.Client
+	Intents      workflowdomain.PublicationRepo
+	Workflows    workflowdomain.Repo
+	Tx           interface {
+		RunInTx(context.Context, func(context.Context) error) error
+	}
 }
 
 func (f *Flow) CompileAndRegister(ctx context.Context, workflow *workflowdomain.Workflow) error {
 	if f.Conductor == nil || !f.Conductor.Enabled() {
 		return fmt.Errorf("CONDUCTOR_URL is required to publish executable workflows")
+	}
+	prepared, err := f.compile(ctx, workflow)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Conductor.CheckWorkflowDefinition(ctx, prepared.definition); err != nil {
+		return err
+	}
+	if err := f.Compilations.Save(ctx, prepared.compilation); err != nil {
+		return fmt.Errorf("save compilation: %w", err)
+	}
+	if err := f.Conductor.RegisterTaskDefinitions(ctx, prepared.tasks); err != nil {
+		_ = f.Compilations.MarkFailed(ctx, prepared.compilation.ID, "task_registration_unavailable")
+		return errors.New("conductor task registration unavailable")
+	}
+	if err := f.Conductor.EnsureWorkflow(ctx, prepared.definition); err != nil {
+		_ = f.Compilations.MarkFailed(ctx, prepared.compilation.ID, "workflow_registration_unverified")
+		return err
+	}
+	return f.Compilations.MarkRegistered(ctx, prepared.compilation.ID)
+}
+
+type preparedPublication struct {
+	compilation *workflowdomain.Compilation
+	definition  compiler.Definition
+	tasks       []conductor.TaskDefinition
+}
+
+// AcceptPublication does not contact Conductor. Authenticated source ownership
+// is checked again before replay; the repository atomically rechecks new intent
+// acceptance under the Workflow lock. Recovery consumes the stored command.
+func (f *Flow) AcceptPublication(ctx context.Context, workflow *workflowdomain.Workflow, callerID string) (*workflowdomain.Publication, error) {
+	if f.Intents == nil || f.Workflows == nil || f.Tx == nil || workflow == nil || callerID == "" {
+		return nil, errors.New("publication acceptance unavailable")
+	}
+	current, err := f.Workflows.Get(ctx, workflow.ID)
+	if err != nil {
+		return nil, errors.New("publication source unavailable")
+	}
+	if current.CreatedBy != callerID || workflow.CreatedBy != callerID {
+		return nil, workflowdomain.ErrPublicationConflict
+	}
+	previous, err := f.Intents.GetPublication(ctx, workflow.ID, workflow.Version)
+	if err != nil {
+		return nil, err
+	}
+	if previous != nil {
+		if previous.RequestedBy != callerID || previous.Validate() != nil {
+			return nil, workflowdomain.ErrPublicationConflict
+		}
+		return previous, nil
+	}
+	if current.Version != workflow.Version || current.Status != workflowdomain.StatusDraft {
+		return nil, workflowdomain.ErrPublicationConflict
+	}
+	prepared, err := f.compile(ctx, workflow)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := json.Marshal(prepared.tasks)
+	if err != nil {
+		return nil, errors.New("publication contract encoding failed")
+	}
+	p := workflowdomain.Publication{ID: fmt.Sprintf("pub_%s_%d", workflow.ID, workflow.Version), WorkflowID: workflow.ID, WorkflowVersion: workflow.Version,
+		CompilationID: prepared.compilation.ID, RequestedBy: callerID, DefinitionHash: prepared.compilation.DefinitionHash,
+		DefinitionJSON: prepared.compilation.DefinitionJSON, TaskDefinitionsJSON: tasks}
+	p.PayloadDigest, err = p.Digest()
+	if err != nil {
+		return nil, err
+	}
+	var accepted *workflowdomain.Publication
+	err = f.Tx.RunInTx(ctx, func(txCtx context.Context) error {
+		var err error
+		accepted, _, err = f.Intents.EnqueuePublication(txCtx, prepared.compilation, p)
+		return err
+	})
+	return accepted, err
+}
+
+func (f *Flow) compile(ctx context.Context, workflow *workflowdomain.Workflow) (*preparedPublication, error) {
+	if workflow == nil || f.Templates == nil || f.Capabilities == nil {
+		return nil, errors.New("publication compiler unavailable")
 	}
 	snapshots := semantic.Snapshots{
 		Templates:    make(map[semantic.TemplateRef]semantic.TemplateSnapshot),
@@ -35,7 +125,7 @@ func (f *Flow) CompileAndRegister(ctx context.Context, workflow *workflowdomain.
 	for _, step := range workflow.Steps {
 		template, err := f.Templates.GetVersion(ctx, step.TemplateID, step.TemplateVersion)
 		if err != nil {
-			return fmt.Errorf("load template %s@%d: %w", step.TemplateID, step.TemplateVersion, err)
+			return nil, fmt.Errorf("load template %s@%d: %w", step.TemplateID, step.TemplateVersion, err)
 		}
 		invocation := make(templatedomain.InvocationMapping, len(template.InvocationMapping))
 		for name, expression := range template.InvocationMapping {
@@ -55,7 +145,7 @@ func (f *Flow) CompileAndRegister(ctx context.Context, workflow *workflowdomain.
 		}
 		capability, err := f.Capabilities.Get(ctx, template.CapabilityKey, template.CapabilityVersion)
 		if err != nil {
-			return fmt.Errorf("load capability %s@%d: %w", template.CapabilityKey, template.CapabilityVersion, err)
+			return nil, fmt.Errorf("load capability %s@%d: %w", template.CapabilityKey, template.CapabilityVersion, err)
 		}
 		inputs := make([]semantic.CapabilityInput, 0, len(capability.Inputs))
 		for _, input := range capability.Inputs {
@@ -71,32 +161,29 @@ func (f *Flow) CompileAndRegister(ctx context.Context, workflow *workflowdomain.
 
 	ir, err := semantic.Compile(*workflow, snapshots)
 	if err != nil {
-		return fmt.Errorf("semantic compile: %w", err)
+		return nil, fmt.Errorf("semantic compile: %w", err)
 	}
 	definition, err := compiler.CompileExecutableIR(ir)
 	if err != nil {
-		return fmt.Errorf("conductor backend compile: %w", err)
+		return nil, fmt.Errorf("conductor backend compile: %w", err)
 	}
 	irJSON, err := executable.CanonicalJSON(ir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	definitionJSON, err := compiler.CanonicalJSON(definition)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	hash, err := compiler.DefinitionHash(definition)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	compilation := &workflowdomain.Compilation{
 		ID: fmt.Sprintf("comp_%s_%d", workflow.ID, workflow.Version), WorkflowID: workflow.ID,
 		WorkflowVersion: workflow.Version, ConductorName: definition.Name, ConductorVersion: definition.Version,
 		IRJSON: irJSON, DefinitionJSON: definitionJSON, DefinitionHash: hash,
 		Status: "registering", CreatedAt: time.Now(),
-	}
-	if err := f.Compilations.Save(ctx, compilation); err != nil {
-		return fmt.Errorf("save compilation: %w", err)
 	}
 	taskDefinitions := []conductor.TaskDefinition{
 		{Name: render_task.TaskDefinitionName, RetryCount: 2, RetryLogic: "FIXED", RetryDelaySeconds: 1, TimeoutSeconds: 60, ResponseTimeoutSeconds: 30, TimeoutPolicy: "TIME_OUT_WF"},
@@ -110,18 +197,8 @@ func (f *Flow) CompileAndRegister(ctx context.Context, workflow *workflowdomain.
 			TimeoutPolicy: "TIME_OUT_WF",
 		})
 	}
-	if err := f.Conductor.RegisterTaskDefinitions(ctx, taskDefinitions); err != nil {
-		_ = f.Compilations.MarkFailed(ctx, compilation.ID, err.Error())
-		return err
-	}
-	if err := f.Conductor.RegisterWorkflow(ctx, definition); err != nil {
-		_ = f.Compilations.MarkFailed(ctx, compilation.ID, err.Error())
-		return err
-	}
-	if err := f.Compilations.MarkRegistered(ctx, compilation.ID); err != nil {
-		return err
-	}
-	return nil
+	sort.Slice(taskDefinitions, func(i, j int) bool { return taskDefinitions[i].Name < taskDefinitions[j].Name })
+	return &preparedPublication{compilation: compilation, definition: definition, tasks: taskDefinitions}, nil
 }
 
 func toTemplateExpression(in workflowdomain.InvocationExpressionSnapshot) templatedomain.InvocationExpression {

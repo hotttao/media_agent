@@ -1,0 +1,2273 @@
+# Generated with protoc-gen-openapi
+# https://github.com/google/gnostic/tree/master/cmd/protoc-gen-openapi
+
+openapi: 3.0.3
+info:
+    title: ""
+    version: 0.0.1
+paths:
+    /api/internal/v1/historical-video-pushes/import:
+        post:
+            tags:
+                - HistoricalPublicationService
+            operationId: HistoricalPublicationService_ImportHistoricalVideoPush
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ImportHistoricalVideoPushReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HistoricalVideoPushResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/internal/v1/jobs/import-completed:
+        post:
+            tags:
+                - JobService
+            description: 可信迁移工具：导入已有视频及其四个已完成节点，不启动 Conductor。
+            operationId: JobService_ImportCompletedExecution
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ImportIncompleteExecutionReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ImportIncompleteExecutionResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/internal/v1/jobs/import-incomplete:
+        post:
+            tags:
+                - JobService
+            description: 可信迁移工具：仅导入已完成的历史图片前缀，不启动 Conductor。
+            operationId: JobService_ImportIncompleteExecution
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ImportIncompleteExecutionReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ImportIncompleteExecutionResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/historical-video-pushes:
+        get:
+            tags:
+                - HistoricalPublicationService
+            operationId: HistoricalPublicationService_ListHistoricalVideoPushes
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListHistoricalVideoPushesResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/historical-video-pushes/{id}:
+        get:
+            tags:
+                - HistoricalPublicationService
+            operationId: HistoricalPublicationService_GetHistoricalVideoPush
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HistoricalVideoPushResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/jobs:
+        get:
+            tags:
+                - JobService
+            operationId: JobService_ListJobs
+            parameters:
+                - name: scope
+                  in: query
+                  schema:
+                    type: string
+                - name: workflow_id
+                  in: query
+                  schema:
+                    type: string
+                - name: status
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListJobsResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - JobService
+            description: —— 用户 / 前端 ——
+            operationId: JobService_SubmitJob
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SubmitJobReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SubmitJobResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/jobs/{id}:
+        get:
+            tags:
+                - JobService
+            operationId: JobService_GetJob
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetJobResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/jobs/{id}/cancel:
+        post:
+            tags:
+                - JobService
+            operationId: JobService_CancelJob
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Job'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/jobs/{id}/resume:
+        post:
+            tags:
+                - JobService
+            operationId: JobService_ResumeJob
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ResumeJobReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Job'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/jobs/{id}/retry:
+        post:
+            tags:
+                - JobService
+            operationId: JobService_RetryJob
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RetryJobReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Job'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/step-runs/claim:
+        post:
+            tags:
+                - JobService
+            description: —— worker ——
+            operationId: JobService_ClaimStepRun
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ClaimStepRunReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ClaimStepRunResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/step-runs/{step_run_id}:
+        get:
+            tags:
+                - JobService
+            operationId: JobService_GetStepRun
+            parameters:
+                - name: step_run_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StepRun'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/step-runs/{step_run_id}/complete:
+        post:
+            tags:
+                - JobService
+            operationId: JobService_CompleteStepRun
+            parameters:
+                - name: step_run_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CompleteStepRunReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StepRun'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/step-runs/{step_run_id}/confirm:
+        post:
+            tags:
+                - JobService
+            operationId: JobService_ConfirmStepRun
+            parameters:
+                - name: step_run_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ConfirmStepRunReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StepRun'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/step-runs/{step_run_id}/fail:
+        post:
+            tags:
+                - JobService
+            operationId: JobService_FailStepRun
+            parameters:
+                - name: step_run_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FailStepRunReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StepRun'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/step-runs/{step_run_id}/regenerate:
+        post:
+            tags:
+                - JobService
+            operationId: JobService_RegenerateStepRun
+            parameters:
+                - name: step_run_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: feedback
+                  in: query
+                  schema:
+                    type: string
+                - name: idempotency_key
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StepRun'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/step-runs/{step_run_id}/retry:
+        post:
+            tags:
+                - JobService
+            operationId: JobService_RetryStepRun
+            parameters:
+                - name: step_run_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RetryStepRunReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StepRun'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/templates:
+        get:
+            tags:
+                - TemplateService
+            operationId: TemplateService_ListTemplates
+            parameters:
+                - name: scope
+                  in: query
+                  schema:
+                    type: string
+                - name: name
+                  in: query
+                  schema:
+                    type: string
+                - name: visibility
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListTemplatesResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - TemplateService
+            operationId: TemplateService_CreateTemplate
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateTemplateReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateTemplateResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/templates/{id}:
+        get:
+            tags:
+                - TemplateService
+            operationId: TemplateService_GetTemplate
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Template'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - TemplateService
+            operationId: TemplateService_UpdateTemplate
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateTemplateReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UpdateTemplateResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/templates/{id}/archive:
+        post:
+            tags:
+                - TemplateService
+            operationId: TemplateService_ArchiveTemplate
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Template'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/templates/{id}/grants:
+        post:
+            tags:
+                - TemplateService
+            operationId: TemplateService_GrantTemplate
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GrantReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Template'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/templates/{id}/grants/{team_id}:
+        delete:
+            tags:
+                - TemplateService
+            operationId: TemplateService_RevokeTemplate
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: team_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Template'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/templates/{id}/publish:
+        post:
+            tags:
+                - TemplateService
+            operationId: TemplateService_PublishTemplate
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Template'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/templates/{id}/versions/{version}:
+        get:
+            tags:
+                - TemplateService
+            operationId: TemplateService_GetTemplateVersion
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Template'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/templates/{id}/visibility:
+        post:
+            tags:
+                - TemplateService
+            operationId: TemplateService_ChangeTemplateVisibility
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ChangeVisibilityReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Template'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workflows:
+        get:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_ListWorkflows
+            parameters:
+                - name: scope
+                  in: query
+                  schema:
+                    type: string
+                - name: name
+                  in: query
+                  schema:
+                    type: string
+                - name: status
+                  in: query
+                  schema:
+                    type: string
+                - name: visibility
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListWorkflowsResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_CreateWorkflow
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateWorkflowReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateWorkflowResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workflows/validate:
+        post:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_ValidateWorkflow
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ValidateWorkflowReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ValidationResult'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workflows/{id}:
+        get:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_GetWorkflow
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Workflow'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_UpdateWorkflow
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateWorkflowReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UpdateWorkflowResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workflows/{id}/archive:
+        post:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_ArchiveWorkflow
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Workflow'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workflows/{id}/grants:
+        post:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_GrantWorkflow
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GrantReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Workflow'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workflows/{id}/grants/{team_id}:
+        delete:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_RevokeWorkflow
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: team_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Workflow'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workflows/{id}/publish:
+        post:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_PublishWorkflow
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Workflow'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workflows/{id}/visibility:
+        post:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_ChangeWorkflowVisibility
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ChangeVisibilityReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Workflow'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/worker/v1/registrations:
+        post:
+            tags:
+                - WorkerService
+            operationId: WorkerService_RegisterWorker
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RegisterWorkerReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegisterWorkerResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/worker/v1/tasks/{dispatch_id}:complete:
+        post:
+            tags:
+                - WorkerService
+            operationId: WorkerService_CompleteWorkerTask
+            parameters:
+                - name: dispatch_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CompleteWorkerTaskReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkerResultReceipt'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/worker/v1/tasks/{dispatch_id}:fail:
+        post:
+            tags:
+                - WorkerService
+            operationId: WorkerService_FailWorkerTask
+            parameters:
+                - name: dispatch_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FailWorkerTaskReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkerResultReceipt'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/worker/v1/tasks/{dispatch_id}:heartbeat:
+        post:
+            tags:
+                - WorkerService
+            operationId: WorkerService_HeartbeatWorkerTask
+            parameters:
+                - name: dispatch_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/HeartbeatWorkerTaskReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HeartbeatWorkerTaskResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/worker/v1/tasks:poll:
+        post:
+            tags:
+                - WorkerService
+            operationId: WorkerService_PollWorkerTask
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PollWorkerTaskReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PollWorkerTaskResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /health:
+        get:
+            tags:
+                - HealthService
+            operationId: HealthService_Health
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HealthResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+components:
+    schemas:
+        AssetData:
+            type: object
+            properties:
+                name:
+                    type: string
+                url:
+                    type: string
+                content:
+                    type: string
+                asset_kind:
+                    type: string
+        Candidate:
+            type: object
+            properties:
+                index:
+                    type: integer
+                    format: int32
+                url:
+                    type: string
+                content:
+                    type: string
+                is_primary:
+                    type: boolean
+        CapabilityVersion:
+            type: object
+            properties:
+                capability_key:
+                    type: string
+                capability_version:
+                    type: integer
+                    format: int32
+                concurrency:
+                    type: integer
+                    format: int32
+        ChangeVisibilityReq:
+            type: object
+            properties:
+                id:
+                    type: string
+                visibility:
+                    type: string
+        ClaimAsset:
+            type: object
+            properties:
+                label:
+                    type: string
+                url:
+                    type: string
+                content:
+                    type: string
+        ClaimStepRunReq:
+            type: object
+            properties:
+                platform:
+                    type: string
+                gen_way:
+                    type: string
+                gen_type:
+                    type: string
+                worker_id:
+                    type: string
+            description: —— worker ——
+        ClaimStepRunResp:
+            type: object
+            properties:
+                step_run_id:
+                    type: string
+                job_id:
+                    type: string
+                rendered_prompt:
+                    type: string
+                input_assets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ClaimAsset'
+                platform:
+                    type: string
+                gen_way:
+                    type: string
+                gen_type:
+                    type: string
+                asset_kind:
+                    type: string
+                candidate_count:
+                    type: integer
+                    format: int32
+        CompleteStepRunReq:
+            type: object
+            properties:
+                step_run_id:
+                    type: string
+                candidates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Candidate'
+        CompleteWorkerTaskReq:
+            type: object
+            properties:
+                dispatch_id:
+                    type: string
+                worker_instance_id:
+                    type: string
+                attempt:
+                    type: integer
+                    format: int32
+                idempotency_key:
+                    type: string
+                output_json:
+                    type: string
+        ConfirmStepRunReq:
+            type: object
+            properties:
+                step_run_id:
+                    type: string
+                selected_index:
+                    type: integer
+                    format: int32
+                idempotency_key:
+                    type: string
+            description: —— 用户确认 ——
+        CreateTemplateReq:
+            type: object
+            properties:
+                scope:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                prompt_body:
+                    type: string
+                inputs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TemplateInputSlot'
+                output_asset_kind:
+                    type: string
+                platform:
+                    type: string
+                gen_way:
+                    type: string
+                gen_type:
+                    type: string
+                needs_confirm:
+                    type: boolean
+                candidate_count:
+                    type: integer
+                    format: int32
+                created_by:
+                    type: string
+                capability_key:
+                    type: string
+                capability_version:
+                    type: integer
+                    format: int32
+                invocation_mapping:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/InvocationExpression'
+        CreateTemplateResp:
+            type: object
+            properties:
+                id:
+                    type: string
+                version:
+                    type: integer
+                    format: int32
+        CreateWorkflowReq:
+            type: object
+            properties:
+                scope:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                output_step_key:
+                    type: string
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowStep'
+                created_by:
+                    type: string
+        CreateWorkflowResp:
+            type: object
+            properties:
+                id:
+                    type: string
+                version:
+                    type: integer
+                    format: int32
+        DerivedEdge:
+            type: object
+            properties:
+                from:
+                    type: string
+                to:
+                    type: string
+                to_input:
+                    type: string
+        FailStepRunReq:
+            type: object
+            properties:
+                step_run_id:
+                    type: string
+                reason:
+                    type: string
+        FailWorkerTaskReq:
+            type: object
+            properties:
+                dispatch_id:
+                    type: string
+                worker_instance_id:
+                    type: string
+                attempt:
+                    type: integer
+                    format: int32
+                idempotency_key:
+                    type: string
+                reason:
+                    type: string
+        GetJobResp:
+            type: object
+            properties:
+                job:
+                    $ref: '#/components/schemas/Job'
+                step_runs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/StepRun'
+        GoogleProtobufAny:
+            type: object
+            properties:
+                '@type':
+                    type: string
+                    description: The type of the serialized message.
+            additionalProperties: true
+            description: Contains an arbitrary serialized message along with a @type that describes the type of the serialized message.
+        GrantReq:
+            type: object
+            properties:
+                id:
+                    type: string
+                team_id:
+                    type: string
+                permission:
+                    type: string
+                granted_by:
+                    type: string
+        HealthResponse:
+            type: object
+            properties:
+                status:
+                    type: string
+        HeartbeatWorkerTaskReq:
+            type: object
+            properties:
+                dispatch_id:
+                    type: string
+                worker_instance_id:
+                    type: string
+                attempt:
+                    type: integer
+                    format: int32
+        HeartbeatWorkerTaskResp:
+            type: object
+            properties:
+                lease_expires_at:
+                    type: string
+        HistoricalMediaObject:
+            type: object
+            properties:
+                object_path:
+                    type: string
+                sha256:
+                    type: string
+                access_url:
+                    type: string
+        HistoricalStepOutput:
+            type: object
+            properties:
+                step_key:
+                    type: string
+                source_record_id:
+                    type: string
+                asset_id:
+                    type: string
+        HistoricalVideoPush:
+            type: object
+            properties:
+                id:
+                    type: string
+                organization_id:
+                    type: string
+                workspace_id:
+                    type: string
+                owner_user_id:
+                    type: string
+                source_record_id:
+                    type: string
+                product_id:
+                    type: string
+                virtual_ip_id:
+                    type: string
+                source_scene_id:
+                    type: string
+                template_name:
+                    type: string
+                title:
+                    type: string
+                content:
+                    type: string
+                source_status:
+                    type: string
+                is_qualified:
+                    type: boolean
+                is_published:
+                    type: boolean
+                video:
+                    $ref: '#/components/schemas/HistoricalMediaObject'
+                thumbnail:
+                    $ref: '#/components/schemas/HistoricalMediaObject'
+                manual_clip:
+                    $ref: '#/components/schemas/HistoricalMediaObject'
+                source_created_at:
+                    type: string
+                source_updated_at:
+                    type: string
+                imported_at:
+                    type: string
+                members:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HistoricalVideoPushMember'
+        HistoricalVideoPushMember:
+            type: object
+            properties:
+                ordinal:
+                    type: integer
+                    format: int32
+                source_video_id:
+                    type: string
+                job_id:
+                    type: string
+        HistoricalVideoPushResp:
+            type: object
+            properties:
+                item:
+                    $ref: '#/components/schemas/HistoricalVideoPush'
+        ImportHistoricalVideoPushReq:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                workspace_id:
+                    type: string
+                owner_user_id:
+                    type: string
+                source_record_id:
+                    type: string
+                product_id:
+                    type: string
+                virtual_ip_id:
+                    type: string
+                source_scene_id:
+                    type: string
+                template_name:
+                    type: string
+                title:
+                    type: string
+                content:
+                    type: string
+                source_status:
+                    type: string
+                is_qualified:
+                    type: boolean
+                is_published:
+                    type: boolean
+                video:
+                    $ref: '#/components/schemas/HistoricalMediaObject'
+                thumbnail:
+                    $ref: '#/components/schemas/HistoricalMediaObject'
+                manual_clip:
+                    $ref: '#/components/schemas/HistoricalMediaObject'
+                source_created_at:
+                    type: string
+                source_updated_at:
+                    type: string
+                members:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HistoricalVideoPushMember'
+        ImportIncompleteExecutionReq:
+            type: object
+            properties:
+                source_group_id:
+                    type: string
+                organization_id:
+                    type: string
+                workspace_id:
+                    type: string
+                owner_user_id:
+                    type: string
+                workflow_id:
+                    type: string
+                workflow_version:
+                    type: integer
+                    format: int32
+                input:
+                    $ref: '#/components/schemas/JobInput'
+                completed:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HistoricalStepOutput'
+        ImportIncompleteExecutionResp:
+            type: object
+            properties:
+                job_id:
+                    type: string
+                status:
+                    type: integer
+                    format: enum
+        InputSchemaEntry:
+            type: object
+            properties:
+                name:
+                    type: string
+                resource_type:
+                    type: string
+                required:
+                    type: boolean
+                asset_kind:
+                    type: string
+        InvocationExpression:
+            type: object
+            properties:
+                op:
+                    type: string
+                slot:
+                    type: string
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InvocationExpression'
+            description: |-
+                InvocationExpression is a closed, declarative mapping expression.
+                 op: render_template | asset_ref | list
+        Job:
+            type: object
+            properties:
+                id:
+                    type: string
+                scope:
+                    type: string
+                workflow_id:
+                    type: string
+                workflow_version:
+                    type: integer
+                    format: int32
+                input:
+                    $ref: '#/components/schemas/JobInput'
+                status:
+                    type: integer
+                    format: enum
+                retry_count:
+                    type: integer
+                    format: int32
+                retry_history:
+                    type: string
+                submitted_by:
+                    type: string
+                submitted_at:
+                    type: string
+                started_at:
+                    type: string
+                finished_at:
+                    type: string
+                failure_reason:
+                    type: string
+                origin:
+                    type: string
+                organization_id:
+                    type: string
+                workspace_id:
+                    type: string
+                source_system:
+                    type: string
+                source_record_id:
+                    type: string
+                imported_at:
+                    type: string
+        JobInput:
+            type: object
+            properties:
+                product:
+                    $ref: '#/components/schemas/ProductData'
+                virtual_ip:
+                    $ref: '#/components/schemas/VirtualIpData'
+                asset:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AssetData'
+                material:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MaterialData'
+        ListHistoricalVideoPushesResp:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HistoricalVideoPush'
+                total:
+                    type: string
+        ListJobsResp:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Job'
+                total:
+                    type: integer
+                    format: int32
+        ListTemplatesResp:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Template'
+                total:
+                    type: integer
+                    format: int32
+        ListWorkflowsResp:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Workflow'
+                total:
+                    type: integer
+                    format: int32
+        MaterialData:
+            type: object
+            properties:
+                name:
+                    type: string
+                url:
+                    type: string
+                content:
+                    type: string
+                asset_kind:
+                    type: string
+            description: —— JobInput bundle（自包含）——
+        PollWorkerTaskReq:
+            type: object
+            properties:
+                worker_instance_id:
+                    type: string
+                capability_key:
+                    type: string
+                capability_version:
+                    type: integer
+                    format: int32
+        PollWorkerTaskResp:
+            type: object
+            properties:
+                task:
+                    $ref: '#/components/schemas/WorkerTask'
+        ProductData:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                target_audience:
+                    type: string
+                product_details:
+                    type: string
+                display_actions:
+                    type: string
+                image_url:
+                    type: string
+        RegisterWorkerReq:
+            type: object
+            properties:
+                worker_instance_id:
+                    type: string
+                capabilities:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CapabilityVersion'
+        RegisterWorkerResp:
+            type: object
+            properties:
+                worker_instance_id:
+                    type: string
+                registered_at:
+                    type: string
+        RejectReason:
+            type: object
+            properties:
+                code:
+                    type: string
+                message:
+                    type: string
+                subject:
+                    type: string
+        ResumeJobReq:
+            type: object
+            properties:
+                id:
+                    type: string
+                input_patch:
+                    $ref: '#/components/schemas/JobInput'
+                idempotency_key:
+                    type: string
+        RetryJobReq:
+            type: object
+            properties:
+                id:
+                    type: string
+                reason:
+                    type: string
+                input_override:
+                    $ref: '#/components/schemas/JobInput'
+            description: —— retry ——
+        RetryStepRunReq:
+            type: object
+            properties:
+                step_run_id:
+                    type: string
+                reason:
+                    type: string
+                input_override:
+                    $ref: '#/components/schemas/JobInput'
+            description: -- 单步 retry + 单步读 --
+        Status:
+            type: object
+            properties:
+                code:
+                    type: integer
+                    description: The status code, which should be an enum value of [google.rpc.Code][google.rpc.Code].
+                    format: int32
+                message:
+                    type: string
+                    description: A developer-facing error message, which should be in English. Any user-facing error message should be localized and sent in the [google.rpc.Status.details][google.rpc.Status.details] field, or localized by the client.
+                details:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GoogleProtobufAny'
+                    description: A list of messages that carry the error details.  There is a common set of message types for APIs to use.
+            description: 'The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors).'
+        StepRun:
+            type: object
+            properties:
+                id:
+                    type: string
+                job_id:
+                    type: string
+                step_key:
+                    type: string
+                step_order:
+                    type: integer
+                    format: int32
+                template_id:
+                    type: string
+                template_version:
+                    type: integer
+                    format: int32
+                status:
+                    type: integer
+                    format: enum
+                retry_count:
+                    type: integer
+                    format: int32
+                resolved_inputs:
+                    type: string
+                rendered_prompt:
+                    type: string
+                candidates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Candidate'
+                selected_index:
+                    type: integer
+                    format: int32
+                output_asset_id:
+                    type: string
+                failure_reason:
+                    type: string
+                claimed_by:
+                    type: string
+                claimed_at:
+                    type: string
+                started_at:
+                    type: string
+                finished_at:
+                    type: string
+                origin:
+                    type: string
+                source_system:
+                    type: string
+                source_record_id:
+                    type: string
+                source_created_at:
+                    type: string
+                last_review_id:
+                    type: string
+                last_review_status:
+                    type: string
+        SubmitJobReq:
+            type: object
+            properties:
+                workflow_id:
+                    type: string
+                workflow_version:
+                    type: integer
+                    format: int32
+                input:
+                    $ref: '#/components/schemas/JobInput'
+                submitted_by:
+                    type: string
+                workspace_id:
+                    type: string
+                organization_id:
+                    type: string
+                idempotency_key:
+                    type: string
+            description: —— SubmitJob ——
+        SubmitJobResp:
+            type: object
+            properties:
+                job_id:
+                    type: string
+                status:
+                    type: integer
+                    format: enum
+        Template:
+            type: object
+            properties:
+                id:
+                    type: string
+                scope:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                prompt_body:
+                    type: string
+                inputs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TemplateInputSlot'
+                output_asset_kind:
+                    type: string
+                platform:
+                    type: string
+                gen_way:
+                    type: string
+                gen_type:
+                    type: string
+                status:
+                    type: integer
+                    format: enum
+                visibility:
+                    type: string
+                version:
+                    type: integer
+                    format: int32
+                created_by:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+                needs_confirm:
+                    type: boolean
+                candidate_count:
+                    type: integer
+                    format: int32
+                capability_key:
+                    type: string
+                capability_version:
+                    type: integer
+                    format: int32
+                invocation_mapping:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/InvocationExpression'
+        TemplateInputSlot:
+            type: object
+            properties:
+                name:
+                    type: string
+                resource_type:
+                    type: string
+                required:
+                    type: boolean
+                display_order:
+                    type: integer
+                    format: int32
+                asset_kind:
+                    type: string
+            description: |-
+                TemplateInputSlot 模板输入槽位。
+                 name: prompt_body 占位符；MATERIAL/ASSET 时 = asset_kind（类型）
+                 resource_type: MATERIAL/ASSET/PRODUCT/VIRTUAL_IP/TEXT（string，避免跨 service enum import）
+        UpdateTemplateReq:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                prompt_body:
+                    type: string
+                inputs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TemplateInputSlot'
+                output_asset_kind:
+                    type: string
+                platform:
+                    type: string
+                gen_way:
+                    type: string
+                gen_type:
+                    type: string
+                needs_confirm:
+                    type: boolean
+                candidate_count:
+                    type: integer
+                    format: int32
+                capability_key:
+                    type: string
+                capability_version:
+                    type: integer
+                    format: int32
+                invocation_mapping:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/InvocationExpression'
+        UpdateTemplateResp:
+            type: object
+            properties:
+                version:
+                    type: integer
+                    format: int32
+        UpdateWorkflowReq:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                output_step_key:
+                    type: string
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowStep'
+        UpdateWorkflowResp:
+            type: object
+            properties:
+                version:
+                    type: integer
+                    format: int32
+        ValidateWorkflowReq:
+            type: object
+            properties:
+                scope:
+                    type: string
+                output_step_key:
+                    type: string
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowStep'
+            description: —— ValidateWorkflow（闸 1，不写库）——
+        ValidationResult:
+            type: object
+            properties:
+                valid:
+                    type: boolean
+                roots:
+                    type: array
+                    items:
+                        type: string
+                output_step_key:
+                    type: string
+                derived_edges:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DerivedEdge'
+                input_schema:
+                    $ref: '#/components/schemas/WorkflowInputSchema'
+                reject_reasons:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RejectReason'
+        VirtualIpData:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                avatar_url:
+                    type: string
+                full_body_url:
+                    type: string
+                three_view_url:
+                    type: string
+                nine_view_url:
+                    type: string
+        WorkerResultReceipt:
+            type: object
+            properties:
+                receipt_id:
+                    type: string
+                dispatch_id:
+                    type: string
+                status:
+                    type: string
+        WorkerTask:
+            type: object
+            properties:
+                dispatch_id:
+                    type: string
+                attempt:
+                    type: integer
+                    format: int32
+                capability_key:
+                    type: string
+                capability_version:
+                    type: integer
+                    format: int32
+                input_json:
+                    type: string
+                lease_expires_at:
+                    type: string
+        Workflow:
+            type: object
+            properties:
+                id:
+                    type: string
+                scope:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                output_step_key:
+                    type: string
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowStep'
+                status:
+                    type: integer
+                    format: enum
+                visibility:
+                    type: string
+                version:
+                    type: integer
+                    format: int32
+                input_schema:
+                    $ref: '#/components/schemas/WorkflowInputSchema'
+                created_by:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        WorkflowInputSchema:
+            type: object
+            properties:
+                entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InputSchemaEntry'
+        WorkflowSlotBinding:
+            type: object
+            properties:
+                source:
+                    type: integer
+                    format: enum
+                ref:
+                    type: string
+                const_value:
+                    type: string
+        WorkflowStep:
+            type: object
+            properties:
+                key:
+                    type: string
+                name:
+                    type: string
+                step_order:
+                    type: integer
+                    format: int32
+                template_id:
+                    type: string
+                template_version:
+                    type: integer
+                    format: int32
+                slot_bindings:
+                    type: object
+                    additionalProperties:
+                        $ref: '#/components/schemas/WorkflowSlotBinding'
+                approval_policy:
+                    type: string
+                    description: Candidate review and source reuse policy are part of the executable step contract.
+                reuse_policy:
+                    type: string
+tags:
+    - name: HealthService
+    - name: HistoricalPublicationService
+    - name: JobService
+      description: JobService —— job 提交 + 查询 + cancel + retry + 用户确认 + worker pull。
+    - name: TemplateService
+      description: TemplateService —— 提示词模板 CRUD + 资源 ACL（visibility + grants）。
+    - name: WorkerService
+    - name: WorkflowService
+      description: WorkflowService —— 工作流 DAG CRUD + 资源 ACL + ValidateWorkflow（闸 1）。

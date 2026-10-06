@@ -13,14 +13,22 @@ import (
 func TestStartResumeRegistersRestoreAndUsesConductorIdempotency(t *testing.T) {
 	var taskRegistered, workflowRegistered bool
 	var started StartWorkflowRequest
+	var registeredTask TaskDefinition
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/metadata/taskdefs/"+compiler.RestoreStepTaskName:
+			if !taskRegistered {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(normalizedTaskDefinition(registeredTask))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/metadata/taskdefs":
 			var tasks []TaskDefinition
 			if err := json.NewDecoder(r.Body).Decode(&tasks); err != nil || len(tasks) != 1 || tasks[0].Name != compiler.RestoreStepTaskName {
 				t.Errorf("restore Task Definition not registered: %+v err=%v", tasks, err)
 			}
 			taskRegistered = true
+			registeredTask = tasks[0]
 			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodPut && r.URL.Path == "/api/metadata/workflow":
 			workflowRegistered = true
@@ -56,9 +64,22 @@ func TestStartResumeRegistersRestoreAndUsesConductorIdempotency(t *testing.T) {
 }
 
 func TestStartResumeRecoversAmbiguousStartByCorrelation(t *testing.T) {
+	var registeredTask *TaskDefinition
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/metadata/taskdefs/"+compiler.RestoreStepTaskName:
+			if registeredTask == nil {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(normalizedTaskDefinition(*registeredTask))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/metadata/taskdefs":
+			var tasks []TaskDefinition
+			if json.NewDecoder(r.Body).Decode(&tasks) != nil || len(tasks) != 1 {
+				w.WriteHeader(400)
+				return
+			}
+			registeredTask = &tasks[0]
 			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodPut && r.URL.Path == "/api/metadata/workflow":
 			_, _ = w.Write([]byte(`{"bulkErrorResults":{}}`))

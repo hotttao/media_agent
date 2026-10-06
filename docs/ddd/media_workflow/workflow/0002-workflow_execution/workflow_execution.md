@@ -9,6 +9,67 @@ Execution 以本地 Job/StepRun 为业务事实源，通过 Outbox 启动已编�
 
 ## 执行时间线
 
+### 失败节点重试的分支隔离
+
+单节点 Retry 的业务边界是目标节点及受影响的下游，不是引擎任务列表中的后缀。已完成、无依赖关系的旁支结果必须保留，其 Capability 不得再次交付 Worker。依赖使用 Job 冻结的 Compilation/IR，不使用后来编辑的 Workflow。
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant W as media_workflow
+    participant E as Execution 聚合
+    participant O as Conductor
+    U->>W: Retry failed StepRun
+    W->>E: 核验归属、失败状态及重试上限
+    W->>O: 查询失败实例与最新轮任务、权威 seq
+    W->>W: 检查是否会截断或重开其他节点
+    alt 可以隔离
+        W->>O: 从最新轮 Renderer 重跑
+        W->>E: 记录目标重试与执行状态
+    else 需要分支结果恢复
+        W-->>U: 拒绝直接重跑，不改变业务状态
+    end
+```
+
+Conductor 指定任务 rerun 按 `seq` 删除后续任务，并可能重开保留的失败任务；它不是 DAG 局部重试。直接路径必须取得权威任务顺序；遇到其他节点会被删除/重开、未知可执行任务或缺少顺序时，在所有副作用前拒绝。此保护不是完整的并行恢复实现。
+
+完整并行恢复必须冻结受影响集合和保留结果，可靠记录重试意图，恢复无关已完成节点的受控产物引用，同时保留目标最新轮反馈。引擎副作用与本地状态需要可靠协调，不能把“先调用引擎，再尽力写库”视为完成。原生执行恢复与历史导入恢复分开，不以 historical origin 绕过归属。
+
+### 普通提交与执行
+
+普通原生 Submit 的启动命令与 Job、全部 StepRun 在同一本地事务保存；参数来自 registered Compilation，并冻结 Definition 名称/版本/hash、稳定输入、Task Domain 与 Job correlation。提交请求不能持有事务调用 Conductor。启动状态独立于 Job 的业务执行状态，客户端断开不删除命令。
+
+公开 Submit 可携带稳定 idempotency_key；省略则每次为新提交，不按相同输入猜测用户意图。键作用域为当前授权的 `(User, Organization, Workspace)`。请求摘要包含 Workflow ID、调用方请求版本（0 代表首次接受时选择发布版）与规范化稳定媒体输入；短期 URL 签名变化不改变语义。Workspace/权限复核先于回执查询。同键同摘要优先返回原 Job，即使其已终态、发布版已改变或原签名已过期；不同摘要冲突。首次接受在事务内锁键并再次查询，原子保存 Job/StepRun/启动命令/提交回执，并发失败方不得留下多余 Job。媒体可读性验证在首次接受事务前完成，重放不再外部读取或启动。
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant W as media_workflow
+    participant DB as Execution DB
+    participant D as Start Delivery
+    participant O as Conductor
+    U->>W: Submit 已发布 Workflow
+    W->>DB: TX: Job + StepRun + queued 启动记录
+    W-->>U: Job 已接受
+    D->>DB: 领取租约及独立 claim token
+    D->>DB: CAS queued→uncertain（外部调用前提交）
+    D->>O: 发送一次冻结 Start
+    alt 获得明确实例 ID
+        D->>DB: TX: 绑定 Job 实例 + started
+    else 响应丢失或进程退出
+        D->>DB: 保留 uncertain
+        D->>O: 查询原 correlation，不重发 Start
+    end
+```
+
+`queued` 表示尚未授权发送，过期领取可由新 token 接手；`uncertain` 表示启动可能发生，只允许查询恢复。当前引擎未通过启动去重门禁，不能把 uncertain 自动改回 queued。数据库回执写失败时保留命令，不把“无法保存实例 ID”冒充未启动；租约过期和旧 token 都不能完成/释放新领取。取消与 uncertain 恢复需记录/终止发现的实例，不能复活 cancelled Job；取消协调与上游幂等契约仍需单独验收。
+
+原生启动取消采用 Job→启动记录的统一锁顺序。取消事务先使 Job cancelled：queued 同事务转 cancelled 并清除 claim，保证尚未授权的 POST 不发生；uncertain 保留待查询事实，started 转 cancel_pending 保留原实例。后台处理 cancelled Job 的 uncertain 只查询 correlation；发现实例后事务外查询并终止，确认引擎终态后以有效 claim 将启动记录记为 cancelled，保存实例 ID，但不把 Job 改回 running。终止响应丢失仍先查询终态再决定是否重发终止；找不到 uncertain 实例不能断言无需清理。取消接口重复调用返回原取消事实，清理失败不撤销取消。
+
+普通 Submit 在写入 Job 前检查输入媒体来自受控存储和 Job 企业，并验证可读性，将媒体地址冻结为 Object Path。Conductor 启动与 Dispatch 保存稳定引用；Worker 领取或重取未过期 Dispatch 时重新解析地址，仅响应中携带短期 URL。解析失败不首次创建 Dispatch，已存在租约保留供恢复；不改写 Job、Conductor 输入或 Dispatch 快照。纯文本动作不经过对象解析。Renderer 仍属于 media_workflow，客户端不承担内部任务。
+
+普通 User 提交前指定目标 Workspace。media_workflow 经 Control 核验访问与当前 `use_workflow` 权限，冻结 Workspace 及其企业；API Token 的可信企业绑定不可被请求覆盖。Personal Worker 交付时匹配 Job owner、企业和 Conductor 实例，拒绝未绑定企业的 Job，不通过改写旧记录绕过校验。
+
 ```mermaid
 sequenceDiagram
     participant C as Browser Caller
@@ -67,7 +128,31 @@ sequenceDiagram
 
 外部调用结果不明确时按 `job_id` correlationId、`dispatch_id` 或 `step_run_id + attempt` 查询，禁止盲目创建第二个执行。Execution Domain 决定 Job/StepRun/WorkerDispatch 转换；Adapter、Compiler 与 Worker 只协调技术执行。
 
+### 审批与重新生成的技术编排
+
+重新生成反馈与决定一同冻结在 Review，并由后台完成本轮 HUMAN。下一轮 Renderer 接收本节点上一轮审批输出、上一轮轮次与当前循环轮次；只有 `previous_generation=current_generation-1` 且决定为 regenerate 时使用反馈。首轮不接受旧决定。每轮重新渲染原冻结模板，再附加紧邻上一轮反馈作为普通文本；不执行反馈里的模板语法、不累计早期反馈，也不改变其他节点。后台重复投递和 Renderer 重试使用同一冻结输入，提示词摘要包含反馈。
+
+新编译定义在 HUMAN 和 Renderer 中冻结 `feedback_mode=last_regeneration_v1`。旧定义缺少该模式时仍允许无反馈重新生成，但带反馈请求必须明确拒绝，不能接收后丢失反馈。该纯渲染过程不查询数据库、对象存储或 Provider，也不迁移到客户端 Worker。
+
+每个原生 Step 的 Renderer、Capability、审批分支置于独立 `DO_WHILE` 内，Finalize 位于循环外。审批输出 `decision=regenerate` 才继续下一轮；`decision=accept` 或自动单候选结束循环，再执行唯一 Finalize。循环不终止整个 Job，也不重跑旁路或已完成上游。预期单候选仍按本轮实际候选数量选择 HUMAN，不能沿用上一轮审批输入。
+
+Conductor 为每轮生成新的 Task ID；循环内引用名称不能含其保留的 `__` 迭代分隔符。API 只完成最新一轮正在等待的 HUMAN 精确引用；对账先确定节点的最新轮次，再投影该轮任务，旧轮候选和失败保留在技术执行审计中但不能覆盖新轮。业务 `retry_count` 不因重新生成增加；Dispatch 的 attempt 是其独立 Conductor Task 的技术重试序号，派发身份还包含 Task ID。用户决定的持久化与 Outbox 仍按 TX5 实施，不在本地事务中调用 Conductor。
+
+旧 Compilation 与在途 Definition 不原位修改。旧定义仍可确认候选，但没有审批循环的旧实例不得通过终止整个 Workflow 或非终态 rerun 模拟重新生成，必须返回明确的不支持错误；新的循环能力通过新版本发布生效。
+
+审批决定与待提交命令保存为同一条不可变 Review 记录。TX5 锁定 Job、StepRun，复核归属、执行实例、候选快照与待确认状态后，保存精确 HUMAN Task ID/引用、生成轮次、用户、幂等键和冻结决定；同时使当前步骤退出待确认。一个 HUMAN Task 只允许一个决定；同键同内容重放返回原记录，同键异内容或同轮另一决定冲突。不同生成轮、不同执行实例不会复用旧决定。
+
+后台事务外领取 pending Review，并以每次领取独立的 claim token 隔离进程重启和租约回收。提交前检查精确 Task ID：已完成且输出匹配原决定则直接标记 applied；已完成但内容不同、执行已取消或任务已被替换则 failed，不再覆盖。暂时不可用只释放自己的 claim，保留原决定与退避时间；旧 claim 不能完成或释放后来重新领取的记录。Review 的 applied 只表示技术审批已被接受，业务输出仍由循环外 Finalize 收口。
+
 Product 输入在提交时冻结商品主图的可访问 URL（无主图时取首图），作为对应 Workflow Input 的 `asset_ref`；Product ID 仍保留在输入快照中供业务追溯。图片进入 Capability 的位置和顺序只由 Template Version 的 Invocation Mapping 决定，不把 URL 拼进提示词正文。
+
+用户命令使用调用方生成的稳定幂等键；显式键重放在查询 Conductor 和判断当前轮之前返回原决定回执，仍须校验当前用户与 Workspace 权限。旧调用方缺少键时，只能以当前 HUMAN 身份兼容同轮去重，不能承诺跨轮网络重放安全。回执包含不透明 Review ID 和 pending/applied/failed，不暴露 Conductor Task ID。读取最新决定不等于当前轮仍可审批。
+
+待确认投影和审批写入采用相同 Job→StepRun 锁序，在本地事务内检查该精确任务是否已有 Review，再更新步骤；Job 的 waiting 状态依据事务内步骤状态计算。Conductor 查询必须发生在锁定前，避免页面刷新与决定提交并发时重新暴露已提交审批。
+
+新审批还冻结读取Job时的Execution Retry Epoch。TX5锁内再次比较该周期，不一致的新决定拒绝；显式键重放仍返回原决定，不把旧决定重绑定到新周期。后台投递旧周期命令只能标记失效，不能完成重试后的任务。投影冻结读取引擎前的周期，并忽略可证明属于更早周期的Review；同周期按generation与精确HUMAN身份防止晚到Render、Invoke、审批、Finalize或Job状态回退。重试允许同一数字generation重建任务，不复用旧审批。没有周期记录的旧Review保留原摘要，不推断或回填其周期；重试后遇到无法以精确已完成HUMAN证明的同轮旧记录时安全拒绝投影。可靠Retry本地接受与上游rerun之间的不确定窗口仍由独立恢复流程负责。
+
+审批投递必须直接使用Review冻结的Conductor Task ID完成HUMAN，不能按Task Reference再次解析提交目标。读取等待状态后即使Retry替换同名HUMAN，旧决定也只能指向旧Task ID，不得重定向到新任务；无法提供精确Task提交能力时保留待恢复命令，不回退引用提交。旧任务不存在或不再等待由对账明确失效；引擎对旧Task结果的语义仍须在真实协议测试中核对。
 
 ## 历史图片谱系导入与继续执行
 
@@ -172,4 +257,29 @@ TX1 创建完整初始 DAG 运行事实；TX2 在交付前保存 Dispatch；TX3 
 
 Managed Worker 属于 media_workflow 内部运行时，不调用 Talos或公开 Worker API。它的可信 `actor_id`、pool 和 capability allowlist 来自服务配置；Job `submitted_by` 只表示业务归属，不被 Managed Worker用于模拟登录。若未来它必须代表 User 调用内部资源服务，由 media_workflow 签发绑定 dispatch/audience/scope/lease 的短期委托 JWT。
 
-任务输入中的稳定 Object Path 在领取时换成短时 presigned GET/PUT URL；Worker 完成只返回受控 Object Path、checksum、content type、size 与 provenance。Finalize 验证对象并以 `(step_run_id, attempt)` 幂等登记唯一 Generated Asset。任意 Provider URL 必须先摄取到受控对象存储。
+任务输入中的稳定 Object Path 在领取时换成短时 presigned GET/PUT URL；Worker 完成只返回受控 Object Path、checksum、content type、size 与 provenance。Finalize 验证对象并以 `(step_run_id, result_key)` 幂等登记唯一 Generated Asset。任意 Provider URL 必须先摄取到受控对象存储。
+
+### 生成结果登记与当前产物引用
+
+```mermaid
+sequenceDiagram
+    participant E as Conductor
+    participant W as workflow_execution
+    participant M as Materials asset
+    participant D as Execution repository
+    E-->>W: 当前轮 Capability 与 Finalize 已完成快照
+    W->>W: 核对当前执行轮次，冻结结果身份与选定候选
+    W->>M: Upsert(step_run_id, result_key, 稳定结果摘要)
+    M->>M: 本地事务：同键校验或创建独立 Asset 与登记回执
+    M-->>W: 本轮 Generated Asset ID
+    W->>D: 本地事务：锁 Job→Step，重读轮次与取消状态
+    alt 当前结果仍有效
+        D->>D: 更新 output_asset_id 与 succeeded
+    else Retry 或取消已发生
+        D-->>W: 拒绝旧结果收口，不覆盖当前节点
+    end
+```
+
+`result_key` 标识被接受的能力生成结果，不使用 Finalize 技术任务重试 ID 或 Worker delivery attempt。对同轮结果的响应丢失重放返回同一个 Asset；同键不同结果冲突。Retry/重新生成产生新的能力结果身份，即使对象内容相同也登记独立产物。StepRun 保留稳定身份，仅当前选定结果引用可以变更，旧 Asset 的对象、内容和来源不被覆盖。
+
+Materials 调用在 Execution 事务之外；Materials 已提交但本地保存失败时保留资产，恢复只能重放原键。取消后晚到资产可作为审计事实留存，但不能重新关联当前 StepRun，也不自动删除其对象。登记使用受信内部服务身份，Materials 最终验证企业、Scope、owner 与资源来源。两服务不建立跨库外键。

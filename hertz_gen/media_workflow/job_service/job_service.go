@@ -19,6 +19,8 @@ var (
 type Client interface {
 	ImportIncompleteExecution(context context.Context, req *job.ImportIncompleteExecutionReq, reqOpt ...config.RequestOption) (resp *job.ImportIncompleteExecutionResp, rawResponse *protocol.Response, err error)
 
+	ImportCompletedExecution(context context.Context, req *job.ImportIncompleteExecutionReq, reqOpt ...config.RequestOption) (resp *job.ImportIncompleteExecutionResp, rawResponse *protocol.Response, err error)
+
 	SubmitJob(context context.Context, req *job.SubmitJobReq, reqOpt ...config.RequestOption) (resp *job.SubmitJobResp, rawResponse *protocol.Response, err error)
 
 	GetJob(context context.Context, req *job.GetJobReq, reqOpt ...config.RequestOption) (resp *job.GetJobResp, rawResponse *protocol.Response, err error)
@@ -74,6 +76,28 @@ func (s *JobServiceClient) ImportIncompleteExecution(context context.Context, re
 		setRequestOption(reqOpt...).
 		setResult(httpResp).
 		execute("POST", "/api/internal/v1/jobs/import-incomplete")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *JobServiceClient) ImportCompletedExecution(context context.Context, req *job.ImportIncompleteExecutionReq, reqOpt ...config.RequestOption) (resp *job.ImportIncompleteExecutionResp, rawResponse *protocol.Response, err error) {
+	httpResp := &job.ImportIncompleteExecutionResp{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/api/internal/v1/jobs/import-completed")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -407,6 +431,10 @@ func ConfigDefaultClient(ops ...Option) (err error) {
 
 func ImportIncompleteExecution(context context.Context, req *job.ImportIncompleteExecutionReq, reqOpt ...config.RequestOption) (resp *job.ImportIncompleteExecutionResp, rawResponse *protocol.Response, err error) {
 	return defaultClient.ImportIncompleteExecution(context, req, reqOpt...)
+}
+
+func ImportCompletedExecution(context context.Context, req *job.ImportIncompleteExecutionReq, reqOpt ...config.RequestOption) (resp *job.ImportIncompleteExecutionResp, rawResponse *protocol.Response, err error) {
+	return defaultClient.ImportCompletedExecution(context, req, reqOpt...)
 }
 
 func SubmitJob(context context.Context, req *job.SubmitJobReq, reqOpt ...config.RequestOption) (resp *job.SubmitJobResp, rawResponse *protocol.Response, err error) {

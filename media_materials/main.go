@@ -83,7 +83,9 @@ func main() {
 	vipGrantRepo := viprepo.NewGrantRepo(db)
 	vipSvc := vipsvc.NewService(vipRepo, vipGrantRepo)
 	viphandler.Svc = vipSvc
-	generatedAssetSvc := generatedassetsvc.NewService(generatedassetrepo.NewRepo(db), productRepo, vipRepo)
+	generatedAssetRepo := generatedassetrepo.NewRepo(db)
+	generatedAssetSvc := generatedassetsvc.NewService(generatedAssetRepo, productRepo, vipRepo)
+	generatedAssetSvc.ConfigureResultReceipts(generatedAssetRepo, dal.NewTxRunner(db))
 	generatedassethandler.Svc = generatedAssetSvc
 
 	materialRepo := materialrepo.NewRepo(db)

@@ -7,7 +7,7 @@
 ### Workspace 隔离边界
 
 **Workspace（工作空间）**:
-Template、Workflow 和 Execution 的业务资源隔离归属；同一 Execution 的输入与产物必须属于同一 Workspace。
+Execution 的业务执行隔离归属。输入和产物必须匹配该 Workspace 所属企业；企业内共享素材可复用于同企业的不同 Workspace，不要求素材归某个 Workspace。Template、Workflow 的 Workspace 资源归属仍是目标模型，不代表当前定义表已实现该隔离。
 _禁用替代词_：Scope（Scope 是业务线分类，不是租户）
 
 ### 范围
@@ -110,6 +110,10 @@ Workflow 中产出最终结果的 Step 的 `step.key`；同时是 DAG 的唯一 
 把已发布 Workflow 的不可变版本转换为 Conductor Workflow Definition，并保存源版本、目标 name/version 与 definition_hash 的映射；编译结果是执行适配物，不是新的业务 Workflow。
 _禁用替代词_：Workflow Execution、DAG Save
 
+**Workflow Publication Intent（工作流发布意图）**:
+拥有者请求发布某个不可变Workflow版本的持久事实，关联冻结编译与注册契约；发布尚在恢复中不等于该版本已经可执行。
+_禁用替代词_：Job、Workflow Execution、Compilation本身。
+
 **Semantic Compiler（语义编译器）**:
 把 Workflow、Template Version、Invocation Mapping 与 Execution Capability Version 解析并校验为 Executable Workflow IR；负责业务引用解析、类型检查和版本冻结，不生成 Conductor 专有结构。
 _禁用替代词_：DAG Compiler、Conductor Compiler
@@ -136,6 +140,14 @@ _禁用替代词_：Batch、Stage（除非专指展示层）
 
 ### 执行
 
+**Execution Retry Epoch（执行重试周期）**:
+同一 Execution 因失败重试进入的执行周期，用于区分重试前后的审批和状态事实；不同于用户要求重新生成的候选轮次，也不同于 Worker 消息投递次数。
+_禁用替代词_：Generation、Dispatch Attempt、Review Delivery Attempt。
+
+**Generation Result（生成结果）**:
+一个 StepRun 在某轮能力生成后由用户选定或自动接受的不可变结果；它与该轮 Generated Asset 对应，不等同于稳定节点身份或 Worker 消息投递次数。
+_禁用替代词_：StepRun、Worker Result Receipt、最新产物别名。
+
 **Execution（执行）**:
 调用一个 Workflow 的一次实例化，落地为一个 Job；归 1 个 workflow_id + 1 个 scope（沿用 workflow.scope）+ 调用方提供的 WorkflowInput 值；同时落地一组 StepRun。归 `execution` domain。
 _禁用替代词_：run、instance、invocation。
@@ -157,7 +169,7 @@ _禁用替代词_：Workflow 输出、Video Step、重新发布任务。
 _禁用替代词_：Retry、重新 SubmitJob、恢复旧 Conductor 实例。
 
 **Frozen Storage Reference（冻结对象引用）**:
-历史执行在 Job 输入与 Conductor 启动命令中保存的企业命名空间内 Object Path；短期签名 URL 只在输入校验和 Worker 领取时生成，不属于持久化执行事实。
+Execution 输入快照与启动命令中保存的企业命名空间内 Object Path；短期签名 URL 只用于输入校验和任务交付，不属于冻结的执行事实。
 _禁用替代词_：持久化签名 URL、Provider URL。
 
 **Text-only Movement Input（纯文本动作输入）**:
@@ -172,8 +184,12 @@ _禁用替代词_：task（task 留给未来通用调度）、record。
 Job 中某一个 Step 的执行实例，落地该 Step 的实际渲染入参、唯一最终输出、状态与失败原因；下游可以返回多个 Candidate，但确认前不构成多个 Step 输出。归 `execution` domain。
 _禁用替代词_：step execution、step instance。
 
+**Job Submission Receipt（任务提交回执）**:
+用户在指定企业及 Workspace 中一次明确提交意图所对应的已接受 Job 身份与请求语义凭据；与生成结果、审批决定和失败重试不同。
+_禁用替代词_：Worker Result Receipt、Conductor Ack、Retry Record。
+
 **Step Review Decision（步骤确认决定）**:
-Step Run 按 Step Approval Policy 等待确认时由用户提交的 `accept(candidate)` 或 `regenerate(feedback)` 决定；accept 固定唯一输出并推进 DAG，regenerate 保留旧候选并开始新 attempt。
+Step Run 按 Step Approval Policy 等待确认时由用户提交的 `accept(candidate)` 或 `regenerate(feedback)` 决定；accept 固定唯一输出并推进 DAG，regenerate 保留旧轮候选审计并开始独立的新一轮生成，不取消其他步骤。
 _禁用替代词_：Retry、Multi-output Step、Candidate
 
 **Step Execution Fragment（步骤执行片段）**:

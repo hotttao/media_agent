@@ -82,7 +82,22 @@ func (r *ManagedRuntime) Poll(ctx context.Context, key string, version int) (*jo
 	now := r.flow.now()
 	existing, err := r.flow.Dispatches.FindActiveManaged(ctx, r.actorID, r.instanceID, key, version, now)
 	if err == nil {
-		return existing, nil
+		job, err := r.flow.Jobs.Get(ctx, existing.JobID)
+		if err != nil {
+			return nil, err
+		}
+		if job.OrganizationID == "" || job.SubmittedBy != existing.UserID || job.OrganizationID != existing.OrganizationID || job.ConductorWorkflowID != existing.ConductorWorkflowID || job.Status.IsTerminal() {
+			return nil, ErrForbidden
+		}
+		var input map[string]any
+		if err := json.Unmarshal(existing.InputJSON, &input); err != nil {
+			return nil, err
+		}
+		resolved, err := r.flow.resolveInputRefs(ctx, job, input)
+		if err != nil {
+			return nil, err
+		}
+		return dispatchForDelivery(existing, resolved)
 	}
 	if !errors.Is(err, jobdomain.ErrDispatchNotFound) {
 		return nil, err
@@ -103,7 +118,7 @@ func (r *ManagedRuntime) Poll(ctx context.Context, key string, version int) (*jo
 	if err != nil {
 		return nil, err
 	}
-	if job.SubmittedBy == "" || job.ConductorWorkflowID != task.WorkflowInstanceID || job.Status.IsTerminal() {
+	if job.OrganizationID == "" || job.SubmittedBy == "" || job.ConductorWorkflowID != task.WorkflowInstanceID || job.Status.IsTerminal() {
 		return nil, ErrForbidden
 	}
 	step, err := r.flow.StepRuns.GetByJobAndStepKey(ctx, jobID, stepKey)
@@ -114,19 +129,26 @@ func (r *ManagedRuntime) Poll(ctx context.Context, key string, version int) (*jo
 	if err != nil {
 		return nil, err
 	}
-	organizationID, _ := task.Input["organization_id"].(string)
+	resolved, err := r.flow.resolveInputRefs(ctx, job, task.Input)
+	if err != nil {
+		return nil, err
+	}
 	deliveredAt := now
 	attempt := task.RetryCount + 1
 	if attempt < 1 {
 		attempt = 1
 	}
-	return r.flow.Dispatches.Create(ctx, &jobdomain.WorkerDispatch{
+	dispatch, err := r.flow.Dispatches.Create(ctx, &jobdomain.WorkerDispatch{
 		ID: "dispatch_" + uuid.NewString(), ConductorTaskID: task.TaskID, ConductorWorkflowID: task.WorkflowInstanceID,
 		JobID: jobID, StepRunID: step.ID, Attempt: attempt, CapabilityKey: key, CapabilityVersion: version,
-		UserID: job.SubmittedBy, OrganizationID: organizationID, ActorID: r.actorID, AuthSource: "internal_runtime",
+		UserID: job.SubmittedBy, OrganizationID: job.OrganizationID, ActorID: r.actorID, AuthSource: "internal_runtime",
 		WorkerInstanceID: r.instanceID, Status: jobdomain.DispatchDelivered, InputJSON: input,
 		LeaseExpiresAt: now.Add(r.flow.lease()), DeliveredAt: &deliveredAt,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return dispatchForDelivery(dispatch, resolved)
 }
 
 func (r *ManagedRuntime) authorize(ctx context.Context, id string, attempt int) (*jobdomain.WorkerDispatch, error) {

@@ -2,10 +2,49 @@ package fixture
 
 import (
 	"strings"
+	"sync"
 	"testing"
 
 	"media_agent/media_worker/internal/gateway"
 )
+
+func TestFixtureFailureIsExplicitPerJobAndStablePerDispatch(t *testing.T) {
+	e, _ := NewExecutor("https://assets.example")
+	for _, call := range []int{0, 9} {
+		if e.SetFailureOnce("image", call) == nil {
+			t.Fatal("invalid fixture failure accepted")
+		}
+	}
+	if e.SetFailureOnce("image", 2) != nil {
+		t.Fatal("fixture failure configuration rejected")
+	}
+	task := func(job, dispatch string) gateway.Task {
+		return gateway.Task{DispatchID: dispatch, CapabilityKey: "media.image.model", CapabilityVersion: 1,
+			Input: map[string]any{"job_id": job, "step_key": "image"}}
+	}
+	for _, job := range []string{"a", "b"} {
+		if _, err := e.Execute(task(job, "first")); err != nil {
+			t.Fatal("fixture failed before configured dispatch")
+		}
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if _, err := e.Execute(task(job, "second")); err == nil || err.Error() != "explicit fixture capability failure" {
+					t.Error("duplicate failure dispatch changed its outcome")
+				}
+			}()
+		}
+		wg.Wait()
+		if _, err := e.Execute(task(job, "retry")); err != nil {
+			t.Fatal("fixture failed the new retry dispatch")
+		}
+	}
+	if _, err := e.Execute(gateway.Task{CapabilityKey: "media_render_template_v1", CapabilityVersion: 1}); err == nil {
+		t.Fatal("failure mode accepted internal task")
+	}
+}
 
 func TestFixtureUsesConfiguredAssetServiceAndFrozenProvenance(t *testing.T) {
 	executor, err := NewExecutor("https://assets.example.test/media/")
@@ -108,5 +147,36 @@ func TestFixtureAllCapabilitiesUseControlledResults(t *testing.T) {
 	}
 	if _, err := executor.Execute(gateway.Task{CapabilityKey: "media.image.model", CapabilityVersion: 2}); err == nil {
 		t.Fatal("unknown Capability Version accepted")
+	}
+}
+
+func TestFixtureMultipleCandidatesAreDistinctAndImmutable(t *testing.T) {
+	e, err := NewExecutor("https://legacy.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	urls := []string{"https://storage.example/a.png?signature=private", "https://storage.example/b.png?signature=private"}
+	if err := e.SetResultURLs("media.image.model", urls); err != nil {
+		t.Fatal(err)
+	}
+	urls[0] = "https://other.example/changed.png"
+	for _, invalid := range [][]string{
+		{"https://storage.example/a.png?sig=1", "https://storage.example/a.png?sig=2"},
+		{"https://storage.example/a.png", "https://user:secret@example.test/b.png"},
+	} {
+		if err := e.SetResultURLs("media.image.model", invalid); err == nil || strings.Contains(err.Error(), "secret") {
+			t.Fatal("invalid or sensitive candidates accepted")
+		}
+	}
+	output, err := e.Execute(gateway.Task{CapabilityKey: "media.image.model", CapabilityVersion: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidates := output["candidates"].([]map[string]any)
+	if len(candidates) != 2 || candidates[0]["url"] != "https://storage.example/a.png?signature=private" || candidates[1]["url"] != "https://storage.example/b.png?signature=private" || candidates[1]["index"] != 1 || candidates[1]["is_primary"] != false {
+		t.Fatal("multiple fixture candidates lost order or accepted mutation")
+	}
+	if output["provenance"].(map[string]any)["mock"] != true {
+		t.Fatal("multiple results disguised as real generation")
 	}
 }

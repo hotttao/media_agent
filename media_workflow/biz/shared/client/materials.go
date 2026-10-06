@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -107,6 +109,7 @@ type UpsertGenAssetReq struct {
 	Visibility        string `json:"visibility"`
 	JobID             string `json:"job_id"`
 	StepRunID         string `json:"step_run_id"`
+	ResultKey         string `json:"result_key,omitempty"`
 	TemplateID        string `json:"template_id"`
 	TemplateVersion   int    `json:"template_version"`
 	SourceVirtualIPID string `json:"source_virtual_ip_id"`
@@ -130,7 +133,7 @@ func (c *MaterialsClient) UpsertGeneratedAsset(ctx context.Context, req *UpsertG
 	httpReq = httpReq.WithContext(ctx)
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("call materials UpsertGeneratedAsset: %w", err)
+		return "", errors.New("materials generated asset registration unavailable")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -140,7 +143,10 @@ func (c *MaterialsClient) UpsertGeneratedAsset(ctx context.Context, req *UpsertG
 		ID string `json:"id"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("decode UpsertGeneratedAsset resp: %w", err)
+		return "", errors.New("materials generated asset response invalid")
+	}
+	if strings.TrimSpace(out.ID) == "" {
+		return "", errors.New("materials generated asset response missing identity")
 	}
 	return out.ID, nil
 }

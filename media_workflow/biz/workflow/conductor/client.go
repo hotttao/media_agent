@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,21 +39,6 @@ type TaskDefinition struct {
 	TimeoutPolicy          string `json:"timeoutPolicy,omitempty"`
 }
 
-func (c *Client) RegisterTaskDefinitions(ctx context.Context, definitions []TaskDefinition) error {
-	if len(definitions) == 0 {
-		return nil
-	}
-	if err := c.doJSON(ctx, http.MethodPost, "/api/metadata/taskdefs", definitions, nil); err == nil {
-		return nil
-	}
-	for _, definition := range definitions {
-		if err := c.doJSON(ctx, http.MethodPut, "/api/metadata/taskdefs", definition, nil); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (c *Client) RegisterWorkflow(ctx context.Context, definition compiler.Definition) error {
 	var response struct {
 		Errors map[string]string `json:"bulkErrorResults"`
@@ -61,7 +47,7 @@ func (c *Client) RegisterWorkflow(ctx context.Context, definition compiler.Defin
 		return err
 	}
 	if len(response.Errors) > 0 {
-		return fmt.Errorf("conductor workflow registration failed: %v", response.Errors)
+		return errorsNew("conductor workflow registration failed")
 	}
 	return nil
 }
@@ -89,6 +75,7 @@ func (c *Client) StartWorkflow(ctx context.Context, request StartWorkflowRequest
 }
 
 type Task struct {
+	Sequence           *int           `json:"seq"`
 	TaskType           string         `json:"taskType"`
 	ReferenceTaskName  string         `json:"referenceTaskName"`
 	TaskID             string         `json:"taskId"`
@@ -225,8 +212,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, input any, out
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		responseBody, _ := io.ReadAll(io.LimitReader(response.Body, 8192))
-		return fmt.Errorf("conductor %s %s: status=%d body=%s", method, path, response.StatusCode, responseBody)
+		return &HTTPStatusError{StatusCode: response.StatusCode}
 	}
 	if output == nil || response.StatusCode == http.StatusNoContent {
 		return nil
@@ -249,6 +235,18 @@ func (c *Client) doJSON(ctx context.Context, method, path string, input any, out
 		return nil
 	}
 	return json.NewDecoder(response.Body).Decode(output)
+}
+
+// HTTPStatusError deliberately excludes URLs, upstream bodies and request data.
+type HTTPStatusError struct{ StatusCode int }
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("conductor request failed: status=%d", e.StatusCode)
+}
+
+func isNotFound(err error) bool {
+	var status *HTTPStatusError
+	return errors.As(err, &status) && status.StatusCode == http.StatusNotFound
 }
 
 func errorsNew(message string) error { return fmt.Errorf("%s", message) }

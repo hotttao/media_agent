@@ -35,7 +35,7 @@ func TestResolveImportedInputRefsRefreshesURLAndEnforcesOrganization(t *testing.
 		SourceSystem: "media_ai", AccessURL: "https://storage.example/frame.png", AccessExpiresAt: time.Now().Add(time.Minute).Unix()}
 	flow := &Flow{ImportedAssets: importedAssetStub{asset: asset}}
 	input := map[string]any{"images": []any{"gen_1", "https://storage.example/native.png"}, "job_id": "job_1"}
-	result, err := flow.resolveImportedInputRefs(context.Background(), job, input)
+	result, err := flow.resolveInputRefs(context.Background(), job, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestResolveImportedInputRefsRefreshesURLAndEnforcesOrganization(t *testing.
 		t.Fatalf("bad refreshed inputs: %+v", result)
 	}
 	asset.OrganizationID = "another"
-	if _, err := flow.resolveImportedInputRefs(context.Background(), job, input); !errors.Is(err, ErrForbidden) {
+	if _, err := flow.resolveInputRefs(context.Background(), job, input); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("foreign asset was not rejected: %v", err)
 	}
 }
@@ -53,7 +53,7 @@ func TestResolveImportedInputRefsRefreshesStableStorageReference(t *testing.T) {
 	job := &jobdomain.Job{Origin: "legacy_import", OrganizationID: "org", Scope: "ai_clothing", SubmittedBy: "owner"}
 	input := map[string]any{"inputs": map[string]any{"movement": map[string]any{"asset_ref": "object_path:materials/org/movement.mp4"}}}
 	flow := &Flow{ImportedAssets: importedAssetStub{err: errors.New("temporary object storage outage")}}
-	if _, err := flow.resolveImportedInputRefs(context.Background(), job, input); err == nil {
+	if _, err := flow.resolveInputRefs(context.Background(), job, input); err == nil {
 		t.Fatal("unavailable storage was treated as a deliverable Worker input")
 	}
 	if got := input["inputs"].(map[string]any)["movement"].(map[string]any)["asset_ref"]; got != "object_path:materials/org/movement.mp4" {
@@ -62,7 +62,7 @@ func TestResolveImportedInputRefsRefreshesStableStorageReference(t *testing.T) {
 	flow.ImportedAssets = importedAssetStub{object: client.ResolvedStorageObject{
 		URL: "https://storage.example/media/materials/org/movement.mp4?fresh=1", ExpiresAt: time.Now().Add(time.Minute).Unix(),
 	}}
-	result, err := flow.resolveImportedInputRefs(context.Background(), job, input)
+	result, err := flow.resolveInputRefs(context.Background(), job, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,14 +71,14 @@ func TestResolveImportedInputRefsRefreshesStableStorageReference(t *testing.T) {
 		t.Fatalf("object reference was not refreshed: %+v", movement)
 	}
 	input["inputs"].(map[string]any)["movement"].(map[string]any)["asset_ref"] = "object_path:materials/other/movement.mp4"
-	if _, err := flow.resolveImportedInputRefs(context.Background(), job, input); !errors.Is(err, ErrForbidden) {
+	if _, err := flow.resolveInputRefs(context.Background(), job, input); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("foreign object was not rejected: %v", err)
 	}
 	input["inputs"].(map[string]any)["movement"].(map[string]any)["asset_ref"] = "object_path:materials/org/movement.mp4"
 	flow.ImportedAssets = importedAssetStub{object: client.ResolvedStorageObject{
 		URL: "https://storage.example/media/materials/org/movement.mp4?expired=1", ExpiresAt: time.Now().Add(10 * time.Second).Unix(),
 	}}
-	if _, err := flow.resolveImportedInputRefs(context.Background(), job, input); !errors.Is(err, ErrForbidden) {
+	if _, err := flow.resolveInputRefs(context.Background(), job, input); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("nearly expired object URL was not rejected: %v", err)
 	}
 }
@@ -199,7 +199,7 @@ func newPollFlow(now time.Time) (*Flow, *dispatchRepoStub, *taskEngineStub) {
 	return &Flow{
 		Dispatches: dispatches,
 		Jobs: &jobRepoStub{item: &jobdomain.Job{
-			ID: "job-1", SubmittedBy: "user-1", ConductorWorkflowID: "workflow-1", Status: jobdomain.JobRunning,
+			ID: "job-1", SubmittedBy: "user-1", OrganizationID: "org-1", WorkspaceID: "workspace-1", ConductorWorkflowID: "workflow-1", Status: jobdomain.JobRunning,
 		}},
 		StepRuns: &stepRunRepoStub{item: &jobdomain.StepRun{ID: "step-run-1", JobID: "job-1", StepKey: "generate"}},
 		Capabilities: &capabilityRepoStub{item: &capabilitydomain.Capability{
@@ -269,9 +269,25 @@ func TestPollUsesOpaqueUserDomainAndPersistsBeforeDelivery(t *testing.T) {
 	}
 }
 
+func TestPollRejectsForeignOrUnboundJobOrganization(t *testing.T) {
+	for _, organization := range []string{"org-other", ""} {
+		t.Run("job organization="+organization, func(t *testing.T) {
+			flow, dispatches, engine := newPollFlow(time.Now())
+			flow.Jobs.(*jobRepoStub).item.OrganizationID = organization
+			got, err := flow.Poll(context.Background(), PollCommand{
+				Principal:        Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"},
+				WorkerInstanceID: "desktop-1", CapabilityKey: "jimeng.image", CapabilityVersion: 1,
+			})
+			if !errors.Is(err, ErrForbidden) || got != nil || dispatches.createCalls != 0 || len(engine.updateCalls) != 0 {
+				t.Fatal("foreign or unbound Job was delivered or mutated", err)
+			}
+		})
+	}
+}
+
 func TestPollReturnsActiveDispatchWithoutPollingConductor(t *testing.T) {
 	flow, dispatches, engine := newPollFlow(time.Now())
-	dispatches.active = &jobdomain.WorkerDispatch{ID: "dispatch-existing"}
+	dispatches.active = &jobdomain.WorkerDispatch{ID: "dispatch-existing", JobID: "job-1", ConductorWorkflowID: "workflow-1", InputJSON: []byte(`{}`)}
 
 	got, err := flow.Poll(context.Background(), PollCommand{
 		Principal:        Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"},

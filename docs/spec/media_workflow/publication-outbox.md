@@ -1,0 +1,23 @@
+# Workflow 持久发布意图
+
+## 范围
+
+已有Semantic/Backend Compiler、Compilation冻结、Conductor精确metadata校验不变。发布编排增加完整冻结TaskDefinition注册参数的持久意图；注册恢复不重读Template/Capability，不改同名上游契约，不创建Job。不涉及UI、历史迁移或Agent功能。
+
+## 模型与存储
+
+`biz/domain/workflow.Publication` 保存ID、WorkflowID/Version、CompilationID、RequestedBy、DefinitionHash、DefinitionJSON、TaskDefinitionsJSON、PayloadDigest和Status/ClaimToken。定义JSON为对象且有非空name、正整数version，TaskDefinitionsJSON为非空名称唯一数组。定义最大4MiB、任务定义最大1MiB，身份长度不超过256、版本正数、hash/digest小写64位hex。Digest规范化两份JSON后绑定上述身份，不包含状态/claim/时间；JSON采用UseNumber，禁止尾随数据。
+
+migration022新增workflow_publications，源Workflow/Version唯一、CompilationID唯一FK RESTRICT；冻结命令与来源不可修改。pending可领取，registered/failed/superseded终态；claim_token/claimed_at成对，终态不持有claim。Workflow状态约束增加publishing/publish_failed。旧数据不回填，不自动迁移旧注册失败行。非空意图表禁止降级删除；空表降级还需不存在publishing/publish_failed源。
+
+## 事务与仓储端口
+
+CompilationRepo新增独立PublicationRepo端口实现。EnqueuePublication(compilation,publication)必须使用caller Tx，先锁Workflow再保存Compilation；复核原owner/version/draft与命令匹配，同版本同摘要返回原事实，不同摘要冲突。首次同事务保存Compilation/意图并将Workflow置publishing。
+
+ClaimPublication使用单SQL SKIP LOCKED，pending且到期且无有效claim；新UUID token、2分钟租约、投递次数加1。ReleasePublication只允许原pending/摘要/token/有效租约，清除claim并记录固定错误码，10秒退避。FinishPublication必须caller Tx、Workflow→Intent锁序，校验原payload/claim/租约；成功同事务Compilation registered、Intent registered和仍匹配原owner/version/publishing且未删除的Workflow published。源已变更则superseded，不发布新版本；不可恢复契约冲突failed并只将原源版本置publish_failed。所有外部请求在事务外。
+
+## 后台与公开接线
+
+Publication编排在接受前冻结Compiler产物、按名称排序TaskDefinitions；仅调用方原资源权限允许接受。已有意图重放仍授权，不重新编译覆盖版本。后台读取原意图，逐名GET/仅POST缺失TaskDefinitions、精确GET/EnsureWorkflow，再caller Tx收口。网络错误释放claim退避；定义冲突终态失败，不能PUT改写上游。进程重启可重取过期claim，精确metadata对账防止盲目重写；这不提供上游CAS。
+
+公开publish响应需区分已接受发布中与注册完成，只有published/registered允许Submit；后台结果通过资源查询可见。IDL/CLI变更在接线阶段生成，不能把仓储完成称为API上线。旧Publisher同步路径在标准服务接线后移除，不新增客户端Conductor访问。

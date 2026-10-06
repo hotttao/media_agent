@@ -53,7 +53,9 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	flow := &worker_gateway.Flow{
-		Dispatches: jobrepo.NewDispatchRepo(db), Jobs: jobrepo.NewJobRepo(db), StepRuns: jobrepo.NewStepRunRepo(db),
+		StorageOrigin:  os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"),
+		ImportedAssets: client.NewMaterialsClient(os.Getenv("MEDIA_MATERIALS_URL")),
+		Dispatches:     jobrepo.NewDispatchRepo(db), Jobs: jobrepo.NewJobRepo(db), StepRuns: jobrepo.NewStepRunRepo(db),
 		Capabilities: capabilityrepo.NewRepo(db), Engine: &conductor.ExecutionEngine{Client: conductor.NewClient(os.Getenv("CONDUCTOR_URL"))},
 	}
 	instanceID := worker.GetInstanceId()

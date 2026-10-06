@@ -9,6 +9,7 @@ import (
 
 	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
 	jobdomain "media_agent/media_workflow/biz/domain/job"
+	"media_agent/media_workflow/biz/shared/client"
 )
 
 type managedExecutorStub struct {
@@ -88,7 +89,7 @@ func TestManagedPollIsolatesPoolAndRecordsJobUser(t *testing.T) {
 	if engine.pollDomain != jobdomain.ExecutionDomainForManagedPool("gpu-cn") || engine.pollWorker != "instance-1" {
 		t.Fatalf("invalid routing: %#v", engine)
 	}
-	if dispatch.UserID != "user-1" || dispatch.ActorID != "Worker:server-worker" || dispatch.CredentialID != "" || dispatch.AuthSource != "internal_runtime" {
+	if dispatch.UserID != "user-1" || dispatch.OrganizationID != "org-1" || dispatch.ActorID != "Worker:server-worker" || dispatch.CredentialID != "" || dispatch.AuthSource != "internal_runtime" {
 		t.Fatalf("invalid managed identity: %#v", dispatch)
 	}
 }
@@ -148,16 +149,48 @@ func TestManagedCompletionRejectsOtherWorkerAndExpiredLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	output := map[string]any{"candidates": []any{map[string]any{"content": "result"}}}
-	dispatch.ActorID = "Worker:other"
+	repo.dispatch.ActorID = "Worker:other"
 	if _, err := runtime.Complete(context.Background(), dispatch.ID, dispatch.Attempt, "result-1", output); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("other worker: %v", err)
 	}
-	dispatch.ActorID = "Worker:server-worker"
-	dispatch.LeaseExpiresAt = runtime.flow.now().Add(-time.Second)
+	repo.dispatch.ActorID = "Worker:server-worker"
+	repo.dispatch.LeaseExpiresAt = runtime.flow.now().Add(-time.Second)
 	if _, err := runtime.Complete(context.Background(), dispatch.ID, dispatch.Attempt, "result-1", output); !errors.Is(err, jobdomain.ErrDispatchExpired) {
 		t.Fatalf("expired lease: %v", err)
 	}
 	if repo.saveCalls != 0 {
 		t.Fatal("unauthorized result persisted")
+	}
+}
+
+func TestManagedInputDeliveryUsesJobOrganizationAndStableSnapshot(t *testing.T) {
+	runtime, flow, repo, engine := newManagedFixture(t)
+	engine.task.Input["organization_id"] = "untrusted-task-org"
+	engine.task.Input["images"] = []any{"object_path:materials/org-1/image.png"}
+	flow.ImportedAssets = importedAssetStub{object: client.ResolvedStorageObject{URL: "https://storage.test/image.png?fresh=1", ExpiresAt: flow.now().Add(time.Hour).Unix()}}
+	first, err := runtime.Poll(context.Background(), "jimeng.image", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input map[string]any
+	if json.Unmarshal(first.InputJSON, &input) != nil || input["images"].([]any)[0] != "https://storage.test/image.png?fresh=1" || repo.created.OrganizationID != "org-1" {
+		t.Fatal("managed delivery used task tenant or failed to resolve media")
+	}
+	repo.active = repo.created
+	engine.pollType = ""
+	flow.ImportedAssets = importedAssetStub{err: errors.New("unavailable storage")}
+	if got, err := runtime.Poll(context.Background(), "jimeng.image", 1); err == nil || got != nil || engine.pollType != "" || repo.createCalls != 1 {
+		t.Fatal("unavailable media consumed another managed task")
+	}
+	flow.ImportedAssets = importedAssetStub{object: client.ResolvedStorageObject{URL: "https://storage.test/image.png?fresh=2", ExpiresAt: flow.now().Add(time.Hour).Unix()}}
+	second, err := runtime.Poll(context.Background(), "jimeng.image", 1)
+	if err != nil || second.ID != first.ID {
+		t.Fatal("managed lease could not be redelivered", err)
+	}
+	if json.Unmarshal(second.InputJSON, &input) != nil || input["images"].([]any)[0] != "https://storage.test/image.png?fresh=2" {
+		t.Fatal("managed redelivery reused a stale URL")
+	}
+	if json.Unmarshal(repo.active.InputJSON, &input) != nil || input["images"].([]any)[0] != "object_path:materials/org-1/image.png" {
+		t.Fatal("managed snapshot was rewritten")
 	}
 }

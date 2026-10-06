@@ -150,7 +150,7 @@ func TestResumeFreezesOnlyPendingVideoAndIsIdempotent(t *testing.T) {
 			Name string `json:"name"`
 		} `json:"tasks"`
 	}
-	if err := json.Unmarshal(outbox.accepted.DefinitionJSON, &definition); err != nil || len(definition.Tasks) != 6 || definition.Tasks[0].Name != "media_restore_historical_step_v1" {
+	if err := json.Unmarshal(outbox.accepted.DefinitionJSON, &definition); err != nil || len(definition.Tasks) != 5 || definition.Tasks[0].Name != "media_restore_historical_step_v1" {
 		t.Fatalf("historical prefix was not compiled to restore tasks: definition=%+v err=%v", definition, err)
 	}
 	firstStart := outbox.accepted

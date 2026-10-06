@@ -11,13 +11,36 @@ Workflow 发布时冻结所有引用版本，先经 Semantic Compiler 生成不�
 
 ## 执行时间线
 
-1. 校验 DAG、Template Version、Execution Capability Version、Scope 与权限并冻结快照。
-2. Semantic Compiler 解析每个 Binding 与 Invocation Mapping，检查 Mapping 覆盖 Capability 必填参数且类型兼容，生成 `ExecutableWorkflowIR`。
-3. Conductor Backend Compiler 计算拓扑波次并降低每个 `ExecutableStepIR`：自动插入 `media_render_template_v1`，再调用固定 Capability Task，最后进入候选持久化、审批和唯一输出收口。
-4. 事务内把 Workflow 置 `publishing`，创建 Compilation 与注册 Outbox；Definition 内嵌降低后的执行语义，Compilation 仅保存发布映射、状态和 hash。
-5. 计算 canonical JSON 的 `definition_hash`，以稳定 name/version 向 Conductor 注册。
-6. 事务内记录目标映射并把 Workflow 置 `published`；不可恢复校验错误置 `publish_failed`，网络失败保留 publishing 并重试。
-7. 启动 Job 时读取 IR 中冻结的 Capability `execution_target`：Personal Target 根据提交 User 构造 User Domain，Managed Target 根据受控 Pool 配置构造 Managed Domain；Domain 是运行时路由上下文，不写入可复用 Definition。
+```mermaid
+sequenceDiagram
+    participant U as 拥有者/网关
+    participant P as 发布编排
+    participant D as Workflow聚合/数据库
+    participant B as 发布后台
+    participant C as Conductor
+    U->>P: 发布Workflow版本
+    P->>P: 校验版本/权限与冻结IR、Definition、TaskDefinitions
+    P->>D: TX1: 锁Workflow，复核版本/owner/draft
+    P->>D: 同事务保存Compilation、PublicationIntent，置publishing
+    D-->>P: 提交发布意图回执
+    P-->>U: 已接受/发布中（不要求连接继续）
+    B->>D: 领取pending，独立claim token/租约
+    B->>D: 读取冻结命令与源版本有效性
+    B->>C: 逐名GET TaskDefinitions、精确GET Workflow version
+    alt 既有契约一致或缺失
+        B->>C: 仅创建缺失定义，写后精确GET核对
+        B->>D: TX2 Workflow→Intent锁，复核claim/摘要/版本
+        B->>D: Compilation registered + Intent registered + Workflow published
+    else 暂时不可用或结果未确认
+        B->>D: CAS释放自己的claim、记录安全码、退避
+    else 同名版本冲突
+        B->>D: TX2 保存failed与publish_failed，不覆盖上游
+    end
+```
+
+Semantic Compiler与Backend Compiler仍在接受前执行；所有外部注册在TX1提交后、TX2开始前。意图以源Workflow/版本唯一，冻结TaskDefinitions完整注册参数及Definition，不因进程重启重读Template/Capability重编译。读取原意图的重放仍复核当前访问权限；不同摘要冲突。后台使用服务自身Conductor连接，不保存用户Token，拥有者归属由TX1复核。
+
+领取claim过期后可由新进程恢复，旧领取者不能完成或释放新领取者的命令。外部响应丢失先读原定义收口，不能改版本或PUT修复同名TaskDefinition。TX2只发布仍属原owner、原version且未删/未归档的源；源改变时标记superseded，不发布后来修改版本，也不删除已注册审计。注册Conflict必须用户以新版本解决；网络故障保持publishing并退避。请求断线不取消已接受意图。Job启动仅消费registered Compilation与published源，不消费pending意图。
 
 ## 状态与幂等
 
@@ -25,11 +48,11 @@ Compilation 状态为 `pending -> registering -> registered | failed`。幂等�
 
 ## 编译输出约束
 
-- task reference name 为 `step__<sanitized_step_key>`，原始 step_key 保留在 input。
+- 循环内task reference采用step key编码，避免Conductor保留的`__`迭代分隔符；原始step_key保留在input。循环外Finalize保留稳定引用。
 - Capability Task 的 input 必须保留 `job_id=${workflow.input.job_id}`、原始 `step_key` 和冻结的 `capability_key/capability_version`；它们是服务端 Dispatch 归属校验所需的执行元数据，不是 Provider 参数。缺少这些字段的旧发布定义不得通过解析 task reference 猜测身份或绕过 Dispatch 校验；迁移联调样本时先通过业务 API 结束旧执行，再创建并发布新的样本定义。保留旧 Compilation 与执行快照，不原位覆盖。
 - `ExecutableWorkflowIR` 是 Semantic Compiler 与 Backend Compiler 的稳定边界；Conductor Definition 和 FlowGram 文档均不得充当 IR。
 - `ExecutableStepIR` 固定 Template/Capability 版本、Execution Target、context bindings、Invocation Mapping、候选数量、唯一输出和 reuse/approval policy。
-- 当 Template 配置多候选、`needs_confirm`，或 Step 使用 `approval_policy=always` 时，Backend Compiler 在 Capability 与 Finalize 之间插入 Conductor `HUMAN` task。候选保存在该 task input；确认接口以 `selected_candidate` 完成 task 后才运行 Finalize。重新生成从同一 Step 的 Capability task 原位 rerun，不由客户端 Worker 承担审批。
+- 当 Template 配置多候选、`needs_confirm`，或 Step 使用 `approval_policy=always` 时，Backend Compiler 在 Capability 与 Finalize 之间插入 Conductor `HUMAN` task；预期单候选也保留实际多候选审批分支。候选保存在该task input；接受才运行Finalize，重新生成通过当前HUMAN的regenerate决定进入该Step下一循环轮次，不使用非终态rerun，不由客户端Worker承担审批。
 - `media_render_template_v1` 固定接收 `template:string` 与 `context:map<string,json>` 并返回 `prompt:string`；Slot 数量和名称只改变 context 内容，不改变 Task Definition。
 - Capability 的 `images[]` 等参数由 Backend Compiler 按 Invocation Mapping 生成；Renderer 和 Worker 均不得按 Slot 名猜测。
 - Definition 只含稳定 ID、不可变模板内容、Object Path 表达式与非敏感参数；不含二进制、Provider 密钥、cookie、Token 或临时 URL。

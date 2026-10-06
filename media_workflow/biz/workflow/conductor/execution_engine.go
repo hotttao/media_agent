@@ -2,17 +2,37 @@ package conductor
 
 import (
 	"context"
+	"errors"
 
 	jobdomain "media_agent/media_workflow/biz/domain/job"
 )
 
 type ExecutionEngine struct{ Client *Client }
 
+func (e *ExecutionEngine) FindStartedExecution(ctx context.Context, workflowName, correlationID string) (string, error) {
+	if workflowName == "" || correlationID == "" {
+		return "", errors.New("start reconciliation identity required")
+	}
+	return e.Client.GetByCorrelation(ctx, workflowName, correlationID)
+}
+
 func (e *ExecutionEngine) Start(ctx context.Context, workflowName string, workflowVersion int, correlationID string, input map[string]any, taskToDomain map[string]string) (string, error) {
-	return e.Client.StartWorkflow(ctx, StartWorkflowRequest{
+	id, err := e.Client.StartWorkflow(ctx, StartWorkflowRequest{
 		Name: workflowName, Version: workflowVersion, CorrelationID: correlationID,
 		Input: input, TaskToDomain: taskToDomain,
 	})
+	if err == nil {
+		return id, nil
+	}
+	// A lost Start response is ambiguous. Correlation can recover a single
+	// existing execution, but does not authorize issuing another Start: the
+	// deployed OSS server ignores RETURN_EXISTING on this endpoint.
+	if correlationID != "" && ctx.Err() == nil {
+		if existing, lookupErr := e.Client.GetByCorrelation(ctx, workflowName, correlationID); lookupErr == nil && existing != "" {
+			return existing, nil
+		}
+	}
+	return "", errors.New("conductor start outcome unconfirmed; do not automatically resubmit")
 }
 
 func (e *ExecutionEngine) Get(ctx context.Context, workflowID string) (*jobdomain.EngineExecution, error) {
@@ -23,7 +43,8 @@ func (e *ExecutionEngine) Get(ctx context.Context, workflowID string) (*jobdomai
 	result := &jobdomain.EngineExecution{Status: execution.Status, Output: execution.Output}
 	for _, task := range execution.Tasks {
 		result.Tasks = append(result.Tasks, jobdomain.EngineTask{
-			TaskID: task.TaskID, TaskType: task.TaskType, ReferenceTaskName: task.ReferenceTaskName, Status: task.Status,
+			Sequence: task.Sequence,
+			TaskID:   task.TaskID, TaskType: task.TaskType, ReferenceTaskName: task.ReferenceTaskName, Status: task.Status,
 			Input: task.InputData, Output: task.OutputData,
 		})
 	}
@@ -32,6 +53,13 @@ func (e *ExecutionEngine) Get(ctx context.Context, workflowID string) (*jobdomai
 
 func (e *ExecutionEngine) CompleteTask(ctx context.Context, workflowID, taskReferenceName string, output map[string]any) error {
 	return e.Client.CompleteTaskByReference(ctx, workflowID, taskReferenceName, output)
+}
+
+func (e *ExecutionEngine) CompleteApprovalTask(ctx context.Context, workflowID, taskID string, output map[string]any) error {
+	if workflowID == "" || taskID == "" {
+		return errors.New("exact approval identity required")
+	}
+	return e.Client.UpdateTask(ctx, TaskResult{WorkflowInstanceID: workflowID, TaskID: taskID, WorkerID: "media-workflow-review", Status: "COMPLETED", OutputData: output})
 }
 
 func (e *ExecutionEngine) RerunFromTask(ctx context.Context, workflowID, taskID string) error {
@@ -67,4 +95,5 @@ func (e *ExecutionEngine) UpdateCapabilityTask(ctx context.Context, result jobdo
 }
 
 var _ jobdomain.WorkflowEngine = (*ExecutionEngine)(nil)
+var _ jobdomain.ExecutionStartEngine = (*ExecutionEngine)(nil)
 var _ jobdomain.CapabilityTaskEngine = (*ExecutionEngine)(nil)

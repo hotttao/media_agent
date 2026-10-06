@@ -67,3 +67,7 @@
 
 - material / asset Workflow Input 的派生快照增加 `asset_kind`，作为创建 Job 时的兼容资源选择与校验契约。
 - 同名输入不得跨不同 material/asset kind 复用；product / virtual_ip 保持由各消费 Slot 解析。
+## 2026-10-06 · 持久发布意图
+
+- 发布接受与冻结Compilation/TaskDefinition命令同事务，后台恢复不用最新模板或能力。
+- 完成只发布原owner/版本，claim fencing阻止旧进程回写；源修改/删除/归档不让旧命令发布新版本。

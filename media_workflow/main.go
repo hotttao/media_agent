@@ -34,6 +34,8 @@ import (
 	"media_agent/media_workflow/biz/shared/client"
 	"media_agent/media_workflow/biz/workflow/conductor"
 	"media_agent/media_workflow/biz/workflow/publication"
+	reviewdelivery "media_agent/media_workflow/biz/workflow/review_delivery"
+	startdelivery "media_agent/media_workflow/biz/workflow/start_delivery"
 	workergateway "media_agent/media_workflow/biz/workflow/worker_gateway"
 )
 
@@ -153,10 +155,47 @@ func main() {
 	controlClient := client.NewControlClient(os.Getenv("MEDIA_CONTROL_URL"), os.Getenv("CONTROL_INTERNAL_TOKEN"))
 	jobSvc.ConfigureHistoryWorkspaces(controlClient)
 	jobSvc.ConfigureResume(jobRepo, controlClient, conductorClient, os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"))
+	jobSvc.ConfigureReviews(jobRepo)
+	jobSvc.ConfigureStarts(jobRepo)
+	jobSvc.ConfigureSubmissions(jobRepo)
 	jobhandler.Svc = jobSvc
 	historypushhandler.Svc = historypushsvc.New(historypushrepo.New(db), jobRepo, controlClient, materialsClient)
 	resumeCtx, resumeCancel := context.WithCancel(context.Background())
 	defer resumeCancel()
+	startFlow := &startdelivery.Flow{Starts: jobRepo, Jobs: jobRepo, Engine: executionEngine}
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			deliveryCtx, cancel := context.WithTimeout(resumeCtx, 20*time.Second)
+			if err := startFlow.DispatchOne(deliveryCtx); err != nil && resumeCtx.Err() == nil {
+				log.Print("execution start delivery deferred; inspect durable start status")
+			}
+			cancel()
+			select {
+			case <-resumeCtx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	reviewFlow := &reviewdelivery.Flow{Reviews: jobRepo, Jobs: jobRepo, Engine: executionEngine}
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			deliveryCtx, cancel := context.WithTimeout(resumeCtx, 20*time.Second)
+			if err := reviewFlow.DispatchOne(deliveryCtx); err != nil && resumeCtx.Err() == nil {
+				log.Print("review delivery deferred; inspect durable review status")
+			}
+			cancel()
+			select {
+			case <-resumeCtx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 	go func() {
 		ticker := time.NewTicker(3 * time.Second)
 		defer ticker.Stop()
@@ -173,7 +212,8 @@ func main() {
 	}()
 	dispatchRepo := jobrepo.NewDispatchRepo(db)
 	workerFlow := &workergateway.Flow{
-		Dispatches: dispatchRepo, Jobs: jobRepo, StepRuns: stepRunRepo,
+		StorageOrigin: os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"),
+		Dispatches:    dispatchRepo, Jobs: jobRepo, StepRuns: stepRunRepo,
 		Capabilities: capabilityRepo, Engine: executionEngine, ImportedAssets: materialsClient,
 	}
 	workerhandler.Flow = workerFlow

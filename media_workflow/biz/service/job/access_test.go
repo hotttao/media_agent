@@ -65,6 +65,39 @@ type submitAuthority struct {
 	allowed              bool
 }
 
+func TestUserSubmitRequiresAuthorizedWorkspaceAndDerivesOrganization(t *testing.T) {
+	for _, tc := range []struct {
+		name, organization, workspace string
+		allowed                       bool
+		want                          error
+	}{
+		{"derive enterprise", "", "workspace", true, nil},
+		{"explicit enterprise", "org", "workspace", true, nil},
+		{"missing workspace", "org", "", true, ErrSubmitForbidden},
+		{"foreign enterprise", "foreign", "workspace", true, ErrSubmitForbidden},
+		{"foreign workspace", "org", "other", true, ErrSubmitForbidden},
+		{"permission removed", "org", "workspace", false, ErrSubmitForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, repo, _ := newTestService(false)
+			svc.wfRepo.(*mockWorkflowLookup).wf.CreatedBy = "owner"
+			a := &submitAuthority{workspace: &client.WorkspaceContext{ID: "workspace", OrganizationID: "org"}, allowed: tc.allowed}
+			svc.historyWorkspaces, svc.resumeAccess = a, a
+			job, err := svc.Submit(context.Background(), SubmitCommand{
+				WorkflowID: "wf1", SubmittedBy: "owner", OrganizationID: tc.organization, WorkspaceID: tc.workspace,
+				Input: domain.JobInput{Materials: []domain.MaterialData{{Name: "scene", URL: "https://example.test/media/materials/org/scene.png"}}},
+			})
+			if tc.want != nil {
+				if !errors.Is(err, tc.want) || job != nil || len(repo.jobs) != 0 {
+					t.Fatal("unauthorized ordinary submission created a Job", err)
+				}
+			} else if err != nil || job == nil || job.OrganizationID != "org" || job.WorkspaceID != "workspace" {
+				t.Fatal("ordinary submission lost authoritative tenant attribution", err)
+			}
+		})
+	}
+}
+
 func (a *submitAuthority) GetWorkspaceForUser(context.Context, string, string) (*client.WorkspaceContext, error) {
 	return a.workspace, a.lookupErr
 }
@@ -114,7 +147,7 @@ func TestDelegatedSubmitRequiresCurrentWorkspacePermission(t *testing.T) {
 		a := &submitAuthority{workspace: &client.WorkspaceContext{ID: "workspace", OrganizationID: "org"}, allowed: true}
 		svc.historyWorkspaces = a
 		svc.resumeAccess = a
-		job, err := svc.Submit(context.Background(), SubmitCommand{WorkflowID: "wf1", SubmittedBy: "owner", OrganizationID: "org", WorkspaceID: "workspace", Delegated: true, Input: domain.JobInput{Materials: []domain.MaterialData{{Name: "scene", URL: "https://example.test/scene.png"}}}})
+		job, err := svc.Submit(context.Background(), SubmitCommand{WorkflowID: "wf1", SubmittedBy: "owner", OrganizationID: "org", WorkspaceID: "workspace", Delegated: true, Input: domain.JobInput{Materials: []domain.MaterialData{{Name: "scene", URL: "https://example.test/media/materials/org/scene.png"}}}})
 		if err != nil || job == nil || job.OrganizationID != "org" || job.WorkspaceID != "workspace" {
 			t.Fatal("authorized execution lost its trusted tenant attribution", err)
 		}

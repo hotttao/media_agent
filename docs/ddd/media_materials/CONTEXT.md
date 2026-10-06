@@ -45,6 +45,10 @@ _禁用替代词_：output asset、result、generation（generation 留给 gener
 由受信迁移流程从旧系统图片/视频记录摄取的 Generated Asset，以 `(source_system, source_record_id)` 幂等标识并保存对象摘要；它保留历史来源，不伪造当前 Job/StepRun 或 Template 生成记录，可供多个导入的未完成执行引用。归 [asset](domain/0002-asset/asset.md) domain。
 _禁用替代词_：Material、临时上传、无来源 Generated Asset。
 
+**Generation Result（生成结果）**:
+Workflow 节点某轮被接受的不可变结果；不同轮结果各自对应独立 Generated Asset，同一结果的重复登记不产生新的资源身份。
+_禁用替代词_：StepRun、产物覆盖、最新产物别名。
+
 **Storage Object Resolution（对象引用解析）**:
 受信服务凭证在指定 Organization 命名空间内把稳定 Object Path 换成短期可访问 URL 的只读能力；它不替代 Material/Generated Asset 的资源授权。
 _禁用替代词_：素材可达性校验、持久化 URL。

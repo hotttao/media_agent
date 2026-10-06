@@ -134,6 +134,8 @@ message StepRun {
   string source_system = 20;
   string source_record_id = 21;
   int64 source_created_at = 22;
+  string last_review_id = 23;       // opaque decision receipt, never a Conductor ID
+  string last_review_status = 24;   // pending | applied | failed
 }
 
 message Job {
@@ -181,6 +183,9 @@ message SubmitJobReq {
   int32 workflow_version = 2 [(api.body) = "workflow_version"];
   JobInput input = 3 [(api.body) = "input"];
   string submitted_by = 4 [(api.query) = "submitted_by"];
+  string workspace_id = 5 [(api.body) = "workspace_id"];
+  string organization_id = 6 [(api.body) = "organization_id"];
+  string idempotency_key = 7 [(api.body) = "idempotency_key"]; // optional; same intent must reuse this key
 }
 message SubmitJobResp { string job_id = 1; JobStatus status = 2; }
 
@@ -230,9 +235,12 @@ message FailStepRunReq {
 message ConfirmStepRunReq {
   string step_run_id = 1 [(api.path) = "step_run_id"];
   int32 selected_index = 2 [(api.body) = "selected_index"];
+  string idempotency_key = 3 [(api.body) = "idempotency_key"];
 }
 message RegenerateStepRunReq {
   string step_run_id = 1 [(api.path) = "step_run_id"];
+  string feedback = 2 [(api.body) = "feedback"];
+  string idempotency_key = 3 [(api.body) = "idempotency_key"];
 }
 
 // —— retry ——

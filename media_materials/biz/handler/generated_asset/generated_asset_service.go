@@ -119,11 +119,16 @@ func UpsertGeneratedAsset(ctx context.Context, c *app.RequestContext) {
 		URL: req.GetUrl(), Content: req.GetContent(), OwnerUserID: req.GetOwnerUserId(),
 		Visibility: req.GetVisibility(), TeamID: req.GetTeamId(),
 		JobID: req.GetJobId(), StepRunID: req.GetStepRunId(), TemplateID: req.GetTemplateId(),
+		ResultKey:         req.GetResultKey(),
 		TemplateVersion:   int(req.GetTemplateVersion()),
 		SourceVirtualIPID: req.GetSourceVirtualIpId(), SourceProductID: req.GetSourceProductId(),
 	})
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		if errors.Is(err, domain.ErrResultConflict) {
+			c.String(consts.StatusConflict, "generation result registration conflict")
+		} else {
+			c.String(consts.StatusBadRequest, "generated asset registration failed")
+		}
 		return
 	}
 	c.JSON(consts.StatusOK, &pb.UpsertGeneratedAssetResp{Id: a.ID})

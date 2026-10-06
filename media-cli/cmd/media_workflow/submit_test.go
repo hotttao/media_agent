@@ -16,6 +16,8 @@ import (
 
 func TestSubmitUsesPublicSelectionsAndResolvedMedia(t *testing.T) {
 	var submits atomic.Int32
+	var submitStatus atomic.Int32
+	submitStatus.Store(200)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Header.Get("Authorization") != "Bearer test-only-token" || r.Header.Get("Cookie") != "" {
@@ -55,12 +57,17 @@ func TestSubmitUsesPublicSelectionsAndResolvedMedia(t *testing.T) {
 				return
 			}
 			var body jobpb.SubmitJobReq
-			if json.NewDecoder(r.Body).Decode(&body) != nil || body.SubmittedBy != "" || body.Input == nil || body.WorkflowVersion != 1 {
+			if json.NewDecoder(r.Body).Decode(&body) != nil || body.SubmittedBy != "" || body.Input == nil || body.WorkflowVersion != 1 || body.OrganizationId != "org" || body.WorkspaceId != "workspace" || body.IdempotencyKey != "submit:test" {
 				t.Error("submission lost bundle or forged identity")
 				w.WriteHeader(400)
 				return
 			}
 			submits.Add(1)
+			if submitStatus.Load() != 200 {
+				w.WriteHeader(int(submitStatus.Load()))
+				_, _ = w.Write([]byte("private upstream credential and URL"))
+				return
+			}
 			result = map[string]any{"job_id": "job", "status": 1}
 		default:
 			t.Error("unexpected route: legacy Reachability must not be called")
@@ -74,16 +81,21 @@ func TestSubmitUsesPublicSelectionsAndResolvedMedia(t *testing.T) {
 	Init(&configpb.Config{Client: map[string]*configpb.AppClientConfig{
 		"media_materials": {BaseDomain: server.URL}, "media_workflow": {BaseDomain: server.URL},
 	}})
-	selection := submitSelection{organization: "org", workflow: "wf", product: "p", virtualIP: "v", materials: map[string]string{"move": "m"}, assets: map[string]string{"reference": "a"}}
+	selection := submitSelection{organization: "org", workspace: "workspace", workflow: "wf", product: "p", virtualIP: "v", materials: map[string]string{"move": "m"}, assets: map[string]string{"reference": "a"}}
 	request, err := buildSubmitRequest(context.Background(), selection)
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := request.Input
+	if request.OrganizationId != "org" || request.WorkspaceId != "workspace" {
+		t.Fatal("submission did not preserve enterprise and Workspace selections")
+	}
 	if !strings.Contains(input.Product.ImageUrl, "/main?") || !strings.Contains(input.VirtualIp.FullBodyUrl, "/body?") || !strings.Contains(input.VirtualIp.ThreeViewUrl, "/three?") || !strings.Contains(input.VirtualIp.NineViewUrl, "/nine?") || input.Material[0].Url != "" || input.Material[0].Content != "walk" || !strings.Contains(input.Asset[0].Url, "/reference?") || request.SubmittedBy != "" {
 		t.Fatal("selected bundle did not preserve main/full-body/view/reference images and text-only movement")
 	}
 	for _, change := range []func(*submitSelection){
+		func(s *submitSelection) { s.idempotencyKey = "with space" },
+		func(s *submitSelection) { s.idempotencyKey = strings.Repeat("a", 161) },
 		func(s *submitSelection) { s.materials = nil },
 		func(s *submitSelection) { s.materials = map[string]string{"unknown": "m"} },
 		func(s *submitSelection) { s.organization = "foreign" },
@@ -95,7 +107,7 @@ func TestSubmitUsesPublicSelectionsAndResolvedMedia(t *testing.T) {
 			t.Fatal("invalid or inaccessible selection was accepted")
 		}
 	}
-	args := []string{"--organization-id", "org", "--workflow-id", "wf", "--product-id", "p", "--virtual-ip-id", "v", "--material", "move=m", "--asset", "reference=a"}
+	args := []string{"--organization-id", "org", "--workspace-id", "workspace", "--workflow-id", "wf", "--product-id", "p", "--virtual-ip-id", "v", "--material", "move=m", "--asset", "reference=a", "--idempotency-key", "submit:test"}
 	for _, dry := range []bool{true, false} {
 		c := newSubmitJobCommand()
 		var output bytes.Buffer
@@ -113,5 +125,25 @@ func TestSubmitUsesPublicSelectionsAndResolvedMedia(t *testing.T) {
 	}
 	if submits.Load() != 1 {
 		t.Fatal("normal invocation must submit exactly once")
+	}
+	for _, status := range []int32{409, 503} {
+		submitStatus.Store(status)
+		before := submits.Load()
+		c := newSubmitJobCommand()
+		var output bytes.Buffer
+		c.SetOut(&output)
+		c.SetErr(&output)
+		c.SilenceUsage = true
+		c.SetArgs(args)
+		err := c.Execute()
+		if err == nil || submits.Load() != before+1 || strings.Contains(err.Error(), "private") || strings.Contains(output.String(), "credential") {
+			t.Fatal("failed submit retried or exposed private response")
+		}
+		if status == 409 && !strings.Contains(err.Error(), "conflicts") {
+			t.Fatal("submission conflict not distinguished")
+		}
+		if status == 503 && !strings.Contains(err.Error(), "same idempotency key") {
+			t.Fatal("uncertain submission lacks safe retry guidance")
+		}
 	}
 }

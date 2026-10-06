@@ -28,10 +28,24 @@ func SubmitJob(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	command := jobsvc.SubmitCommand{
+		OrganizationID: req.GetOrganizationId(), WorkspaceID: req.GetWorkspaceId(),
 		WorkflowID: req.GetWorkflowId(), WorkflowVersion: int(req.GetWorkflowVersion()),
 		Input: jobInputFromPB(req.GetInput()), SubmittedBy: auth.CallerID(ctx),
+		IdempotencyKey: req.GetIdempotencyKey(),
+	}
+	if caller := auth.CallerFromContext(ctx); caller != nil && caller.OrganizationID != "" {
+		if command.OrganizationID != "" && command.OrganizationID != caller.OrganizationID {
+			c.String(consts.StatusForbidden, "workflow execution access denied")
+			return
+		}
+		command.OrganizationID = caller.OrganizationID
 	}
 	if principal, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+		if (command.OrganizationID != "" && command.OrganizationID != principal.OrganizationID) ||
+			(command.WorkspaceID != "" && command.WorkspaceID != principal.WorkspaceID) {
+			c.String(consts.StatusForbidden, "workflow execution access denied")
+			return
+		}
 		command.Delegated = true
 		command.OrganizationID = principal.OrganizationID
 		command.WorkspaceID = principal.WorkspaceID
@@ -42,6 +56,10 @@ func SubmitJob(ctx context.Context, c *app.RequestContext) {
 	}
 	j, err := Svc.Submit(ctx, command)
 	if err != nil {
+		if errors.Is(err, domain.ErrSubmissionConflict) {
+			c.String(consts.StatusConflict, "submission key conflicts with different parameters")
+			return
+		}
 		if errors.Is(err, jobsvc.ErrSubmitForbidden) {
 			c.String(consts.StatusForbidden, "workflow execution access denied")
 			return
@@ -172,16 +190,12 @@ func ConfirmStepRun(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	if !ownsStepRun(ctx, req.GetStepRunId()) {
-		c.String(consts.StatusNotFound, "step run not found")
-		return
-	}
-	sr, err := Svc.Confirm(ctx, req.GetStepRunId(), int(req.GetSelectedIndex()))
+	sr, err := Svc.DecideReview(ctx, jobsvc.ReviewCommand{StepRunID: req.GetStepRunId(), UserID: auth.CallerID(ctx), OrganizationID: delegatedOrganization(ctx), Decision: "accept", SelectedIndex: int(req.GetSelectedIndex()), IdempotencyKey: req.GetIdempotencyKey()})
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		writeReviewError(c, err)
 		return
 	}
-	c.JSON(consts.StatusOK, stepRunToPB(sr))
+	c.JSON(consts.StatusAccepted, stepRunToPB(sr))
 }
 
 func RegenerateStepRun(ctx context.Context, c *app.RequestContext) {
@@ -190,16 +204,26 @@ func RegenerateStepRun(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	if !ownsStepRun(ctx, req.GetStepRunId()) {
-		c.String(consts.StatusNotFound, "step run not found")
-		return
-	}
-	sr, err := Svc.Regenerate(ctx, req.GetStepRunId())
+	sr, err := Svc.DecideReview(ctx, jobsvc.ReviewCommand{StepRunID: req.GetStepRunId(), UserID: auth.CallerID(ctx), OrganizationID: delegatedOrganization(ctx), Decision: "regenerate", Feedback: req.GetFeedback(), IdempotencyKey: req.GetIdempotencyKey()})
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		writeReviewError(c, err)
 		return
 	}
-	c.JSON(consts.StatusOK, stepRunToPB(sr))
+	c.JSON(consts.StatusAccepted, stepRunToPB(sr))
+}
+
+func writeReviewError(c *app.RequestContext, err error) {
+	status := consts.StatusBadRequest
+	if errors.Is(err, domain.ErrReviewConflict) {
+		status = consts.StatusConflict
+	}
+	if errors.Is(err, jobsvc.ErrSubmitForbidden) {
+		status = consts.StatusForbidden
+	}
+	if errors.Is(err, jobsvc.ErrSubmitAuthorityUnavailable) {
+		status = consts.StatusServiceUnavailable
+	}
+	c.String(status, "review request could not be accepted")
 }
 
 // —— worker ——
@@ -382,6 +406,7 @@ func stepRunToPB(sr *domain.StepRun) *pb.StepRun {
 		Candidates: cands, SelectedIndex: selIdx, OutputAssetId: sr.OutputAssetID,
 		FailureReason: sr.FailureReason, ClaimedBy: sr.ClaimedBy,
 		Origin: sr.Origin, SourceSystem: sr.SourceSystem, SourceRecordId: sr.SourceRecordID,
+		LastReviewId: sr.LastReviewID, LastReviewStatus: sr.LastReviewStatus,
 	}
 	if sr.SourceCreatedAt != nil {
 		out.SourceCreatedAt = sr.SourceCreatedAt.UnixNano()
@@ -455,6 +480,9 @@ func ownsJob(ctx context.Context, jobID string) bool {
 func delegatedOrganization(ctx context.Context) string {
 	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
 		return p.OrganizationID
+	}
+	if caller := auth.CallerFromContext(ctx); caller != nil {
+		return caller.OrganizationID
 	}
 	return ""
 }

@@ -1,0 +1,1616 @@
+# Generated with protoc-gen-openapi
+# https://github.com/google/gnostic/tree/master/cmd/protoc-gen-openapi
+
+openapi: 3.0.3
+info:
+    title: ""
+    version: 0.0.1
+paths:
+    /api/internal/v1/asset-kinds:batchGet:
+        post:
+            tags:
+                - AssetKindService
+            description: BatchGetAssetKind —— 内部 RPC（被 media_workflow 校验期调用），不暴露给前端。
+            operationId: AssetKindService_BatchGetAssetKind
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BatchGetAssetKindReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BatchGetAssetKindResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/internal/v1/generated-assets/import:
+        post:
+            tags:
+                - GeneratedAssetService
+            description: ImportGeneratedAsset —— 迁移专用内部接口，历史产物不伪造 Job/StepRun。
+            operationId: GeneratedAssetService_ImportGeneratedAsset
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ImportGeneratedAssetReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ImportGeneratedAssetResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/internal/v1/generated-assets/import/{id}:
+        get:
+            tags:
+                - GeneratedAssetService
+            description: GetImportedGeneratedAsset —— 供 media_workflow 校验历史 StepRun 所引用的真实资产。
+            operationId: GeneratedAssetService_GetImportedGeneratedAsset
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ImportedGeneratedAsset'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/internal/v1/generated-assets:upsert:
+        post:
+            tags:
+                - GeneratedAssetService
+            description: UpsertGeneratedAsset —— 内部 RPC（被 media_workflow execution 期调用），不暴露给前端。
+            operationId: GeneratedAssetService_UpsertGeneratedAsset
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertGeneratedAssetReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UpsertGeneratedAssetResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/internal/v1/library-objects:resolve:
+        get:
+            tags:
+                - LibraryObjectService
+            operationId: LibraryObjectService_ResolveInternalLibraryObject
+            parameters:
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+                - name: object_path
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ResolveLibraryObjectResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/asset-kinds:
+        get:
+            tags:
+                - AssetKindService
+            operationId: AssetKindService_ListAssetKinds
+            parameters:
+                - name: resource_type
+                  in: query
+                  schema:
+                    type: string
+                - name: media_type
+                  in: query
+                  schema:
+                    type: string
+                - name: status
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAssetKindsResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - AssetKindService
+            operationId: AssetKindService_RegisterAssetKind
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RegisterAssetKindReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AssetKind'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/asset-kinds/{name}:
+        get:
+            tags:
+                - AssetKindService
+            operationId: AssetKindService_GetAssetKind
+            parameters:
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AssetKind'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - AssetKindService
+            operationId: AssetKindService_UpdateAssetKind
+            parameters:
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateAssetKindReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AssetKind'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - AssetKindService
+            operationId: AssetKindService_DeleteAssetKind
+            parameters:
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AssetKind'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/generated-assets:
+        get:
+            tags:
+                - GeneratedAssetService
+            operationId: GeneratedAssetService_ListGeneratedAssets
+            parameters:
+                - name: scope
+                  in: query
+                  schema:
+                    type: string
+                - name: asset_kind
+                  in: query
+                  schema:
+                    type: string
+                - name: owner
+                  in: query
+                  schema:
+                    type: string
+                - name: job_id
+                  in: query
+                  schema:
+                    type: string
+                - name: source_virtual_ip_id
+                  in: query
+                  schema:
+                    type: string
+                - name: source_product_id
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListGeneratedAssetsResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/generated-assets/by-source:
+        get:
+            tags:
+                - GeneratedAssetService
+            description: ListGeneratedAssetsBySource —— 给编排层组装 bundle 用：按 source virtual_ip / product 列出产物。
+            operationId: GeneratedAssetService_ListGeneratedAssetsBySource
+            parameters:
+                - name: source_kind
+                  in: query
+                  schema:
+                    type: string
+                - name: source_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListGeneratedAssetsBySourceResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/generated-assets/{id}:
+        get:
+            tags:
+                - GeneratedAssetService
+            operationId: GeneratedAssetService_GetGeneratedAsset
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GeneratedAsset'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - GeneratedAssetService
+            operationId: GeneratedAssetService_DeleteGeneratedAsset
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GeneratedAsset'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/library-objects:resolve:
+        get:
+            tags:
+                - LibraryObjectService
+            operationId: LibraryObjectService_ResolveLibraryObject
+            parameters:
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+                - name: object_path
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ResolveLibraryObjectResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/library-objects:upload:
+        post:
+            tags:
+                - LibraryObjectService
+            operationId: LibraryObjectService_UploadLibraryObject
+            parameters:
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+                - name: scope
+                  in: query
+                  schema:
+                    type: string
+                - name: purpose
+                  in: query
+                  schema:
+                    type: string
+                - name: idempotency_key
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UploadLibraryObjectResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/materials:
+        get:
+            tags:
+                - MaterialService
+            operationId: MaterialService_ListMaterials
+            parameters:
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+                - name: scope
+                  in: query
+                  schema:
+                    type: string
+                - name: asset_kind
+                  in: query
+                  schema:
+                    type: string
+                - name: only_mine
+                  in: query
+                  schema:
+                    type: boolean
+                - name: visibility
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMaterialsResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - MaterialService
+            operationId: MaterialService_CreateMaterial
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateMaterialReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Material'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/materials/{id}:
+        get:
+            tags:
+                - MaterialService
+            operationId: MaterialService_GetMaterial
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Material'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - MaterialService
+            operationId: MaterialService_UpdateMaterial
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateMaterialReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Material'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - MaterialService
+            operationId: MaterialService_DeleteMaterial
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Material'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/products:
+        get:
+            tags:
+                - ProductService
+            operationId: ProductService_ListProducts
+            parameters:
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+                - name: scope
+                  in: query
+                  schema:
+                    type: string
+                - name: name
+                  in: query
+                  schema:
+                    type: string
+                - name: target_audience
+                  in: query
+                  schema:
+                    type: string
+                - name: tag
+                  in: query
+                  schema:
+                    type: string
+                - name: status
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListProductsResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - ProductService
+            operationId: ProductService_CreateProduct
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateProductReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Product'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/products/{id}:
+        get:
+            tags:
+                - ProductService
+            operationId: ProductService_GetProduct
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Product'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - ProductService
+            operationId: ProductService_UpdateProduct
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateProductReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Product'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - ProductService
+            operationId: ProductService_DeleteProduct
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Product'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/products/{id}/archive:
+        post:
+            tags:
+                - ProductService
+            operationId: ProductService_ArchiveProduct
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Product'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/virtual-ips:
+        get:
+            tags:
+                - VirtualIpService
+            operationId: VirtualIpService_ListVirtualIps
+            parameters:
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+                - name: scope
+                  in: query
+                  schema:
+                    type: string
+                - name: name
+                  in: query
+                  schema:
+                    type: string
+                - name: status
+                  in: query
+                  schema:
+                    type: string
+                - name: visibility
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListVirtualIpsResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - VirtualIpService
+            operationId: VirtualIpService_CreateVirtualIp
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateVirtualIpReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VirtualIp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/virtual-ips/{id}:
+        get:
+            tags:
+                - VirtualIpService
+            operationId: VirtualIpService_GetVirtualIp
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VirtualIp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - VirtualIpService
+            operationId: VirtualIpService_UpdateVirtualIp
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateVirtualIpReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VirtualIp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - VirtualIpService
+            operationId: VirtualIpService_DeleteVirtualIp
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VirtualIp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/virtual-ips/{id}/archive:
+        post:
+            tags:
+                - VirtualIpService
+            operationId: VirtualIpService_ArchiveVirtualIp
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VirtualIp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /health:
+        get:
+            tags:
+                - HealthService
+            operationId: HealthService_Health
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HealthResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+components:
+    schemas:
+        AssetKind:
+            type: object
+            properties:
+                name:
+                    type: string
+                resource_type:
+                    type: integer
+                    format: enum
+                media_type:
+                    type: integer
+                    format: enum
+                source_table:
+                    type: string
+                description:
+                    type: string
+                status:
+                    type: integer
+                    format: enum
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        BatchGetAssetKindReq:
+            type: object
+            properties:
+                names:
+                    type: array
+                    items:
+                        type: string
+        BatchGetAssetKindResp:
+            type: object
+            properties:
+                kinds:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AssetKind'
+                not_found:
+                    type: array
+                    items:
+                        type: string
+        CreateMaterialReq:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                scope:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                prompt:
+                    type: string
+                asset_kind:
+                    type: string
+                object_path:
+                    type: string
+                content:
+                    type: string
+                metadata:
+                    type: string
+                visibility:
+                    type: string
+                team_id:
+                    type: string
+        CreateProductReq:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                scope:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                target_audience:
+                    type: string
+                product_details:
+                    type: string
+                display_actions:
+                    type: string
+                tags:
+                    type: string
+                external_commerce:
+                    type: string
+                metadata:
+                    type: string
+                images:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ProductImageInput'
+        CreateVirtualIpReq:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                scope:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                avatar_object_path:
+                    type: string
+                full_body_object_path:
+                    type: string
+                three_view_object_path:
+                    type: string
+                nine_view_object_path:
+                    type: string
+                persona_profile:
+                    type: string
+                visibility:
+                    type: string
+        GeneratedAsset:
+            type: object
+            properties:
+                id:
+                    type: string
+                scope:
+                    type: string
+                name:
+                    type: string
+                asset_kind:
+                    type: string
+                url:
+                    type: string
+                content:
+                    type: string
+                owner_user_id:
+                    type: string
+                visibility:
+                    type: string
+                team_id:
+                    type: string
+                job_id:
+                    type: string
+                step_run_id:
+                    type: string
+                template_id:
+                    type: string
+                template_version:
+                    type: integer
+                    format: int32
+                source_virtual_ip_id:
+                    type: string
+                source_product_id:
+                    type: string
+                created_at:
+                    type: string
+                object_path:
+                    type: string
+                origin:
+                    type: string
+                source_system:
+                    type: string
+                source_record_id:
+                    type: string
+        GoogleProtobufAny:
+            type: object
+            properties:
+                '@type':
+                    type: string
+                    description: The type of the serialized message.
+            additionalProperties: true
+            description: Contains an arbitrary serialized message along with a @type that describes the type of the serialized message.
+        HealthResponse:
+            type: object
+            properties:
+                status:
+                    type: string
+        ImportGeneratedAssetReq:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                scope:
+                    type: string
+                asset_kind:
+                    type: string
+                name:
+                    type: string
+                object_path:
+                    type: string
+                owner_user_id:
+                    type: string
+                source_system:
+                    type: string
+                source_record_id:
+                    type: string
+                source_sha256:
+                    type: string
+                source_created_at:
+                    type: string
+                source_virtual_ip_id:
+                    type: string
+                source_product_id:
+                    type: string
+        ImportGeneratedAssetResp:
+            type: object
+            properties:
+                id:
+                    type: string
+                object_path:
+                    type: string
+        ImportedGeneratedAsset:
+            type: object
+            properties:
+                id:
+                    type: string
+                organization_id:
+                    type: string
+                scope:
+                    type: string
+                owner_user_id:
+                    type: string
+                asset_kind:
+                    type: string
+                object_path:
+                    type: string
+                source_system:
+                    type: string
+                source_record_id:
+                    type: string
+                source_sha256:
+                    type: string
+                source_created_at:
+                    type: string
+                source_product_id:
+                    type: string
+                source_virtual_ip_id:
+                    type: string
+                access_url:
+                    type: string
+                access_expires_at:
+                    type: string
+        ListAssetKindsResp:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AssetKind'
+                total:
+                    type: integer
+                    format: int32
+        ListGeneratedAssetsBySourceResp:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GeneratedAsset'
+        ListGeneratedAssetsResp:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GeneratedAsset'
+                total:
+                    type: integer
+                    format: int32
+        ListMaterialsResp:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Material'
+                total:
+                    type: integer
+                    format: int32
+        ListProductsResp:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Product'
+                total:
+                    type: integer
+                    format: int32
+        ListVirtualIpsResp:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/VirtualIp'
+                total:
+                    type: integer
+                    format: int32
+        Material:
+            type: object
+            properties:
+                id:
+                    type: string
+                organization_id:
+                    type: string
+                scope:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                prompt:
+                    type: string
+                asset_kind:
+                    type: string
+                object_path:
+                    type: string
+                content:
+                    type: string
+                metadata:
+                    type: string
+                owner_user_id:
+                    type: string
+                visibility:
+                    type: string
+                team_id:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        Product:
+            type: object
+            properties:
+                id:
+                    type: string
+                organization_id:
+                    type: string
+                scope:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                target_audience:
+                    type: string
+                product_details:
+                    type: string
+                display_actions:
+                    type: string
+                tags:
+                    type: string
+                external_commerce:
+                    type: string
+                metadata:
+                    type: string
+                images:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ProductImage'
+                status:
+                    type: string
+                created_by:
+                    type: string
+                updated_by:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        ProductImage:
+            type: object
+            properties:
+                id:
+                    type: string
+                object_path:
+                    type: string
+                is_main:
+                    type: boolean
+                sort_order:
+                    type: integer
+                    format: int32
+        ProductImageInput:
+            type: object
+            properties:
+                object_path:
+                    type: string
+                is_main:
+                    type: boolean
+                sort_order:
+                    type: integer
+                    format: int32
+        RegisterAssetKindReq:
+            type: object
+            properties:
+                name:
+                    type: string
+                resource_type:
+                    type: integer
+                    format: enum
+                media_type:
+                    type: integer
+                    format: enum
+                source_table:
+                    type: string
+                description:
+                    type: string
+        ResolveLibraryObjectResp:
+            type: object
+            properties:
+                url:
+                    type: string
+                expires_at:
+                    type: string
+        Status:
+            type: object
+            properties:
+                code:
+                    type: integer
+                    description: The status code, which should be an enum value of [google.rpc.Code][google.rpc.Code].
+                    format: int32
+                message:
+                    type: string
+                    description: A developer-facing error message, which should be in English. Any user-facing error message should be localized and sent in the [google.rpc.Status.details][google.rpc.Status.details] field, or localized by the client.
+                details:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GoogleProtobufAny'
+                    description: A list of messages that carry the error details.  There is a common set of message types for APIs to use.
+            description: 'The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors).'
+        UpdateAssetKindReq:
+            type: object
+            properties:
+                name:
+                    type: string
+                description:
+                    type: string
+                status:
+                    type: string
+        UpdateMaterialReq:
+            type: object
+            properties:
+                id:
+                    type: string
+                organization_id:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                prompt:
+                    type: string
+                object_path:
+                    type: string
+                content:
+                    type: string
+                metadata:
+                    type: string
+                visibility:
+                    type: string
+                team_id:
+                    type: string
+        UpdateProductReq:
+            type: object
+            properties:
+                id:
+                    type: string
+                organization_id:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                target_audience:
+                    type: string
+                product_details:
+                    type: string
+                display_actions:
+                    type: string
+                tags:
+                    type: string
+                external_commerce:
+                    type: string
+                metadata:
+                    type: string
+                images:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ProductImageInput'
+        UpdateVirtualIpReq:
+            type: object
+            properties:
+                id:
+                    type: string
+                organization_id:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                avatar_object_path:
+                    type: string
+                full_body_object_path:
+                    type: string
+                three_view_object_path:
+                    type: string
+                nine_view_object_path:
+                    type: string
+                persona_profile:
+                    type: string
+        UploadLibraryObjectResp:
+            type: object
+            properties:
+                object_path:
+                    type: string
+                size_bytes:
+                    type: string
+                content_type:
+                    type: string
+                checksum:
+                    type: string
+        UpsertGeneratedAssetReq:
+            type: object
+            properties:
+                scope:
+                    type: string
+                asset_kind:
+                    type: string
+                name:
+                    type: string
+                url:
+                    type: string
+                content:
+                    type: string
+                owner_user_id:
+                    type: string
+                visibility:
+                    type: string
+                team_id:
+                    type: string
+                job_id:
+                    type: string
+                step_run_id:
+                    type: string
+                template_id:
+                    type: string
+                template_version:
+                    type: integer
+                    format: int32
+                source_virtual_ip_id:
+                    type: string
+                source_product_id:
+                    type: string
+                result_key:
+                    type: string
+        UpsertGeneratedAssetResp:
+            type: object
+            properties:
+                id:
+                    type: string
+        VirtualIp:
+            type: object
+            properties:
+                id:
+                    type: string
+                organization_id:
+                    type: string
+                scope:
+                    type: string
+                name:
+                    type: string
+                description:
+                    type: string
+                avatar_object_path:
+                    type: string
+                full_body_object_path:
+                    type: string
+                three_view_object_path:
+                    type: string
+                nine_view_object_path:
+                    type: string
+                persona_profile:
+                    type: string
+                status:
+                    type: string
+                visibility:
+                    type: string
+                owner_user_id:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+tags:
+    - name: AssetKindService
+      description: |-
+        AssetKindService —— 资源类别注册表（全局，无 scope）。
+         SYSTEM 预置不可删；ENABLED 可 CRUD；DISABLED 仍列出但拒绝被新 template 引用。
+    - name: GeneratedAssetService
+      description: |-
+        GeneratedAssetService —— workflow 产物。
+         创建由 media_workflow 调 UpsertGeneratedAsset（内部 RPC）；前端只读 + 删。
+    - name: HealthService
+    - name: LibraryObjectService
+    - name: MaterialService
+    - name: ProductService
+    - name: VirtualIpService

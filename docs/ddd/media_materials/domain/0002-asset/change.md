@@ -1,5 +1,9 @@
 # asset domain 变更记录
 
+## 2026-10-05 · 每轮独立不可变产物
+
+用户采纳方案 2：取消默认 Retry 覆盖同一业务产物，改为每个生成结果独立 Generated Asset；同轮登记回执与 Asset 原子保存，同键同摘要重放、不同摘要冲突。旧记录和已有资源引用保留，不回填伪造轮次。Execution 管理当前引用，Materials 不管理节点最新结果。
+
 ## 2026-10-02 · 历史执行的对象引用解析
 
 - media_materials 提供受内部服务凭证保护的 Object Path 解析入口，限定 Organization 命名空间并返回短期 URL；业务素材访问授权仍由原有调用链处理。

@@ -38,6 +38,10 @@ go -C media_worker run ./cmd/media_worker
 
 URL 通过 Materials API 在测试开始前重新解析，短期签名可能过期，不提交或打印 URL。放在私有环境中，而非进程命令行参数；Worker 不需要 User 上传凭据。覆盖结果仍带 `mock=true` 和旧样本 provenance，不能当作真实生成结果。未配置某个结果时仍使用旧资源服务的对应固定样本，只适合诊断旧链路，不代表目标对象存储验收。配置完成后再启动 Worker，不在轮询期间修改配置。
 
+多候选联调可设置 `MEDIA_WORKER_FIXTURE_MODEL_RESULT_URLS` 为 JSON 字符串数组（2–8 个不同的受控图片对象 URL），同时取消单值 `MEDIA_WORKER_FIXTURE_MODEL_RESULT_URL`。只更换签名的同一对象不能冒充多个候选；列表按顺序返回、首项 primary，其余非 primary，仍明确标记 mock。该变量只放私有环境中，禁止打印或作为命令行参数传入；Worker 不自动选择或审批候选。
+
+失败重试联调可显式设置 `MEDIA_WORKER_FIXTURE_FAIL_STEP=model_image` 与 `MEDIA_WORKER_FIXTURE_FAIL_CALL=2`。仅 fixture profile 生效：每个 Job 的该节点第 2 个不同 Dispatch 返回固定测试错误，同一 Dispatch 重交付仍返回相同结果；后续新 Dispatch 正常返回已配置媒体。用于验证“首轮→重新生成→第二轮失败→用户重试”，不会执行内部 Renderer 或自行重试业务节点。计数只在当前客户端进程内，重启会重置；不是生产故障策略。启动前仍须核对队列，结束后停止测试 Worker。
+
 ```bash
 MEDIA_GATEWAY_URL=http://192.168.2.41:18080 \
 MEDIA_WORKER_API_TOKEN=talos_xxx \

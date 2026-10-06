@@ -29,3 +29,11 @@ func TestFinalizeUsesApprovedCandidate(t *testing.T) {
 		t.Fatalf("unexpected approved result: %#v err=%v", out, err)
 	}
 }
+
+func TestFinalizeRejectsCandidateFromPreviousGeneration(t *testing.T) {
+	old := Candidate{URL: "old.png"}
+	_, err := (Handler{}).Execute(Input{Candidates: []Candidate{{URL: "current.png"}}, SelectedCandidate: &old})
+	if err == nil {
+		t.Fatal("candidate from an earlier round was finalized")
+	}
+}

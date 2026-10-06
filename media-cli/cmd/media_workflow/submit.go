@@ -2,6 +2,7 @@ package media_workflow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -16,10 +17,11 @@ import (
 )
 
 type submitSelection struct {
-	organization, workflow, product, virtualIP string
-	version                                    int
-	materials, assets                          map[string]string
-	dryRun                                     bool
+	organization, workspace, workflow, product, virtualIP string
+	idempotencyKey                                        string
+	version                                               int
+	materials, assets                                     map[string]string
+	dryRun                                                bool
 }
 
 var submitJobCmd = newSubmitJobCommand()
@@ -28,7 +30,9 @@ func newSubmitJobCommand() *cobra.Command {
 	var selection submitSelection
 	c := &cobra.Command{Use: "submit-job", Short: "选择企业素材并提交自包含 Workflow 输入", Args: cobra.NoArgs}
 	c.Flags().StringVar(&selection.organization, "organization-id", "", "素材所属企业")
+	c.Flags().StringVar(&selection.workspace, "workspace-id", "", "任务所属 Workspace")
 	c.Flags().StringVar(&selection.workflow, "workflow-id", "", "已发布 Workflow ID")
+	c.Flags().StringVar(&selection.idempotencyKey, "idempotency-key", "", "同一次提交重用稳定键；省略则每次创建新 Job")
 	c.Flags().IntVar(&selection.version, "workflow-version", 0, "发布版本（0=当前版本）")
 	c.Flags().StringVar(&selection.product, "product-id", "", "Product ID")
 	c.Flags().StringVar(&selection.virtualIP, "virtual-ip-id", "", "Virtual IP ID")
@@ -36,6 +40,7 @@ func newSubmitJobCommand() *cobra.Command {
 	c.Flags().StringToStringVar(&selection.assets, "asset", nil, "输入名=Generated Asset ID，可重复指定")
 	c.Flags().BoolVar(&selection.dryRun, "dry-run", false, "验证并组装输入，不创建 Job；不输出媒体 URL")
 	_ = c.MarkFlagRequired("organization-id")
+	_ = c.MarkFlagRequired("workspace-id")
 	_ = c.MarkFlagRequired("workflow-id")
 	c.RunE = func(c *cobra.Command, _ []string) error {
 		request, err := buildSubmitRequest(c.Context(), selection)
@@ -46,11 +51,23 @@ func newSubmitJobCommand() *cobra.Command {
 			_, err = fmt.Fprintf(c.OutOrStdout(), "input validated workflow_id=%s version=%d materials=%d assets=%d; no Job submitted\n", request.WorkflowId, request.WorkflowVersion, len(request.Input.Material), len(request.Input.Asset))
 			return err
 		}
-		result, _, err := JobCli.SubmitJob(c.Context(), request)
-		if err != nil {
-			return fmt.Errorf("submit job failed")
+		result, response, err := JobCli.SubmitJob(c.Context(), request)
+		if response != nil && response.StatusCode() == 409 {
+			return fmt.Errorf("submission key conflicts with different parameters")
 		}
-		if result.GetJobId() == "" {
+		if err != nil {
+			// Generated Hertz clients discard rawResponse on HTTP errors and
+			// wrap status_code/body as JSON. Inspect only the numeric status;
+			// never return that error string or its upstream body to the user.
+			var failure struct {
+				Status int `json:"status_code"`
+			}
+			if json.Unmarshal([]byte(err.Error()), &failure) == nil && failure.Status == 409 {
+				return fmt.Errorf("submission key conflicts with different parameters")
+			}
+			return fmt.Errorf("submit outcome unconfirmed; query execution or reuse the same idempotency key, do not create a new key automatically")
+		}
+		if response == nil || response.StatusCode() != 200 || result.GetJobId() == "" {
 			return fmt.Errorf("gateway did not acknowledge a Job")
 		}
 		_, err = fmt.Fprintf(c.OutOrStdout(), "submitted job_id=%s status=%s\n", result.GetJobId(), result.GetStatus())
@@ -62,8 +79,18 @@ func newSubmitJobCommand() *cobra.Command {
 // Use authorized public resource reads, explicit selections and signed URLs.
 // Identity comes from gateway credentials, never from a caller-supplied User ID.
 func buildSubmitRequest(ctx context.Context, s submitSelection) (*jobpb.SubmitJobReq, error) {
-	if s.organization == "" || s.workflow == "" || s.version < 0 {
-		return nil, fmt.Errorf("organization, workflow and a nonnegative version are required")
+	if s.idempotencyKey != "" {
+		if len(s.idempotencyKey) > 160 {
+			return nil, fmt.Errorf("invalid submission key")
+		}
+		for _, ch := range []byte(s.idempotencyKey) {
+			if ch < 33 || ch > 126 {
+				return nil, fmt.Errorf("invalid submission key")
+			}
+		}
+	}
+	if s.organization == "" || s.workspace == "" || s.workflow == "" || s.version < 0 {
+		return nil, fmt.Errorf("organization, workspace, workflow and a nonnegative version are required")
 	}
 	if WfCli == nil || JobCli == nil || ProdCli == nil || VipCli == nil || MatCli == nil || ObjectCli == nil || AssetCli == nil {
 		return nil, fmt.Errorf("Workflow/Materials clients are not configured")
@@ -201,5 +228,5 @@ func buildSubmitRequest(ctx context.Context, s submitSelection) (*jobpb.SubmitJo
 			input.Asset = append(input.Asset, &jobpb.AssetData{Name: name, AssetKind: a.AssetKind, Url: resourceURL, Content: a.Content})
 		}
 	}
-	return &jobpb.SubmitJobReq{WorkflowId: s.workflow, WorkflowVersion: wf.Version, Input: input}, nil
+	return &jobpb.SubmitJobReq{WorkflowId: s.workflow, WorkflowVersion: wf.Version, Input: input, OrganizationId: s.organization, WorkspaceId: s.workspace, IdempotencyKey: s.idempotencyKey}, nil
 }

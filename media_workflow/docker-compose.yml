@@ -61,6 +61,9 @@ services:
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_workflow?sslmode=disable
       CONDUCTOR_URL: http://conductor:8080
       MANAGED_EXECUTOR_URL: ${MANAGED_EXECUTOR_URL:-http://host.docker.internal:8010}
+      MEDIA_STORAGE_PUBLIC_ENDPOINT: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://192.168.2.41:8333}
+      MEDIA_MATERIALS_URL: http://media_materials:8003
+      MEDIA_MATERIALS_INTERNAL_TOKEN: ${MEDIA_MATERIALS_INTERNAL_TOKEN:-dev-media-materials-internal-token}
     volumes:
     - ${MANAGED_WORKER_CONFIG:-./conf/managed-worker.example.yaml}:/app/conf/managed-worker.yaml:ro
     extra_hosts:
