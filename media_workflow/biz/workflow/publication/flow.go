@@ -70,7 +70,7 @@ func (f *Flow) AcceptPublication(ctx context.Context, workflow *workflowdomain.W
 		return nil, errors.New("publication acceptance unavailable")
 	}
 	current, err := f.Workflows.Get(ctx, workflow.ID)
-	if err != nil {
+	if err != nil || current == nil {
 		return nil, errors.New("publication source unavailable")
 	}
 	if current.CreatedBy != callerID || workflow.CreatedBy != callerID {
@@ -89,7 +89,9 @@ func (f *Flow) AcceptPublication(ctx context.Context, workflow *workflowdomain.W
 	if current.Version != workflow.Version || current.Status != workflowdomain.StatusDraft {
 		return nil, workflowdomain.ErrPublicationConflict
 	}
-	prepared, err := f.compile(ctx, workflow)
+	// Compile the authorized authoritative source, not a caller's same-version
+	// struct that could carry a different DAG or template references.
+	prepared, err := f.compile(ctx, current)
 	if err != nil {
 		return nil, err
 	}

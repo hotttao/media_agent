@@ -517,6 +517,8 @@ GOWORK=off go test -tags=e2e ./e2e -run '^TestGenerationRegistration(HTTPReplayP
 
 ### Workflow 冻结编译持久化
 
+发布恢复：在 `media_workflow/` 内执行 `MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 go test -tags=e2e ./e2e -run '^TestPublicationDelivery(RealConductorRecovery|RealProcessRestart)$' -race -count=1`。使用自己的隔离数据库与唯一技术TaskDefinition/Workflow metadata，不启动实例/Worker。分别覆盖写后代理503、本地完成回滚后仅查询恢复，以及真实子进程注册后退出、另一子进程回收claim恢复（恢复代理禁止所有非GET并检查0重写）。测试结束只清理自己的技术元数据。DSN仅经私有子进程环境传递，禁止输出子进程原始错误；不替代公开publish API/CLI、权限或标准main后台装配验收。
+
 审批周期门禁在 `media_workflow/` 内运行 `go test -tags=e2e ./e2e -run '^(TestReviewRetryEpochPersistence|TestExecutionProjectionAtomicPersistence)$' -race -count=1`，覆盖真实接受事务锁内周期校验、原键重放不重绑定、同数字generation跨Retry的旧Review隔离、epoch持久化/不可变与降级保护。引擎快照受控，AppendRetryHistory仅代表已提交本地边界，不证明实际rerun窗口恢复。新审批由标准服务冻结epoch，旧null记录不回填。
 
 `MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 go test -tags=e2e ./e2e -run '^(TestReviewDeliveryRealConductorLostResponse|TestReviewDeliveryRealProcessRestart)$' -race -count=1` 另验证冻结HUMAN Task ID的真实提交、丢响应后精确查询与进程恢复。禁止以Task Reference重新查找后提交新任务，不向客户端开放此内部接口。

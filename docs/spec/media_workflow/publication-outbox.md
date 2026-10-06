@@ -20,4 +20,6 @@ ClaimPublication使用单SQL SKIP LOCKED，pending且到期且无有效claim；�
 
 Publication编排在接受前冻结Compiler产物、按名称排序TaskDefinitions；仅调用方原资源权限允许接受。已有意图重放仍授权，不重新编译覆盖版本。后台读取原意图，逐名GET/仅POST缺失TaskDefinitions、精确GET/EnsureWorkflow，再caller Tx收口。网络错误释放claim退避；定义冲突终态失败，不能PUT改写上游。进程重启可重取过期claim，精确metadata对账防止盲目重写；这不提供上游CAS。
 
+首次接受必须编译仓库读取并授权的当前Workflow，不接受调用方传入的同版本但不同DAG/模板引用。后台严格解码冻结Definition/TaskDefinitions，不忽略未知结构字段；数字精度通过UseNumber保留，Definition重新规范计算hash必须等于被冻结hash。已存在的原意图重放不重新读取不可用或已变化的Template/Capability；任务策略改变不能偷偷替换旧意图。不可解析/未知契约字段及hash冲突为终态失败，网络故障才释放claim重试。
+
 公开publish响应需区分已接受发布中与注册完成，只有published/registered允许Submit；后台结果通过资源查询可见。IDL/CLI变更在接线阶段生成，不能把仓储完成称为API上线。旧Publisher同步路径在标准服务接线后移除，不新增客户端Conductor访问。

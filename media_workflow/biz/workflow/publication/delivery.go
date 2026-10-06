@@ -1,15 +1,30 @@
 package publication
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 
 	"gorm.io/gorm"
 	domain "media_agent/media_workflow/biz/domain/workflow"
 	"media_agent/media_workflow/biz/workflow/compiler"
 	"media_agent/media_workflow/biz/workflow/conductor"
 )
+
+func decodeFrozenContract(raw []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if decoder.Decode(new(any)) != io.EOF {
+		return errors.New("invalid frozen contract tail")
+	}
+	return nil
+}
 
 var ErrTemporarilyUnavailable = errors.New("workflow publication registration temporarily unavailable")
 
@@ -59,8 +74,8 @@ func (f *Delivery) DispatchOne(ctx context.Context) error {
 	}
 	var definition compiler.Definition
 	var tasks []conductor.TaskDefinition
-	if json.Unmarshal(p.DefinitionJSON, &definition) != nil || json.Unmarshal(p.TaskDefinitionsJSON, &tasks) != nil {
-		return release("invalid_frozen_contract")
+	if decodeFrozenContract(p.DefinitionJSON, &definition) != nil || decodeFrozenContract(p.TaskDefinitionsJSON, &tasks) != nil {
+		return finish("failed", "invalid_frozen_contract")
 	}
 	hash, err := compiler.DefinitionHash(definition)
 	if err != nil || hash != p.DefinitionHash {

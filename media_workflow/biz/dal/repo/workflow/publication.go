@@ -99,7 +99,7 @@ func (r *CompilationRepo) EnqueuePublication(ctx context.Context, c *domain.Comp
 
 func (r *CompilationRepo) ClaimPublication(ctx context.Context) (*domain.Publication, error) {
 	var row publicationRow
-	err := r.db.WithContext(ctx).Raw(`UPDATE media_workflow.workflow_publications AS p
+	err := dal.FromContext(ctx, r.db).WithContext(ctx).Raw(`UPDATE media_workflow.workflow_publications AS p
         SET claim_token=?,claimed_at=now(),delivery_attempts=delivery_attempts+1,updated_at=now()
         WHERE p.id=(SELECT id FROM media_workflow.workflow_publications
         WHERE status='pending' AND next_attempt_at<=now()
@@ -120,7 +120,7 @@ func (r *CompilationRepo) ReleasePublication(ctx context.Context, p domain.Publi
 	if p.ClaimToken == "" || !publicationErrorCode.MatchString(code) {
 		return domain.ErrPublicationClaimStale
 	}
-	result := r.db.WithContext(ctx).Exec(`UPDATE media_workflow.workflow_publications
+	result := dal.FromContext(ctx, r.db).WithContext(ctx).Exec(`UPDATE media_workflow.workflow_publications
         SET claim_token=NULL,claimed_at=NULL,last_error=?,next_attempt_at=now()+interval '10 seconds',updated_at=now()
         WHERE id=? AND status='pending' AND payload_digest=? AND claim_token=?
           AND claimed_at>now()-interval '2 minutes'`, code, p.ID, p.PayloadDigest, p.ClaimToken)

@@ -11,9 +11,9 @@
 
 ## P2 发布编排
 
-- [ ] Compiler冻结定义和排序完整TaskDefinitions；接受与同步外部注册解耦。
-- [ ] 后台只消费冻结意图、事务外注册、原claim收口、安全失败码和退避；冲突不覆盖。
-- [ ] 真实Conductor丢响应、独立进程恢复、源修改/归档时不发布新版本。
+- [x] Compiler冻结定义和排序完整TaskDefinitions；AcceptPublication与同步注册解耦。单位/race覆盖权威源编译（非调用方同版本对象）、完整Capability retry/timeout、确定性排序、模板离线时原意图重放且仍查当前owner。
+- [x] Delivery只消费冻结意图、事务外注册、caller Tx/原claim收口、安全失败码和退避；严格冻结契约解码/hash检查，永久冲突不重试、不忽略未知字段。单位/race覆盖暂时失败/重新构建Delivery、无模板/能力查询端口、源归档/改版/删除及注册中变更、陈旧claim拒绝。
+- [x] 真实Conductor丢响应、独立进程恢复、源修改/归档时不发布新版本。真实技术元数据+隔离PostgreSQL两场景门禁5.780s：实际TaskDefinition/Workflow注册成功后代理503仍GET收口；本地完成写后回滚，新Repo/Delivery重取过期claim仅GET恢复，写入各1次。独立子进程 `TestPublicationDeliveryRealProcessRestart` 6.676s：注册成功后os.Exit(77)、另一子进程恢复，代理禁止恢复阶段任何非GET，0重写。只创建并清理唯一技术元数据，没有业务实例、Worker或模型执行；源变更保护仍由隔离库/单位证明，不混作公开API验收。
 
 ## P3 公开与部署
 
@@ -23,4 +23,4 @@
 
 ## 当前提交检查点
 
-发布Flow新增AcceptPublication和统一编译冻结辅助函数，TaskDefinitions按名称排序；新增Delivery只消费冻结意图、注册在事务外、完成在caller事务内。代码可编译、架构检查通过，但编排行为/真实Conductor与独立进程恢复测试尚未补齐，标准main和公开发布入口仍使用旧同步路径，migration022未部署。此提交保留明确的未完成P2/P3，不计为发布恢复已上线。
+提交 `5dd6501` 保存P1与P2编排代码检查点。后续已补齐P2单位/race、真实Conductor/隔离PostgreSQL及独立进程恢复测试；Workflow全包、架构、gofmt/diff通过。标准main和公开发布入口仍使用旧同步路径，migration022未部署；P3接线和公开HTTP/CLI验收尚未完成，不计为发布恢复已上线。
