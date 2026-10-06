@@ -55,7 +55,7 @@ func TestWorkflowMigrationStopsAtVideo(t *testing.T) {
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"workflow-1","version":1}`))
+		_, _ = w.Write([]byte(`{"id":"workflow-1","version":1,"status":2,"publication_status":"registered"}`))
 	}))
 	defer server.Close()
 	c := &client{config: config{baseURL: server.URL, scope: "ai_clothing", workflowName: "republished sample"}, http: server.Client()}
@@ -72,6 +72,34 @@ func TestWorkflowMigrationStopsAtVideo(t *testing.T) {
 	}
 	if len(steps) != 4 || workflow["output_step_key"] != "video" {
 		t.Fatalf("workflow must stop at video: %v", workflow)
+	}
+}
+
+func TestWorkflowMigrationObservesAcceptedPublicationWithoutRepeating(t *testing.T) {
+	creates, publishes, reads := 0, 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/workflows":
+			creates++
+			_, _ = w.Write([]byte(`{"id":"workflow-1","version":1}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/workflows/workflow-1/publish":
+			publishes++
+			w.WriteHeader(202)
+			_, _ = w.Write([]byte(`{"id":"workflow-1","version":1,"status":4,"publication_status":"pending"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/workflows/workflow-1":
+			reads++
+			_, _ = w.Write([]byte(`{"id":"workflow-1","version":1,"status":2,"publication_status":"registered"}`))
+		default:
+			t.Error("unexpected publication request")
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+	c := &client{config: config{baseURL: server.URL, scope: "ai_clothing"}, http: server.Client()}
+	result, err := c.createAndPublishWorkflow(context.Background(), map[string]resourceRef{})
+	if err != nil || result.ID != "workflow-1" || creates != 1 || publishes != 1 || reads != 1 {
+		t.Fatal("asynchronous observation recreated or republished the source")
 	}
 }
 

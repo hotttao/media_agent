@@ -67,7 +67,7 @@ func (f *Flow) DispatchOne(ctx context.Context) error {
 	case "uncertain":
 		// Read only: even a definitive-looking empty search is not proof that
 		// the previous POST did not commit or is not still in flight.
-		executionID, err = f.Engine.FindStartedExecution(ctx, command.WorkflowName, command.CorrelationID)
+		executionID, err = f.Engine.FindStartedExecution(ctx, *command)
 	default:
 		return release("invalid_start_state")
 	}
@@ -86,7 +86,7 @@ func (f *Flow) cleanupCancelled(ctx context.Context, command domain.ExecutionSta
 	id := command.ConductorWorkflowID
 	if command.Status == "uncertain" {
 		var err error
-		id, err = engine.FindStartedExecution(ctx, command.WorkflowName, command.CorrelationID)
+		id, err = engine.FindStartedExecution(ctx, command)
 		if err != nil || id == "" {
 			return release("cancel_execution_unconfirmed")
 		}

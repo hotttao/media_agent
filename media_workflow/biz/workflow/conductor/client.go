@@ -154,12 +154,18 @@ func (c *Client) TerminateWorkflow(ctx context.Context, workflowID, reason strin
 }
 
 type WorkflowExecution struct {
-	WorkflowID     string         `json:"workflowId"`
-	CorrelationID  string         `json:"correlationId"`
-	IdempotencyKey string         `json:"idempotencyKey"`
-	Status         string         `json:"status"`
-	Output         map[string]any `json:"output"`
-	Tasks          []Task         `json:"tasks"`
+	WorkflowID         string            `json:"workflowId"`
+	CorrelationID      string            `json:"correlationId"`
+	IdempotencyKey     string            `json:"idempotencyKey"`
+	Status             string            `json:"status"`
+	Output             map[string]any    `json:"output"`
+	Tasks              []Task            `json:"tasks"`
+	Input              map[string]any    `json:"input"`
+	TaskToDomain       map[string]string `json:"taskToDomain"`
+	WorkflowDefinition struct {
+		Name    string `json:"name"`
+		Version int    `json:"version"`
+	} `json:"workflowDefinition"`
 }
 
 func (c *Client) GetByCorrelation(ctx context.Context, name, correlationID string) (string, error) {

@@ -2220,6 +2220,10 @@ components:
                     type: string
                 updated_at:
                     type: string
+                publication_id:
+                    type: string
+                publication_status:
+                    type: string
         WorkflowInputSchema:
             type: object
             properties:

@@ -56,6 +56,8 @@ enum WorkflowStatus {
   WF_DRAFT = 1;
   WF_PUBLISHED = 2;
   WF_ARCHIVED = 3;
+  WF_PUBLISHING = 4;
+  WF_PUBLISH_FAILED = 5;
 }
 
 enum WorkflowInputSource {
@@ -105,6 +107,8 @@ message Workflow {
   string created_by = 11;
   int64 created_at = 12;
   int64 updated_at = 13;
+  string publication_id = 14; // Opaque current-version receipt, not the frozen contract.
+  string publication_status = 15;
 }
 
 message CreateWorkflowReq {

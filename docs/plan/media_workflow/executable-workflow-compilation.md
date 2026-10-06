@@ -1,5 +1,7 @@
 # Executable Workflow 编译落地计划
 
+当前范围调整（2026-10-06）：用户要求暂不实现Conductor启动幂等扩展，保留启动不确定时只读对账；[问题记录](../../review/media_workflow/workflow/0002-workflow_execution/conductor-start-idempotency.md)。下文相关未完成门禁保留为已知限制，不作为本轮继续扩展引擎的授权。Capability Provider契约纠偏另行提交；本检查点不代表该纠偏或全部功能已完成。
+
 ## 审批 Retry Epoch 落地（2026-10-06）
 
 - [x] migration021 nullable非负/不可变与安全降级，旧摘要兼容、新周期摘要/域验证。
@@ -57,6 +59,8 @@
   - [ ] 并行分支重试不重复已完成旁支的设计与证明；Conductor rerun 的 seq 截断语义不能用串行测试冒充并行证明。Submit/Retry 的跨数据库与引擎可靠协调仍未完成。
     - [x] `TestConductorParallelRerunTruncatesCompletedSibling` 真实引擎协议测试确认已完成旁支被截断；新增直接重跑隔离检查，单测/race 覆盖已完成后缀、失败/等待前缀、缺失 seq、未知能力任务，在任何变更前拒绝。此保护不等于并行恢复已实现。
     - [ ] 冻结 DAG 重试集合、可靠重试意图与旁支结果恢复；保留目标最新轮反馈、不再次交付已完成能力；补齐并行 User/Worker Gateway 和故障恢复验收。
+      - [x] 冻结图分析与标准Step Retry预检/下游重置接线：纯函数覆盖7节点并行汇合、传递闭包、逐slot边界、root/leaf重试、存储顺序无关及16组不合法图；service/race覆盖不可访问编辑源仍可读取原Compilation、只清目标及传递下游、旁支保留、8组版本/hash/IR/StepRun不符在引擎变更前拒绝、本地失败不冒充成功。仍保留直接rerun隔离保护；不代表持久Retry、并行旁支恢复或故障恢复验收完成。
+      - [x] 原生Step/Job Retry本地原子提交及晚到fencing：引擎在事务外；Job→Step锁内重读失败/实例/hash/周期，目标计数/候选/下游/Job历史和计数同事务。隔离PostgreSQL/race `TestNativeStepRetryLocalAtomicCommit` 25.59s，目标/下游/历史实际写后故障均回滚，取消不复活、新epoch不覆盖、成功旁支不动；整单 `TestNativeJobRetryLocalAtomicCommit` 24.053s同样验证实际节点/历史写后回滚、取消/周期竞争和成功。控制Engine只是确认端口，不证明Conductor、持久Retry意图或公开HTTP重试恢复。
     - [x] 普通引擎 Start 响应丢失时，只查询 correlation 找回唯一已提交实例，不自动重发；真实 `TestConductorStartCommittedResponseLossRecovery` 通过，上游实际启动后注入 503，恢复同一 ID 且只有一次 Start。单测/race 覆盖查不到和多个匹配时安全拒绝，无重复 Start。
     - [ ] 启动幂等上游协议门禁：运行镜像 `conductoross/conductor:3.32.4` 的 `TestConductorStartIdempotencyContract` 失败，相同 `RETURN_EXISTING` 键仍创建不同实例。测试仅创建独立 HUMAN 技术流程并终止，不修改用户执行。不能据请求字段存在假定服务支持幂等，也不能据 correlation 暂未查到自动重发；需确定并验证兼容的引擎启动方案，再实现普通 Submit 持久 Outbox、进程崩溃与丢失响应全链路恢复。现有历史 Resume 的字段级单测不提供该上游保证，本轮不推进历史恢复。
   - [x] 新 API 部署后回归 `TestWorkflowReviewReceiptsGateway` 和 `TestWorkflowCompletedOutputsGateway`：原终态回执重放、相反决定拒绝、3 PNG + 1 MP4 Range 206 通过；网关任务查询和 Vite 5173 HTTP 200。不是新的执行样本或 UI 交互验收。

@@ -657,6 +657,10 @@ func (s *Service) Retry(ctx context.Context, jobID string, reason string, inputO
 		inputOverride = &frozen
 	}
 	if job.ConductorWorkflowID != "" && s.engine != nil {
+		if s.reviews != nil && s.tx == nil {
+			return nil, errors.New("retry transaction unavailable")
+		}
+		expectedJob := *job
 		retryInput := job.Input
 		if inputOverride != nil {
 			retryInput = *inputOverride
@@ -666,21 +670,9 @@ func (s *Service) Retry(ctx context.Context, jobID string, reason string, inputO
 		}); err != nil {
 			return nil, fmt.Errorf("rerun conductor workflow: %w", err)
 		}
-		if inputOverride != nil {
-			_ = s.jobRepo.UpdateInput(ctx, jobID, retryInput)
-		}
-		stepRuns, err := s.stepRunRepo.ListByJob(ctx, jobID)
-		if err != nil {
+		if err := s.commitNativeJobRetry(ctx, expectedJob, reason, inputOverride); err != nil {
 			return nil, err
 		}
-		for _, sr := range stepRuns {
-			_ = s.stepRunRepo.UpdateCandidates(ctx, sr.ID, []domain.Candidate{})
-			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRBlocked, map[string]any{
-				"selected_index": nil, "failure_reason": "", "output_asset_id": "",
-			})
-		}
-		record := domain.RetryRecord{RetryAt: time.Now(), Reason: reason, InputOverride: inputOverride}
-		_ = s.jobRepo.AppendRetryHistory(ctx, jobID, record, job.RetryCount+1)
 		return s.jobRepo.Get(ctx, jobID)
 	}
 	// 重置 failed/skipped/need_confirm step_runs → pending（仅重置非 succeeded 的）
@@ -732,6 +724,9 @@ func (s *Service) RetryStepRun(ctx context.Context, stepRunID, reason string, in
 		return nil, errors.New("historical execution cannot use ordinary StepRun Retry")
 	}
 	if job.ConductorWorkflowID != "" && s.engine != nil {
+		if s.reviews != nil && s.tx == nil {
+			return nil, errors.New("retry transaction unavailable")
+		}
 		if inputOverride != nil {
 			return nil, errors.New("conductor step retry does not support input_override; retry the whole job instead")
 		}
@@ -744,6 +739,15 @@ func (s *Service) RetryStepRun(ctx context.Context, stepRunID, reason string, in
 		}
 		if sr.RetryCount >= maxRetries || job.RetryCount >= maxRetries {
 			return nil, errors.New("max retries exceeded")
+		}
+		var impact *executable.RetryImpact
+		var frozenSteps []*domain.StepRun
+		expectedJob, expectedStep := *job, *sr
+		if s.compilations != nil {
+			impact, frozenSteps, err = s.loadFrozenRetryImpact(ctx, job, sr.StepKey)
+			if err != nil {
+				return nil, err
+			}
 		}
 		execution, err := s.engine.Get(ctx, job.ConductorWorkflowID)
 		if err != nil {
@@ -772,14 +776,9 @@ func (s *Service) RetryStepRun(ctx context.Context, stepRunID, reason string, in
 		if err := s.engine.RerunFromTask(ctx, job.ConductorWorkflowID, renderTaskID); err != nil {
 			return nil, fmt.Errorf("rerun conductor step: %w", err)
 		}
-		_ = s.stepRunRepo.UpdateCandidates(ctx, sr.ID, []domain.Candidate{})
-		_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRBlocked, map[string]any{
-			"retry_count": sr.RetryCount + 1, "selected_index": nil, "failure_reason": "", "output_asset_id": "",
-		})
-		s.resetDownstream(ctx, sr.JobID, sr.StepKey)
-		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobRunning, "")
-		record := domain.RetryRecord{RetryAt: time.Now(), Reason: reason}
-		_ = s.jobRepo.AppendRetryHistory(ctx, sr.JobID, record, job.RetryCount+1)
+		if err := s.commitNativeStepRetry(ctx, expectedJob, expectedStep, reason, impact, frozenSteps); err != nil {
+			return nil, err
+		}
 		return s.stepRunRepo.Get(ctx, sr.ID)
 	}
 	if inputOverride != nil {

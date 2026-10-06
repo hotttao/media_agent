@@ -22,12 +22,20 @@ func TestStartLostResponseQueriesButNeverRepeatsStart(t *testing.T) {
 				}
 				reads.Add(1)
 				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/api/workflow/existing" {
+					_, _ = w.Write([]byte(`{"workflowId":"existing","correlationId":"job","workflowDefinition":{"name":"frozen","version":1},"input":{"job_id":"job"},"taskToDomain":{}}`))
+					return
+				}
 				_, _ = w.Write([]byte(result))
 			}))
 			defer server.Close()
 			engine := &ExecutionEngine{Client: NewClient(server.URL)}
 			id, err := engine.Start(context.Background(), "frozen", 1, "job", map[string]any{"job_id": "job"}, nil)
-			if posts.Load() != 1 || reads.Load() != 1 {
+			wantReads := int32(1)
+			if strings.Contains(result, "existing") {
+				wantReads = 2
+			}
+			if posts.Load() != 1 || reads.Load() != wantReads {
 				t.Fatal("start replayed or omitted correlation recovery")
 			}
 			if strings.Contains(result, "existing") {

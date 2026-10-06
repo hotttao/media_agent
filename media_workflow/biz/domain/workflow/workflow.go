@@ -5,9 +5,11 @@ import "time"
 type Status string
 
 const (
-	StatusDraft     Status = "draft"
-	StatusPublished Status = "published"
-	StatusArchived  Status = "archived"
+	StatusDraft         Status = "draft"
+	StatusPublishing    Status = "publishing"
+	StatusPublishFailed Status = "publish_failed"
+	StatusPublished     Status = "published"
+	StatusArchived      Status = "archived"
 )
 
 type Visibility string
@@ -92,6 +94,9 @@ type Workflow struct {
 	CreatedBy     string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	// Read-only projection of the current version's publication receipt.
+	PublicationID     string
+	PublicationStatus string
 }
 
 // Grant workflow ↔ team 授权。

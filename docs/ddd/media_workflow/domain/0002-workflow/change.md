@@ -37,6 +37,11 @@
 - step_binding 校验改为基于 slot.`kind`（asset_kind name）：slot.kind.resource_type 与 workflow_input.type 自洽；step_output 边的类型匹配改用 kind.media_type。
 - `SLOT_ASSET_KIND_REQUIRED` 错误码改为 `SLOT_KIND_REQUIRED`（slot.kind 现必填，不限于 product/virtual_ip 输入）。
 
+## 2026-10-06：公开发布回执与编辑守卫
+
+- Publish接受后返回202与不透明回执；当前版本Get在授权后查询回执，重复发布不重编译。
+- 非归档编辑以版本/owner CAS增加版本并回到draft，避免并发编辑覆盖或旧发布改变新版本。归档禁止编辑及发布。
+
 ## 来自业务规则的强约束
 1. `scope` 不可改。理由同 template。
 2. `output_step_key` 必须等于推导出的唯一 sink，且为唯一 sink。

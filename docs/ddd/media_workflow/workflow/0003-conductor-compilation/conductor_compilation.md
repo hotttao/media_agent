@@ -44,6 +44,8 @@ Semantic Compiler与Backend Compiler仍在接受前执行；所有外部注册�
 
 ## 状态与幂等
 
+公开Publish返回Workflow形态及不透明的`publication_id/publication_status`，pending为HTTP 202，完成或失败回执重放为HTTP 200；Get在资源授权后查询当前版本的回执，不暴露冻结契约或内部错误。相同版本重复发布复用原意图。归档拒绝发布；编辑非归档源使用旧版本与owner的CAS，原子增加版本并置draft，旧意图只能superseded，不能改变新版本状态。并发编辑与首次接受由源行锁串行化；已接受意图不因客户端断开而取消。
+
 Compilation 状态为 `pending -> registering -> registered | failed`。幂等键是 `(workflow_id, workflow_version, definition_hash)`；同一 hash 重放返回既有映射，不创建新 Conductor version。Conductor 返回冲突时必须读取远端定义并比 hash：相同视为成功，不同视为不可自动覆盖的冲突。
 
 ## 编译输出约束

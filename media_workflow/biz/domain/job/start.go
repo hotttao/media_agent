@@ -71,7 +71,7 @@ type ExecutionStartRepo interface {
 // absent correlation match never authorizes resending an uncertain command.
 type ExecutionStartEngine interface {
 	Start(context.Context, string, int, string, map[string]any, map[string]string) (string, error)
-	FindStartedExecution(context.Context, string, string) (string, error)
+	FindStartedExecution(context.Context, ExecutionStart) (string, error)
 }
 
 type ExecutionStartCancellationRepo interface {

@@ -207,6 +207,8 @@ SubmitJobReq 的 `idempotency_key` 位于字段 7，保持可选；Handler 仅�
 
 普通 Submit 启动落库新增 migration 017 `execution_starts`，由 Execution Job Repository 持有。`ExecutionStart` 冻结 Job ID、引擎 Definition 名称/版本、Compilation hash、correlation=Job ID、workflow_input 与 task_domains JSON，以及规范化 JSON 摘要。EnqueueStart 必须使用保存 Job/StepRun 的调用方事务，只有无实例 native pending Job 可写，Compilation hash 同时绑定至 Job。
 
+`ExecutionStartEngine.FindStartedExecution(ctx,ExecutionStart)`使用完整冻结命令。correlated(includeClosed=true)只定位唯一候选，随后GET该实例，核对workflowId/correlationId、workflowDefinition.name/version、完整input及taskToDomain的规范JSON。未找到返回空；冲突/缺字段/读失败返回固定安全错误。已发送首次Start响应丢失也使用同一精确校验；uncertain恢复与取消均不得只凭correlation绑定/终止。当前普通启动入口未实现RETURN_EXISTING，仍禁止uncertain补发，发送前崩溃无法自动取得进展；引擎级幂等方案需要独立验证与部署决策。
+
 ClaimStart 使用 SKIP LOCKED 和新 UUID token，queued/uncertain 均可领取；MarkStartSent 只允许有效 token/两分钟内租约且 Job 仍 pending 的 queued→uncertain。事务外发送一次 Start 后，FinishStart 同事务写 Job running/实例及命令 started，必须匹配冻结摘要、token、租约；ReleaseStartClaim 只保存固定码和十秒退避，不改变 queued/uncertain。回滚与降级保护不得丢失启动事实。当前引擎不保证启动去重，后台恢复 uncertain 只查询原实例，不再发送。取消与实例终止接线、公开 Submit 幂等、进程重启以及实际部署单流程另行验收；仓储实现不等于功能已上线。
 
 迁移 018 扩展启动取消状态：cancel_pending 必须有实例，cancelled 可有已清理实例。`CancelInitialStart` 锁 Job 后锁启动记录，同事务取消 Job；queued 清除 claim 转 cancelled，started 清除 claim 转 cancel_pending，uncertain 保留状态供只读恢复。重复 cancelled Job 返回原事实，其他终态拒绝取消；无初次启动记录返回未接管，由原有路径处理。Claim/Release 包含 cancel_pending。`FinishCancelledStart` 只允许 cancelled Job、uncertain/cancel_pending、有效 claim/摘要及匹配实例，记录 cancelled 清除租约，不修改 Job。后台 uncertain 只查询原实例；cancel_pending 使用已冻结实例 ID。先 Get 引擎状态，非终态才 Terminate，再 Get 确认终态才收口；终止响应丢失保留义务，下一轮先读，不盲目再次终止。取消实例查询无结果不标完成。在线接线与真实故障恢复需单独验收。
@@ -214,6 +216,12 @@ ClaimStart 使用 SKIP LOCKED 和新 UUID token，queued/uncertain 均可领取�
 失败 Step Retry 从最新生成轮 Renderer 开始，前提是本地 Job 与 Conductor 均为失败终态且未超过次数上限。Adapter 保留任务 `seq` 的缺失语义（可空整数，不以默认 0 冒充已知顺序）。rerun 前检查其他业务节点：按 seq 会被删除、保留但未完成会被重开、缺失顺序或未知 SIMPLE/HUMAN 均拒绝直接重跑；拒绝不能变更 StepRun/Job/Retry History 或调用 rerun。已完成且位于目标之前的节点保持原样。
 
 这是并行恢复开发期间的防误执行保护，不代表支持全部 DAG Retry。完整恢复需从冻结 Compilation/IR 派生受影响集合，持久化幂等重试意图和保留的产物引用/反馈，由后台协调引擎及本地状态；不得重跑无关已完成 Capability。不能将旧 historical restore 入口直接开放给原生 Job，或更换用户/Workspace 实现恢复。
+
+冻结图分析由`executable.PlanStepRetry`纯函数提供：仅当前SchemaVersion、有效源身份/版本、唯一Step key、完整依赖、唯一输出sink且无环的IR可参与。`DependsOn`与Context内StepOutput引用集合必须相等，不能隐藏或漏声明边；返回按拓扑顺序的Affected（目标及所有传递下游）、Preserved（其余节点）以及Boundary（Preserved输出进入Affected的每个业务slot）。存储数组顺序不改变结果，不根据Conductor seq决定业务依赖。Preserved不是“已完成”的声明；恢复协调器仍必须验证运行产物回执，不得凭此函数执行模型或恢复旁支。
+
+标准Conductor Step Retry在任何engine rerun前读取Job原版本的registered Compilation，核对源ID/version/hash、严格解码IR、核对IR身份并计算图分区；StepRun集合必须与冻结节点一一对应。不能查询可编辑Workflow作为重置依据。已有直接rerun隔离保护不放宽；允许rerun后按Affected清空目标和传递下游的候选/选中项/产物指针并置blocked，Preserved不写。本地写入错误返回安全失败与查询原执行指引，不能忽略并报告成功。这仍没有消除引擎提交与本地保存之间的窗口，也不是持久Retry意图实现。
+
+原生Step/Job Retry的引擎请求在本地事务外；允许请求成功后，本地提交使用caller Tx及Job→Step锁序，重读并核对失败状态、原实例、Compilation hash和原Job retry_count；Step另核对原节点身份/计数及failed/skipped。目标/下游或整单节点的候选、选择、产物指针、旧claim及执行时间清空/blocked状态与Retry History、Job retry_count/running在同一事务保存，失败全部回滚。整单覆盖输入也在该事务保存。取消或新周期发生后晚到本地提交拒绝；配置了原生Review锁端口却没有TxRunner时，网络请求前拒绝。Job事务必须结束后才能继续外部交互。这个事务仅保证本地原子性，不提供外部rerun幂等或崩溃补发。
 
 状态投影在调用 Engine.Get 前捕获 Job ID、ConductorWorkflowID、RetryCount 的值副本；本地 Job→Step 锁内重读当前聚合，不匹配则停止该次投影。外部产物保存前检查一次，保存后本地 Output/Status 事务内再检查；不能在数据库事务中请求引擎或素材服务。校验发现过期后不再调用素材服务或改写节点、审批、终态，Get/List 返回重新读取的当前持久状态，不向用户暴露过期快照错误。若 Retry 在外部保存期间发生，只阻止后续本地收口，不能撤销已经发生的外部副作用。该校验只识别已经持久化的 Retry 边界，不能代替 Retry 意图与引擎的可靠协调，也不能证明重试 POST 后、本地次数增加前的窗口已解决。
 

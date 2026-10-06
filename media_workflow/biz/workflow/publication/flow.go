@@ -22,38 +22,11 @@ import (
 type Flow struct {
 	Templates    workflowdomain.TemplateLookup
 	Capabilities capabilitydomain.Repo
-	Compilations workflowdomain.CompilationRepo
-	Conductor    *conductor.Client
 	Intents      workflowdomain.PublicationRepo
 	Workflows    workflowdomain.Repo
 	Tx           interface {
 		RunInTx(context.Context, func(context.Context) error) error
 	}
-}
-
-func (f *Flow) CompileAndRegister(ctx context.Context, workflow *workflowdomain.Workflow) error {
-	if f.Conductor == nil || !f.Conductor.Enabled() {
-		return fmt.Errorf("CONDUCTOR_URL is required to publish executable workflows")
-	}
-	prepared, err := f.compile(ctx, workflow)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Conductor.CheckWorkflowDefinition(ctx, prepared.definition); err != nil {
-		return err
-	}
-	if err := f.Compilations.Save(ctx, prepared.compilation); err != nil {
-		return fmt.Errorf("save compilation: %w", err)
-	}
-	if err := f.Conductor.RegisterTaskDefinitions(ctx, prepared.tasks); err != nil {
-		_ = f.Compilations.MarkFailed(ctx, prepared.compilation.ID, "task_registration_unavailable")
-		return errors.New("conductor task registration unavailable")
-	}
-	if err := f.Conductor.EnsureWorkflow(ctx, prepared.definition); err != nil {
-		_ = f.Compilations.MarkFailed(ctx, prepared.compilation.ID, "workflow_registration_unverified")
-		return err
-	}
-	return f.Compilations.MarkRegistered(ctx, prepared.compilation.ID)
 }
 
 type preparedPublication struct {

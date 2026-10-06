@@ -18,6 +18,23 @@ type Service struct {
 	tx             dal.TxRunner
 	templateLookup domain.TemplateLookup
 	publisher      domain.Publisher
+	publications   domain.PublicationRepo
+}
+
+func (s *Service) ConfigurePublications(repo domain.PublicationRepo) { s.publications = repo }
+
+func (s *Service) publicationView(ctx context.Context, w *domain.Workflow) (*domain.Workflow, error) {
+	if s.publications == nil {
+		return w, nil
+	}
+	p, err := s.publications.GetPublication(ctx, w.ID, w.Version)
+	if err != nil {
+		return nil, errors.New("publication receipt unavailable")
+	}
+	if p != nil {
+		w.PublicationID, w.PublicationStatus = p.ID, p.Status
+	}
+	return w, nil
 }
 
 func NewService(repo domain.Repo, grants domain.GrantRepo, tx dal.TxRunner, tl domain.TemplateLookup, publisher domain.Publisher) *Service {
@@ -117,7 +134,7 @@ func (s *Service) Get(ctx context.Context, id, callerID string) (*domain.Workflo
 	if !s.canRead(w, callerID) {
 		return nil, fmt.Errorf("workflow %q not accessible", id)
 	}
-	return w, nil
+	return s.publicationView(ctx, w)
 }
 
 func (s *Service) List(ctx context.Context, q domain.ListQuery, callerID string) ([]*domain.WorkflowSummary, int, error) {
@@ -147,6 +164,9 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Workfl
 	if old.CreatedBy != cmd.CallerID {
 		return nil, errors.New("only owner can update workflow")
 	}
+	if old.Status == domain.StatusArchived {
+		return nil, domain.ErrPublicationConflict
+	}
 	v.scope = old.Scope
 	res, err := v.validate(ctx)
 	if err != nil || !res.Valid {
@@ -158,6 +178,7 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Workfl
 	old.Steps = cmd.Steps
 	old.InputSchema = res.InputSchema
 	old.Version++
+	old.Status = domain.StatusDraft
 	var result *domain.Workflow
 	err = s.tx.RunInTx(ctx, func(txCtx context.Context) error {
 		if err := s.repo.Update(txCtx, old); err != nil {
@@ -186,28 +207,34 @@ func (s *Service) Archive(ctx context.Context, id, callerID string) (*domain.Wor
 	return s.repo.Get(ctx, id)
 }
 
-// Publish draft -> published（状态机守卫：仅 draft 可 publish；archived 不可 publish）。
+// Publish accepts a durable command; registration is owned by background delivery.
 func (s *Service) Publish(ctx context.Context, id, callerID string) (*domain.Workflow, error) {
 	w, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if w.Status != domain.StatusDraft {
-		return nil, fmt.Errorf("workflow %q status %s, expected draft", id, w.Status)
-	}
 	if w.CreatedBy != callerID {
-		return nil, errors.New("only owner can publish workflow")
+		return nil, domain.ErrWorkflowForbidden
+	}
+	if w.Status == domain.StatusArchived {
+		return nil, domain.ErrPublicationConflict
 	}
 	if s.publisher == nil {
 		return nil, errors.New("workflow publisher is not configured")
 	}
-	if err := s.publisher.CompileAndRegister(ctx, w); err != nil {
-		return nil, fmt.Errorf("compile and register workflow: %w", err)
-	}
-	if err := s.repo.UpdateStatus(ctx, id, domain.StatusPublished); err != nil {
+	p, err := s.publisher.AcceptPublication(ctx, w, callerID)
+	if err != nil {
 		return nil, err
 	}
-	return s.repo.Get(ctx, id)
+	current, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil || current.Version != p.WorkflowVersion {
+		return nil, domain.ErrPublicationConflict
+	}
+	current.PublicationID, current.PublicationStatus = p.ID, p.Status
+	return current, nil
 }
 
 func (s *Service) Delete(ctx context.Context, id string) (*domain.Workflow, error) {

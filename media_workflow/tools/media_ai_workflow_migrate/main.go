@@ -309,9 +309,29 @@ func (c *client) createAndPublishWorkflow(ctx context.Context, templates map[str
 	if created.ID == "" {
 		return resourceRef{}, errors.New("CreateWorkflow 响应缺少 id")
 	}
-	var published map[string]any
+	var published struct {
+		Status            int    `json:"status"`
+		PublicationStatus string `json:"publication_status"`
+	}
 	if err := c.json(ctx, http.MethodPost, "/api/v1/workflows/"+url.PathEscape(created.ID)+"/publish", nil, &published); err != nil {
 		return resourceRef{}, err
+	}
+	// Publication is asynchronous. Observe the accepted identity, never create
+	// another source or issue another publish to recover an observation timeout.
+	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	for published.Status != 2 || published.PublicationStatus != "registered" {
+		if published.PublicationStatus == "failed" || published.PublicationStatus == "superseded" {
+			return created, errors.New("workflow publication failed; inspect the existing workflow")
+		}
+		select {
+		case <-waitCtx.Done():
+			return created, errors.New("workflow publication observation timed out; query the existing workflow before retrying")
+		case <-time.After(100 * time.Millisecond):
+		}
+		if err := c.json(waitCtx, http.MethodGet, "/api/v1/workflows/"+url.PathEscape(created.ID), nil, &published); err != nil {
+			return created, errors.New("workflow publication observation unavailable; query the existing workflow")
+		}
 	}
 	return created, nil
 }

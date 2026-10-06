@@ -163,3 +163,6 @@
 
 - 将生成轮次与Execution Retry Epoch区分；新Review冻结接受时Job retry_count并在聚合锁内核对，旧Review不回填。
 - 同周期阻止晚到投影，旧周期决定不影响重试后同数字generation重建的任务；显式命令重放保持原审计。
+## 2026-10-06：初次启动精确对账
+
+- correlation只定位候选，恢复及取消清理核对完整冻结命令，防止错绑或终止同correlation异源实例；不提供启动去重承诺。

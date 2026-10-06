@@ -141,9 +141,10 @@ func main() {
 	compilationRepo := wfrepo.NewCompilationRepo(db)
 	conductorClient := conductor.NewClient(os.Getenv("CONDUCTOR_URL"))
 	publishFlow := &publication.Flow{
-		Templates: tplLookup, Capabilities: capabilityRepo, Compilations: compilationRepo, Conductor: conductorClient,
+		Templates: tplLookup, Capabilities: capabilityRepo, Intents: compilationRepo, Workflows: wfRepo, Tx: txRunner,
 	}
 	wfSvc := wfsvc.NewService(wfRepo, wfGrantRepo, txRunner, tplLookup, publishFlow)
+	wfSvc.ConfigurePublications(compilationRepo)
 	wfhandler.Svc = wfSvc
 
 	// job 装配（P3）
@@ -162,6 +163,23 @@ func main() {
 	historypushhandler.Svc = historypushsvc.New(historypushrepo.New(db), jobRepo, controlClient, materialsClient)
 	resumeCtx, resumeCancel := context.WithCancel(context.Background())
 	defer resumeCancel()
+	publicationFlow := &publication.Delivery{Intents: compilationRepo, Workflows: wfRepo, Engine: conductorClient, Tx: txRunner}
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			deliveryCtx, cancel := context.WithTimeout(resumeCtx, 20*time.Second)
+			if err := publicationFlow.DispatchOne(deliveryCtx); err != nil && resumeCtx.Err() == nil {
+				log.Print("publication delivery deferred; inspect durable publication status")
+			}
+			cancel()
+			select {
+			case <-resumeCtx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 	startFlow := &startdelivery.Flow{Starts: jobRepo, Jobs: jobRepo, Engine: executionEngine}
 	go func() {
 		ticker := time.NewTicker(time.Second)

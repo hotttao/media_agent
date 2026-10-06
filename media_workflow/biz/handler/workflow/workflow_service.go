@@ -4,6 +4,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -248,6 +249,10 @@ func statusToPB(s domain.Status) pb.WorkflowStatus {
 		return pb.WorkflowStatus_WF_DRAFT
 	case domain.StatusPublished:
 		return pb.WorkflowStatus_WF_PUBLISHED
+	case domain.StatusPublishing:
+		return pb.WorkflowStatus_WF_PUBLISHING
+	case domain.StatusPublishFailed:
+		return pb.WorkflowStatus_WF_PUBLISH_FAILED
 	case domain.StatusArchived:
 		return pb.WorkflowStatus_WF_ARCHIVED
 	}
@@ -269,6 +274,7 @@ func toView(w *domain.Workflow) *pb.Workflow {
 		Status: statusToPB(w.Status), Visibility: string(w.Visibility), Version: int32(w.Version),
 		InputSchema: schemaToPB(w.InputSchema), CreatedBy: w.CreatedBy,
 		CreatedAt: w.CreatedAt.UnixNano(), UpdatedAt: w.UpdatedAt.UnixNano(),
+		PublicationId: w.PublicationID, PublicationStatus: w.PublicationStatus,
 	}
 }
 
@@ -309,8 +315,19 @@ func PublishWorkflow(ctx context.Context, c *app.RequestContext) {
 	}
 	w, err := Svc.Publish(ctx, req.GetId(), auth.CallerID(ctx))
 	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
+		status, code := consts.StatusBadRequest, "workflow_publication_unavailable"
+		switch {
+		case errors.Is(err, domain.ErrWorkflowForbidden):
+			status, code = consts.StatusForbidden, "workflow_publication_forbidden"
+		case errors.Is(err, domain.ErrPublicationConflict), errors.Is(err, domain.ErrCompilationConflict):
+			status, code = consts.StatusConflict, "workflow_publication_conflict"
+		}
+		c.JSON(status, map[string]string{"code": code})
 		return
 	}
-	c.JSON(consts.StatusOK, toView(w))
+	status := consts.StatusOK
+	if w.PublicationStatus == "pending" {
+		status = consts.StatusAccepted
+	}
+	c.JSON(status, toView(w))
 }

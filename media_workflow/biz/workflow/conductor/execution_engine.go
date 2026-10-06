@@ -1,7 +1,9 @@
 package conductor
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 
 	jobdomain "media_agent/media_workflow/biz/domain/job"
@@ -9,11 +11,44 @@ import (
 
 type ExecutionEngine struct{ Client *Client }
 
-func (e *ExecutionEngine) FindStartedExecution(ctx context.Context, workflowName, correlationID string) (string, error) {
-	if workflowName == "" || correlationID == "" {
-		return "", errors.New("start reconciliation identity required")
+func (e *ExecutionEngine) FindStartedExecution(ctx context.Context, command jobdomain.ExecutionStart) (string, error) {
+	if command.Validate() != nil {
+		return "", errors.New("invalid frozen start reconciliation command")
 	}
-	return e.Client.GetByCorrelation(ctx, workflowName, correlationID)
+	var input map[string]any
+	var domains map[string]string
+	if json.Unmarshal(command.WorkflowInput, &input) != nil || json.Unmarshal(command.TaskDomains, &domains) != nil {
+		return "", errors.New("invalid frozen start reconciliation payload")
+	}
+	return e.findExactStart(ctx, command.WorkflowName, command.WorkflowVersion, command.CorrelationID, input, domains)
+}
+
+func (e *ExecutionEngine) findExactStart(ctx context.Context, name string, version int, correlation string, input map[string]any, domains map[string]string) (string, error) {
+	id, err := e.Client.GetByCorrelation(ctx, name, correlation)
+	if err != nil {
+		return "", errors.New("start correlation reconciliation unavailable or conflicting")
+	}
+	if id == "" {
+		return "", nil
+	}
+	execution, err := e.Client.GetWorkflow(ctx, id)
+	if err != nil || execution == nil {
+		return "", errors.New("start execution reconciliation unavailable")
+	}
+	equalJSON := func(a, b any) bool {
+		left, lerr := json.Marshal(a)
+		right, rerr := json.Marshal(b)
+		return lerr == nil && rerr == nil && bytes.Equal(left, right)
+	}
+	// Empty task domains are represented as {} by OSS, even if omitted from
+	// the original POST. Nonempty routing must match exactly.
+	if domains == nil {
+		domains = map[string]string{}
+	}
+	if execution.WorkflowID != id || execution.CorrelationID != correlation || execution.WorkflowDefinition.Name != name || execution.WorkflowDefinition.Version != version || execution.Input == nil || execution.TaskToDomain == nil || !equalJSON(input, execution.Input) || !equalJSON(domains, execution.TaskToDomain) {
+		return "", errors.New("start execution conflicts with frozen command")
+	}
+	return id, nil
 }
 
 func (e *ExecutionEngine) Start(ctx context.Context, workflowName string, workflowVersion int, correlationID string, input map[string]any, taskToDomain map[string]string) (string, error) {
@@ -28,7 +63,7 @@ func (e *ExecutionEngine) Start(ctx context.Context, workflowName string, workfl
 	// existing execution, but does not authorize issuing another Start: the
 	// deployed OSS server ignores RETURN_EXISTING on this endpoint.
 	if correlationID != "" && ctx.Err() == nil {
-		if existing, lookupErr := e.Client.GetByCorrelation(ctx, workflowName, correlationID); lookupErr == nil && existing != "" {
+		if existing, lookupErr := e.findExactStart(ctx, workflowName, workflowVersion, correlationID, input, taskToDomain); lookupErr == nil && existing != "" {
 			return existing, nil
 		}
 	}

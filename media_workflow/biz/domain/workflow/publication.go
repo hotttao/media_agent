@@ -13,6 +13,7 @@ import (
 
 var ErrPublicationConflict = errors.New("workflow publication conflicts with frozen version")
 var ErrPublicationClaimStale = errors.New("workflow publication claim is no longer current")
+var ErrWorkflowForbidden = errors.New("workflow operation is not permitted")
 
 type Publication struct {
 	ID, WorkflowID, CompilationID, RequestedBy string

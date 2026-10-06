@@ -104,13 +104,17 @@ func (r *Repo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Workflow
 func (r *Repo) Update(ctx context.Context, w *domain.Workflow) error {
 	Q := query.Use(dal.FromContext(ctx, r.db))
 	schemaJSON, _ := json.Marshal(w.InputSchema)
-	if _, err := Q.Workflow.WithContext(ctx).
-		Where(Q.Workflow.ID.Eq(w.ID), Q.Workflow.DeletedAt.IsNull()).
+	result, err := Q.Workflow.WithContext(ctx).
+		Where(Q.Workflow.ID.Eq(w.ID), Q.Workflow.DeletedAt.IsNull(), Q.Workflow.Version.Eq(w.Version-1), Q.Workflow.CreatedBy.Eq(w.CreatedBy), Q.Workflow.Status.Neq(string(domain.StatusArchived))).
 		Updates(map[string]any{
 			"name": w.Name, "description": w.Description, "output_step_key": w.OutputStepKey,
-			"version": w.Version, "input_schema": schemaJSON, "updated_at": time.Now(),
-		}); err != nil {
+			"version": w.Version, "status": string(domain.StatusDraft), "input_schema": schemaJSON, "updated_at": time.Now(),
+		})
+	if err != nil {
 		return err
+	}
+	if result.RowsAffected != 1 {
+		return domain.ErrPublicationConflict
 	}
 	// 删旧版本 steps（连带 bindings CASCADE）
 	if _, err := Q.WorkflowStep.WithContext(ctx).

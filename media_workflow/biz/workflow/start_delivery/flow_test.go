@@ -53,8 +53,8 @@ func (e engine) Start(_ context.Context, name string, version int, correlation s
 	*e.events = append(*e.events, "post")
 	return e.result, e.err
 }
-func (e engine) FindStartedExecution(_ context.Context, name, correlation string) (string, error) {
-	if name != "frozen" || correlation != "job" {
+func (e engine) FindStartedExecution(_ context.Context, command domain.ExecutionStart) (string, error) {
+	if command.WorkflowName != "frozen" || command.WorkflowVersion != 3 || command.CorrelationID != "job" || string(command.WorkflowInput) != `{"job_id":"job"}` || (string(command.TaskDomains) != `{"capability":"personal"}` && string(command.TaskDomains) != `{}`) {
 		panic("lookup identity changed")
 	}
 	*e.events = append(*e.events, "lookup")

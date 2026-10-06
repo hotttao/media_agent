@@ -1,5 +1,7 @@
 # E2E 测试
 
+发布恢复公开门禁 `TestWorkflowPublicationGateway` 与独立命令门禁 `TestWorkflowPublicationCLI` 位于 `media-cli/e2e/workflow_publication_test.go`。预置 `MEDIA_GATEWAY_ADDR`、`MEDIA_API_TOKEN`、授权的 `MEDIA_E2E_PUBLICATION_SOURCE_ID`；CLI另需绝对路径 `MEDIA_E2E_CLI_BINARY`。两者只复制源Workflow为唯一测试定义、发布并查询收敛，最后归档自身资源；不启动Job、Worker或模型，不改借用源。HTTP验证8路同版本单回执/202/完成重放/归档拒绝；CLI真实独立进程发布与查询，不能用HTTP测试替代。Conductor网络失效/进程重启另由Workflow隔离库故障门禁证明。
+
 ## 测试分工
 
 | 测试类型 | 位置 | 驱动方式 | 覆盖 |

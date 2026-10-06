@@ -17,10 +17,10 @@
 
 ## P3 公开与部署
 
-- [ ] IDL状态/发布回执、服务权限与并发状态守卫、CLI和标准main装配；不做UI。
-- [ ] publish/pending/恢复后published的HTTP与独立CLI门禁，只有注册完成版本可Submit。
-- [ ] 全包/race/架构/gofmt/diff、部署和已有执行回归；不以P1证明整个功能完成。
+- [x] IDL状态/发布回执、服务权限与并发状态守卫、CLI和标准main装配；不做UI。移除同步Publisher路径，main启动Delivery；Get授权后投影不透明回执。单位/race权限与重放、隔离PG `TestPublicationEditingVersionGuard` 4.034s：8路编辑仅一次成功、新版本draft、旧意图superseded、owner/归档守卫。
+- [x] publish/pending/published的HTTP与独立CLI门禁，只有注册完成版本可Submit。真实网关 `TestWorkflowPublicationGateway` 1.10s，8路发布单回执、202 pending、后台收敛/完成重放/归档409；独立CLI发布及查询0.97s。只创建并归档两条唯一测试定义，无业务Job或模型调用。Submit单位测试覆盖draft/publishing/publish_failed/archived拒绝且无Job/Step/Start副作用，published缺registered也拒绝；故障恢复仍采用P2真实Conductor/隔离库/独立进程证据，不冒充公开HTTP故障注入。
+- [x] Workflow/CLI全包、相关service/domain/编排race、架构及gofmt/diff通过；migration022已部署，公开HTTP/独立CLI与已有执行产物/审批回执回归通过。迁移工具只兼容异步发布协议（单次Publish后查询原ID至registered，超时不创建替代源），没有执行历史迁移；单位验证202等待时仅一次创建/发布。
 
 ## 当前提交检查点
 
-提交 `5dd6501` 保存P1与P2编排代码检查点。后续已补齐P2单位/race、真实Conductor/隔离PostgreSQL及独立进程恢复测试；Workflow全包、架构、gofmt/diff通过。标准main和公开发布入口仍使用旧同步路径，migration022未部署；P3接线和公开HTTP/CLI验收尚未完成，不计为发布恢复已上线。
+提交 `5dd6501` 保存P1/P2代码，`928c491`保存P2测试。P3标准main/公开入口/CLI已接线；API镜像8d7244970b23d9185c2fae7baa380089a9e7b73d7cdb45dac87bd5ca1385609b运行，schema=22/dirty=false。公开HTTP及独立CLI通过；已有Job job_d4c5a619-ba10-4e83-b284-950c47fd1d96产物读取0.16s、审批终态回执重放0.37s通过。工具异步协议兼容单位通过0.114s，Vite入口5173为HTTP200。本计划完成不代表启动幂等、可靠Retry、并行分支恢复、Worker上传或最终wiki等其他收口任务完成。

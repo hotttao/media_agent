@@ -33,5 +33,5 @@ type CompilationRepo interface {
 }
 
 type Publisher interface {
-	CompileAndRegister(ctx context.Context, workflow *Workflow) error
+	AcceptPublication(ctx context.Context, workflow *Workflow, callerID string) (*Publication, error)
 }

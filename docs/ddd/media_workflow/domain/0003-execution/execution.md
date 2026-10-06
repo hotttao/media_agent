@@ -54,6 +54,8 @@ StepRun 是稳定业务节点，一次被接受的 Generation Result 是独立�
 
 原生 Job 的初次启动参数是 Execution 聚合的不可变事实，随 Job/StepRun 一起提交。启动记录的 `queued→uncertain→started` 与 Job 的 pending/running 区分；不确定发送不允许自动回 queued。每个原生 Job 只能有一条初始启动记录，绑定实例与 started 必须同事务完成，晚到或过期租约不能覆盖当前实例或取消状态。外部调用由 Workflow 协调。
 
+恢复端口接收完整ExecutionStart，而不是只有名称/correlation；关联查询的唯一候选必须核对精确实例的Definition名称/版本、冻结输入与任务Domain才可绑定。重复/异源/缺字段不能视为原命令成功，也不能授权终止异源实例。
+
 | 聚合根 | 包含对象 | 一致性边界 | 核心不变量 |
 |:---|:---|:---|:---|
 | Job | StepRun、Step Review Decision | 单次执行状态推进 | 每个 StepRun 最终只有一个 output_resource_id；未确认多候选不能解锁后继；每个 review attempt 只能接受一个决定 |

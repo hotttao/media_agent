@@ -304,7 +304,7 @@ const (
 4. **Required 必填**：所有 `template.inputs[i].required=true` 在该 step 的 Bindings 里至少出现一条，且 `ConstValue` 非 nil（`source=const` 也算满足 required，等同于"调用方在 step 上常量化一个固定值"）。
 5. Template 引用：`Template` 必须存在同 scope，未被 archived，且 step 引用的 `TemplateVersion` 仍存在。
 6. **scope 匹配**：所有 binding 解析出的 material / asset / product / virtual_ip 必须与 workflow 同 scope——由 `workflow_validation` 跨 service 校验（material / asset 走 AssetReachability；product / virtual_ip 输入走各自的可达性规则）。
-7. `Status` 流转：`draft -> publishing -> published | publish_failed`，修改失败版本产生新版本再发布；`published -> archived` 为终态，已启动 Job 不受归档影响。
+7. `Status` 流转：`draft -> publishing -> published | publish_failed`；编辑非归档源以旧版本/owner CAS增加版本并置draft，旧意图只可superseded，不能发布新版本。归档为终态，不允许编辑/发布；已启动 Job 不受归档影响。公开回执仅包含意图ID和状态，不公开冻结契约。
 8. `ApprovalPolicy` 只允许 `when_multiple_candidates | always`；它不能关闭多 Candidate 审批。`ReusePolicy` 只允许 `reuse_if_available | force_new`。
 
 ### Validate（不保存）
