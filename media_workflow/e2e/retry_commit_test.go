@@ -16,7 +16,6 @@ import (
 	domain "media_agent/media_workflow/biz/domain/job"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
 	service "media_agent/media_workflow/biz/service/job"
-	"media_agent/media_workflow/biz/shared/taskref"
 	"media_agent/media_workflow/biz/workflow/executable"
 )
 
@@ -51,8 +50,15 @@ func (e *retryCommitEngine) RerunFromTask(ctx context.Context, _ string, _ strin
 	return nil
 }
 
-func (e *retryCommitEngine) RerunWorkflow(ctx context.Context, _ string, _ map[string]any) error {
-	return e.RerunFromTask(ctx, "", "")
+func (e *retryCommitEngine) RerunWorkflow(ctx context.Context, _ string, input map[string]any) error {
+	err := e.RerunFromTask(ctx, "", "")
+	if err == nil {
+		after := *e.execution
+		after.Status, after.Input = "RUNNING", input
+		after.Tasks = nil
+		e.execution = &after
+	}
+	return err
 }
 
 type retryCommitFaultSteps struct {
@@ -79,114 +85,8 @@ func (r retryCommitFaultJob) AppendRetryHistory(ctx context.Context, id string, 
 	return errors.New("injected after actual history write")
 }
 
-// Real PostgreSQL atomicity and fencing, controlled engine acknowledgement.
-// This does not prove upstream rerun durability or authorize replaying it.
-func TestNativeStepRetryLocalAtomicCommit(t *testing.T) {
-	db := newDatabase(t)
-	ctx := context.Background()
-	jobs, steps := repo.NewJobRepo(db), repo.NewStepRunRepo(db)
-	for _, scenario := range []string{"target_write", "downstream_write", "history_write", "cancelled", "epoch_changed", "success"} {
-		t.Run(scenario, func(t *testing.T) {
-			jobID := "retry_" + scenario
-			j := &domain.Job{ID: jobID, WorkflowID: "frozen", WorkflowVersion: 1, Scope: "e2e", Origin: "native", Status: domain.JobFailed, SubmittedBy: "owner", SubmittedAt: time.Now()}
-			runs := []*domain.StepRun{}
-			for i, key := range []string{"root", "image", "middle", "sink"} {
-				status := domain.SRSkipped
-				if key == "root" {
-					status = domain.SRSucceeded
-				}
-				if key == "image" {
-					status = domain.SRFailed
-				}
-				runs = append(runs, &domain.StepRun{ID: jobID + "_" + key, JobID: jobID, StepKey: key, StepOrder: i + 1, TemplateID: "template", TemplateVersion: 1, Status: status, ApprovalPolicy: domain.ApprovalWhenMultipleCandidates})
-			}
-			if jobs.Save(ctx, j, runs) != nil || jobs.UpdateConductorExecution(ctx, jobID, "engine_"+jobID, strings.Repeat("a", 64)) != nil {
-				t.Fatal("isolated retry seed failed")
-			}
-			for _, run := range runs {
-				if steps.UpdateStatus(ctx, run.ID, run.Status, map[string]any{"claimed_by": "prior-worker", "claimed_at": time.Now(), "started_at": time.Now(), "finished_at": time.Now()}) != nil {
-					t.Fatal("retry timing seed failed")
-				}
-				if steps.UpdateCandidates(ctx, run.ID, []domain.Candidate{{URL: "object_path:retained"}}) != nil || steps.UpdateOutput(ctx, run.ID, "asset_"+run.StepKey) != nil {
-					t.Fatal("candidate/output seed failed")
-				}
-			}
-			ir := executable.ExecutableWorkflowIR{SchemaVersion: executable.SchemaVersion, WorkflowID: "frozen", WorkflowVersion: 1, OutputStepKey: "sink"}
-			for i, key := range []string{"root", "image", "middle", "sink"} {
-				step := executable.ExecutableStepIR{Key: key, Order: i + 1, Context: map[string]executable.ValueRef{}}
-				if i > 0 {
-					parent := []string{"root", "image", "middle"}[i-1]
-					step.DependsOn = []string{parent}
-					step.Context[parent] = executable.ValueRef{Source: executable.ValueStepOutput, Ref: parent}
-				}
-				ir.Steps = append(ir.Steps, step)
-			}
-			encoded, _ := json.Marshal(ir)
-			comp := retryCommitCompilation{item: &wfdomain.Compilation{WorkflowID: "frozen", WorkflowVersion: 1, DefinitionHash: strings.Repeat("a", 64), IRJSON: encoded}}
-			sequence := 1
-			engine := &retryCommitEngine{db: db, execution: &domain.EngineExecution{Status: "FAILED", Tasks: []domain.EngineTask{{TaskID: "render", Sequence: &sequence, ReferenceTaskName: taskref.Reference("image", "render"), Status: "COMPLETED"}}}}
-			var stepPort domain.StepRunRepo = steps
-			var jobPort domain.JobRepo = jobs
-			switch scenario {
-			case "target_write":
-				stepPort = retryCommitFaultSteps{StepRunRepo: steps, failID: runs[1].ID}
-			case "downstream_write":
-				stepPort = retryCommitFaultSteps{StepRunRepo: steps, failID: runs[2].ID}
-			case "history_write":
-				jobPort = retryCommitFaultJob{JobRepo: jobs}
-			case "cancelled":
-				engine.after = func() {
-					if jobs.UpdateStatus(ctx, jobID, domain.JobCancelled, "") != nil {
-						t.Error("cancellation injection failed")
-					}
-				}
-			case "epoch_changed":
-				engine.after = func() {
-					if jobs.AppendRetryHistory(ctx, jobID, domain.RetryRecord{Reason: "concurrent retry"}, 1) != nil {
-						t.Error("epoch injection failed")
-					}
-				}
-			}
-			svc := service.NewService(jobPort, stepPort, dal.NewTxRunner(db), nil, nil, nil, nil, comp, engine)
-			svc.ConfigureReviews(jobs)
-			_, err := svc.RetryStepRun(ctx, runs[1].ID, "isolated retry", nil)
-			if (err == nil) != (scenario == "success") || engine.calls != 1 {
-				t.Fatal("unexpected retry outcome")
-			}
-			current, _ := jobs.Get(ctx, jobID)
-			if scenario == "success" {
-				if current.Status != domain.JobRunning || current.RetryCount != 1 || len(current.RetryHistory) != 1 {
-					t.Fatal("job history/count not atomically committed")
-				}
-			} else if scenario == "cancelled" {
-				if current.Status != domain.JobCancelled || current.RetryCount != 0 {
-					t.Fatal("cancelled job revived")
-				}
-			} else if scenario == "epoch_changed" {
-				if current.RetryCount != 1 || len(current.RetryHistory) != 1 || current.RetryHistory[0].Reason != "concurrent retry" {
-					t.Fatal("late commit overwrote newer epoch")
-				}
-			} else if current.Status != domain.JobFailed || current.RetryCount != 0 || len(current.RetryHistory) != 0 {
-				t.Fatal("partial retry job state escaped rollback")
-			}
-			for i, run := range runs {
-				saved, _ := steps.Get(ctx, run.ID)
-				if scenario == "success" && i > 0 {
-					if saved.Status != domain.SRBlocked || len(saved.Candidates) != 0 || saved.OutputAssetID != "" || saved.ClaimedBy != "" || saved.ClaimedAt != nil || saved.StartedAt != nil || saved.FinishedAt != nil {
-						t.Fatal("affected step did not commit reset")
-					}
-					if i == 1 && saved.RetryCount != 1 {
-						t.Fatal("target retry count not committed")
-					}
-				} else if saved.Status != run.Status || len(saved.Candidates) != 1 || saved.OutputAssetID != "asset_"+run.StepKey || saved.RetryCount != 0 || saved.ClaimedBy != "prior-worker" || saved.FinishedAt == nil {
-					t.Fatal("partial or collateral step write escaped transaction")
-				}
-			}
-		})
-	}
-}
-
-func TestNativeJobRetryLocalAtomicCommit(t *testing.T) {
+// Real PostgreSQL transaction gate with controlled native rerun acknowledgement.
+func TestNativeInputOverrideRerunProjectionAtomicCommit(t *testing.T) {
 	db := newDatabase(t)
 	ctx := context.Background()
 	jobs, steps := repo.NewJobRepo(db), repo.NewStepRunRepo(db)
@@ -211,7 +111,7 @@ func TestNativeJobRetryLocalAtomicCommit(t *testing.T) {
 			}
 			var stepPort domain.StepRunRepo = steps
 			var jobPort domain.JobRepo = jobs
-			engine := &retryCommitEngine{db: db}
+			engine := &retryCommitEngine{db: db, execution: &domain.EngineExecution{WorkflowInstanceID: "engine_" + id, Status: "FAILED"}}
 			switch scenario {
 			case "step_write":
 				stepPort = retryCommitFaultSteps{StepRunRepo: steps, failID: runs[1].ID}
@@ -230,9 +130,12 @@ func TestNativeJobRetryLocalAtomicCommit(t *testing.T) {
 					}
 				}
 			}
-			svc := service.NewService(jobPort, stepPort, dal.NewTxRunner(db), nil, nil, nil, nil, nil, engine)
+			ir := executable.ExecutableWorkflowIR{SchemaVersion: executable.SchemaVersion, WorkflowID: "workflow", WorkflowVersion: 1}
+			encoded, _ := json.Marshal(ir)
+			comp := retryCommitCompilation{item: &wfdomain.Compilation{DefinitionHash: strings.Repeat("b", 64), IRJSON: encoded}}
+			svc := service.NewService(jobPort, stepPort, dal.NewTxRunner(db), nil, nil, nil, nil, comp, engine)
 			svc.ConfigureReviews(jobs)
-			_, err := svc.Retry(ctx, id, "whole retry", nil)
+			_, err := svc.Retry(ctx, id, "whole rerun", &domain.JobInput{})
 			if (err == nil) != (scenario == "success") || engine.calls != 1 {
 				t.Fatal("wrong whole retry result")
 			}

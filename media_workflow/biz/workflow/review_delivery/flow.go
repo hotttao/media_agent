@@ -43,12 +43,12 @@ func (f *Flow) DispatchOne(ctx context.Context) error {
 	if job.ConductorWorkflowID != review.ConductorWorkflowID || job.SubmittedBy != review.DecidedBy {
 		return f.Reviews.FinishReview(ctx, *review, "failed", "execution_replaced")
 	}
-	if review.AcceptedRetryCount != nil && *review.AcceptedRetryCount != job.RetryCount {
-		return f.Reviews.FinishReview(ctx, *review, "failed", "execution_retried")
-	}
 	execution, err := f.Engine.Get(ctx, review.ConductorWorkflowID)
 	if err != nil || execution == nil {
 		return release("execution_unavailable")
+	}
+	if execution.WorkflowInstanceID != "" && execution.WorkflowInstanceID != review.ConductorWorkflowID {
+		return f.Reviews.FinishReview(ctx, *review, "failed", "execution_replaced")
 	}
 	var target *domain.EngineTask
 	for i := range execution.Tasks {
@@ -57,7 +57,7 @@ func (f *Flow) DispatchOne(ctx context.Context) error {
 			break
 		}
 	}
-	if target == nil || target.ReferenceTaskName != review.TaskReferenceName || target.TaskType != "HUMAN" {
+	if target == nil || target.Retried || target.ReferenceTaskName != review.TaskReferenceName || target.TaskType != "HUMAN" {
 		return f.Reviews.FinishReview(ctx, *review, "failed", "approval_task_replaced")
 	}
 	var output map[string]any
@@ -74,11 +74,8 @@ func (f *Flow) DispatchOne(ctx context.Context) error {
 		}
 		return f.Reviews.FinishReview(ctx, *review, "applied", "")
 	}
-	if job.Status.IsTerminal() || execution.Status != "RUNNING" || target.Status != "IN_PROGRESS" {
+	if job.Status == domain.JobCancelled || execution.Status != "RUNNING" || target.Status != "IN_PROGRESS" {
 		return f.Reviews.FinishReview(ctx, *review, "failed", "approval_no_longer_waiting")
-	}
-	if review.AcceptedRetryCount == nil && job.RetryCount > 0 {
-		return f.Reviews.FinishReview(ctx, *review, "failed", "unknown_retry_epoch")
 	}
 	// References may be reused by a concurrent Retry after the lookup. Submit
 	// the frozen Task ID, never resolve the reference to a newer HUMAN again.
@@ -89,5 +86,31 @@ func (f *Flow) DispatchOne(ctx context.Context) error {
 	if err := exact.CompleteApprovalTask(ctx, review.ConductorWorkflowID, review.ConductorTaskID, output); err != nil {
 		return release("task_completion_unavailable")
 	}
-	return f.Reviews.FinishReview(ctx, *review, "applied", "")
+	// Conductor may ignore updates racing with task termination/replacement.
+	// A successful HTTP response alone is not proof that the decision applied.
+	confirmed, err := f.Engine.Get(ctx, review.ConductorWorkflowID)
+	if err != nil || confirmed == nil {
+		return release("completion_unverified")
+	}
+	if confirmed.WorkflowInstanceID != "" && confirmed.WorkflowInstanceID != review.ConductorWorkflowID {
+		return f.Reviews.FinishReview(ctx, *review, "failed", "execution_replaced")
+	}
+	for _, task := range confirmed.Tasks {
+		if task.TaskID != review.ConductorTaskID {
+			continue
+		}
+		if task.Retried || task.TaskType != "HUMAN" || task.ReferenceTaskName != review.TaskReferenceName {
+			return f.Reviews.FinishReview(ctx, *review, "failed", "approval_task_replaced")
+		}
+		if task.Status != "COMPLETED" {
+			return release("completion_unverified")
+		}
+		encoded, err := json.Marshal(task.Output)
+		var actual map[string]any
+		if err != nil || json.Unmarshal(encoded, &actual) != nil || !reflect.DeepEqual(output, actual) {
+			return f.Reviews.FinishReview(ctx, *review, "failed", "approval_output_conflict")
+		}
+		return f.Reviews.FinishReview(ctx, *review, "applied", "")
+	}
+	return f.Reviews.FinishReview(ctx, *review, "failed", "approval_task_replaced")
 }

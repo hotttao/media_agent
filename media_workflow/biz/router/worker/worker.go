@@ -32,6 +32,7 @@ func Register(r *server.Hertz) {
 						_dispatch_id.POST("/complete", append(_completeworkertaskMw(), worker.CompleteWorkerTask)...)
 						_dispatch_id.POST("/fail", append(_failworkertaskMw(), worker.FailWorkerTask)...)
 						_dispatch_id.POST("/heartbeat", append(_heartbeatworkertaskMw(), worker.HeartbeatWorkerTask)...)
+						_dispatch_id.POST("/uploads", append(_prepareworkerartifactuploadMw(), worker.PrepareWorkerArtifactUpload)...)
 					}
 				}
 			}

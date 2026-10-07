@@ -314,7 +314,9 @@ paths:
         post:
             tags:
                 - JobService
-            description: —— worker ——
+            description: |-
+                —— worker ——
+                 Retired: always HTTP 410. Use Worker Gateway capability dispatch instead.
             operationId: JobService_ClaimStepRun
             requestBody:
                 content:
@@ -1101,6 +1103,36 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/worker/v1/tasks/{dispatch_id}/uploads:
+        post:
+            tags:
+                - WorkerService
+            operationId: WorkerService_PrepareWorkerArtifactUpload
+            parameters:
+                - name: dispatch_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PrepareWorkerArtifactUploadReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PrepareWorkerArtifactUploadResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/worker/v1/tasks/{dispatch_id}:complete:
         post:
             tags:
@@ -1457,6 +1489,11 @@ components:
                     type: string
                 reason:
                     type: string
+                failure_kind:
+                    type: string
+                    description: |-
+                        transient -> native FAILED; permanent -> FAILED_WITH_TERMINAL_ERROR.
+                         Empty preserves the legacy permanent failure behavior.
         GetJobResp:
             type: object
             properties:
@@ -1505,6 +1542,7 @@ components:
             properties:
                 lease_expires_at:
                     type: string
+                    description: 兼容交付刷新时间，不作为第二个任务超时判断。
         HistoricalMediaObject:
             type: object
             properties:
@@ -1808,6 +1846,42 @@ components:
             properties:
                 task:
                     $ref: '#/components/schemas/WorkerTask'
+        PrepareWorkerArtifactUploadReq:
+            type: object
+            properties:
+                dispatch_id:
+                    type: string
+                worker_instance_id:
+                    type: string
+                attempt:
+                    type: integer
+                    format: int32
+                candidate_index:
+                    type: integer
+                    format: int32
+                content_type:
+                    type: string
+                size_bytes:
+                    type: string
+                checksum_sha256:
+                    type: string
+                content_md5:
+                    type: string
+        PrepareWorkerArtifactUploadResp:
+            type: object
+            properties:
+                object_path:
+                    type: string
+                upload_url:
+                    type: string
+                headers:
+                    type: object
+                    additionalProperties:
+                        type: string
+                expires_at:
+                    type: string
+                already_uploaded:
+                    type: boolean
         ProductData:
             type: object
             properties:
@@ -2187,6 +2261,7 @@ components:
                     type: string
                 lease_expires_at:
                     type: string
+                    description: 兼容交付刷新时间；不是任务执行截止时间，以原生任务状态为准。
         Workflow:
             type: object
             properties:

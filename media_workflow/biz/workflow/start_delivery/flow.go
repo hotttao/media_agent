@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	domain "media_agent/media_workflow/biz/domain/job"
+	"media_agent/media_workflow/biz/shared/taskcontext"
 )
 
 var ErrTemporarilyUnavailable = errors.New("execution start delivery temporarily unavailable")
@@ -35,6 +36,12 @@ func (f *Flow) DispatchOne(ctx context.Context) error {
 	if command.Validate() != nil {
 		return release("invalid_frozen_start")
 	}
+	var frozenInput map[string]any
+	if json.Unmarshal(command.WorkflowInput, &frozenInput) != nil {
+		return release("invalid_frozen_start")
+	}
+	ctx, span := taskcontext.StartExecution(ctx, frozenInput, "workflow.start_delivery")
+	defer span.End()
 	j, err := f.Jobs.Get(ctx, command.JobID)
 	if err != nil || j == nil {
 		return release("job_unavailable")
@@ -72,6 +79,7 @@ func (f *Flow) DispatchOne(ctx context.Context) error {
 		return release("invalid_start_state")
 	}
 	if err != nil || executionID == "" {
+		taskcontext.Log(ctx, taskcontext.Event{Event: "workflow_start_unconfirmed", JobID: command.JobID, Status: command.Status})
 		return release("start_outcome_unconfirmed")
 	}
 	if err := f.Starts.FinishStart(ctx, *command, executionID); err != nil {
@@ -79,6 +87,7 @@ func (f *Flow) DispatchOne(ctx context.Context) error {
 		// the next lease reconciles by correlation rather than launching again.
 		return release("start_binding_unavailable")
 	}
+	taskcontext.Log(ctx, taskcontext.Event{Event: "workflow_start_confirmed", JobID: command.JobID, WorkflowID: executionID})
 	return nil
 }
 
@@ -97,6 +106,9 @@ func (f *Flow) cleanupCancelled(ctx context.Context, command domain.ExecutionSta
 	if err != nil || execution == nil {
 		return release("cancel_execution_unavailable")
 	}
+	if execution.WorkflowInstanceID != "" && execution.WorkflowInstanceID != id {
+		return release("cancel_execution_identity_conflict")
+	}
 	terminal := func(status string) bool {
 		switch status {
 		case "COMPLETED", "FAILED", "TIMED_OUT", "TERMINATED", "FAILED_WITH_TERMINAL_ERROR":
@@ -111,6 +123,9 @@ func (f *Flow) cleanupCancelled(ctx context.Context, command domain.ExecutionSta
 		execution, err = engine.Get(ctx, id)
 		if err != nil || execution == nil || !terminal(execution.Status) {
 			return release("cancel_termination_unconfirmed")
+		}
+		if execution.WorkflowInstanceID != "" && execution.WorkflowInstanceID != id {
+			return release("cancel_execution_identity_conflict")
 		}
 	}
 	if err := repo.FinishCancelledStart(ctx, command, id); err != nil {

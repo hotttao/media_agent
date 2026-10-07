@@ -183,39 +183,31 @@ func TestManagedWorkerConductorRoundTrip(t *testing.T) {
 	defer func() { stop(); <-done }()
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
-	var receipt *jobdomain.WorkerResultReceipt
-	for receipt == nil {
-		pending, err := repo.ListPendingResults(ctx, 10)
+	for {
+		execution, err := api.GetWorkflow(ctx, workflowID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(pending) == 1 {
-			receipt = pending[0]
+		if execution.Status == "COMPLETED" {
 			break
 		}
 		select {
 		case <-ctx.Done():
-			t.Fatal("result inbox did not converge")
+			t.Fatal("direct result delivery did not converge")
 		case <-ticker.C:
 		}
-	}
-	if receipt.Operation != "complete" || receipt.ConductorStatus != "pending" {
-		t.Fatal("invalid durable receipt")
 	}
 	// Replaying identical results returns the same receipt, even after lease expiry.
 	if err := db.Model(&model.WorkerDispatch{}).Where("id = ?", dispatch.ID).Update("lease_expires_at", time.Now().Add(-time.Minute)).Error; err != nil {
 		t.Fatal(err)
 	}
 	output := map[string]any{"candidates": []any{map[string]any{"url": "https://example.test/mock-image.png"}}}
-	replayed, err := runtime.Complete(ctx, dispatch.ID, dispatch.Attempt, receipt.IdempotencyKey, output)
-	if err != nil || replayed.ID != receipt.ID {
+	replayed, err := runtime.Complete(ctx, dispatch.ID, dispatch.Attempt, "same-result", output)
+	if err != nil || replayed.ConductorStatus != "submitted" {
 		t.Fatalf("result replay: %v", err)
 	}
 	if _, err := runtime.Fail(ctx, dispatch.ID, dispatch.Attempt, "conflicting-result", "conflict"); !errors.Is(err, jobdomain.ErrDispatchConflict) {
 		t.Fatalf("opposite terminal result accepted: %v", err)
-	}
-	if err := flow.SubmitReceipt(ctx, receipt); err != nil {
-		t.Fatal(err)
 	}
 	for {
 		execution, err := api.GetWorkflow(ctx, workflowID)
@@ -259,10 +251,18 @@ func (e *resultEngine) UpdateCapabilityTask(_ context.Context, result jobdomain.
 		return errors.New("conductor unavailable")
 	}
 	e.result = result
+	if e.execution != nil {
+		for i := range e.execution.Tasks {
+			if e.execution.Tasks[i].TaskID == result.TaskID {
+				e.execution.Tasks[i].Status, e.execution.Tasks[i].Output, e.execution.Tasks[i].ReasonForIncompletion = result.Status, result.Output, result.Reason
+			}
+		}
+	}
 	return nil
 }
 
-func TestDispatchInboxConcurrentReplayAndDeliveryRetry(t *testing.T) {
+// Historical schema compatibility only. No production submitter remains.
+func TestLegacyDispatchInboxConcurrentReplayAndDeliveryRetry(t *testing.T) {
 	db := newDatabase(t)
 	ctx := context.Background()
 	job := &model.Job{ID: "job-test", Scope: "e2e", WorkflowID: "wf-test", WorkflowVersion: 1,
@@ -315,12 +315,11 @@ func TestDispatchInboxConcurrentReplayAndDeliveryRetry(t *testing.T) {
 		t.Fatalf("opposite result accepted: %v", err)
 	}
 	engine := &resultEngine{fail: true}
-	flow := &worker_gateway.Flow{Dispatches: repo, Engine: engine}
 	pending, err := repo.ListPendingResults(ctx, 20)
 	if err != nil || len(pending) != 1 {
 		t.Fatalf("pending: %v", err)
 	}
-	if err := flow.SubmitReceipt(ctx, pending[0]); err == nil {
+	if err := submitArchivedReceipt(ctx, repo, engine, pending[0]); err == nil {
 		t.Fatal("unavailable conductor acknowledged")
 	}
 	pending, err = repo.ListPendingResults(ctx, 20)
@@ -328,11 +327,25 @@ func TestDispatchInboxConcurrentReplayAndDeliveryRetry(t *testing.T) {
 		t.Fatal("failed delivery lost durable receipt")
 	}
 	engine.fail = false
-	if err := flow.SubmitReceipt(ctx, pending[0]); err != nil {
+	if err := submitArchivedReceipt(ctx, repo, engine, pending[0]); err != nil {
 		t.Fatal(err)
 	}
 	pending, err = repo.ListPendingResults(ctx, 20)
 	if err != nil || len(pending) != 0 || engine.result.Status != "COMPLETED" || engine.result.Output["candidates"] == nil {
 		t.Fatal("retry did not deliver stored result")
 	}
+}
+
+// Test-only reproduction of the archived delivery protocol; not a new runtime.
+func submitArchivedReceipt(ctx context.Context, repo *jobrepo.DispatchRepo, engine *resultEngine, receipt *jobdomain.WorkerResultReceipt) error {
+	var output map[string]any
+	if err := json.Unmarshal(receipt.ResultJSON, &output); err != nil {
+		return err
+	}
+	err := engine.UpdateCapabilityTask(ctx, jobdomain.CapabilityTaskResult{WorkflowInstanceID: receipt.Dispatch.ConductorWorkflowID, TaskID: receipt.Dispatch.ConductorTaskID, Status: "COMPLETED", Output: output})
+	if err != nil {
+		_ = repo.MarkResultFailed(ctx, receipt.ID, "archived delivery failure")
+		return err
+	}
+	return repo.MarkResultSubmitted(ctx, receipt.ID, time.Now())
 }

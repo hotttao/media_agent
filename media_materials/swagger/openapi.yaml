@@ -106,6 +106,30 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/internal/v1/library-objects:prepareUpload:
+        post:
+            tags:
+                - LibraryObjectService
+            operationId: LibraryObjectService_PrepareInternalLibraryObjectUpload
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PrepareInternalLibraryObjectUploadReq'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PrepareInternalLibraryObjectUploadResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/internal/v1/library-objects:resolve:
         get:
             tags:
@@ -1338,6 +1362,38 @@ components:
                     type: string
                 updated_at:
                     type: string
+        PrepareInternalLibraryObjectUploadReq:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                scope:
+                    type: string
+                upload_key:
+                    type: string
+                content_type:
+                    type: string
+                size_bytes:
+                    type: string
+                checksum_sha256:
+                    type: string
+                content_md5:
+                    type: string
+        PrepareInternalLibraryObjectUploadResp:
+            type: object
+            properties:
+                object_path:
+                    type: string
+                upload_url:
+                    type: string
+                headers:
+                    type: object
+                    additionalProperties:
+                        type: string
+                expires_at:
+                    type: string
+                already_uploaded:
+                    type: boolean
         Product:
             type: object
             properties:

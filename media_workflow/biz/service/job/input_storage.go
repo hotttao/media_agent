@@ -80,6 +80,9 @@ func (s *Service) normalizeInputStorage(ctx context.Context, organization string
 // Retry must validate the publication used by this Job, not a newer editor
 // version. Compilation and Template versions are immutable execution inputs.
 func (s *Service) freezeRetryInput(ctx context.Context, job *domain.Job, input domain.JobInput) (domain.JobInput, error) {
+	if s.compilations == nil {
+		return domain.JobInput{}, errors.New("frozen rerun compilation unavailable")
+	}
 	var schema []wfdomain.InputSchemaEntry
 	if s.compilations != nil {
 		compilation, err := s.compilations.GetRegistered(ctx, job.WorkflowID, job.WorkflowVersion)
@@ -127,12 +130,6 @@ func (s *Service) freezeRetryInput(ctx context.Context, job *domain.Job, input d
 		for _, entry := range entries {
 			schema = append(schema, entry)
 		}
-	} else {
-		workflow, err := s.wfRepo.Get(ctx, job.WorkflowID)
-		if err != nil {
-			return domain.JobInput{}, err
-		}
-		schema = workflow.InputSchema
 	}
 	if err := s.validateBundle(schema, input); err != nil {
 		return domain.JobInput{}, err

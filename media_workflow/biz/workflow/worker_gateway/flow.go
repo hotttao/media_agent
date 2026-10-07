@@ -2,8 +2,6 @@ package worker_gateway
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +17,7 @@ import (
 	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
 	jobdomain "media_agent/media_workflow/biz/domain/job"
 	"media_agent/media_workflow/biz/shared/client"
+	"media_agent/media_workflow/biz/shared/taskcontext"
 )
 
 const defaultLeaseDuration = 90 * time.Second
@@ -51,16 +50,18 @@ type FailCommand struct {
 	Principal
 	DispatchID, WorkerInstanceID, IdempotencyKey, Reason string
 	Attempt                                              int
+	FailureKind                                          string
 }
 
 type Flow struct {
-	StorageOrigin string
-	Dispatches    jobdomain.DispatchRepo
-	Jobs          jobdomain.JobRepo
-	StepRuns      jobdomain.StepRunRepo
-	Capabilities  capabilitydomain.Repo
-	Engine        jobdomain.CapabilityTaskEngine
-	Executions    interface {
+	ArtifactUploads ArtifactUploadPreparer
+	StorageOrigin   string
+	Dispatches      jobdomain.DispatchRepo
+	Jobs            jobdomain.JobRepo
+	StepRuns        jobdomain.StepRunRepo
+	Capabilities    capabilitydomain.Repo
+	Engine          jobdomain.CapabilityTaskEngine
+	Executions      interface {
 		Get(context.Context, string) (*jobdomain.EngineExecution, error)
 	}
 	ImportedAssets interface {
@@ -144,7 +145,7 @@ func (f *Flow) Poll(ctx context.Context, cmd PollCommand) (*jobdomain.WorkerDisp
 		if err != nil {
 			return nil, fmt.Errorf("resolve task inputs: %w", err)
 		}
-		return dispatchForDelivery(existing, resolved)
+		return f.dispatchForDelivery(ctx, existing, resolved)
 	} else if !errors.Is(err, jobdomain.ErrDispatchNotFound) {
 		return nil, err
 	}
@@ -211,18 +212,38 @@ func (f *Flow) Poll(ctx context.Context, cmd PollCommand) (*jobdomain.WorkerDisp
 	if err != nil {
 		return nil, err
 	}
-	return dispatchForDelivery(dispatch, resolved)
+	return f.dispatchForDelivery(ctx, dispatch, resolved)
 }
 
 // Copy the delivery envelope: transport credentials must not replace the
 // stable references held by the repository or Conductor task snapshot.
-func dispatchForDelivery(dispatch *jobdomain.WorkerDispatch, input map[string]any) (*jobdomain.WorkerDispatch, error) {
+func (f *Flow) dispatchForDelivery(ctx context.Context, dispatch *jobdomain.WorkerDispatch, input map[string]any) (*jobdomain.WorkerDispatch, error) {
+	// Correlation metadata is optional and response-only. Storage/provider
+	// inputs and the durable dispatch snapshot stay unchanged.
+	copy := make(map[string]any, len(input))
+	for key, value := range input {
+		if key != taskcontext.TraceParentKey {
+			copy[key] = value
+		}
+	}
+	input = copy
+	if f.Executions != nil {
+		metadataCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		execution, err := f.Executions.Get(metadataCtx, dispatch.ConductorWorkflowID)
+		cancel()
+		if err == nil && execution != nil && execution.WorkflowInstanceID == dispatch.ConductorWorkflowID {
+			input = taskcontext.PreserveTrace(execution.Input, input)
+		}
+	}
 	encoded, err := json.Marshal(input)
 	if err != nil {
 		return nil, err
 	}
 	delivery := *dispatch
 	delivery.InputJSON = encoded
+	logCtx, span := taskcontext.StartExecution(ctx, input, "workflow.worker_delivery")
+	defer span.End()
+	taskcontext.Log(logCtx, taskcontext.Event{Event: "worker_task_delivered", JobID: dispatch.JobID, DispatchID: dispatch.ID, TaskID: dispatch.ConductorTaskID})
 	return &delivery, nil
 }
 
@@ -432,6 +453,9 @@ func (f *Flow) Heartbeat(ctx context.Context, principal Principal, dispatchID, w
 	}); err != nil {
 		return nil, err
 	}
+	if _, err := f.requireActiveDispatch(ctx, dispatch, attempt); err != nil {
+		return nil, err
+	}
 	return f.Dispatches.ExtendLease(ctx, dispatchID, attempt, f.now().Add(f.lease()))
 }
 
@@ -480,41 +504,33 @@ func (f *Flow) Fail(ctx context.Context, cmd FailCommand) (*jobdomain.WorkerResu
 	if cmd.Reason == "" {
 		return nil, ErrInvalidRequest
 	}
-	return f.saveResult(ctx, cmd.Principal, cmd.DispatchID, cmd.WorkerInstanceID, cmd.Attempt, "fail", cmd.IdempotencyKey, map[string]any{"reason": cmd.Reason})
+	result, err := failureResult(cmd.Reason, cmd.FailureKind)
+	if err != nil {
+		return nil, err
+	}
+	return f.saveResult(ctx, cmd.Principal, cmd.DispatchID, cmd.WorkerInstanceID, cmd.Attempt, "fail", cmd.IdempotencyKey, result)
 }
 
 func (f *Flow) saveResult(ctx context.Context, principal Principal, dispatchID, workerInstanceID string, attempt int, operation, idempotencyKey string, result map[string]any) (*jobdomain.WorkerResultReceipt, error) {
 	if idempotencyKey == "" {
 		return nil, ErrInvalidRequest
 	}
-	if _, err := f.authorizeDispatch(ctx, principal, dispatchID, workerInstanceID, attempt); err != nil {
-		return nil, err
-	}
-	return f.persistResult(ctx, dispatchID, attempt, operation, idempotencyKey, result)
-}
-
-func (f *Flow) persistResult(ctx context.Context, dispatchID string, attempt int, operation, idempotencyKey string, result map[string]any) (*jobdomain.WorkerResultReceipt, error) {
-	if idempotencyKey == "" {
-		return nil, ErrInvalidRequest
-	}
-	encoded, err := json.Marshal(result)
-	if err != nil {
-		return nil, ErrInvalidOutput
-	}
-	digest := sha256.Sum256(encoded)
-	receipt, err := f.Dispatches.SaveResult(ctx, dispatchID, attempt, operation, idempotencyKey, encoded, hex.EncodeToString(digest[:]), f.now())
+	dispatch, err := f.authorizeResultIdentity(ctx, principal, dispatchID, workerInstanceID, attempt)
 	if err != nil {
 		return nil, err
 	}
-	if receipt.ConductorStatus == "submitted" {
-		return receipt, nil
-	}
-	// The durable submitter owns Conductor delivery. HTTP completion only
-	// acknowledges that the result is safely stored in the inbox.
-	return receipt, nil
+	return f.deliverResult(ctx, dispatch, operation, idempotencyKey, result)
 }
 
 func (f *Flow) authorizeDispatch(ctx context.Context, principal Principal, dispatchID, workerInstanceID string, attempt int) (*jobdomain.WorkerDispatch, error) {
+	dispatch, err := f.authorizeResultIdentity(ctx, principal, dispatchID, workerInstanceID, attempt)
+	if err != nil {
+		return nil, err
+	}
+	return f.requireActiveDispatch(ctx, dispatch, attempt)
+}
+
+func (f *Flow) authorizeResultIdentity(ctx context.Context, principal Principal, dispatchID, workerInstanceID string, attempt int) (*jobdomain.WorkerDispatch, error) {
 	if err := validatePrincipal(principal); err != nil {
 		return nil, err
 	}
@@ -527,91 +543,24 @@ func (f *Flow) authorizeDispatch(ctx context.Context, principal Principal, dispa
 		dispatch.AuthSource != principal.AuthSource || dispatch.WorkerInstanceID != workerInstanceID {
 		return nil, ErrForbidden
 	}
-	return f.checkDispatchLease(ctx, dispatch, attempt)
-}
-
-func (f *Flow) checkDispatchLease(ctx context.Context, dispatch *jobdomain.WorkerDispatch, attempt int) (*jobdomain.WorkerDispatch, error) {
 	if dispatch.Attempt != attempt {
 		return nil, jobdomain.ErrDispatchConflict
-	}
-	if !dispatch.LeaseActive(f.now()) && dispatch.Status != jobdomain.DispatchResultReceived {
-		return nil, jobdomain.ErrDispatchExpired
-	}
-	if dispatch.Status != jobdomain.DispatchResultReceived {
-		job, err := f.Jobs.Get(ctx, dispatch.JobID)
-		if err != nil {
-			return nil, fmt.Errorf("load dispatch job: %w", err)
-		}
-		if err := f.requireActiveTask(ctx, job, dispatch.ConductorWorkflowID, dispatch.ConductorTaskID, dispatch.Attempt); err != nil {
-			return nil, err
-		}
 	}
 	return dispatch, nil
 }
 
-func (f *Flow) SubmitReceipt(ctx context.Context, receipt *jobdomain.WorkerResultReceipt) error {
-	if receipt == nil || receipt.Dispatch == nil {
-		return ErrInvalidRequest
+func (f *Flow) requireActiveDispatch(ctx context.Context, dispatch *jobdomain.WorkerDispatch, attempt int) (*jobdomain.WorkerDispatch, error) {
+	if dispatch.Attempt != attempt {
+		return nil, jobdomain.ErrDispatchConflict
 	}
-	var output map[string]any
-	if err := json.Unmarshal(receipt.ResultJSON, &output); err != nil {
-		return err
-	}
-	status := "COMPLETED"
-	reason := ""
-	if receipt.Operation == "fail" {
-		status = "FAILED_WITH_TERMINAL_ERROR"
-		reason, _ = output["reason"].(string)
-		output = nil
-	}
-	err := f.Engine.UpdateCapabilityTask(ctx, jobdomain.CapabilityTaskResult{
-		WorkflowInstanceID: receipt.Dispatch.ConductorWorkflowID,
-		TaskID:             receipt.Dispatch.ConductorTaskID, WorkerID: "media-workflow-proxy",
-		Status: status, Output: output, Reason: reason,
-	})
+	job, err := f.Jobs.Get(ctx, dispatch.JobID)
 	if err != nil {
-		_ = f.Dispatches.MarkResultFailed(ctx, receipt.ID, err.Error())
-		return err
+		return nil, errors.New("dispatch job unavailable")
 	}
-	return f.Dispatches.MarkResultSubmitted(ctx, receipt.ID, f.now())
-}
-
-func (f *Flow) RunResultSubmitter(ctx context.Context, interval time.Duration) {
-	if interval <= 0 {
-		interval = time.Second
+	if err := f.requireActiveTask(ctx, job, dispatch.ConductorWorkflowID, dispatch.ConductorTaskID, dispatch.Attempt); err != nil {
+		return nil, err
 	}
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			receipts, err := f.Dispatches.ListPendingResults(ctx, 20)
-			if err != nil {
-				continue
-			}
-			for _, receipt := range receipts {
-				_ = f.SubmitReceipt(ctx, receipt)
-			}
-		}
-	}
-}
-
-func (f *Flow) RunLeaseReaper(ctx context.Context, interval time.Duration) {
-	if interval <= 0 {
-		interval = 15 * time.Second
-	}
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			_, _ = f.Dispatches.ExpireLeases(ctx, f.now())
-		}
-	}
+	return dispatch, nil
 }
 
 func validatePrincipal(principal Principal) error {

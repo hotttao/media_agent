@@ -47,6 +47,7 @@ type engine struct {
 	execution     domain.EngineExecution
 	completeCalls int
 	loseResponse  bool
+	ignoreUpdate  bool
 }
 
 func (e *engine) Get(context.Context, string) (*domain.EngineExecution, error) {
@@ -57,12 +58,29 @@ func (e *engine) CompleteApprovalTask(_ context.Context, _ string, taskID string
 	if taskID != e.execution.Tasks[0].TaskID {
 		return errors.New("wrong immutable task identity")
 	}
+	if e.ignoreUpdate {
+		return nil
+	}
 	e.execution.Tasks[0].Status, e.execution.Tasks[0].Output = "COMPLETED", output
 	e.execution.Status = "COMPLETED"
 	if e.loseResponse {
 		return errors.New("secret upstream response must not escape")
 	}
 	return nil
+}
+
+func TestDeliveryDoesNotTreatIgnoredUpdateAsApplied(t *testing.T) {
+	store, jobs, engine := fixture()
+	engine.ignoreUpdate = true
+	flow := &Flow{Reviews: store, Jobs: jobs, Engine: engine}
+	if err := flow.DispatchOne(context.Background()); !errors.Is(err, ErrTemporarilyUnavailable) || store.status != "pending" || store.reason != "completion_unverified" {
+		t.Fatal("ignored native update incorrectly acknowledged", err)
+	}
+	engine.execution.Status = "TERMINATED"
+	engine.execution.Tasks[0].Status = "CANCELED"
+	if err := flow.DispatchOne(context.Background()); err != nil || store.status != "failed" || engine.completeCalls != 1 {
+		t.Fatal("cancelled task was submitted again", err)
+	}
 }
 
 func fixture() (*reviewStore, jobs, *engine) {
@@ -90,24 +108,26 @@ func TestDeliveryRecoversCommittedDecisionWithLostResponse(t *testing.T) {
 	}
 }
 
-func TestDeliveryDoesNotSubmitReviewFromEarlierRetryCycle(t *testing.T) {
+func TestDeliveryDoesNotSubmitRetriedNativeTask(t *testing.T) {
 	store, jobs, engine := fixture()
 	epoch := 0
 	store.review.AcceptedRetryCount = &epoch
 	store.review.RequestDigest, _ = store.review.Digest()
 	jobs.job.RetryCount = 1
+	engine.execution.Tasks[0].Retried = true
 	flow := &Flow{Reviews: store, Jobs: jobs, Engine: engine}
-	if err := flow.DispatchOne(context.Background()); err != nil || store.status != "failed" || store.reason != "execution_retried" || engine.completeCalls != 0 {
+	if err := flow.DispatchOne(context.Background()); err != nil || store.status != "failed" || store.reason != "approval_task_replaced" || engine.completeCalls != 0 {
 		t.Fatal("old cycle review submitted to restarted execution")
 	}
 }
 
-func TestDeliveryDoesNotInventEpochForLegacyPendingReview(t *testing.T) {
+func TestDeliveryUsesExactNativeTaskNotLocalRetryCounter(t *testing.T) {
 	store, jobs, engine := fixture()
 	jobs.job.RetryCount = 1
+	jobs.job.Status = domain.JobFailed
 	flow := &Flow{Reviews: store, Jobs: jobs, Engine: engine}
-	if err := flow.DispatchOne(context.Background()); err != nil || store.status != "failed" || store.reason != "unknown_retry_epoch" || engine.completeCalls != 0 {
-		t.Fatal("legacy unknown cycle decision was submitted after retry")
+	if err := flow.DispatchOne(context.Background()); err != nil || store.status != "applied" || engine.completeCalls != 1 {
+		t.Fatal("stale local projection vetoed current native task")
 	}
 }
 

@@ -228,63 +228,17 @@ func writeReviewError(c *app.RequestContext, err error) {
 
 // —— worker ——
 
-func ClaimStepRun(ctx context.Context, c *app.RequestContext) {
-	var req pb.ClaimStepRunReq
-	if err := c.BindAndValidate(&req); err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
-	}
-	res, err := Svc.Claim(ctx, jobsvc.ClaimQuery{
-		Platform: req.GetPlatform(), GenWay: req.GetGenWay(), GenType: req.GetGenType(), WorkerID: req.GetWorkerId(),
-	})
-	if err != nil {
-		c.String(consts.StatusNotFound, err.Error())
-		return
-	}
-	assets := make([]*pb.ClaimAsset, len(res.InputAssets))
-	for i, a := range res.InputAssets {
-		assets[i] = &pb.ClaimAsset{Label: a.Label, Url: a.URL, Content: a.Content}
-	}
-	c.JSON(consts.StatusOK, &pb.ClaimStepRunResp{
-		StepRunId: res.StepRunID, JobId: res.JobID, RenderedPrompt: res.RenderedPrompt,
-		InputAssets: assets, Platform: res.Platform, GenWay: res.GenWay,
-		GenType: res.GenType, AssetKind: res.AssetKind, CandidateCount: int32(res.CandidateCount),
-	})
+func ClaimStepRun(_ context.Context, c *app.RequestContext) {
+	c.String(consts.StatusGone, "legacy task API retired; use Worker Gateway")
 }
 
-func CompleteStepRun(ctx context.Context, c *app.RequestContext) {
-	var req pb.CompleteStepRunReq
-	if err := c.BindAndValidate(&req); err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
-	}
-	cands := make([]domain.Candidate, len(req.GetCandidates()))
-	for i, c := range req.GetCandidates() {
-		cands[i] = domain.Candidate{Index: int(c.GetIndex()), URL: c.GetUrl(), Content: c.GetContent(), IsPrimary: c.GetIsPrimary()}
-	}
-	sr, err := Svc.Complete(ctx, req.GetStepRunId(), cands)
-	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
-	}
-	c.JSON(consts.StatusOK, stepRunToPB(sr))
+func CompleteStepRun(_ context.Context, c *app.RequestContext) {
+	c.String(consts.StatusGone, "legacy task API retired; use Worker Gateway")
 }
 
-func FailStepRun(ctx context.Context, c *app.RequestContext) {
-	var req pb.FailStepRunReq
-	if err := c.BindAndValidate(&req); err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
-	}
-	sr, err := Svc.Fail(ctx, req.GetStepRunId(), req.GetReason())
-	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
-	}
-	c.JSON(consts.StatusOK, stepRunToPB(sr))
+func FailStepRun(_ context.Context, c *app.RequestContext) {
+	c.String(consts.StatusGone, "legacy task API retired; use Worker Gateway")
 }
-
-// —— 映射 ——
 
 func jobInputFromPB(in *pb.JobInput) domain.JobInput {
 	var ji domain.JobInput
@@ -333,6 +287,8 @@ func jobStatusToPB(s domain.JobStatus) pb.JobStatus {
 		return pb.JobStatus_PENDING
 	case domain.JobRunning:
 		return pb.JobStatus_RUNNING
+	case domain.JobPaused:
+		return pb.JobStatus_PAUSED
 	case domain.JobNeedConfirm:
 		return pb.JobStatus_NEED_CONFIRM
 	case domain.JobSucceeded:

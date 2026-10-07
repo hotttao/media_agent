@@ -29,7 +29,7 @@ func (e *managedExecutorStub) Execute(_ context.Context, body []byte, key string
 	return map[string]any{"candidates": []any{map[string]any{"content": "result"}}}, nil
 }
 
-func TestManagedRunnerHeartbeatsAndStoresSuccessOrFailure(t *testing.T) {
+func TestManagedRunnerHeartbeatsAndDirectlyDeliversSuccessOrFailure(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		runtime, _, repo, engine := newManagedFixture(t)
 		dispatch, err := runtime.Poll(context.Background(), "jimeng.image", 1)
@@ -40,15 +40,15 @@ func TestManagedRunnerHeartbeatsAndStoresSuccessOrFailure(t *testing.T) {
 		if err := runtime.execute(context.Background(), dispatch, executor); err != nil {
 			t.Fatal(err)
 		}
-		if !executor.called || len(engine.updateCalls) != 1 || engine.updateCalls[0].Status != "IN_PROGRESS" {
+		if !executor.called || len(engine.updateCalls) != 2 || engine.updateCalls[0].Status != "IN_PROGRESS" {
 			t.Fatal("execution was not leased before provider call")
 		}
-		want := "complete"
+		want := "COMPLETED"
 		if fail {
-			want = "fail"
+			want = "FAILED"
 		}
-		if repo.receipt == nil || repo.receipt.Operation != want || repo.receipt.ConductorStatus != "pending" {
-			t.Fatal("result did not reach durable inbox")
+		if engine.updateCalls[1].Status != want || repo.saveCalls != 0 {
+			t.Fatal("result was not directly delivered")
 		}
 	}
 }
@@ -116,7 +116,7 @@ func TestManagedRuntimeRejectsPoolMismatch(t *testing.T) {
 	}
 }
 
-func TestManagedResultUsesDurableInboxAndCannotUsePublicComplete(t *testing.T) {
+func TestManagedResultUsesDirectProxyAndCannotUsePublicComplete(t *testing.T) {
 	runtime, flow, repo, engine := newManagedFixture(t)
 	dispatch, err := runtime.Poll(context.Background(), "jimeng.image", 1)
 	if err != nil {
@@ -124,11 +124,8 @@ func TestManagedResultUsesDurableInboxAndCannotUsePublicComplete(t *testing.T) {
 	}
 	output := map[string]any{"candidates": []any{map[string]any{"url": "https://example.test/result.png"}}}
 	receipt, err := runtime.Complete(context.Background(), dispatch.ID, dispatch.Attempt, "result-1", output)
-	if err != nil || receipt == nil || repo.saveCalls != 1 || len(engine.updateCalls) != 0 {
+	if err != nil || receipt == nil || receipt.ConductorStatus != "submitted" || repo.saveCalls != 0 || len(engine.updateCalls) != 1 {
 		t.Fatalf("durable result: %v", err)
-	}
-	if err := flow.SubmitReceipt(context.Background(), receipt); err != nil {
-		t.Fatal(err)
 	}
 	if len(engine.updateCalls) != 1 || engine.updateCalls[0].Status != "COMPLETED" {
 		t.Fatal("result not delivered to Conductor")
@@ -142,7 +139,7 @@ func TestManagedResultUsesDurableInboxAndCannotUsePublicComplete(t *testing.T) {
 	}
 }
 
-func TestManagedCompletionRejectsOtherWorkerAndExpiredLease(t *testing.T) {
+func TestManagedCompletionRejectsOtherWorkerButUsesNativeExpiry(t *testing.T) {
 	runtime, _, repo, _ := newManagedFixture(t)
 	dispatch, err := runtime.Poll(context.Background(), "jimeng.image", 1)
 	if err != nil {
@@ -155,8 +152,8 @@ func TestManagedCompletionRejectsOtherWorkerAndExpiredLease(t *testing.T) {
 	}
 	repo.dispatch.ActorID = "Worker:server-worker"
 	repo.dispatch.LeaseExpiresAt = runtime.flow.now().Add(-time.Second)
-	if _, err := runtime.Complete(context.Background(), dispatch.ID, dispatch.Attempt, "result-1", output); !errors.Is(err, jobdomain.ErrDispatchExpired) {
-		t.Fatalf("expired lease: %v", err)
+	if _, err := runtime.Complete(context.Background(), dispatch.ID, dispatch.Attempt, "result-1", output); err != nil {
+		t.Fatalf("local delivery clock vetoed native completion: %v", err)
 	}
 	if repo.saveCalls != 0 {
 		t.Fatal("unauthorized result persisted")

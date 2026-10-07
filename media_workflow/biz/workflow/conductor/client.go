@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/propagation"
+	"media_agent/hertz_infra/tracecontext"
 
 	"media_agent/media_workflow/biz/workflow/compiler"
 )
@@ -75,19 +77,20 @@ func (c *Client) StartWorkflow(ctx context.Context, request StartWorkflowRequest
 }
 
 type Task struct {
-	Sequence           *int           `json:"seq"`
-	TaskType           string         `json:"taskType"`
-	ReferenceTaskName  string         `json:"referenceTaskName"`
-	TaskID             string         `json:"taskId"`
-	WorkflowInstanceID string         `json:"workflowInstanceId"`
-	Status             string         `json:"status"`
-	InputData          map[string]any `json:"inputData"`
-	OutputData         map[string]any `json:"outputData"`
-	RetryCount         int            `json:"retryCount"`
-	Retried            bool           `json:"retried"`
-	ScheduledTime      int64          `json:"scheduledTime"`
-	StartTime          int64          `json:"startTime"`
-	EndTime            int64          `json:"endTime"`
+	Sequence              *int           `json:"seq"`
+	TaskType              string         `json:"taskType"`
+	ReferenceTaskName     string         `json:"referenceTaskName"`
+	TaskID                string         `json:"taskId"`
+	WorkflowInstanceID    string         `json:"workflowInstanceId"`
+	Status                string         `json:"status"`
+	InputData             map[string]any `json:"inputData"`
+	OutputData            map[string]any `json:"outputData"`
+	RetryCount            int            `json:"retryCount"`
+	Retried               bool           `json:"retried"`
+	ReasonForIncompletion string         `json:"reasonForIncompletion"`
+	ScheduledTime         int64          `json:"scheduledTime"`
+	StartTime             int64          `json:"startTime"`
+	EndTime               int64          `json:"endTime"`
 }
 
 func (c *Client) Poll(ctx context.Context, taskType, workerID, domain string) (*Task, error) {
@@ -101,14 +104,14 @@ func (c *Client) Poll(ctx context.Context, taskType, workerID, domain string) (*
 	if err != nil {
 		return nil, err
 	}
+	injectTraceParent(ctx, request)
 	response, err := c.http.Do(request)
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		return nil, fmt.Errorf("conductor poll %s: status=%d body=%s", taskType, response.StatusCode, body)
+		return nil, &HTTPStatusError{StatusCode: response.StatusCode}
 	}
 	var tasks []Task
 	if err := json.NewDecoder(response.Body).Decode(&tasks); err != nil {
@@ -251,6 +254,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, input any, out
 		return err
 	}
 	request.Header.Set("Content-Type", "application/json")
+	injectTraceParent(ctx, request)
 	response, err := c.http.Do(request)
 	if err != nil {
 		return err
@@ -280,6 +284,14 @@ func (c *Client) doJSON(ctx context.Context, method, path string, input any, out
 		return nil
 	}
 	return json.NewDecoder(response.Body).Decode(output)
+}
+
+func injectTraceParent(ctx context.Context, request *http.Request) {
+	carrier := propagation.MapCarrier{}
+	tracecontext.Inject(ctx, carrier)
+	if parent := carrier.Get("traceparent"); parent != "" {
+		request.Header.Set("traceparent", parent)
+	}
 }
 
 // HTTPStatusError deliberately excludes URLs, upstream bodies and request data.

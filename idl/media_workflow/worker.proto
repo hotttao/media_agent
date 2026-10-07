@@ -8,6 +8,10 @@ import "google/api/annotations.proto";
 option go_package = "media_workflow/worker";
 
 service WorkerService {
+  rpc PrepareWorkerArtifactUpload(PrepareWorkerArtifactUploadReq) returns (PrepareWorkerArtifactUploadResp) {
+    option (google.api.http) = { post: "/api/worker/v1/tasks/{dispatch_id}/uploads" body: "*" };
+    option (api.post) = "/api/worker/v1/tasks/:dispatch_id/uploads";
+  }
   rpc RegisterWorker(RegisterWorkerReq) returns (RegisterWorkerResp) {
     option (google.api.http) = { post: "/api/worker/v1/registrations" body: "*" };
     option (api.post) = "/api/worker/v1/registrations";
@@ -28,6 +32,24 @@ service WorkerService {
     option (google.api.http) = { post: "/api/worker/v1/tasks/{dispatch_id}:fail" body: "*" };
     option (api.post) = "/api/worker/v1/tasks/:dispatch_id/fail";
   }
+}
+
+message PrepareWorkerArtifactUploadReq {
+  string dispatch_id = 1 [(api.path) = "dispatch_id"];
+  string worker_instance_id = 2;
+  int32 attempt = 3;
+  int32 candidate_index = 4;
+  string content_type = 5;
+  int64 size_bytes = 6;
+  string checksum_sha256 = 7;
+  string content_md5 = 8;
+}
+message PrepareWorkerArtifactUploadResp {
+  string object_path = 1;
+  string upload_url = 2;
+  map<string,string> headers = 3;
+  int64 expires_at = 4;
+  bool already_uploaded = 5;
 }
 
 message CapabilityVersion {
@@ -58,6 +80,7 @@ message WorkerTask {
   string capability_key = 3;
   int32 capability_version = 4;
   string input_json = 5;
+  // 兼容交付刷新时间；不是任务执行截止时间，以原生任务状态为准。
   int64 lease_expires_at = 6;
 }
 
@@ -69,7 +92,10 @@ message HeartbeatWorkerTaskReq {
   int32 attempt = 3;
 }
 
-message HeartbeatWorkerTaskResp { int64 lease_expires_at = 1; }
+message HeartbeatWorkerTaskResp {
+  // 兼容交付刷新时间，不作为第二个任务超时判断。
+  int64 lease_expires_at = 1;
+}
 
 message CompleteWorkerTaskReq {
   string dispatch_id = 1 [(api.path) = "dispatch_id"];
@@ -85,6 +111,9 @@ message FailWorkerTaskReq {
   int32 attempt = 3;
   string idempotency_key = 4;
   string reason = 5;
+  // transient -> native FAILED; permanent -> FAILED_WITH_TERMINAL_ERROR.
+  // Empty preserves the legacy permanent failure behavior.
+  string failure_kind = 6;
 }
 
 message WorkerResultReceipt {

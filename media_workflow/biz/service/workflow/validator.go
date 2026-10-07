@@ -14,11 +14,21 @@ type validator struct {
 	steps          []domain.Step
 	outputStepKey  string
 	templateLookup domain.TemplateLookup
-	tplSnapshots   map[string]*domain.TemplateSnapshot // template_id → snapshot（validateTemplates 填充）
+	tplSnapshots   map[templateVersionRef]*domain.TemplateSnapshot
+}
+
+// Template identity without its immutable version is not a compilation key.
+type templateVersionRef struct {
+	id      string
+	version int
+}
+
+func stepTemplateRef(step domain.Step) templateVersionRef {
+	return templateVersionRef{id: step.TemplateID, version: step.TemplateVersion}
 }
 
 func newValidator(scope string, steps []domain.Step, outputStepKey string, tl domain.TemplateLookup) *validator {
-	return &validator{scope: scope, steps: steps, outputStepKey: outputStepKey, templateLookup: tl, tplSnapshots: map[string]*domain.TemplateSnapshot{}}
+	return &validator{scope: scope, steps: steps, outputStepKey: outputStepKey, templateLookup: tl, tplSnapshots: map[templateVersionRef]*domain.TemplateSnapshot{}}
 }
 
 func (v *validator) validate(ctx context.Context) (*domain.ValidationResult, error) {
@@ -152,7 +162,7 @@ func (v *validator) validateTemplates(ctx context.Context, res *domain.Validatio
 			return fmt.Errorf("scope mismatch for template %s", s.TemplateID)
 		}
 		// 缓存 snapshot 供 validateBindings + deriveInputSchema 用
-		v.tplSnapshots[s.TemplateID] = snap
+		v.tplSnapshots[stepTemplateRef(s)] = snap
 	}
 	return nil
 }
@@ -161,7 +171,7 @@ func (v *validator) validateTemplates(ctx context.Context, res *domain.Validatio
 func (v *validator) validateBindings(res *domain.ValidationResult) error {
 	// 用 validateTemplates 阶段加载的 snapshots 校验 to_input 存在性
 	for _, s := range v.steps {
-		snap := v.tplSnapshots[s.TemplateID]
+		snap := v.tplSnapshots[stepTemplateRef(s)]
 		if snap == nil {
 			continue // validateTemplates 已报错
 		}
@@ -210,7 +220,7 @@ func (v *validator) validateBindings(res *domain.ValidationResult) error {
 func (v *validator) deriveInputSchema(res *domain.ValidationResult) error {
 	seen := make(map[string]*domain.InputSchemaEntry)
 	for _, s := range v.steps {
-		snap := v.tplSnapshots[s.TemplateID]
+		snap := v.tplSnapshots[stepTemplateRef(s)]
 		if snap == nil {
 			continue
 		}
@@ -225,7 +235,7 @@ func (v *validator) deriveInputSchema(res *domain.ValidationResult) error {
 			}
 			e, ok := seen[b.Ref]
 			if !ok {
-				e = &domain.InputSchemaEntry{Name: b.Ref, Required: true}
+				e = &domain.InputSchemaEntry{Name: b.Ref}
 				seen[b.Ref] = e
 			}
 			// 从 template slot 填 resource_type 与 material/asset kind。
@@ -252,9 +262,7 @@ func (v *validator) deriveInputSchema(res *domain.ValidationResult) error {
 					}
 					e.AssetKind = info.AssetKind
 				}
-				if !info.Required {
-					e.Required = false
-				}
+				e.Required = e.Required || info.Required
 			}
 		}
 	}

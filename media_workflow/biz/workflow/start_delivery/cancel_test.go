@@ -24,12 +24,26 @@ func (r *cancelRepo) FinishCancelledStart(_ context.Context, _ domain.ExecutionS
 type cleanupEngine struct {
 	engine
 	status       string
+	instanceID   string
 	terminateErr error
 }
 
 func (e *cleanupEngine) Get(context.Context, string) (*domain.EngineExecution, error) {
 	*e.events = append(*e.events, "get")
-	return &domain.EngineExecution{Status: e.status}, nil
+	return &domain.EngineExecution{Status: e.status, WorkflowInstanceID: e.instanceID}, nil
+}
+
+func TestCancelledCleanupRejectsDifferentObservedInstance(t *testing.T) {
+	command := &domain.ExecutionStart{ID: "start", JobID: "job", WorkflowName: "frozen", WorkflowVersion: 1, CompilationHash: strings.Repeat("a", 64), CorrelationID: "job", WorkflowInput: []byte(`{"job_id":"job"}`), TaskDomains: []byte(`{}`), Status: "cancel_pending", ClaimToken: "lease", ConductorWorkflowID: "expected"}
+	command.PayloadDigest, _ = command.Digest()
+	var events []string
+	r := &cancelRepo{startRepo: &startRepo{command: command, events: &events}}
+	e := &cleanupEngine{engine: engine{events: &events}, status: "RUNNING", instanceID: "different"}
+	j := &domain.Job{Status: domain.JobCancelled, Origin: "native", CompilationHash: command.CompilationHash}
+	f := Flow{Starts: r, Jobs: jobs{job: j}, Engine: e}
+	if err := f.DispatchOne(context.Background()); !errors.Is(err, ErrTemporarilyUnavailable) || r.code != "cancel_execution_identity_conflict" || strings.Join(events, ",") != "get" || r.finished != "" {
+		t.Fatal("wrong observed instance was terminated or confirmed", err)
+	}
 }
 func (e *cleanupEngine) Terminate(context.Context, string, string) error {
 	*e.events = append(*e.events, "terminate")

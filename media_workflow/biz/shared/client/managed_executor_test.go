@@ -8,15 +8,21 @@ import (
 	"testing"
 
 	hclient "github.com/cloudwego/hertz/pkg/app/client"
+	"go.opentelemetry.io/otel/propagation"
+	"media_agent/hertz_infra/tracecontext"
 )
 
 func TestManagedExecutorSendsIdempotentInternalRequest(t *testing.T) {
+	const parent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/execute" || r.Method != "POST" {
 			t.Error("wrong executor request")
 		}
 		if r.Header.Get("Authorization") != "" {
 			t.Error("managed executor carried user credential")
+		}
+		if r.Header.Get("Traceparent") != parent {
+			t.Error("managed execution lost local correlation")
 		}
 		if r.Header.Get("Idempotency-Key") != "managed:dispatch-1:1" {
 			t.Error("missing stable idempotency key")
@@ -34,7 +40,8 @@ func TestManagedExecutorSendsIdempotentInternalRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	executor := &ManagedExecutor{Client: httpClient, BaseURL: server.URL}
-	output, err := executor.Execute(context.Background(), []byte(`{"input":{"prompt":"test"}}`), "managed:dispatch-1:1")
+	ctx := tracecontext.Extract(context.Background(), propagation.MapCarrier{"traceparent": parent})
+	output, err := executor.Execute(ctx, []byte(`{"input":{"prompt":"test"}}`), "managed:dispatch-1:1")
 	if err != nil || output["candidates"] == nil {
 		t.Fatalf("executor output: %v", err)
 	}

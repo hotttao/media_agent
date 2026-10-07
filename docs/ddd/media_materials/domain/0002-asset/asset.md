@@ -4,6 +4,7 @@ description: material（curated 原料）+ generated_asset（workflow 产物）�
 dependencies:
     - asset_kind
 related_workflow:
+    - worker_artifact_upload
     - library_object_upload
     - reachability
     - media_workflow.workflow_validation
@@ -11,6 +12,8 @@ related_workflow:
 ---
 
 ## 一句话职责
+
+Worker Artifact Upload只准备受控企业/Scope下的对象写入凭据，不创建Material或Generated Asset。路径同时绑定原生任务尝试、候选位置与内容清单，相同内容稳定重放、不同文件不覆盖旧引用；对象存在且元数据匹配时可HEAD确认上传。资源登记、可见性和来源校验仍由既有Asset能力持有，参见[上传流程](../../../workflow/0001-worker_artifact_upload/worker_artifact_upload.md)。
 asset domain 管理**两类物理资源**，分落两张表：
 - **material**（`materials` 表，resource_type=MATERIAL）：curated 原料（scene/pose/makeup/movement/music/caption），用户上传/策展，**无生成记录**；可由 Storage 对象或内联文本承载。
 - **generated_asset**（`generated_assets` 表，resource_type=ASSET）：workflow 执行产物（model_image/style_image/first_frame/ai_video）。原生产物持 Job/StepRun/Template 生成记录；历史导入产物持旧系统来源键、摘要与原时间，不伪造原生 Job 链接。

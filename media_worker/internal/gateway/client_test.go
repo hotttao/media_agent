@@ -100,8 +100,8 @@ func TestClientCompleteUsesDispatchRouteAndStablePayload(t *testing.T) {
 		if err := json.Unmarshal([]byte(body.OutputJSON), &output); err != nil || output["candidates"] == nil {
 			t.Fatalf("output_json = %q, err = %v", body.OutputJSON, err)
 		}
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(map[string]any{"receipt_id": "receipt-1", "dispatch_id": "dispatch-1", "status": "pending"})
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"receipt_id": "receipt-1", "dispatch_id": "dispatch-1", "status": "submitted"})
 	}))
 	defer server.Close()
 

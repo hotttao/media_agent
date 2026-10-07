@@ -17,6 +17,7 @@ import (
 	domain "media_agent/media_workflow/biz/domain/job"
 	templatedomain "media_agent/media_workflow/biz/domain/template"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
+	"media_agent/media_workflow/biz/shared/taskcontext"
 	"media_agent/media_workflow/biz/workflow/compiler"
 	"media_agent/media_workflow/biz/workflow/executable"
 )
@@ -178,7 +179,7 @@ func (s *Service) Resume(ctx context.Context, cmd ResumeCommand) (*domain.Job, e
 	}
 	definitionJSON, _ := json.Marshal(definition)
 	domainsJSON, _ := json.Marshal(domains)
-	inputJSON, _ := json.Marshal(map[string]any{"job_id": job.ID, "inputs": conductorInputs(merged)})
+	inputJSON, _ := json.Marshal(taskcontext.CaptureTrace(ctx, map[string]any{"job_id": job.ID, "inputs": conductorInputs(merged)}))
 	start := domain.ResumeStart{
 		ID: "resume_" + uuid.NewString(), JobID: job.ID, Generation: job.ResumeGeneration + 1,
 		IdempotencyKey: cmd.IdempotencyKey, CorrelationID: fmt.Sprintf("resume:%s:%d", job.ID, job.ResumeGeneration+1),

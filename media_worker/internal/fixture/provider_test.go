@@ -1,12 +1,63 @@
 package fixture
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
 
 	"media_agent/media_worker/internal/gateway"
 )
+
+func TestProviderFileResultsAreExplicitAndConfirmed(t *testing.T) {
+	b := providerBinding("job", "step", "jimeng.i2i.multi_image_prompt", "https://storage.test/result")
+	b.ResultFiles = []string{"/private/result-a.png", "/private/result-b.png"}
+	if _, err := NewProviderExecutor([]ProviderBinding{b}); err == nil {
+		t.Fatal("ambiguous URL/file binding accepted")
+	}
+	b.ResultURLs = nil
+	e, err := NewProviderExecutor([]ProviderBinding{b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := providerTask("job", "step", b.CapabilityKey, "https://storage.test/input.png")
+	if _, err = e.Execute(task); err == nil {
+		t.Fatal("file result accepted without uploader")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := 0
+	e.SetFileUploader(func(got context.Context, actual gateway.Task, index int, file string) (string, error) {
+		calls++
+		if got != ctx || actual.DispatchID != task.DispatchID || file != b.ResultFiles[index] {
+			t.Error("upload binding changed")
+		}
+		return "materials/org/scope/file-" + file[len(file)-5:len(file)-4], nil
+	})
+	out, err := e.ExecuteContext(ctx, task)
+	if err != nil || calls != 2 {
+		t.Fatal("file results failed", err)
+	}
+	candidates := out["candidates"].([]map[string]any)
+	if len(candidates) != 2 || candidates[0]["object_path"] == "" || candidates[0]["url"] != nil || candidates[1]["is_primary"] != false {
+		t.Fatal("uploaded result shape invalid")
+	}
+	e.SetFileUploader(func(context.Context, gateway.Task, int, string) (string, error) {
+		return "", errors.New("upload unconfirmed")
+	})
+	if out, err = e.Execute(task); err == nil || out != nil {
+		t.Fatal("failed upload became completed result")
+	}
+	if e.SetFailureOnce("step", 1) != nil {
+		t.Fatal("failure fixture rejected")
+	}
+	calls = 0
+	e.SetFileUploader(func(context.Context, gateway.Task, int, string) (string, error) { calls++; return "path", nil })
+	if _, err = e.Execute(task); err == nil || calls != 0 {
+		t.Fatal("explicit generation failure uploaded results")
+	}
+}
 
 func providerBinding(job, step, key, result string) ProviderBinding {
 	return ProviderBinding{JobID: job, StepKey: step, CapabilityKey: key, CapabilityVersion: 1, ResultURLs: []string{result}}

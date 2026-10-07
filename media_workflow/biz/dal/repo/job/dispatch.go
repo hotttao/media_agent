@@ -61,8 +61,18 @@ func (r *DispatchRepo) Create(ctx context.Context, dispatch *domain.WorkerDispat
 		}
 		if existing.UserID != dispatch.UserID || existing.OrganizationID != dispatch.OrganizationID ||
 			existing.CredentialID != dispatch.CredentialID || existing.ActorID != dispatch.ActorID ||
-			existing.AuthSource != dispatch.AuthSource || existing.WorkerInstanceID != dispatch.WorkerInstanceID {
+			existing.AuthSource != dispatch.AuthSource || existing.WorkerInstanceID != dispatch.WorkerInstanceID ||
+			existing.ConductorWorkflowID != dispatch.ConductorWorkflowID || existing.JobID != dispatch.JobID ||
+			existing.StepRunID != dispatch.StepRunID || existing.CapabilityKey != dispatch.CapabilityKey || existing.CapabilityVersion != dispatch.CapabilityVersion {
 			return nil, domain.ErrDispatchConflict
+		}
+		if existing.Status == string(domain.DispatchResultReceived) || existing.Status == string(domain.DispatchFailed) {
+			return nil, domain.ErrDispatchExpired
+		}
+		// The caller obtained and verified this exact native Task again. Refresh
+		// delivery bookkeeping only; do not allocate a new task or attempt.
+		if existing.Status == string(domain.DispatchExpired) || dispatch.DeliveredAt != nil && !existing.LeaseExpiresAt.After(*dispatch.DeliveredAt) {
+			return r.ExtendLease(ctx, existing.ID, existing.Attempt, dispatch.LeaseExpiresAt)
 		}
 		return dispatchToDomain(&existing), nil
 	}
@@ -97,8 +107,8 @@ func (r *DispatchRepo) Get(ctx context.Context, id string) (*domain.WorkerDispat
 
 func (r *DispatchRepo) ExtendLease(ctx context.Context, id string, attempt int, leaseExpiresAt time.Time) (*domain.WorkerDispatch, error) {
 	result := r.conn(ctx).Model(&model.WorkerDispatch{}).
-		Where("id = ? AND attempt = ? AND status IN ? AND lease_expires_at > now()", id, attempt,
-			[]string{string(domain.DispatchClaimed), string(domain.DispatchDelivered), string(domain.DispatchRunning)}).
+		Where("id = ? AND attempt = ? AND status IN ?", id, attempt,
+			[]string{string(domain.DispatchClaimed), string(domain.DispatchDelivered), string(domain.DispatchRunning), string(domain.DispatchExpired)}).
 		Updates(map[string]any{"status": string(domain.DispatchRunning), "lease_expires_at": leaseExpiresAt})
 	if result.Error != nil {
 		return nil, result.Error
@@ -109,6 +119,8 @@ func (r *DispatchRepo) ExtendLease(ctx context.Context, id string, attempt int, 
 	return r.Get(ctx, id)
 }
 
+// SaveResult is retained for archived Inbox schema compatibility only. Normal
+// Worker delivery never calls it; the runtime port no longer exposes it.
 func (r *DispatchRepo) SaveResult(ctx context.Context, dispatchID string, attempt int, operation, idempotencyKey string, resultJSON []byte, resultDigest string, now time.Time) (*domain.WorkerResultReceipt, error) {
 	var receipt *domain.WorkerResultReceipt
 	err := r.conn(ctx).Transaction(func(tx *gorm.DB) error {
@@ -171,6 +183,12 @@ func (r *DispatchRepo) SaveResult(ctx context.Context, dispatchID string, attemp
 	return receipt, err
 }
 
+// Delivery bookkeeping only; output and execution state live in Conductor.
+func (r *DispatchRepo) MarkResultReceived(ctx context.Context, id string, attempt int, at time.Time) error {
+	return r.conn(ctx).Model(&model.WorkerDispatch{}).Where("id = ? AND attempt = ?", id, attempt).
+		Updates(map[string]any{"status": string(domain.DispatchResultReceived), "completed_at": at}).Error
+}
+
 func (r *DispatchRepo) ListPendingResults(ctx context.Context, limit int) ([]*domain.WorkerResultReceipt, error) {
 	if limit <= 0 {
 		limit = 20
@@ -200,15 +218,6 @@ func (r *DispatchRepo) MarkResultSubmitted(ctx context.Context, receiptID string
 func (r *DispatchRepo) MarkResultFailed(ctx context.Context, receiptID, message string) error {
 	return r.conn(ctx).Model(&model.WorkerResultInbox{}).Where("id = ?", receiptID).
 		Updates(map[string]any{"conductor_status": "failed", "last_error": message}).Error
-}
-
-func (r *DispatchRepo) ExpireLeases(ctx context.Context, now time.Time) (int64, error) {
-	result := r.conn(ctx).Model(&model.WorkerDispatch{}).
-		Where("status IN ? AND lease_expires_at <= ?", []string{
-			string(domain.DispatchClaimed), string(domain.DispatchDelivered), string(domain.DispatchRunning),
-		}, now).
-		Update("status", string(domain.DispatchExpired))
-	return result.RowsAffected, result.Error
 }
 
 func dispatchToDomain(row *model.WorkerDispatch) *domain.WorkerDispatch {

@@ -3,7 +3,6 @@ package job
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"gorm.io/datatypes"
@@ -216,43 +215,6 @@ func (r *StepRunRepo) GetByJobAndStepKey(ctx context.Context, jobID, stepKey str
 	return stepRunToDomain(&row), nil
 }
 
-func (r *StepRunRepo) ListByJobAndStatus(ctx context.Context, jobID string, status domain.StepRunStatus) ([]*domain.StepRun, error) {
-	Q := query.Use(dal.FromContext(ctx, r.db))
-	rows, err := Q.StepRun.WithContext(ctx).
-		Where(Q.StepRun.JobID.Eq(jobID), Q.StepRun.Status.Eq(string(status))).Find()
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*domain.StepRun, len(rows))
-	for i := range rows {
-		out[i] = stepRunToDomain(rows[i])
-	}
-	return out, nil
-}
-
-// ClaimAtomic 原子领取一个 PENDING StepRun（FOR UPDATE SKIP LOCKED）。
-func (r *StepRunRepo) ClaimAtomic(ctx context.Context, q domain.ClaimQuery) (*domain.StepRun, error) {
-	db := dal.FromContext(ctx, r.db)
-	var row model.StepRun
-	// 原子 UPDATE...RETURNING：领一个 PENDING + platform 匹配的 step_run
-	err := db.Raw(`
-		UPDATE media_workflow.step_runs
-		SET status = 'claimed', claimed_by = ?, claimed_at = now()
-		WHERE id = (
-			SELECT id FROM media_workflow.step_runs
-			WHERE status = 'pending' AND platform = ? AND gen_way = ?
-			ORDER BY step_order LIMIT 1 FOR UPDATE SKIP LOCKED
-		)
-		RETURNING *`, q.WorkerID, q.Platform, q.GenWay).Scan(&row).Error
-	if err != nil {
-		return nil, err
-	}
-	if row.ID == "" {
-		return nil, gorm.ErrRecordNotFound
-	}
-	return stepRunToDomain(&row), nil
-}
-
 func (r *StepRunRepo) UpdateStatus(ctx context.Context, id string, status domain.StepRunStatus, updates map[string]any) error {
 	Q := query.Use(dal.FromContext(ctx, r.db))
 	if updates == nil {
@@ -347,17 +309,4 @@ func stepRunToDomain(row *model.StepRun) *domain.StepRun {
 		sr.ResolvedInputs = map[string]any{}
 	}
 	return sr
-}
-
-var _ = fmt.Sprintf
-
-// ReclaimStale 把 CLAIMED 超时的 step_run 回 PENDING（worker 崩溃保护）。
-func (r *StepRunRepo) ReclaimStale(ctx context.Context, timeoutSeconds int) (int64, error) {
-	db := dal.FromContext(ctx, r.db)
-	res := db.Exec(`
-		UPDATE media_workflow.step_runs
-		SET status = 'pending', claimed_by = '', claimed_at = NULL, started_at = NULL
-		WHERE status = 'claimed' AND claimed_at < now() - make_interval(secs => ?)`,
-		timeoutSeconds)
-	return res.RowsAffected, res.Error
 }

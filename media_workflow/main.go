@@ -52,7 +52,7 @@ func (a *templateLookupAdapter) GetVersion(ctx context.Context, id string, versi
 		slots[i] = wfdomain.SlotSnapshot{Name: in.Name, AssetKind: in.AssetKind, ResourceType: in.ResourceType, Required: in.Required}
 	}
 	// status 需从当前 template 取（version 快照无 status；查当前）
-	t, err := a.svc.Get(ctx, id, auth.CallerID(ctx)) // 传 callerID 供 canRead 校验
+	t, err := a.svc.Get(ctx, id, auth.CallerID(ctx)) // current baseline visibility contract; ACL expansion is deferred
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +153,7 @@ func main() {
 	executionEngine := &conductor.ExecutionEngine{Client: conductorClient}
 	jobSvc := jobsvc.NewService(jobRepo, stepRunRepo, txRunner, wfRepo, tplLookup, materialsClient, cfg.GetJob(), compilationRepo, executionEngine)
 	jobSvc.ConfigureHistoryAssets(materialsClient)
+	jobSvc.ConfigureCandidateMedia(materialsClient)
 	controlClient := client.NewControlClient(os.Getenv("MEDIA_CONTROL_URL"), os.Getenv("CONTROL_INTERNAL_TOKEN"))
 	jobSvc.ConfigureHistoryWorkspaces(controlClient)
 	jobSvc.ConfigureResume(jobRepo, controlClient, conductorClient, os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"))
@@ -229,16 +230,16 @@ func main() {
 		}
 	}()
 	dispatchRepo := jobrepo.NewDispatchRepo(db)
+	if pending, err := dispatchRepo.ListPendingResults(context.Background(), 1); err != nil || len(pending) != 0 {
+		log.Fatal("legacy worker results remain unconfirmed; resolve before switching to direct delivery")
+	}
 	workerFlow := &workergateway.Flow{
-		StorageOrigin: os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"),
-		Dispatches:    dispatchRepo, Jobs: jobRepo, StepRuns: stepRunRepo,
+		ArtifactUploads: materialsClient,
+		StorageOrigin:   os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"),
+		Dispatches:      dispatchRepo, Jobs: jobRepo, StepRuns: stepRunRepo,
 		Capabilities: capabilityRepo, Engine: executionEngine, Executions: executionEngine, ImportedAssets: materialsClient,
 	}
 	workerhandler.Flow = workerFlow
-	workerSubmitterCtx, workerSubmitterCancel := context.WithCancel(context.Background())
-	defer workerSubmitterCancel()
-	go workerFlow.RunResultSubmitter(workerSubmitterCtx, time.Second)
-	go workerFlow.RunLeaseReaper(workerSubmitterCtx, 15*time.Second)
 
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
 	mediaAuthURL := "http://127.0.0.1:8001"

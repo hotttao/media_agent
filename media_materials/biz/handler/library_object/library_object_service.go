@@ -141,3 +141,36 @@ func validOrganizationObjectPath(organizationID, objectPath string) bool {
 		strings.HasPrefix(objectPath, "materials/"+organizationID+"/") &&
 		path.Clean(objectPath) == objectPath && !strings.Contains(objectPath, "\\")
 }
+
+// PrepareInternalLibraryObjectUpload .
+// @router /api/internal/v1/library-objects:prepareUpload [POST]
+func PrepareInternalLibraryObjectUpload(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req library_object.PrepareInternalLibraryObjectUploadReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	if Flow == nil {
+		c.String(consts.StatusServiceUnavailable, "media storage unavailable")
+		return
+	}
+	grant, err := Flow.Prepare(ctx, uploadworkflow.PrepareCommand{OrganizationID: req.GetOrganizationId(), Scope: req.GetScope(), UploadKey: req.GetUploadKey(), ContentType: req.GetContentType(), SizeBytes: req.GetSizeBytes(), Checksum: req.GetChecksumSha256(), ContentMD5: req.GetContentMd5()})
+	if err != nil {
+		status := consts.StatusBadRequest
+		if errors.Is(err, uploadworkflow.ErrUnavailable) {
+			status = consts.StatusServiceUnavailable
+		}
+		if errors.Is(err, uploadworkflow.ErrTooLarge) {
+			status = consts.StatusRequestEntityTooLarge
+		}
+		if errors.Is(err, uploadworkflow.ErrConflict) {
+			status = consts.StatusConflict
+		}
+		c.String(status, "artifact upload could not be prepared")
+		return
+	}
+	c.JSON(consts.StatusOK, &library_object.PrepareInternalLibraryObjectUploadResp{ObjectPath: grant.ObjectPath, UploadUrl: grant.URL, Headers: grant.Headers, ExpiresAt: grant.ExpiresAt, AlreadyUploaded: grant.AlreadyUploaded})
+}

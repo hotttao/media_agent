@@ -17,12 +17,14 @@ import (
 
 	"media_agent/media_worker/internal/fixture"
 	"media_agent/media_worker/internal/gateway"
+	"media_agent/media_worker/internal/results"
 )
 
 func main() {
 	gatewayURL := flag.String("gateway-url", envOr("MEDIA_GATEWAY_URL", ""), "public media gateway base URL")
 	apiToken := flag.String("token", envOr("MEDIA_WORKER_API_TOKEN", ""), "opaque Personal Worker API Token")
 	workerID := flag.String("worker-id", envOr("MEDIA_WORKER_ID", defaultWorkerID()), "stable client worker id")
+	stateDir := flag.String("state-dir", envOr("MEDIA_WORKER_STATE_DIR", ".worker-state"), "private local directory for unconfirmed result replay")
 	profile := flag.String("profile", envOr("MEDIA_WORKER_PROFILE", ""), "execution profile; use media_ai_fixture only for integration testing")
 	fixtureConfig := flag.String("fixture-config", envOr("MEDIA_WORKER_FIXTURE_CONFIG", ""), "private Provider fixture JSON file with explicit Job/Step results")
 	capabilityList := flag.String("capabilities", envOr("MEDIA_WORKER_CAPABILITIES", ""), "comma-separated capability key@version allowlist")
@@ -108,8 +110,25 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	client := gateway.New(*gatewayURL, *apiToken)
+	executor.SetFileUploader(func(ctx context.Context, task gateway.Task, index int, file string) (string, error) {
+		return client.UploadFile(ctx, *workerID, task, index, file)
+	})
+	store, err := results.Open(*stateDir, *gatewayURL, *workerID, *apiToken)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer store.Close()
 	if err := client.Register(ctx, *workerID, capabilities); err != nil {
 		log.Fatalf("register worker: %v", err)
+	}
+	pending, err := store.Pending()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, record := range pending {
+		if !deliverStoredResult(ctx, client, *workerID, store, record) && ctx.Err() != nil {
+			return
+		}
 	}
 	var wg sync.WaitGroup
 	for _, capability := range capabilities {
@@ -117,7 +136,7 @@ func main() {
 			wg.Add(1)
 			go func(capability gateway.Capability) {
 				defer wg.Done()
-				runCapability(ctx, client, *workerID, capability, executor)
+				runCapability(ctx, client, *workerID, capability, executor, store)
 			}(capability)
 		}
 	}
@@ -134,11 +153,11 @@ func parseFixtureResultURLs(raw string) ([]string, error) {
 	return urls, nil
 }
 
-func runCapability(ctx context.Context, client *gateway.Client, workerID string, capability gateway.Capability, executor *fixture.Executor) {
+func runCapability(ctx context.Context, client *gateway.Client, workerID string, capability gateway.Capability, executor *fixture.Executor, store *results.Store) {
 	for ctx.Err() == nil {
 		task, err := client.Poll(ctx, workerID, capability)
 		if err != nil {
-			log.Printf("poll capability=%s@%d: %v", capability.Key, capability.Version, err)
+			log.Printf("poll deferred capability=%s@%d", capability.Key, capability.Version)
 			wait(ctx, time.Second)
 			continue
 		}
@@ -146,40 +165,54 @@ func runCapability(ctx context.Context, client *gateway.Client, workerID string,
 			wait(ctx, 300*time.Millisecond)
 			continue
 		}
-		taskCtx, cancelTask := context.WithCancel(ctx)
+		taskCtx, cancelTask := context.WithCancel(gateway.TaskContext(ctx, *task))
 		go heartbeat(taskCtx, client, workerID, *task)
-		output, executeErr := executor.Execute(*task)
+		output, executeErr := executor.ExecuteContext(taskCtx, *task)
 		idempotencyKey := task.DispatchID + ":" + fmt.Sprint(task.Attempt)
-		submitted := submitResult(ctx, client, workerID, *task, idempotencyKey, output, executeErr)
+		record := results.Record{Task: *task, Key: idempotencyKey + ":complete", Output: output}
+		if executeErr != nil {
+			record.Key, record.Output, record.Reason, record.FailureKind = idempotencyKey+":fail", nil, executeErr.Error(), gateway.FailureKind(executeErr)
+		}
+		if err := store.Save(record); err != nil {
+			cancelTask()
+			log.Fatal(err)
+		}
+		submitted := deliverStoredResult(ctx, client, workerID, store, record)
 		cancelTask()
 		if !submitted {
 			continue
 		}
 		if executeErr != nil {
-			log.Printf("failed dispatch=%s capability=%s@%d", task.DispatchID, capability.Key, capability.Version)
+			log.Printf("event=worker_task_failed trace_id=%s dispatch=%s capability=%s@%d", task.TraceID(), task.DispatchID, capability.Key, capability.Version)
 			continue
 		}
-		log.Printf("completed dispatch=%s capability=%s@%d", task.DispatchID, capability.Key, capability.Version)
+		log.Printf("event=worker_task_completed trace_id=%s dispatch=%s capability=%s@%d", task.TraceID(), task.DispatchID, capability.Key, capability.Version)
 	}
 }
 
-func submitResult(ctx context.Context, client *gateway.Client, workerID string, task gateway.Task, idempotencyKey string, output map[string]any, executeErr error) bool {
+func deliverStoredResult(ctx context.Context, client *gateway.Client, workerID string, store *results.Store, record results.Record) bool {
 	for ctx.Err() == nil {
 		var err error
-		if executeErr != nil {
-			_, err = client.Fail(ctx, workerID, task, idempotencyKey+":fail", executeErr.Error())
+		if record.Reason != "" {
+			_, err = client.FailWithKind(ctx, workerID, record.Task, record.Key, record.Reason, record.FailureKind)
 		} else {
-			_, err = client.Complete(ctx, workerID, task, idempotencyKey+":complete", output)
+			_, err = client.Complete(ctx, workerID, record.Task, record.Key, record.Output)
 		}
 		if err == nil {
+			if err := store.Finish(record, false); err != nil {
+				log.Fatal(err)
+			}
 			return true
 		}
 		var httpErr *gateway.HTTPError
 		if errors.As(err, &httpErr) && (httpErr.StatusCode == 409 || httpErr.StatusCode == 410) {
-			log.Printf("result rejected dispatch=%s: %v", task.DispatchID, err)
+			if err := store.Finish(record, true); err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("event=worker_result_rejected trace_id=%s dispatch=%s", record.Task.TraceID(), record.Task.DispatchID)
 			return false
 		}
-		log.Printf("retry result dispatch=%s: %v", task.DispatchID, err)
+		log.Printf("event=worker_result_unconfirmed trace_id=%s dispatch=%s", record.Task.TraceID(), record.Task.DispatchID)
 		wait(ctx, time.Second)
 	}
 	return false
@@ -221,7 +254,7 @@ func heartbeat(ctx context.Context, client *gateway.Client, workerID string, tas
 			return
 		case <-ticker.C:
 			if err := client.Heartbeat(ctx, workerID, task); err != nil && ctx.Err() == nil {
-				log.Printf("heartbeat dispatch=%s: %v", task.DispatchID, err)
+				log.Printf("event=worker_heartbeat_deferred trace_id=%s dispatch=%s", task.TraceID(), task.DispatchID)
 			}
 		}
 	}

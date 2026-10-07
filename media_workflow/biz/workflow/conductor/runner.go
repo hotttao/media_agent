@@ -65,7 +65,7 @@ func (r *Runner) runTaskType(ctx context.Context, taskType string, handler Handl
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			log.Printf("internal worker poll %s: %v", taskType, err)
+			log.Printf("event=internal_poll_deferred task_type=%s", taskType)
 			if !wait(ctx, interval) {
 				return ctx.Err()
 			}
@@ -77,7 +77,18 @@ func (r *Runner) runTaskType(ctx context.Context, taskType string, handler Handl
 			}
 			continue
 		}
-		taskCtx := taskcontext.WithIdentity(ctx, taskcontext.Identity{WorkflowID: task.WorkflowInstanceID, TaskID: task.TaskID, TaskType: task.TaskType, Reference: task.ReferenceTaskName})
+		// Read-only optional metadata works with already published definitions.
+		metadataCtx, cancelMetadata := context.WithTimeout(ctx, 2*time.Second)
+		execution, metadataErr := r.Client.GetWorkflow(metadataCtx, task.WorkflowInstanceID)
+		cancelMetadata()
+		var envelope map[string]any
+		if metadataErr == nil && execution != nil && execution.WorkflowID == task.WorkflowInstanceID {
+			envelope = execution.Input
+		}
+		taskCtx, span := taskcontext.StartExecution(ctx, envelope, "workflow.internal_task")
+		taskCtx = taskcontext.WithIdentity(taskCtx, taskcontext.Identity{WorkflowID: task.WorkflowInstanceID, TaskID: task.TaskID, TaskType: task.TaskType, Reference: task.ReferenceTaskName})
+		jobID, _ := task.InputData["job_id"].(string)
+		taskcontext.Log(taskCtx, taskcontext.Event{Event: "internal_task_started", JobID: jobID, WorkflowID: task.WorkflowInstanceID, TaskID: task.TaskID, TaskType: taskType})
 		output, executeErr := handler(taskCtx, task.InputData)
 		result := TaskResult{
 			WorkflowInstanceID: task.WorkflowInstanceID, TaskID: task.TaskID, WorkerID: r.WorkerID,
@@ -91,11 +102,15 @@ func (r *Runner) runTaskType(ctx context.Context, taskType string, handler Handl
 			result.OutputData = nil
 			result.ReasonForIncompletion = taskerror.Reason(executeErr)
 		}
-		if err := r.Client.UpdateTask(ctx, result); err != nil {
+		if err := r.Client.UpdateTask(taskCtx, result); err != nil {
+			span.End()
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			log.Printf("internal worker update %s task=%s: %v", taskType, task.TaskID, err)
+			taskcontext.Log(taskCtx, taskcontext.Event{Event: "internal_task_update_unconfirmed", JobID: jobID, WorkflowID: task.WorkflowInstanceID, TaskID: task.TaskID, TaskType: taskType, Status: result.Status})
+		} else {
+			taskcontext.Log(taskCtx, taskcontext.Event{Event: "internal_task_updated", JobID: jobID, WorkflowID: task.WorkflowInstanceID, TaskID: task.TaskID, TaskType: taskType, Status: result.Status})
+			span.End()
 		}
 	}
 }

@@ -206,6 +206,11 @@ func TestExecutionStartOutboxPersistence(t *testing.T) {
 		t.Fatal("cleanup rebound Job")
 	}
 
+	// A stale terminal projection must not block an already authorized native
+	// cancel intent. Active engine admission is the service's responsibility.
+	if err := store.UpdateStatus(ctx, current.JobID, domain.JobFailed, "stale cache"); err != nil {
+		t.Fatal(err)
+	}
 	if handled, err := store.CancelInitialStart(ctx, current.JobID); err != nil || !handled {
 		t.Fatal("bound instance cancellation failed")
 	}

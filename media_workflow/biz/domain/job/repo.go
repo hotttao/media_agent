@@ -78,23 +78,18 @@ type EngineTask struct {
 	ScheduledTime, StartTime, EndTime int64
 	RetryCount                        int
 	Retried                           bool
+	ReasonForIncompletion             string
 }
 
 type StepRunRepo interface {
 	Get(ctx context.Context, id string) (*StepRun, error)
 	ListByJob(ctx context.Context, jobID string) ([]*StepRun, error)
 	GetByJobAndStepKey(ctx context.Context, jobID, stepKey string) (*StepRun, error)
-	// ClaimAtomic 原子领取一个 PENDING StepRun（按 platform/gen_way 匹配），返回被领的 step_run + 其 template 信息。
-	ClaimAtomic(ctx context.Context, q ClaimQuery) (*StepRun, error)
 	UpdateStatus(ctx context.Context, id string, status StepRunStatus, updates map[string]any) error
 	UpdateResolvedInputs(ctx context.Context, id string, inputs map[string]any, prompt string) error
 	UpdateCandidates(ctx context.Context, id string, candidates []Candidate) error
 	UpdateOutput(ctx context.Context, id string, outputAssetID string) error
 	UpdateFailure(ctx context.Context, id string, reason string) error
-	// ListClaimableByStepKeys 按 step_key 集合查 PENDING 的 step_run（DAG 推进用）。
-	ListByJobAndStatus(ctx context.Context, jobID string, status StepRunStatus) ([]*StepRun, error)
-	// ReclaimStale 把 CLAIMED 超时的 step_run 回 PENDING（worker 崩溃保护）。
-	ReclaimStale(ctx context.Context, timeoutSeconds int) (int64, error)
 }
 
 type ListQuery struct {
@@ -106,11 +101,4 @@ type ListQuery struct {
 	Status         string
 	Limit          int
 	Offset         int
-}
-
-type ClaimQuery struct {
-	Platform string
-	GenWay   string
-	GenType  string
-	WorkerID string
 }

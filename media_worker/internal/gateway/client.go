@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -48,6 +49,7 @@ type Task struct {
 	Input             map[string]any `json:"-"`
 	InputJSON         string         `json:"input_json"`
 	LeaseExpiresAt    int64          `json:"lease_expires_at"`
+	TraceParent       string         `json:"trace_parent,omitempty"`
 }
 
 type pollResponse struct {
@@ -81,17 +83,27 @@ func (c *Client) Poll(ctx context.Context, workerID string, capability Capabilit
 		if err := json.Unmarshal([]byte(response.Task.InputJSON), &response.Task.Input); err != nil {
 			return nil, fmt.Errorf("decode task input: %w", err)
 		}
+		parent, _ := response.Task.Input["_traceparent"].(string)
+		response.Task.TraceParent = ""
+		if validTraceParent(parent) {
+			response.Task.TraceParent = parent
+		}
+		delete(response.Task.Input, "_traceparent")
+		clean, _ := json.Marshal(response.Task.Input)
+		response.Task.InputJSON = string(clean)
 	}
 	return response.Task, nil
 }
 
 func (c *Client) Heartbeat(ctx context.Context, workerID string, task Task) error {
+	ctx = TaskContext(ctx, task)
 	body := map[string]any{"worker_instance_id": workerID, "attempt": task.Attempt}
 	path := "/api/worker/v1/tasks/" + url.PathEscape(task.DispatchID) + "/heartbeat"
 	return c.doJSON(ctx, http.MethodPost, path, body, nil)
 }
 
 func (c *Client) Complete(ctx context.Context, workerID string, task Task, idempotencyKey string, output map[string]any) (*ResultReceipt, error) {
+	ctx = TaskContext(ctx, task)
 	encoded, err := json.Marshal(output)
 	if err != nil {
 		return nil, err
@@ -105,18 +117,30 @@ func (c *Client) Complete(ctx context.Context, workerID string, task Task, idemp
 	if err := c.doJSON(ctx, http.MethodPost, path, body, &receipt); err != nil {
 		return nil, err
 	}
+	if receipt.Status != "submitted" {
+		return nil, errors.New("native task result is not confirmed")
+	}
 	return &receipt, nil
 }
 
 func (c *Client) Fail(ctx context.Context, workerID string, task Task, idempotencyKey, reason string) (*ResultReceipt, error) {
+	return c.FailWithKind(ctx, workerID, task, idempotencyKey, reason, "permanent")
+}
+
+func (c *Client) FailWithKind(ctx context.Context, workerID string, task Task, idempotencyKey, reason, kind string) (*ResultReceipt, error) {
+	ctx = TaskContext(ctx, task)
 	body := map[string]any{
 		"worker_instance_id": workerID, "attempt": task.Attempt,
 		"idempotency_key": idempotencyKey, "reason": reason,
+		"failure_kind": kind,
 	}
 	path := "/api/worker/v1/tasks/" + url.PathEscape(task.DispatchID) + "/fail"
 	var receipt ResultReceipt
 	if err := c.doJSON(ctx, http.MethodPost, path, body, &receipt); err != nil {
 		return nil, err
+	}
+	if receipt.Status != "submitted" {
+		return nil, errors.New("native task result is not confirmed")
 	}
 	return &receipt, nil
 }
@@ -140,6 +164,9 @@ func (c *Client) doJSONStatus(ctx context.Context, method, path string, body, ou
 		return 0, err
 	}
 	request.Header.Set("Authorization", "Bearer "+c.token)
+	if parent, ok := ctx.Value(taskTraceKey{}).(string); ok && validTraceParent(parent) {
+		request.Header.Set("traceparent", parent)
+	}
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}

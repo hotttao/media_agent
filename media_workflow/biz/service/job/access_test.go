@@ -79,8 +79,7 @@ func TestUserSubmitRequiresAuthorizedWorkspaceAndDerivesOrganization(t *testing.
 		{"permission removed", "org", "workspace", false, ErrSubmitForbidden},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			svc, repo, _ := newTestService(false)
-			svc.wfRepo.(*mockWorkflowLookup).wf.CreatedBy = "owner"
+			svc, repo, _, _, _, _ := submissionFixture()
 			a := &submitAuthority{workspace: &client.WorkspaceContext{ID: "workspace", OrganizationID: "org"}, allowed: tc.allowed}
 			svc.historyWorkspaces, svc.resumeAccess = a, a
 			job, err := svc.Submit(context.Background(), SubmitCommand{
@@ -137,7 +136,7 @@ func TestDelegatedSubmitRequiresCurrentWorkspacePermission(t *testing.T) {
 		})
 	}
 	for _, public := range []bool{false, true} {
-		svc, _, _ := newTestService(false)
+		svc, _, _, _, _, _ := submissionFixture()
 		wf := svc.wfRepo.(*mockWorkflowLookup).wf
 		wf.CreatedBy = "owner"
 		if public {

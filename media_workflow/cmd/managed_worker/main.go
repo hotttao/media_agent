@@ -53,10 +53,14 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	engine := &conductor.ExecutionEngine{Client: conductor.NewClient(os.Getenv("CONDUCTOR_URL"))}
+	if pending, err := jobrepo.NewDispatchRepo(db).ListPendingResults(ctx, 1); err != nil || len(pending) != 0 {
+		return fmt.Errorf("legacy worker results remain unconfirmed; resolve before switching to direct delivery")
+	}
 	flow := &worker_gateway.Flow{
-		StorageOrigin:  os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"),
-		ImportedAssets: client.NewMaterialsClient(os.Getenv("MEDIA_MATERIALS_URL")),
-		Dispatches:     jobrepo.NewDispatchRepo(db), Jobs: jobrepo.NewJobRepo(db), StepRuns: jobrepo.NewStepRunRepo(db),
+		ArtifactUploads: client.NewMaterialsClient(os.Getenv("MEDIA_MATERIALS_URL")),
+		StorageOrigin:   os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"),
+		ImportedAssets:  client.NewMaterialsClient(os.Getenv("MEDIA_MATERIALS_URL")),
+		Dispatches:      jobrepo.NewDispatchRepo(db), Jobs: jobrepo.NewJobRepo(db), StepRuns: jobrepo.NewStepRunRepo(db),
 		Capabilities: capabilityrepo.NewRepo(db), Engine: engine, Executions: engine,
 	}
 	instanceID := worker.GetInstanceId()
@@ -87,8 +91,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	go flow.RunResultSubmitter(ctx, time.Second)
-	go flow.RunLeaseReaper(ctx, 15*time.Second)
 	log.Printf("managed worker starting: worker_id=%s instance_id=%s", worker.GetWorkerId(), instanceID)
 	err = runtime.Run(ctx, time.Duration(worker.GetPollIntervalMs())*time.Millisecond, executors)
 	if ctx.Err() != nil {

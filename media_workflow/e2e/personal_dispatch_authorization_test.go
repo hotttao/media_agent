@@ -82,6 +82,24 @@ func TestPersonalDispatchAuthorizationIsolation(t *testing.T) {
 	if err != nil || after.Status != before.Status || !after.LeaseExpiresAt.Equal(before.LeaseExpiresAt) || engine.result.TaskID != "" {
 		t.Fatal("rejected operations changed lease, status or Conductor")
 	}
+	// The fixture's exact native Task remains IN_PROGRESS. Native re-poll of
+	// the same identity refreshes bookkeeping without a new dispatch/attempt.
+	if db.Model(&model.WorkerDispatch{}).Where("id=?", before.ID).Updates(map[string]any{"status": "expired", "lease_expires_at": time.Now().Add(-time.Minute)}).Error != nil {
+		t.Fatal("isolated delivery expiry seed failed")
+	}
+	now := time.Now()
+	renewal := *before
+	renewal.ID, renewal.DeliveredAt, renewal.LeaseExpiresAt = "ignored-new-dispatch", &now, now.Add(time.Minute)
+	refreshed, err := repo.Create(ctx, &renewal)
+	if err != nil || refreshed.ID != before.ID || refreshed.Attempt != before.Attempt || !refreshed.LeaseExpiresAt.After(now) {
+		t.Fatal("re-poll did not preserve exact native dispatch identity", err)
+	}
+	if db.Model(&model.WorkerDispatch{}).Where("id=?", before.ID).Updates(map[string]any{"status": "expired", "lease_expires_at": time.Now().Add(-time.Minute)}).Error != nil {
+		t.Fatal("isolated heartbeat expiry seed failed")
+	}
+	if _, err := flow.Heartbeat(ctx, owner, before.ID, before.WorkerInstanceID, before.Attempt); err != nil {
+		t.Fatal("local timestamp vetoed active native heartbeat", err)
+	}
 	command := worker_gateway.CompleteCommand{Principal: owner, DispatchID: "dispatch-auth", WorkerInstanceID: "instance-one",
 		Attempt: 1, IdempotencyKey: "valid-complete", Output: output}
 	first, err := flow.Complete(ctx, command)
@@ -92,7 +110,7 @@ func TestPersonalDispatchAuthorizationIsolation(t *testing.T) {
 	if err != nil || first.ID != replay.ID {
 		t.Fatal("authorized result replay was not idempotent")
 	}
-	if err := db.Model(&model.WorkerResultInbox{}).Count(&count).Error; err != nil || count != 1 || engine.result.TaskID != "" {
-		t.Fatal("authorized result must be persisted once for the durable submitter")
+	if err := db.Model(&model.WorkerResultInbox{}).Count(&count).Error; err != nil || count != 0 || engine.result.TaskID != "task-auth" || first.ConductorStatus != "submitted" {
+		t.Fatal("authorized result must directly reach Conductor without an inbox")
 	}
 }

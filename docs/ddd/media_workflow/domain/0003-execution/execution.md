@@ -24,7 +24,7 @@ StepRun 是稳定业务节点，一次被接受的 Generation Result 是独立�
 - Agent委托的User、企业和Workspace来自独立验证的请求上下文。提交、查询和状态变更检查当前Workspace的use_workflow授权；列表和资源查询同时限定owner、企业与Workspace。Job查询先授权后同步Conductor状态，没有企业/Workspace事实的旧Job不对Agent放行。
 - 保存 Job 输入快照、StepRun 状态和最终业务资源 ID。
 - 通过 Outbox 启动对应 Conductor Workflow，以 `job_id` 作为 correlation/idempotency key。
-- 按 Capability 冻结的 Personal/Managed Execution Domain 领取 Conductor Task，持久化 WorkerDispatch 租约与 Worker Result Receipt。
+- 按 Capability 冻结的 Personal/Managed Execution Domain 领取 Conductor Task，持久化WorkerDispatch授权关联；结果直接回写原生Task。
 - 幂等应用完成/失败结果，记录候选确认决定，支持带反馈重新生成、失败重试和取消。
 
 ### 不做什么
@@ -40,9 +40,9 @@ StepRun 是稳定业务节点，一次被接受的 Generation Result 是独立�
 | 查询执行 | 返回 Job 与步骤状态 | `GetJob/GetStepRun` |
 | 领取能力任务 | 按 Worker Principal、Capability 和 Execution Domain 创建或恢复 Dispatch | `PollWorkerTask` |
 | 续租任务 | 延长 Dispatch 租约并感知 Job 取消 | `HeartbeatWorkerTask` |
-| 接收 Worker 结果 | 校验 attempt/schema/object ref，写 Result Inbox 与稳定收据 | `CompleteWorkerTask/FailWorkerTask` |
+| 回写 Worker 结果 | 校验身份与精确Task，直接代理原生结果更新与确认 | `CompleteWorkerTask/FailWorkerTask` |
 | 应用步骤结果 | 幂等处理下游完成或失败事件 | `ApplyStepResult` |
-| 接受候选 | 对 needs_confirm StepRun 选择唯一候选，待下游确认后推进 DAG | `ConfirmStepRun` |
+| 接受候选 | 对当前原生HUMAN输入选择候选并保存决定，由Conductor推进 | `ConfirmStepRun` |
 | 重新生成 | 将反馈提交精确HUMAN，由Conductor循环开启新轮 | `RegenerateStepRun` |
 | 重试执行 | 两个入口均代理所属Conductor实例的原生retry，不限定单节点范围 | `RetryStepRun/RetryJob` |
 | 取消执行 | 阻止新步骤并请求取消下游任务 | `CancelJob` |
@@ -59,7 +59,7 @@ StepRun 是稳定业务节点，一次被接受的 Generation Result 是独立�
 | 聚合根 | 包含对象 | 一致性边界 | 核心不变量 |
 |:---|:---|:---|:---|
 | Job | StepRun、Step Review Decision | 单次执行状态推进 | 每个 StepRun 最终只有一个 output_resource_id；未确认多候选不能解锁后继；每个 review attempt 只能接受一个决定 |
-| WorkerDispatch | Worker Result Receipt | 单次能力交付与结果接收 | 一个 Dispatch 只绑定一个 Job/StepRun attempt、Capability、Execution Target、User、执行 Actor 和 lease；同一 operation 只产生一个结果收据 |
+| WorkerDispatch | 授权关联与交付记账 | 本地授权身份不变 | Dispatch绑定原生Task、Capability和Worker身份；原生Task是终态输出权威，不保存新的结果Inbox |
 
 - 下游返回多个 Candidate 不改变 Workflow Step 的单输出定义，且必须进入 needs_confirm。
 - 单 Candidate 在 `approval_policy=always` 时进入 needs_confirm；否则自动确认并形成唯一输出。
@@ -94,13 +94,21 @@ StepRun 是稳定业务节点，一次被接受的 Generation Result 是独立�
 
 ## 数据模型
 
+Worker Artifact Upload不新增聚合表：Dispatch提供任务尝试与执行者绑定，上传对象的不可覆盖事实由Storage原子条件写持有。准备上传只签发当前尝试某个候选的短期写入凭据；不改变Task/Job/Step状态。上传后仍须原生Complete、审批及Finalize，参见[产物上传流程](../../../workflow/0001-worker_artifact_upload/worker_artifact_upload.md)。
+
 ### 执行状态权威与业务投影
 
 Conductor拥有Task/Workflow的执行状态、技术retry_count、循环轮次及失败恢复。Execution聚合保存归属、冻结输入/编译关联、业务审批/生成资源关联与查询投影，不自行拥有Task调度和重跑状态机。失败恢复不新建execution_retries聚合/表，不持久化另一套发送租约、重置计划或witness。
 
 普通失败继续保留成功任务和产物；审批重新生成以精确Human Task/循环轮次辨识新结果。Job/StepRun终态缓存不能与引擎已经恢复的状态冲突；旧结果/决定仍按精确Task、Dispatch和生成身份拒绝，不能只由本地RetryCount决定执行资格。取消意图、资源登记和业务幂等仍是本地事实，投影事务不包含外部调用。
 
+Job查询状态含paused：原生PAUSED是非终态，独立于need_confirm；RUNNING恢复后可重新投影，TERMINATED为cancelled而不是技术失败。取消意图与原始状态缓存区分：接受native取消只由当前活动引擎实例与持久初次启动记录共同授权，事务保存取消意图及清理义务，不在事务中Terminate。取消后投影不能复活Job。
+
+明确input_override使用Execution Rerun，不属于Execution Retry。原生rerun确认后，Job事务原子记录新受控Input、历史周期审计并使Step查询缓存失效；取消意图/实例/版本/周期变化拒绝旧提交。旧Generated Assets与Review不删除，缓存写不能控制原生Task队列。生成来源以本轮原生Input为准，不能因本地审计延迟使用旧商品/人物；引擎提交与本地事务之间不承诺原子性。
+
 ### `execution_starts`
+
+workflow_input可携服务端冻结的只读追踪关联元数据，不属于Job业务输入、提交去重语义或权限事实，不新增聚合/表。首次接受与完整启动清单摘要一同保存，重放不更换；无效/缺失元数据不能使任务失败或改变原生执行资格。执行状态、Task身份与取消意图仍是唯一准入事实。
 
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
@@ -193,7 +201,7 @@ Conductor拥有Task/Workflow的执行状态、技术retry_count、循环轮次�
 | job_id | text | 所属 Job；事务内校验 StepRun 与 Job 的关联 |
 | conductor_workflow_id / conductor_task_id / task_reference_name | text | 精确审批目标；不向客户端暴露 Conductor 身份 |
 | generation | integer | 生成轮次；旧无循环审批为 0，循环轮次从 1 开始 |
-| accepted_retry_count | integer nullable | 审批接受时冻结的Execution Retry Epoch；非负，旧记录未知为null，不回填 |
+| accepted_retry_count | integer nullable | 接受时本地历史周期的不可变审计；非负，未知为null，不作执行资格判断 |
 | decision | text | accept/regenerate |
 | selected_index | integer nullable | accept 时在本轮候选快照内选中的位置 |
 | feedback | text nullable | regenerate 时传给下游的用户反馈 |
@@ -212,9 +220,9 @@ Conductor拥有Task/Workflow的执行状态、技术retry_count、循环轮次�
 - `UNIQUE (step_run_id, conductor_task_id)`，同一实际审批任务只能存在一个有效决定；生成轮和技术失败重试不能混作同一个 attempt。
 - `UNIQUE (step_run_id, idempotency_key)`，重复提交返回同一决定。
 - selected_index 只在 accept 时必填，feedback 只在 regenerate 时使用。
-- Review 与退出待确认状态在同一聚合事务内提交；Repository 透传应用层事务，不在数据库锁中调用 Conductor。后台写入必须匹配本次 claim token，过期领取者不能覆盖新 claim。
+- Review事务只保存不可变决定，不推进Job/Step执行状态；Repository透传应用层事务，不在锁中调用Conductor。后台写入匹配本次claim token，过期领取者不能覆盖新claim。
 
-新审批的accepted_retry_count必须等于Job锁内当前retry_count，且参与决定摘要；同键重放保持原周期和原摘要。Retry前的决定继续保留审计但不能影响新周期；同周期不能被较老数字generation/审批Task投影回退。未知旧周期不等同于0；其摘要保持原格式，遇到同轮重试歧义时拒绝自动解释，不删除旧Review。
+accepted_retry_count参与原摘要并保留审计，不与Job缓存计数比较来决定资格。决定只绑定精确HUMAN Task；原生retried标记、Task状态与实例关联防止影响替代任务。同键重放保留原摘要与原审计，未知旧周期仍为null，不回填或删除。
 
 ### `worker_dispatches`
 
@@ -233,12 +241,14 @@ Conductor拥有Task/Workflow的执行状态、技术retry_count、循环轮次�
 | worker_instance_id | text | 本次 Worker 进程实例审计标识 |
 | auth_source | text | api_token / internal_runtime |
 | status | text | claimed/delivered/running/result_received/expired/failed |
-| lease_expires_at | timestamptz | 本地租约到期时间 |
+| lease_expires_at | timestamptz | 兼容交付刷新时间，不是原生任务截止时间 |
 | created_at / delivered_at / completed_at | timestamptz nullable | 生命周期时间 |
 
-约束：同一 `conductor_task_id + attempt` 最多一个未过期 Dispatch；同一 Worker 有有效 Dispatch 时重复 poll 返回原 Dispatch，不重复领取。
+约束：同一conductor_task_id+attempt唯一Dispatch，不因本地时间分配新尝试。原生重投给同一绑定身份时保留ID并刷新记账；不重绑定不同Worker/凭证/实例。活动资格由精确原生Task及取消意图决定，不由lease_expires_at判定。
 
 ### `worker_result_inbox`
+
+历史存档表，不再由正常Worker回写新增数据或后台扫描交付；现有字段和约束保留，禁止通过删表/删记录完成退役。
 
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
@@ -275,14 +285,20 @@ Job 和 StepRun 使用 ULID；下游幂等键由 `step_run_id + attempt` 派生�
 2. 服务端把 Capability Version 映射为 Task Definition，并从 Principal 派生 Personal Domain；客户端值不参与路由。Managed Worker 通过内部运行入口只加载 Managed Capability/Domain，不经过该 JWT 路径。
 3. 若该 Worker 已有未过期 Dispatch，返回原 Dispatch；否则在对应 Domain 执行 Conductor batch long-poll。
 4. poll 成功后先事务写 WorkerDispatch，再返回 `dispatch_id`、清洗后的输入与即时签发的 presigned URL。
-5. heartbeat 延长本地 lease，并通过 Outbox 异步更新 Conductor；Job 取消、凭证撤销或 lease 过期时拒绝续租。
+5. heartbeat核对精确原生Task，代理IN_PROGRESS/callback并再次确认仍活动，再刷新交付记账；无heartbeat Outbox或本地过期扫描。取消、错误身份、原生终态或替代Task拒绝；本地时间过期不否决活动原Task。
 
 ### CompleteWorkerTask / FailWorkerTask
 
-1. Personal 结果校验 Principal 与 Dispatch 的 user、actor、organization、credential/lease、worker instance、attempt；Managed 结果校验可信内部 actor、pool、lease、worker instance、attempt；两者都校验 Capability 输出 schema 和 Object Path 所属前缀。
-2. 事务内以 `(dispatch_id, attempt, operation)` 写 Worker Result Inbox、标记 Dispatch `result_received`；立即返回 `202 + receipt_id`。
-3. Conductor Adapter 重试提交 TaskResult；结果不明确时按 conductor_task_id 查询，不能要求客户端重新执行 Provider。
-4. Finalizer 验证对象元数据，以 `(step_run_id, attempt)` 幂等登记 Generated Asset，再通过 ApplyStepResult 推进业务状态。
+1. Personal结果校验Principal与Dispatch的user、actor、organization、credential、worker instance、attempt；Managed校验可信内部actor、pool、worker instance、attempt；输出遵守Capability schema和Object Path前缀。交付刷新时间不是身份有效期。
+2. 查询原生精确Task，核对Job、实例、attempt。已处于匹配终态则直接返回确认；不同终态结果冲突。首次更新要求原Task仍活动且身份归属有效，不使用本地交付时间作为执行截止。
+3. 直接提交TaskResult后再查询原Task。状态及输出或失败reason匹配才返回200/submitted；未确认返回安全可重试错误，客户端保留并重发原结果、不重新执行Provider。只更新Dispatch交付记账，不写Inbox/Job/Step。receipt_id为由Dispatch与attempt派生的不透明确认标识，不是新建数据库回执。
+4. Conductor调度的Finalize验证本轮结果，以原生实例、StepRun与成功invoke Task身份派生稳定生成结果键，幂等登记Generated Asset并回写原Finalize Task；查询只投影资源引用与状态，不推进DAG。
+
+### Worker失败分类与结果接收
+
+FailWorkerTask的`failure_kind`仅允许空、`permanent`或`transient`，空表示兼容的永久失败。transient映射FAILED，permanent/空映射FAILED_WITH_TERMINAL_ERROR；重放核对原生失败状态及reason，不能把不同分类/原因视为已确认。
+
+没有结果接收事务；原生结果确认后才写WorkerDispatch的status=result_received与completed_at，作为交付记账。completed_at不是整个Workflow完成时间。不修改Job/StepRun、不登记素材；原生Task Definition决定技术重试，未知分类在外部调用前拒绝。历史Inbox只存档，当前结果来源为Conductor。
 
 ### ApplyStepResult
 

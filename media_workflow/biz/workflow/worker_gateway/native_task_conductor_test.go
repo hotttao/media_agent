@@ -6,9 +6,16 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"io"
+	"log"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -63,7 +70,24 @@ func TestNativeTaskDeliveryIgnoresFailedProjection(t *testing.T) {
 		defer cancel()
 		_ = api.TerminateWorkflow(cleanup, id, "technical delivery gate cleanup")
 	})
-	engine := &conductor.ExecutionEngine{Client: api}
+	target, _ := url.Parse(address)
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.ErrorLog = log.New(io.Discard, "", 0)
+	var updates atomic.Int32
+	proxy.ModifyResponse = func(response *http.Response) error {
+		if response.Request.Method == http.MethodPost && response.Request.URL.Path == "/api/tasks" {
+			updates.Add(1)
+			if response.StatusCode >= 200 && response.StatusCode < 300 {
+				_, _ = io.Copy(io.Discard, response.Body)
+				response.Body.Close()
+				return errors.New("injected committed response loss")
+			}
+		}
+		return nil
+	}
+	server := httptest.NewServer(proxy)
+	defer server.Close()
+	engine := &conductor.ExecutionEngine{Client: conductor.NewClient(server.URL)}
 	f.Engine = engine
 	f.Executions = engine
 	f.Jobs.(*jobRepoStub).item.ConductorWorkflowID = id
@@ -72,9 +96,17 @@ func TestNativeTaskDeliveryIgnoresFailedProjection(t *testing.T) {
 		t.Fatal("native running task blocked by failed projection", err)
 	}
 	var execution *jobdomain.EngineExecution
+	// Native response timeout has not elapsed; local delivery time is not
+	// another execution deadline for the exact still-active native Task.
+	d.dispatch.LeaseExpiresAt = f.now().Add(-time.Minute)
 	receipt, err := f.Complete(ctx, CompleteCommand{Principal: cmd.Principal, DispatchID: got.ID, WorkerInstanceID: cmd.WorkerInstanceID, Attempt: got.Attempt, IdempotencyKey: name + ":complete", Output: map[string]any{"candidates": []any{map[string]any{"content": "technical fixture result"}}}})
-	if err != nil || f.SubmitReceipt(ctx, receipt) != nil {
+	if err != nil || receipt.ConductorStatus != "submitted" {
 		t.Fatal("normal result protocol did not complete the technical task")
+	}
+	d.dispatch.LeaseExpiresAt = f.now().Add(-time.Minute)
+	replay, err := f.Complete(ctx, CompleteCommand{Principal: cmd.Principal, DispatchID: got.ID, WorkerInstanceID: cmd.WorkerInstanceID, Attempt: got.Attempt, IdempotencyKey: name + ":complete", Output: map[string]any{"candidates": []any{map[string]any{"content": "technical fixture result"}}}})
+	if err != nil || replay.ID != receipt.ID || updates.Load() != 1 || d.saveCalls != 0 {
+		t.Fatal("committed result replay did not resolve by query", err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {

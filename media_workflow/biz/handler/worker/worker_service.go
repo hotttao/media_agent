@@ -131,7 +131,7 @@ func CompleteWorkerTask(ctx context.Context, c *app.RequestContext) {
 		writeError(c, err)
 		return
 	}
-	c.JSON(consts.StatusAccepted, receiptDTO(receipt))
+	c.JSON(consts.StatusOK, receiptDTO(receipt))
 }
 
 // FailWorkerTask .
@@ -151,13 +151,13 @@ func FailWorkerTask(ctx context.Context, c *app.RequestContext) {
 	}
 	receipt, err := Flow.Fail(ctx, workergateway.FailCommand{
 		Principal: principal, DispatchID: req.GetDispatchId(), WorkerInstanceID: req.GetWorkerInstanceId(),
-		Attempt: int(req.GetAttempt()), IdempotencyKey: req.GetIdempotencyKey(), Reason: req.GetReason(),
+		Attempt: int(req.GetAttempt()), IdempotencyKey: req.GetIdempotencyKey(), Reason: req.GetReason(), FailureKind: req.GetFailureKind(),
 	})
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-	c.JSON(consts.StatusAccepted, receiptDTO(receipt))
+	c.JSON(consts.StatusOK, receiptDTO(receipt))
 }
 
 func requireWorker(ctx context.Context, c *app.RequestContext, scope string) (*auth.WorkerPrincipal, workergateway.Principal, bool) {
@@ -183,6 +183,8 @@ func receiptDTO(receipt *jobdomain.WorkerResultReceipt) *worker.WorkerResultRece
 func writeError(c *app.RequestContext, err error) {
 	status := consts.StatusInternalServerError
 	switch {
+	case errors.Is(err, workergateway.ErrResultUnconfirmed):
+		status = consts.StatusServiceUnavailable
 	case errors.Is(err, workergateway.ErrUnauthorized):
 		status = consts.StatusUnauthorized
 	case errors.Is(err, workergateway.ErrForbidden):
@@ -199,4 +201,31 @@ func writeError(c *app.RequestContext, err error) {
 		status = consts.StatusBadRequest
 	}
 	c.JSON(status, map[string]string{"error": err.Error()})
+}
+
+// PrepareWorkerArtifactUpload .
+// @router /api/worker/v1/tasks/:dispatch_id/uploads [POST]
+func PrepareWorkerArtifactUpload(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req worker.PrepareWorkerArtifactUploadReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	_, principal, ok := requireWorker(ctx, c, "workflow.worker.upload")
+	if !ok {
+		return
+	}
+	if Flow == nil {
+		c.String(consts.StatusServiceUnavailable, "artifact upload unavailable")
+		return
+	}
+	grant, err := Flow.PrepareArtifactUpload(ctx, workergateway.PrepareArtifactCommand{Principal: principal, DispatchID: req.GetDispatchId(), WorkerInstanceID: req.GetWorkerInstanceId(), Attempt: int(req.GetAttempt()), ArtifactMetadata: workergateway.ArtifactMetadata{CandidateIndex: int(req.GetCandidateIndex()), ContentType: req.GetContentType(), SizeBytes: req.GetSizeBytes(), ChecksumSHA256: req.GetChecksumSha256(), ContentMD5: req.GetContentMd5()}})
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(consts.StatusOK, &worker.PrepareWorkerArtifactUploadResp{ObjectPath: grant.ObjectPath, UploadUrl: grant.UploadURL, Headers: grant.Headers, ExpiresAt: grant.ExpiresAt, AlreadyUploaded: grant.AlreadyUploaded})
 }

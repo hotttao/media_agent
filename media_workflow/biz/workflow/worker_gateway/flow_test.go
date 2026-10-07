@@ -128,8 +128,15 @@ func (e *taskEngineStub) Get(context.Context, string) (*jobdomain.EngineExecutio
 	if e.task == nil {
 		return nil, errors.New("missing test execution")
 	}
+	status := "IN_PROGRESS"
+	var output map[string]any
+	reason := ""
+	if len(e.updateCalls) > 0 {
+		last := e.updateCalls[len(e.updateCalls)-1]
+		status, output, reason = last.Status, last.Output, last.Reason
+	}
 	return &jobdomain.EngineExecution{WorkflowInstanceID: e.task.WorkflowInstanceID, Status: "RUNNING", Tasks: []jobdomain.EngineTask{{
-		TaskID: e.task.TaskID, TaskType: e.task.TaskType, Input: e.task.Input, Status: "IN_PROGRESS", RetryCount: e.task.RetryCount,
+		TaskID: e.task.TaskID, TaskType: e.task.TaskType, Input: e.task.Input, Status: status, Output: output, ReasonForIncompletion: reason, RetryCount: e.task.RetryCount,
 	}}}, nil
 }
 
@@ -199,6 +206,14 @@ func (r *dispatchRepoStub) SaveResult(_ context.Context, _ string, _ int, operat
 func (r *dispatchRepoStub) MarkResultSubmitted(context.Context, string, time.Time) error {
 	r.markCalls++
 	r.receipt.ConductorStatus = "submitted"
+	return nil
+}
+
+func (r *dispatchRepoStub) MarkResultReceived(context.Context, string, int, time.Time) error {
+	r.markCalls++
+	if r.dispatch != nil {
+		r.dispatch.Status = jobdomain.DispatchResultReceived
+	}
 	return nil
 }
 
@@ -318,7 +333,7 @@ func TestCompleteIsIdempotentAfterReceiptWasSubmitted(t *testing.T) {
 	flow, dispatches, engine := newPollFlow(now)
 	engine.task.RetryCount = 0
 	dispatches.dispatch = &jobdomain.WorkerDispatch{
-		ID: "dispatch-1", ConductorTaskID: "task-1", ConductorWorkflowID: "workflow-1", Attempt: 1,
+		ID: "dispatch-1", JobID: "job-1", ConductorTaskID: "task-1", ConductorWorkflowID: "workflow-1", Attempt: 1,
 		UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token", WorkerInstanceID: "desktop-1",
 		Status: jobdomain.DispatchDelivered, LeaseExpiresAt: now.Add(time.Minute),
 	}
@@ -333,22 +348,16 @@ func TestCompleteIsIdempotentAfterReceiptWasSubmitted(t *testing.T) {
 	if _, err := flow.Complete(context.Background(), cmd); err != nil {
 		t.Fatalf("second Complete() error = %v", err)
 	}
-	if dispatches.saveCalls != 2 || len(engine.updateCalls) != 0 || dispatches.markCalls != 0 {
+	if dispatches.saveCalls != 0 || len(engine.updateCalls) != 1 || dispatches.markCalls != 2 {
 		t.Fatalf("save=%d updates=%d marks=%d", dispatches.saveCalls, len(engine.updateCalls), dispatches.markCalls)
-	}
-	if err := flow.SubmitReceipt(context.Background(), dispatches.receipt); err != nil {
-		t.Fatalf("SubmitReceipt() error = %v", err)
-	}
-	if len(engine.updateCalls) != 1 || dispatches.markCalls != 1 {
-		t.Fatalf("updates=%d marks=%d", len(engine.updateCalls), dispatches.markCalls)
 	}
 }
 
 func TestHeartbeatRejectsForeignAndStaleDispatches(t *testing.T) {
 	now := time.Now()
-	flow, dispatches, _ := newPollFlow(now)
+	flow, dispatches, engine := newPollFlow(now)
 	dispatches.dispatch = &jobdomain.WorkerDispatch{
-		ID: "dispatch-1", Attempt: 2, UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token",
+		ID: "dispatch-1", JobID: "job-1", ConductorWorkflowID: "workflow-1", ConductorTaskID: "task-1", Attempt: 2, UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token",
 		WorkerInstanceID: "desktop-1", Status: jobdomain.DispatchDelivered, LeaseExpiresAt: now.Add(time.Minute),
 	}
 
@@ -362,8 +371,13 @@ func TestHeartbeatRejectsForeignAndStaleDispatches(t *testing.T) {
 	}
 	dispatches.dispatch.LeaseExpiresAt = now.Add(-time.Second)
 	_, err = flow.Heartbeat(context.Background(), Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"}, "dispatch-1", "desktop-1", 2)
-	if !errors.Is(err, jobdomain.ErrDispatchExpired) {
-		t.Fatalf("expired Heartbeat() error = %v", err)
+	if err != nil || len(engine.updateCalls) != 1 || !dispatches.dispatch.LeaseExpiresAt.After(now) {
+		t.Fatalf("local delivery clock vetoed active native heartbeat: %v", err)
+	}
+	engine.task.TaskID = "replacement-task"
+	_, err = flow.Heartbeat(context.Background(), Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"}, "dispatch-1", "desktop-1", 2)
+	if !errors.Is(err, jobdomain.ErrDispatchExpired) || len(engine.updateCalls) != 1 {
+		t.Fatal("obsolete task was renewed", err)
 	}
 }
 
@@ -371,8 +385,9 @@ func TestCompleteRejectsCancelledJob(t *testing.T) {
 	now := time.Now()
 	flow, dispatches, engine := newPollFlow(now)
 	flow.Jobs.(*jobRepoStub).item.Status = jobdomain.JobCancelled
+	engine.task.RetryCount = 0
 	dispatches.dispatch = &jobdomain.WorkerDispatch{
-		ID: "dispatch-1", JobID: "job-1", Attempt: 1, UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token",
+		ID: "dispatch-1", JobID: "job-1", ConductorWorkflowID: "workflow-1", ConductorTaskID: "task-1", Attempt: 1, UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token",
 		WorkerInstanceID: "desktop-1", Status: jobdomain.DispatchDelivered, LeaseExpiresAt: now.Add(time.Minute),
 	}
 	_, err := flow.Complete(context.Background(), CompleteCommand{

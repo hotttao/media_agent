@@ -1,6 +1,7 @@
 package fixture
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
@@ -24,6 +25,7 @@ type Executor struct {
 	baseURL           string
 	resultURLs        map[string][]string
 	providerResults   map[providerTaskRef]ProviderBinding
+	uploadFile        func(context.Context, gateway.Task, int, string) (string, error)
 	failureMu         sync.Mutex
 	failureStep       string
 	failureCall       int
@@ -139,8 +141,17 @@ func validateResultURLs(urls []string) error {
 }
 
 func (e *Executor) Execute(task gateway.Task) (map[string]any, error) {
+	return e.ExecuteContext(context.Background(), task)
+}
+
+// SetFileUploader must be configured before execution starts.
+func (e *Executor) SetFileUploader(upload func(context.Context, gateway.Task, int, string) (string, error)) {
+	e.uploadFile = upload
+}
+
+func (e *Executor) ExecuteContext(ctx context.Context, task gateway.Task) (map[string]any, error) {
 	if e.providerResults != nil {
-		return e.executeProvider(task)
+		return e.executeProvider(ctx, task)
 	}
 	if task.CapabilityVersion != 1 {
 		return nil, fmt.Errorf("media_ai fixture does not support capability version %d", task.CapabilityVersion)

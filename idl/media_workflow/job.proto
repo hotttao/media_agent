@@ -62,15 +62,19 @@ service JobService {
   }
 
   // —— worker ——
+  // Retired: always HTTP 410. Use Worker Gateway capability dispatch instead.
   rpc ClaimStepRun(ClaimStepRunReq) returns (ClaimStepRunResp) {
+    option deprecated = true;
     option (google.api.http) = { post: "/api/v1/step-runs/claim" body: "*" };
     option (api.post) = "/api/v1/step-runs/claim";
   }
   rpc CompleteStepRun(CompleteStepRunReq) returns (StepRun) {
+    option deprecated = true;
     option (google.api.http) = { post: "/api/v1/step-runs/{step_run_id}/complete" body: "*" };
     option (api.post) = "/api/v1/step-runs/:step_run_id/complete";
   }
   rpc FailStepRun(FailStepRunReq) returns (StepRun) {
+    option deprecated = true;
     option (google.api.http) = { post: "/api/v1/step-runs/{step_run_id}/fail" body: "*" };
     option (api.post) = "/api/v1/step-runs/:step_run_id/fail";
   }
@@ -98,6 +102,7 @@ message JobInput {
 enum JobStatus {
   JOB_STATUS_UNSPECIFIED = 0; PENDING = 1; RUNNING = 2; NEED_CONFIRM = 3;
   SUCCEEDED = 4; FAILED = 5; CANCELLED = 6; AWAITING_RESUME = 7;
+  PAUSED = 8; // 原生 Conductor 暂停，不等于等待候选审批。
 }
 enum StepRunStatus {
   SR_UNSPECIFIED = 0; SR_BLOCKED = 1; SR_PENDING = 2; SR_CLAIMED = 3;

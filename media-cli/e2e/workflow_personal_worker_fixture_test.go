@@ -214,7 +214,7 @@ func awaitPersonalWorkerFixture(t *testing.T, request func(string, string, any, 
 	if feedback != "" && regenerateKey == "" {
 		t.Fatal("feedback requires a regeneration step")
 	}
-	regenerated, confirmedAfterRegeneration := false, false
+	regenerated, confirmedAfterRegeneration := os.Getenv("MEDIA_E2E_PROVIDER_REGENERATION_ALREADY_REQUESTED") == "1", false
 	type reviewReceipt struct {
 		ID     string `json:"last_review_id"`
 		Status string `json:"last_review_status"`
@@ -296,7 +296,11 @@ func awaitPersonalWorkerFixture(t *testing.T, request func(string, string, any, 
 				}
 				body := map[string]any{"selected_index": index, "idempotency_key": "fixture:" + jobID + ":" + step.Key + ":accept"}
 				if regenerated && step.Key == regenerateKey && feedback != "" && !strings.HasSuffix(step.Prompt, "\n\n用户重新生成反馈（本轮）：\n"+feedback) {
-					t.Fatal("regenerated step did not project the rendered feedback")
+					// Accepting a decision does not synchronously advance the
+					// native loop. Wait for the new rendered generation instead
+					// of confirming the still-cached old HUMAN candidates.
+					// Missing feedback still fails the bounded final observation.
+					continue
 				}
 				var receipt, replay reviewReceipt
 				request("POST", "/api/v1/step-runs/"+step.ID+"/confirm", body, &receipt)

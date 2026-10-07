@@ -8,8 +8,8 @@ import (
 
 	hclient "github.com/cloudwego/hertz/pkg/app/client"
 	"github.com/cloudwego/hertz/pkg/protocol"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	"media_agent/hertz_infra/tracecontext"
 )
 
 // ManagedExecutor adapts a configured internal capability implementation.
@@ -28,7 +28,7 @@ func (e *ManagedExecutor) Execute(ctx context.Context, body []byte, idempotencyK
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", idempotencyKey)
 	headers := propagation.MapCarrier{}
-	otel.GetTextMapPropagator().Inject(ctx, headers)
+	tracecontext.Inject(ctx, headers)
 	for key, value := range headers {
 		request.Header.Set(key, value)
 	}

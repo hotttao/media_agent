@@ -133,7 +133,7 @@ func (r *JobRepo) CancelInitialStart(ctx context.Context, jobID string) (bool, e
 		if j.Status == "cancelled" {
 			return nil
 		}
-		if j.Origin != "native" || domain.JobStatus(j.Status).IsTerminal() {
+		if j.Origin != "native" {
 			return domain.ErrStartConflict
 		}
 		if err := tx.Model(&j).Updates(map[string]any{"status": "cancelled", "failure_reason": "cancelled by user", "finished_at": time.Now().UTC()}).Error; err != nil {

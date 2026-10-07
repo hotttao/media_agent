@@ -34,12 +34,15 @@ func (r *registrationExecution) Get(context.Context, string) (*domain.EngineExec
 }
 
 type registrationAssets struct {
-	keys []string
-	ids  map[string]string
-	lost bool
+	keys    []string
+	ids     map[string]string
+	lost    bool
+	request *client.UpsertGenAssetReq
 }
 
 func (r *registrationAssets) UpsertGeneratedAsset(_ context.Context, request *client.UpsertGenAssetReq) (string, error) {
+	copy := *request
+	r.request = &copy
 	r.keys = append(r.keys, request.ResultKey)
 	id := r.ids[request.ResultKey]
 	if id == "" {
@@ -51,6 +54,28 @@ func (r *registrationAssets) UpsertGeneratedAsset(_ context.Context, request *cl
 		return "", errors.New("response lost after commit")
 	}
 	return id, nil
+}
+
+func TestFinalizeUsesNativeRerunSourcesNotLaggingJobInput(t *testing.T) {
+	for _, include := range []bool{true, false} {
+		h, ctx, input, execution, assets := registrationFixture()
+		inputs := map[string]any{}
+		if include {
+			inputs["product"] = map[string]any{"value": map[string]any{"id": "new-product"}}
+			inputs["virtual_ip"] = map[string]any{"value": map[string]any{"id": "new-person"}}
+		}
+		execution.item.Input = map[string]any{"inputs": inputs}
+		if _, err := h.Execute(ctx, input); err != nil {
+			t.Fatal(err)
+		}
+		wantProduct, wantVIP := "", ""
+		if include {
+			wantProduct, wantVIP = "new-product", "new-person"
+		}
+		if assets.request.SourceProductID != wantProduct || assets.request.SourceVirtualIPID != wantVIP {
+			t.Fatal("generation used prior input provenance")
+		}
+	}
 }
 
 func registrationFixture() (Handler, context.Context, Input, *registrationExecution, *registrationAssets) {
@@ -92,7 +117,7 @@ func TestFinalizeRegistrationUsesStableInvocationIdentityAcrossTechnicalRetry(t 
 }
 
 func TestFinalizeRejectsStaleOrForeignFactsBeforeRegistration(t *testing.T) {
-	for _, scenario := range []string{"no_identity", "wrong_execution", "cancelled", "wrong_step", "wrong_kind", "retired_finalize", "retired_invoke", "pending_generation", "old_candidates", "old_selected", "engine_terminated", "ambiguous_invoke"} {
+	for _, scenario := range []string{"no_identity", "wrong_execution", "cancelled", "wrong_step", "wrong_kind", "retired_finalize", "retired_invoke", "pending_generation", "old_candidates", "old_selected", "engine_terminated", "ambiguous_invoke", "malformed_source"} {
 		t.Run(scenario, func(t *testing.T) {
 			h, ctx, input, execution, assets := registrationFixture()
 			switch scenario {
@@ -121,6 +146,8 @@ func TestFinalizeRejectsStaleOrForeignFactsBeforeRegistration(t *testing.T) {
 				execution.item.Status = "TERMINATED"
 			case "ambiguous_invoke":
 				execution.item.Tasks = append(execution.item.Tasks, execution.item.Tasks[1])
+			case "malformed_source":
+				execution.item.Input = map[string]any{"inputs": map[string]any{"product": map[string]any{"value": "not a product snapshot"}}}
 			}
 			if _, err := h.Execute(ctx, input); err == nil || !taskerror.IsPermanent(err) || len(assets.keys) != 0 {
 				t.Fatal("invalid generation was registered or misclassified", err)

@@ -15,3 +15,4 @@ media_worker/.env*
 media_worker/.fixture*.json
 media_workflow/.migration_reports
 **/node_modules
+**/.worker-state

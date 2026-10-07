@@ -32,10 +32,6 @@ type WorkerDispatch struct {
 	DeliveredAt, CompletedAt                 *time.Time
 }
 
-func (d WorkerDispatch) LeaseActive(now time.Time) bool {
-	return (d.Status == DispatchClaimed || d.Status == DispatchDelivered || d.Status == DispatchRunning) && now.Before(d.LeaseExpiresAt)
-}
-
 type WorkerResultReceipt struct {
 	ID, DispatchID, Operation, IdempotencyKey string
 	Attempt                                   int
@@ -52,15 +48,11 @@ type DispatchRepo interface {
 	Create(ctx context.Context, dispatch *WorkerDispatch) (*WorkerDispatch, error)
 	Get(ctx context.Context, id string) (*WorkerDispatch, error)
 	ExtendLease(ctx context.Context, id string, attempt int, leaseExpiresAt time.Time) (*WorkerDispatch, error)
-	SaveResult(ctx context.Context, dispatchID string, attempt int, operation, idempotencyKey string, resultJSON []byte, resultDigest string, now time.Time) (*WorkerResultReceipt, error)
-	ListPendingResults(ctx context.Context, limit int) ([]*WorkerResultReceipt, error)
-	MarkResultSubmitted(ctx context.Context, receiptID string, at time.Time) error
-	MarkResultFailed(ctx context.Context, receiptID, message string) error
-	ExpireLeases(ctx context.Context, now time.Time) (int64, error)
+	MarkResultReceived(ctx context.Context, id string, attempt int, at time.Time) error
 }
 
 var (
 	ErrDispatchNotFound = errors.New("worker dispatch not found")
 	ErrDispatchConflict = errors.New("worker dispatch conflict")
-	ErrDispatchExpired  = errors.New("worker dispatch lease expired")
+	ErrDispatchExpired  = errors.New("worker task no longer active")
 )

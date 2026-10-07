@@ -1,5 +1,7 @@
 # Workflow 执行边界完整审查
 
+> 本文下方为整改前审查证据，不是当前部署状态。后续核心整改、公开客户端流程、异步关联及 input_override/真实本地时间边界已完成，见[当前计划与逐项证据](../../../../plan/media_workflow/conductor-native-execution.md)和[设计说明](../../../../wiki/workflow-conductor.md)。部门/角色/资源权限扩展明确暂缓；引擎级启动幂等未实现。不删除历史发现，也不把曾经存在的本地调度代码误认为仍在运行。
+
 日期：2026-10-07。事实基线：`eb75d53`上的当前未提交工作区，不把仅存在于工作区的adapter当作运行服务已经接线。审查标准来自用户最新约定：**业务核心是编译生成Conductor Definition；此后的Workflow执行语义由Conductor拥有，运行服务是授权代理和结果展示，不再建第二套执行引擎。**
 
 本次只审查并形成报告；不改业务代码、IDL、迁移、部署或用户数据。UI、Agent扩展、全量历史迁移不进入整改范围。
@@ -249,3 +251,43 @@
 - Vite此前无5173监听，代理访问返回502；仅恢复既有开发进程，直接LAN HTTP200，UI代码未改，用户DESIGN.md未动。后端及Vite保持运行；不改外部Conductor、其他外部服务或历史数据。
 
 仍有missing：Provider错误分类、审批/取消/授权租约的完整权威收敛、旧调度器/无引擎路径清理、输入覆盖兼容、编译校验、资源权限缺口、async trace与最终wiki。本阶段证明当前普通四节点mock流程可运行，不宣称Goal或全部审查项完成。
+
+## 2026-10-07 · 用户确认Worker结果直接代理
+
+### 资源权限入口第一阶段
+
+源码补上Template更新事务内owner复核、Archive/Publish/Delete的明确caller，以及公开GetVersionForCaller入口；内部不可变快照GetVersion保留，不由公开handler调用。两个Grant handler从认证上下文取得issuer，忽略请求字段；IDL字段deprecated但不删除编号，DTO/OpenAPI已重新生成。非owner更新/归档/发布返回403；公开私有版本拒绝读取。
+
+service拒绝测试断言零写入/零版本读取；Hertz handler测试通过显式本地principal注入验证query/body伪造owner拒绝、实际owner操作仍通过且Grant审计issuer不能被客户端覆盖。该门禁不冒充真实GatewayJWT、部门成员/IAM或数据库验收。部门Grant读写消费、editor授权、组织边界及授权列表分页仍missing；所有者守卫仅为第一阶段，不把缩窄为owner-only作为最终设计。本批尚未部署，不改用户数据或UI。
+
+### 部署及编译校验后续证据
+
+直接代理版本已停旧进程并核对pending/failed=0后部署，完整网关/独立CLI/客户端单样本33.28s通过；Inbox保持93条、6个Dispatch只记账。详细镜像/Job/原实例与输出读取见直接交付plan。故上文该项“未部署”是部署前阶段记录，不代表当前运行状态。
+
+F12两处实际缺口已修正源代码：快照按Template ID+Version取用，同名入口required为消费方OR。新增测试先在旧代码复现跨版本拒绝正确Slot及optional削弱mandatory的失败，再验证正确版本隔离、错版本拒绝、四种required组合。Workflow全量单测、Workflow/Semantic/Publication race及架构/diff通过；尚未部署新validator，不改已发布快照。已有拓扑顺序/wave契约未扩展，资源权限、审批/取消/租约、旧执行代码/输入覆盖、上传、trace/wiki仍missing。
+
+当前结果回写不再新增Inbox或异步投递，生产SubmitReceipt/RunResultSubmitter已删除；结果先后查询精确原Task，200/submitted才确认，ignored update不能冒充成功。Personal本地私有文件保存/重启恢复发送与executor分离，Managed同次执行内只重发结果；Provider副作用幂等仍需自身保证。旧Inbox仅存档且启动有未确认记录时拒绝切换，初次启动/审批/发布Outbox不变。
+
+证据：真实Conductor自动retry6.14s、实际提交后代理丢响应/原Task查询恢复4.14s，隔离PG鉴权27.27s/Inbox零新增与失败分类22.25s、真实Conductor+PG Managed40.67s通过；Worker真实子进程保存退出后恢复与全量race通过，Workflow全量单测/架构/diff通过。未部署本批，不代替公开网关/独立客户端完整复验。此调整不关闭其他审批/取消/租约/旧代码/编译权限/trace/wiki missing。
+
+## 2026-10-07 · Provider失败分类源代码整改（直接代理前的阶段证据）
+
+此节之后补充的审批整改是独立证据，不代表下方Provider范围已经全部验收。
+
+F05的失败性质映射已接入Personal公开IDL/handler、客户端及Managed executor，transient→FAILED、permanent/旧空分类→FAILED_WITH_TERMINAL_ERROR。旧reason-only JSON保持不变，分类不能通过重放覆盖；未知值在持久化前拒绝。Conductor拥有技术retry调度，没有新的本地Provider重试器。
+
+Workflow全量单测、Worker全量单测及Gateway race通过，架构检查通过。真实Conductor门禁`TestProviderFailureClassificationNativeRetry`3.96s PASS（transient 2.82s，permanent 1.14s）：正常代理交付失败，原生Task Definition自动创建新Task/attempt并完成；永久错误仅一Task且无自动重试。使用唯一技术定义/实例与受控持久端口，不改用户任务或数据库，不冒充公开网关/独立Worker验收。未部署本批代码，F05结果输出/上传契约、F08晚到交付和租约等其余项仍missing。
+
+## 2026-10-07 · 审批执行权威源码收敛
+
+后续Worker超时边界源码已收敛：本地90秒字段不再决定活动结果/心跳资格，精确Task状态、attempt、取消和身份继续校验；Heartbeat提交后再查活动状态。API/Managed本地Reaper与DAL过期扫描删除，旧expired记账可刷新，同身份原生重投保留ID/attempt，不夺取不同绑定身份。Workflow全量、Gateway race/构建/架构通过，真实Conductor过本地时间交付及丢响应4.45s、隔离PG记账/身份/心跳/结果35.83s通过；源码covered，最新运行镜像与公开完整复验missing。上传/输出契约和trace/wiki仍未完成。
+
+后续input_override源码收敛：原生FAILED/TIMED_OUT+精确实例准入、原Compilation冻结输入、POST后GET输入确认；丢响应只由输入/Task身份变化证明，RUNNING不单独作为确认。本地commitRerunProjection仅使查询缓存失效并写输入/审计，不排队原生任务；取消/关联/周期变更拒绝旧提交。Finalize来源优先本轮原生输入，不错误继承旧Job商品/人物。Job/Finalize race通过，隔离PG事务36.55s、真实Conductor+PG丢响应一次POST33.70s通过。简单HUMAN技术图不是完整公开编译Workflow验收，最新代码部署仍missing；不新增执行控制器，不关闭上传/租约/trace/wiki。
+
+后续旧本地调度源码已退役：Service/DAL无ClaimAtomic、ReclaimStale、本地Complete/Fail/旁路Confirm/Regenerate、DAG推进或Claim扫描；Submit缺少注册Compilation/Conductor拒绝而不创建本地任务。旧地址IDL deprecated、Handler直接410，旧CLI本地协议测试换不写资源的网关410门禁。Workflow与CLI全量、关键race、架构/gofmt/diff通过，公开网关旧地址门禁1.01s通过；源码能力covered，最新镜像部署missing。历史数据未删除，旧测试源码由Git可恢复；此记录不关闭输入覆盖、租约、上传或trace/wiki项。
+
+后续取消整改技术门禁已通过：native接口先核对RUNNING/PAUSED、幂等重放取消意图，缺少持久启动记录不回退直接Terminate；后台拒绝不同实例身份。暂停独立paused投影，TERMINATED为cancelled，IDL追加PAUSED=8及迁移24状态约束。实际Conductor+隔离PG取消恢复23.13s、启动事务22.58s、暂停与降级安全40.73s通过（暂停首轮fixture缺实例绑定，修正后通过）；全量/race/架构检查通过。源码技术能力covered，运行库迁移和部署复验missing，以下审批阶段记录保留。
+
+DecideReview改用当前原生HUMAN冻结候选，不以缓存Step状态/候选禁止活动任务；AcceptReview事务只存决定，不提前claim Step或推进Job。精确Task与retried标记用于送达校验，历史accepted_retry_count只保留审计与摘要。送达HTTP成功后仍查询COMPLETED和相同输出；旧缓存失败不否决原生活动Task。已完成HUMAN选择由查询投影保存。
+
+Workflow全量、关键race、archcheck、gofmt/diff通过；隔离PG审计34.80s/事务59.73s，真实Conductor+PG响应丢失31.62s/真实进程重启78.12s通过。技术门禁covered，公开部署复验missing。此批未更新运行镜像；取消、租约、旧调度器/输入覆盖、上传及trace/wiki仍未完成，ACL按用户要求deferred至核心验收后。

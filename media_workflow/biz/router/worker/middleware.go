@@ -60,3 +60,8 @@ func _heartbeatworkertaskMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _prepareworkerartifactuploadMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

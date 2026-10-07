@@ -9,11 +9,66 @@ Conductor是执行状态与调度权威；本地Job/StepRun持有业务归属/�
 
 ## 执行时间线
 
+### 异步日志关联（技术元数据，不是执行语义）
+
+提交请求的W3C traceparent随首次接受的启动输入冻结，异步启动在外部调用前恢复该上下文。仅保留标准traceparent，不保存tracestate、baggage、Token、提示词或对象签名。无有效上下文时生成本地非采样关联，不依赖可观测性服务。显式提交键重放不重写原始关联元数据；普通retry保留原实例关联，整次输入覆盖rerun保留原关联元数据。历史无关联数据可使用新关联，但不回填旧记录。
+
+```mermaid
+sequenceDiagram
+    participant U as 提交请求
+    participant W as media_workflow
+    participant D as 启动记录
+    participant C as Conductor
+    participant I as 内部/托管Worker
+    participant P as Personal Worker
+    participant M as Materials
+    U->>W: 已验证身份，HTTP追踪上下文
+    W->>D: TX: Job/Step/启动输入含只读traceparent
+    W-->>U: 已接受（原始关联不因断线撤销）
+    D->>W: 后台领取，恢复冻结关联
+    W->>C: Start，输入保留关联且HTTP注入子span
+    C-->>I: Poll任务
+    I->>C: 读取精确实例的只读关联元数据
+    I->>M: 内部操作，继承关联、不转发用户凭证
+    C-->>W: Personal能力任务
+    W-->>P: 不透明Dispatch，传输元数据携关联
+    P->>W: 心跳/准备上传/结果回写，沿用关联
+    W->>M: 内部请求继承关联
+```
+
+日志只记录固定event、trace_id、Job/Dispatch及技术Task身份、结果状态/安全错误码，不记录任务输入/输出、凭证或签名。追踪标识不能作为幂等键、任务归属、授权或调度依据；用户决定HTTP请求仍有自己的请求trace，并可通过Job/Task身份关联执行。旧发布Definition不原位修改，追踪元数据由运行适配器读取实例输入，不需要重新编译业务图。
+
 ### 失败继续与重新生成分离
 
 Job Retry与Step Retry均代理所属实例的Conductor原生retry；Step只是操作入口，不限定恢复范围。普通失败继续使用Conductor原生retry：失败/取消任务恢复，成功旁支、已渲染提示词和既有输入保留。依赖图仍来自冻结Compilation/IR，由FORK_JOIN/JOIN/DO_WHILE表达；业务服务不按seq截断和重置自己的DAG。
 
 用户不满意产物属于HUMAN审批中的regenerate决定，由DO_WHILE开启新轮；不等于调用失败后的技术重试。改变输入或明确整次重新开始才评估原生rerun/restart及其已完成任务影响，不能将指定Renderer rerun作为普通失败继续的默认实现。历史导入恢复仍独立且不用于恢复普通并行旁支。
+
+### 整次输入覆盖重跑兼容路径
+
+```mermaid
+sequenceDiagram
+    participant U as 授权用户
+    participant W as media_workflow
+    participant C as Conductor
+    participant D as Job数据库
+    U->>W: RetryJob(input_override)
+    W->>C: GET原实例，核对精确身份与FAILED/TIMED_OUT
+    W->>W: 用原Compilation/Template版本校验并冻结受控输入
+    W->>C: 原生整次rerun(workflowInput)，无数据库事务
+    C->>C: 移除旧Tasks，替换Input并原生调度
+    W->>C: GET核对原实例/Definition/新Input
+    alt HTTP响应丢失
+        W->>W: 新Input或旧Task被移除证实变化，不因RUNNING猜测成功
+    end
+    W->>D: TX: 锁Job，核对取消/实例/历史周期，Input+审计+查询缓存失效
+    W->>C: 刷新原生执行查询投影
+    W-->>U: 当前Job；未知或本地提交失败明确返回未确认
+```
+
+整次rerun与普通retry不同：Conductor复用实例ID但删除旧Task，成功旁支也重跑。Job兼容接口只接受原生FAILED/TIMED_OUT，不以缓存failed授权；Step入口仍拒绝input_override。事务使旧Step查询缓存失效（候选/选择/当前输出/计时清空），不是把原生任务重新排队，也不计算局部DAG影响集合。原Assets和不可变Review保留审计，历史周期只保护缓存/审计提交，不调度任务。
+
+响应成功仍核对原实例的新Input；丢响应时必须同时证明Input或Task身份发生变化。无法证明时不自动重发，RUNNING或本来就相同的Input都不是丢响应证明。外部rerun已提交而本地事务失败不具备跨系统原子性，明确报未确认并查询原实例，不引入持久执行控制器。Finalize来源Product/VirtualIP优先从本轮原生workflowInput读取，避免审计提交延迟错误关联到上轮输入；旧无输入信封定义保留历史兼容读取。
 
 ### 普通提交与执行
 
@@ -45,6 +100,10 @@ sequenceDiagram
 `queued` 表示尚未授权发送，过期领取可由新 token 接手；`uncertain` 表示启动可能发生，只允许查询恢复。当前引擎未通过启动去重门禁，不能把 uncertain 自动改回 queued。数据库回执写失败时保留命令，不把“无法保存实例 ID”冒充未启动；租约过期和旧 token 都不能完成/释放新领取。取消与 uncertain 恢复需记录/终止发现的实例，不能复活 cancelled Job；取消协调与上游幂等契约仍需单独验收。
 
 原生启动取消采用 Job→启动记录的统一锁顺序。取消事务先使 Job cancelled：queued 同事务转 cancelled 并清除 claim，保证尚未授权的 POST 不发生；uncertain 保留待查询事实，started 转 cancel_pending 保留原实例。后台处理 cancelled Job 的 uncertain 只查询 correlation；发现实例后事务外查询并终止，确认引擎终态后以有效 claim 将启动记录记为 cancelled，保存实例 ID，但不把 Job 改回 running。终止响应丢失仍先查询终态再决定是否重发终止；找不到 uncertain 实例不能断言无需清理。取消接口重复调用返回原取消事实，清理失败不撤销取消。
+
+已绑定原生实例的取消在事务前查询精确Conductor实例，只有RUNNING/PAUSED接受新取消；缓存failed/succeeded不能禁止当前活动实例。已取消回执直接重放，不依赖引擎可用性。未绑定初次启动由queued/uncertain协议取消；native缺少持久启动记录不得回退锁外先Terminate后写Job。后台GET实例身份不符不得终止或确认，锁外取消与完成竞争时保留本地取消意图并确认原实例终态。
+
+查询将原生PAUSED投影为非终态paused，不误标need_confirm；引擎恢复RUNNING后刷新运行/审批投影。TERMINATED投影cancelled，FAILED/TIMED_OUT投影failed。这里只表达既有引擎状态，不新增平台暂停/恢复调度器或操作API。
 
 普通 Submit 在写入 Job 前检查输入媒体来自受控存储和 Job 企业，并验证可读性，将媒体地址冻结为 Object Path。Conductor 启动与 Dispatch 保存稳定引用；Worker 领取或重取未过期 Dispatch 时重新解析地址，仅响应中携带短期 URL。解析失败不首次创建 Dispatch，已存在租约保留供恢复；不改写 Job、Conductor 输入或 Dispatch 快照。纯文本动作不经过对象解析。Renderer 仍属于 media_workflow，客户端不承担内部任务。
 
@@ -84,9 +143,10 @@ sequenceDiagram
         W-->>MW: Internal WorkerTask(dispatch_id, sanitized inputs)
         MW->>W: internal Heartbeat / Complete
     end
-    W->>DB: TX3: Result Inbox + Dispatch=result_received
-    W-->>X: 202 stable receipt
-    A->>O: async task COMPLETED / FAILED
+    W->>O: 查询精确Task，直接提交COMPLETED / FAILED
+    W->>O: 查询原Task状态与输出，确认结果（含响应丢失恢复）
+    W->>DB: Dispatch=result_received交付记账（无结果Inbox）
+    W-->>X: 200 submitted确认；未确认返回可重试错误
     alt 单一结果
         O-->>I: finalize internal task
         I->>W: Apply finalized result
@@ -120,7 +180,7 @@ Conductor 为每轮生成新的 Task ID；循环内引用名称不能含其保�
 
 旧 Compilation 与在途 Definition 不原位修改。旧定义仍可确认候选，但没有审批循环的旧实例不得通过终止整个 Workflow 或非终态 rerun 模拟重新生成，必须返回明确的不支持错误；新的循环能力通过新版本发布生效。
 
-审批决定与待提交命令保存为同一条不可变 Review 记录。TX5 锁定 Job、StepRun，复核归属、执行实例、候选快照与待确认状态后，保存精确 HUMAN Task ID/引用、生成轮次、用户、幂等键和冻结决定；同时使当前步骤退出待确认。一个 HUMAN Task 只允许一个决定；同键同内容重放返回原记录，同键异内容或同轮另一决定冲突。不同生成轮、不同执行实例不会复用旧决定。
+审批决定与待提交命令保存为同一条不可变 Review 记录。事务前查询原生RUNNING实例，选择最新轮、未被retried替代且IN_PROGRESS的唯一HUMAN，以其输入冻结候选并按数组位置选择。TX5锁定Job、StepRun，复核归属、实例关联和取消意图，仅保存精确Task身份、轮次、用户、幂等键与决定，不改变Step/Job执行状态。一个HUMAN只允许一个决定；同键同内容返回原回执，异内容或同Task第二决定冲突。缓存状态、候选和旧retry_count不能否决原生活动任务。
 
 后台事务外领取 pending Review，并以每次领取独立的 claim token 隔离进程重启和租约回收。提交前检查精确 Task ID：已完成且输出匹配原决定则直接标记 applied；已完成但内容不同、执行已取消或任务已被替换则 failed，不再覆盖。暂时不可用只释放自己的 claim，保留原决定与退避时间；旧 claim 不能完成或释放后来重新领取的记录。Review 的 applied 只表示技术审批已被接受，业务输出仍由循环外 Finalize 收口。
 
@@ -128,11 +188,13 @@ Product 输入在提交时冻结商品主图的可访问 URL（无主图时取�
 
 用户命令使用调用方生成的稳定幂等键；显式键重放在查询 Conductor 和判断当前轮之前返回原决定回执，仍须校验当前用户与 Workspace 权限。旧调用方缺少键时，只能以当前 HUMAN 身份兼容同轮去重，不能承诺跨轮网络重放安全。回执包含不透明 Review ID 和 pending/applied/failed，不暴露 Conductor Task ID。读取最新决定不等于当前轮仍可审批。
 
-待确认投影和审批写入采用相同 Job→StepRun 锁序，在本地事务内检查该精确任务是否已有 Review，再更新步骤；Job 的 waiting 状态依据事务内步骤状态计算。Conductor 查询必须发生在锁定前，避免页面刷新与决定提交并发时重新暴露已提交审批。
+待确认投影和审批写入采用相同Job→StepRun锁序，在事务内检查精确Task是否已有Review；已有决定不重复覆盖其候选。Job/Step仍可投影为等待，LastReviewStatus=pending表示已接受、正在送达，不代表允许第二次审批。Conductor查询在锁定前进行，外部调用不进入数据库事务。
 
 原生retry不增加本地执行周期，也不使已通过的Human审批失效。当前Task、Conductor retried标记和循环轮次区分技术尝试与生成轮；审批回执始终绑定精确Human Task ID。旧整次输入覆盖rerun仍有历史周期字段，保留原摘要供兼容隔离，不将它升级为新的执行状态机。
 
 审批投递必须直接使用Review冻结的Conductor Task ID完成HUMAN，不能按Task Reference再次解析提交目标。读取等待状态后即使Retry替换同名HUMAN，旧决定也只能指向旧Task ID，不得重定向到新任务；无法提供精确Task提交能力时保留待恢复命令，不回退引用提交。旧任务不存在或不再等待由对账明确失效；引擎对旧Task结果的语义仍须在真实协议测试中核对。
+
+提交HTTP成功后再次查询精确Task，只有COMPLETED且输出与冻结决定相同才标记applied。未确认保留pending供后续查询，冲突/替代/取消记failed。响应丢失也先查询原Task，不创建新审批任务；accepted_retry_count只保留不可变审计，不授权或禁止原生任务。
 
 ## 历史图片谱系导入与继续执行
 
@@ -241,7 +303,7 @@ Job/StepRun状态是查询投影，不是与Conductor平行的调度权威。授
 
 初次Submit、审批决定及结果登记的幂等属于其各自业务边界，不据此再创建执行重试命令/租约/基线证据控制层。input_override兼容迁移必须保留明确语义，不静默删除；公开接线门禁完成前不宣称原生执行交付。
 
-## Dispatch 租约与连接生命周期
+## Dispatch交付记账与原生任务生命周期
 
 ### 原生任务交付不依赖本地重试提交
 
@@ -249,15 +311,15 @@ Personal/Managed poll得到任务后，先核对归属、企业、Step与冻结C
 
 Job缓存仍为failed或succeeded不否决已恢复的原生任务，也不先修改缓存来解锁交付。不使用callback=2延迟任务，不清空Step或计算重跑影响集合。取消意图与归属校验仍属于业务边界；本地授权记录不能覆盖引擎已终止、已完成或已替换Task的事实。查询失败时不交付，不伪造Task成功或创建另一个执行。
 
-- `WorkerDispatch` 独立于 Job 聚合保存，状态为 `claimed -> delivered -> running -> result_received`，可进入 `expired/failed`。
+- `WorkerDispatch`独立保存身份关联与交付记账，正常路径`delivered -> running -> result_received`；旧expired/failed记录保留兼容，不由本地扫描器驱动任务。
 - 向客户端返回任务前必须完成 Dispatch 事务；响应丢失时，同一 Worker 的下一次 poll 返回现有有效 Dispatch。
-- heartbeat 幂等延长本地租约，并由 Adapter 更新 Conductor `IN_PROGRESS`/callback；租约不得超过 Conductor response timeout。
-- Worker 断线不直接让 Job 失败；租约到期后任务由 Conductor 重投并创建新 attempt/Dispatch。旧 Dispatch 的晚到结果返回 409/410。
+- heartbeat先核对精确原生Task，代理IN_PROGRESS/callback更新并再次确认仍活动，之后只刷新本地交付时间。lease_expires_at是兼容记账字段，不是第二个任务截止时间；Task timeout/response timeout与技术重试由Conductor Task Definition决定。
+- Worker断线不由本地时钟触发Job失败或重排队。原Task仍活动时，绑定的执行者可续心跳和交付结果，即使本地时间已过期；原生重投相同Task/attempt给同一绑定身份时，保留Dispatch ID并刷新记账，不创建新attempt。原Task终态、被替代或取消时拒绝活动操作；已确认的相同结果仍可查询重放。不同Worker/凭证/实例不能借记账时间过期夺取现有Dispatch。
 - Personal Worker API Token 被撤销后不能继续 poll、heartbeat 或 complete；短时 Internal JWT 的剩余 TTL 是最大撤销延迟。Managed Worker 不使用 Token，停用通过进程配置、pool/capability allowlist 和停止内部 poller 生效。
 
 ## 一致性、恢复与权限
 
-TX1 创建完整初始 DAG 运行事实；TX2 在交付前保存 Dispatch；TX3 接收客户端结果但不依赖 Conductor 同步可用；TX4 处理普通结果或进入 needs_confirm；TX5 原子保存用户决定与 CompleteWait Outbox；TX6 提交唯一输出或新 attempt。Outbox/Inbox 至少一次，旧 attempt 结果只审计。取消阻止未开始 StepRun 与 Dispatch 续租，运行中 Provider 按其取消能力处理，晚到成功不得反转 cancelled Job。
+TX1保存初次提交与启动事实，TX2保存Dispatch授权关联；Worker结果直接提交原生Task，不另设接收结果事务或后台发送器。Task确认后只记录Dispatch交付完成，不写Job/Step或登记素材。TX5仍原子保存审批决定与待交付命令；初次启动/发布/审批的可靠交付不因Worker结果代理调整而删除。取消意图与原生状态核对仍独立处理，晚到结果不能更新替代Task或反转取消事实。
 
 浏览器 API 使用 Web Session；`/api/worker/v1/*` 使用基于 API Token 签发的 `sub=User + act.sub=Personal Worker` Internal Identity JWT，不依赖 Kratos Cookie。Personal Worker 有效权限是 User 当前权限、Worker Actor 状态、Token scope、Organization Membership/Entitlement、Job owner 和 Personal Capability allowlist 的交集。
 
@@ -296,3 +358,30 @@ Materials调用不持有Execution数据库事务。登记成功但Task回写失�
 旧Definition仍使用原Finalize输入形状，不原位改写冻结版本。Worker从原实例查找本轮唯一成功invoke，核对候选与精确Finalize身份，不在查询路径补做旧未登记结果。已完成旧实例保留已有业务引用；缺少真实已登记Asset身份的旧输出应明确报不完整，不将散列占位ID当成资产。
 
 内部任务的临时存储/服务不可用报告FAILED，由Task Definition的原生retry策略恢复；无效候选、错身份或不可满足的冻结契约报告FAILED_WITH_TERMINAL_ERROR。错误分类不调度任务，也不新建本地尝试。
+
+### Provider失败回执
+
+客户端Fail请求的`failure_kind`只描述此次能力调用的失败性质：`transient`映射原生FAILED；`permanent`或未填写映射FAILED_WITH_TERMINAL_ERROR。未知值在接收前拒绝。旧未分类回执保留原永久失败行为，不根据错误文本猜测或批量改写。Managed executor以类型化错误声明永久性，未分类内部异常按临时故障报告；Personal fixture未分类的显式测试失败保持永久性。
+
+```mermaid
+sequenceDiagram
+    participant C as Capability Worker
+    participant W as Worker Gateway
+    participant D as Dispatch repository
+    participant E as Conductor
+    C->>W: fail(dispatch, attempt, key, reason, failure_kind)
+    W->>W: 验证Worker身份/授权与精确原生Task
+    W->>E: 查询原Task；直接提交FAILED或FAILED_WITH_TERMINAL_ERROR
+    E->>E: 依据冻结Task Definition决定自动retry或终止
+    W->>E: 查询原Task状态与reason，确认已接受
+    W->>D: 记账Dispatch=result_received（不保存结果内容）
+    W-->>C: 200 submitted，或未确认错误
+```
+
+分类决定原生Task失败状态，reason保存为原生reasonForIncompletion。旧空分类仍为永久失败；同Task不同失败分类或reason不得作为已确认重放返回。客户端将未确认结果保存在私有本地目录，发送失败保留结果，重启先恢复交付、不重新执行生成函数。原Task已处于匹配终态时只查询确认，不再次POST；错结果冲突，已过期/替代Task不重定向。此流程不修改Job/Step、生成轮次或DAG；技术retry的次数、延迟和新Task由Conductor负责。多候选仍遵守审批规则，临时失败不能替代用户重新生成。
+
+### Worker结果交付责任
+
+客户端必须先保存完整待确认结果，再发送回写。直接代理不返回“已进入服务器队列”；仅在精确Task的状态与输出/失败原因匹配后返回submitted。请求响应丢失先查询同Task，不通过新Dispatch、新幂等键或重新调用Provider恢复。Task结果确认后，本地待交付文件才可移除；409/410结果留作拒绝记录而不继续发送。Task输出保存和对象存储写入不是分布式事务：生成完成但本地结果保存前崩溃仍由Provider/业务副作用的幂等与查询恢复解决，本地交付日志不消除该窗口。
+
+Managed运行时在一次执行内保存返回结果并只重试发送；进程退出后的函数恢复遵循Conductor至少一次执行与下游幂等契约，不声称具有Personal客户端文件日志的恢复保证。旧Inbox表仅保留历史，不删除或改写；切换前有pending/failed记录则拒绝启动新交付路径，要求先核对原Task，不能静默丢弃结果。

@@ -15,6 +15,23 @@ type registrationProbe struct {
 	reads int
 }
 
+func TestSubmitNeverFallsBackToLocalScheduling(t *testing.T) {
+	for _, missing := range []string{"engine", "compilation"} {
+		t.Run(missing, func(t *testing.T) {
+			svc, jobs, starts, _, _, cmd := submissionFixture()
+			cmd.IdempotencyKey = ""
+			if missing == "engine" {
+				svc.engine = nil
+			} else {
+				svc.compilations = nil
+			}
+			if _, err := svc.Submit(context.Background(), cmd); err == nil || len(jobs.jobs) != 0 || starts.command != nil {
+				t.Fatal("missing native dependency silently created a local execution", err)
+			}
+		})
+	}
+}
+
 func (r *registrationProbe) GetRegistered(context.Context, string, int) (*wfdomain.Compilation, error) {
 	r.reads++
 	return nil, gorm.ErrRecordNotFound

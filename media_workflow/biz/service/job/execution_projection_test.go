@@ -226,6 +226,27 @@ func TestDelayedEngineProjectionDoesNotOverwriteCancelledJob(t *testing.T) {
 	}
 }
 
+func TestNativePauseAndTerminationAreNotApprovalOrFailure(t *testing.T) {
+	for _, tc := range []struct {
+		native string
+		want   domain.JobStatus
+	}{
+		{"PAUSED", domain.JobPaused}, {"TERMINATED", domain.JobCancelled},
+		{"FAILED", domain.JobFailed}, {"TIMED_OUT", domain.JobFailed},
+	} {
+		t.Run(tc.native, func(t *testing.T) {
+			svc, jobs, _, engine, sr := projectionFixture()
+			engine.execution.Status, engine.execution.Tasks = tc.native, nil
+			if _, _, err := svc.Get(context.Background(), sr.JobID); err != nil {
+				t.Fatal(err)
+			}
+			if jobs.jobs[sr.JobID].Status != tc.want {
+				t.Fatalf("native %s mapped to %s", tc.native, jobs.jobs[sr.JobID].Status)
+			}
+		})
+	}
+}
+
 func TestDelayedInvokeCannotEraseFinalizedParallelBranch(t *testing.T) {
 	svc, jobs, _, engine, sr := projectionFixture()
 	sr.Status, sr.OutputAssetID = domain.SRSucceeded, "persisted"

@@ -4,3 +4,4 @@
 !.env.example
 # Private mock result configuration can contain short-lived signed URLs.
 .fixture*.json
+.worker-state/

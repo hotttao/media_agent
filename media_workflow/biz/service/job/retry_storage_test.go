@@ -3,6 +3,9 @@ package job
 import (
 	"context"
 	"encoding/json"
+	"go.opentelemetry.io/otel/propagation"
+	"media_agent/hertz_infra/tracecontext"
+	"media_agent/media_workflow/biz/shared/taskcontext"
 	"testing"
 
 	domain "media_agent/media_workflow/biz/domain/job"
@@ -23,8 +26,10 @@ func (r *retryCompilationStub) GetRegistered(_ context.Context, _ string, versio
 
 func TestRetryOverrideUsesFrozenSchemaAndStableStorage(t *testing.T) {
 	svc, repo, steps := newTestService(false)
-	engine := &mockWorkflowEngine{}
+	const originalTrace = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	engine := &mockWorkflowEngine{execution: &domain.EngineExecution{WorkflowInstanceID: "execution-1", Status: "FAILED", Input: map[string]any{taskcontext.TraceParentKey: originalTrace}}}
 	svc.engine = engine
+	svc.tx = commandReviewTx{}
 	// The editor has changed since this Job's publication. It must not decide
 	// which inputs a frozen execution accepts.
 	svc.wfRepo.(*mockWorkflowLookup).wf.InputSchema = []wfdomain.InputSchemaEntry{{Name: "new_input", ResourceType: "MATERIAL", Required: true}}
@@ -41,7 +46,8 @@ func TestRetryOverrideUsesFrozenSchemaAndStableStorage(t *testing.T) {
 	step.Status = domain.SRFailed
 	raw := "https://example.test/media/materials/org/new.png?signature=temporary"
 	input := domain.JobInput{Materials: []domain.MaterialData{{Name: "scene", URL: raw}}}
-	updated, err := svc.Retry(context.Background(), job.ID, "new input", &input)
+	requestCtx := tracecontext.Extract(context.Background(), propagation.MapCarrier{"traceparent": "00-11111111111111111111111111111111-2222222222222222-00"})
+	updated, err := svc.Retry(requestCtx, job.ID, "new input", &input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +59,9 @@ func TestRetryOverrideUsesFrozenSchemaAndStableStorage(t *testing.T) {
 	if inputs["scene"].(map[string]any)["asset_ref"] != want {
 		t.Fatal("Conductor rerun received temporary URL")
 	}
+	if engine.rerunInput[taskcontext.TraceParentKey] != originalTrace {
+		t.Fatal("whole rerun replaced original execution trace with request trace")
+	}
 }
 
 func TestRetryInvalidMediaDoesNotChangeJobOrRestartEngine(t *testing.T) {
@@ -63,9 +72,13 @@ func TestRetryInvalidMediaDoesNotChangeJobOrRestartEngine(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, repo, steps := newTestService(false)
-			engine := &mockWorkflowEngine{}
+			engine := &mockWorkflowEngine{execution: &domain.EngineExecution{WorkflowInstanceID: "execution-1", Status: "FAILED"}}
 			svc.engine = engine
-			job := &domain.Job{ID: "job1", OrganizationID: "org", WorkflowID: "wf1", Status: domain.JobFailed, ConductorWorkflowID: "execution-1"}
+			svc.tx = commandReviewTx{}
+			ir := executable.ExecutableWorkflowIR{WorkflowID: "wf1", WorkflowVersion: 1, Steps: []executable.ExecutableStepIR{{Template: executable.TemplateIR{ID: "tpl1", Version: 1}, Context: map[string]executable.ValueRef{"scene": {Source: executable.ValueWorkflowInput, Ref: "scene"}}}}}
+			encoded, _ := json.Marshal(ir)
+			svc.compilations = &retryCompilationStub{item: &wfdomain.Compilation{IRJSON: encoded, DefinitionHash: "frozen-hash"}}
+			job := &domain.Job{ID: "job1", OrganizationID: "org", WorkflowID: "wf1", WorkflowVersion: 1, CompilationHash: "frozen-hash", Status: domain.JobFailed, ConductorWorkflowID: "execution-1"}
 			repo.jobs[job.ID] = job
 			step := makeClaimedStepRun(steps, false)
 			step.Status = domain.SRFailed

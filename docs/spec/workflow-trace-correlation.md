@@ -1,0 +1,13 @@
+# Workflow异步日志关联
+
+范围：media_workflow、media_worker、既有hertz_infra追踪工具；不启动可观测性服务，不修改UI/权限/调度/已发布Compilation。
+
+启动工作流Input增加服务端保留字段`_traceparent`，值为标准W3C字符串，只由当前有效请求上下文获取。首次Submit将其同启动JSON冻结，提交键摘要仍只包含原业务语义。后台从冻结JSON恢复关联并开始本地非采样span；Conductor HTTP adapter注入标准header。无/坏关联安全忽略并产生新的本地上下文，不阻断任务。
+
+Internal/Managed/Personal适配器读取精确workflowInstance输入的关联值，不修改Definition；运输给客户端时作为只读元数据，不进入Provider固定prompt/images参数或模型请求。客户端心跳/上传准备/回写使用此关联header，Storage签名PUT不得转发Token或追踪header。客户端可仅标准库解析W3C版本00并沿用traceparent，服务端生成子span；不引入客户端exporter。重启恢复结果仍保留原任务关联，不新增持久执行队列。
+
+普通native retry保留原Input。input_override rerun替换Input时保留原`_traceparent`；历史Resume首次可捕获当前请求，但不回填旧Job记录。Review请求自己的trace不作为执行根，日志依靠Job/Task关联。
+
+固定日志事件记录trace_id及业务/技术身份、状态/错误码，禁止原始异常正文、Token、signedURL、prompt、候选内容及baggage。内部下游使用既有HTTP追踪注入。范围不包含保证第三方Conductor自身日志格式/采样，也不承诺一条长流程只存在一个HTTP请求span。
+
+验收：冻结/重放同关联，后台跨进程恢复，HTTP注入、旧图兼容、坏/缺关联不影响执行，rerun保持元数据；客户端不向存储传播追踪或凭证。公开请求到异步执行/客户端结果/Materials日志的相同trace_id实测，不以只看到响应X-Trace-ID替代跨服务证据。独立技术门禁可使用唯一fixture，不执行第二条用户完整模型流程。

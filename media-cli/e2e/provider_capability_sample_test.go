@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -107,7 +109,8 @@ func TestProviderCapabilityFixtureConfig(t *testing.T) {
 		Step       string   `json:"step_key"`
 		Capability string   `json:"capability_key"`
 		Version    int      `json:"capability_version"`
-		URLs       []string `json:"result_urls"`
+		URLs       []string `json:"result_urls,omitempty"`
+		Files      []string `json:"result_files,omitempty"`
 	}
 	config := struct {
 		Tasks []binding `json:"tasks"`
@@ -123,7 +126,7 @@ func TestProviderCapabilityFixtureConfig(t *testing.T) {
 		if b.Capability == "" {
 			t.Fatal("missing sample step")
 		}
-		for _, assetID := range fixtures[step] {
+		for position, assetID := range fixtures[step] {
 			var asset struct {
 				Path string `json:"object_path"`
 			}
@@ -145,7 +148,37 @@ func TestProviderCapabilityFixtureConfig(t *testing.T) {
 			if object.URL == "" || !strings.HasPrefix(object.Type, prefix) || object.Size <= 0 || object.Expires < time.Now().Add(2*time.Minute).Unix() {
 				t.Fatal("new Materials protocol or fixture media unavailable")
 			}
-			b.URLs = append(b.URLs, object.URL)
+			if os.Getenv("MEDIA_E2E_PROVIDER_FILE_RESULTS") == "1" {
+				// Download known media without API Token. These private runtime
+				// files are uploaded by the independent client, not this test.
+				ext, limit := ".png", int64(16<<20)
+				if step == "video" {
+					ext, limit = ".mp4", 256<<20
+				}
+				if object.Size > limit {
+					t.Fatal("fixture exceeds upload boundary")
+				}
+				path := filepath.Join(filepath.Dir(configPath), fmt.Sprintf("%s-%d%s", step, position, ext))
+				file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+				if err != nil {
+					t.Fatal("private result file creation refused")
+				}
+				download := &http.Client{Timeout: time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+				response, err := download.Get(object.URL)
+				if err != nil {
+					file.Close()
+					t.Fatal("fixture download unavailable")
+				}
+				copied, copyErr := io.Copy(file, io.LimitReader(response.Body, object.Size+1))
+				response.Body.Close()
+				closeErr := file.Close()
+				if response.StatusCode != 200 || copyErr != nil || closeErr != nil || copied != object.Size {
+					t.Fatal("fixture download incomplete")
+				}
+				b.Files = append(b.Files, path)
+			} else {
+				b.URLs = append(b.URLs, object.URL)
+			}
 		}
 		config.Tasks = append(config.Tasks, b)
 	}

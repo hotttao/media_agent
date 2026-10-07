@@ -89,7 +89,7 @@ func (e *ExecutionEngine) Get(ctx context.Context, workflowID string) (*jobdomai
 			TaskID:   task.TaskID, TaskType: task.TaskType, ReferenceTaskName: task.ReferenceTaskName, Status: task.Status,
 			Input: task.InputData, Output: task.OutputData,
 			ScheduledTime: task.ScheduledTime, StartTime: task.StartTime, EndTime: task.EndTime, RetryCount: task.RetryCount,
-			Retried: task.Retried,
+			Retried: task.Retried, ReasonForIncompletion: task.ReasonForIncompletion,
 		})
 	}
 	return result, nil

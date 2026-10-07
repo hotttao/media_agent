@@ -1,14 +1,12 @@
 package job
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,6 +19,7 @@ import (
 	domain "media_agent/media_workflow/biz/domain/job"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
 	"media_agent/media_workflow/biz/shared/client"
+	"media_agent/media_workflow/biz/shared/taskcontext"
 	"media_agent/media_workflow/biz/shared/taskref"
 	"media_agent/media_workflow/biz/workflow/executable"
 )
@@ -30,7 +29,7 @@ type GeneratedAssetSaver interface {
 	UpsertGeneratedAsset(ctx context.Context, req *client.UpsertGenAssetReq) (string, error)
 }
 
-// Service job 用例编排（pull 模式 + NEED_CONFIRM）。
+// Service owns execution commands and read projections; Conductor owns scheduling.
 type Service struct {
 	jobRepo             domain.JobRepo
 	stepRunRepo         domain.StepRunRepo
@@ -38,6 +37,7 @@ type Service struct {
 	wfRepo              domain.WorkflowLookup
 	tplLookup           wfdomain.TemplateLookup
 	materials           GeneratedAssetSaver
+	candidateMedia      CandidateObjectResolver
 	historyAssets       ImportedAssetLookup
 	historyWorkspaces   HistoricalWorkspaceLookup
 	resumeRepo          domain.ResumeRepo
@@ -122,16 +122,15 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 	if cmd.WorkflowVersion != 0 && wf.Version != cmd.WorkflowVersion {
 		return nil, fmt.Errorf("workflow version mismatch: want %d, got %d", wf.Version, cmd.WorkflowVersion)
 	}
-	conductorMode := s.compilations != nil && s.engine != nil
-	var compilation *wfdomain.Compilation
-	if conductorMode {
-		if wf.Status != wfdomain.StatusPublished {
-			return nil, fmt.Errorf("workflow %s is not published", wf.ID)
-		}
-		compilation, err = s.compilations.GetRegistered(ctx, wf.ID, wf.Version)
-		if err != nil {
-			return nil, fmt.Errorf("registered workflow compilation %s@%d: %w", wf.ID, wf.Version, err)
-		}
+	if s.compilations == nil || s.engine == nil {
+		return nil, errors.New("registered Conductor execution unavailable")
+	}
+	if wf.Status != wfdomain.StatusPublished {
+		return nil, fmt.Errorf("workflow %s is not published", wf.ID)
+	}
+	compilation, err := s.compilations.GetRegistered(ctx, wf.ID, wf.Version)
+	if err != nil {
+		return nil, fmt.Errorf("registered workflow compilation %s@%d: %w", wf.ID, wf.Version, err)
 	}
 	// 闸2: bundle vs input_schema
 	if err := s.validateBundle(wf.InputSchema, cmd.Input); err != nil {
@@ -152,18 +151,6 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 	// 为每个 step 创建 step_run，反范式化 template 字段
 	stepRuns := make([]*domain.StepRun, 0, len(wf.Steps))
 	for _, step := range wf.Steps {
-		// 判断 root（无 STEP_OUTPUT 依赖）→ PENDING；否则 BLOCKED
-		isRoot := true
-		for _, b := range step.SlotBindings {
-			if b.Source == wfdomain.SourceStepOutput {
-				isRoot = false
-				break
-			}
-		}
-		status := domain.SRBlocked
-		if isRoot && !conductorMode {
-			status = domain.SRPending
-		}
 		// 加载 template 快照（反范式化 platform/gen_way/asset_kind 等）
 		tpl, err := s.tplLookup.GetVersion(ctx, step.TemplateID, step.TemplateVersion)
 		if err != nil {
@@ -174,22 +161,13 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 			StepKey: step.Key, StepOrder: step.Order,
 			TemplateID: step.TemplateID, TemplateVersion: step.TemplateVersion,
 			ApprovalPolicy: approvalPolicyFromWorkflow(step.ApprovalPolicy),
-			Status:         status, ResolvedInputs: map[string]any{}, Candidates: []domain.Candidate{},
+			Status:         domain.SRBlocked, ResolvedInputs: map[string]any{}, Candidates: []domain.Candidate{},
 			Platform: tpl.Platform, GenWay: tpl.GenWay, GenType: tpl.GenType,
 			AssetKind: tpl.OutputAssetKind, NeedsConfirm: tpl.NeedsConfirm, CandidateCount: tpl.CandidateCount,
 		}
 		stepRuns = append(stepRuns, sr)
 	}
-	if conductorMode {
-		return s.enqueueInitialStart(ctx, job, stepRuns, compilation, submission)
-	}
-	if err := s.jobRepo.Save(ctx, job, stepRuns); err != nil {
-		return nil, fmt.Errorf("save job: %w", err)
-	}
-	if err := s.jobRepo.UpdateStatus(ctx, jobID, domain.JobRunning, ""); err != nil {
-		return nil, err
-	}
-	return s.jobRepo.Get(ctx, jobID)
+	return s.enqueueInitialStart(ctx, job, stepRuns, compilation, submission)
 }
 
 func taskDomainsForIR(ir executable.ExecutableWorkflowIR, submittedBy string) (map[string]string, error) {
@@ -310,192 +288,6 @@ func (s *Service) validateBundle(schema []wfdomain.InputSchemaEntry, input domai
 	return nil
 }
 
-// —— ClaimStepRun ——
-type ClaimQuery = domain.ClaimQuery
-
-func (s *Service) Claim(ctx context.Context, q ClaimQuery) (*ClaimResult, error) {
-	sr, err := s.stepRunRepo.ClaimAtomic(ctx, q)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("no claimable step_run")
-		}
-		return nil, err
-	}
-	// 加载 job（取 bundle）
-	job, err := s.jobRepo.Get(ctx, sr.JobID)
-	if err != nil {
-		return nil, err
-	}
-	// 加载 template（取 prompt_body + slots）
-	tpl, err := s.tplLookup.GetVersion(ctx, sr.TemplateID, sr.TemplateVersion)
-	if err != nil {
-		return nil, err
-	}
-	// 解析 slot 值 + 渲染 prompt
-	resolved, prompt, assets := s.resolveAndRender(ctx, sr, tpl, job.Input)
-	_ = s.stepRunRepo.UpdateResolvedInputs(ctx, sr.ID, resolved, prompt)
-	return &ClaimResult{
-		StepRunID: sr.ID, JobID: sr.JobID, RenderedPrompt: prompt,
-		InputAssets: assets, Platform: sr.Platform, GenWay: sr.GenWay,
-		GenType: sr.GenType, AssetKind: sr.AssetKind, CandidateCount: sr.CandidateCount,
-	}, nil
-}
-
-type ClaimResult struct {
-	StepRunID      string
-	JobID          string
-	RenderedPrompt string
-	InputAssets    []ClaimAsset
-	Platform       string
-	GenWay         string
-	GenType        string
-	AssetKind      string
-	CandidateCount int
-}
-type ClaimAsset struct{ Label, URL, Content string }
-
-// resolveAndRender 解析 binding -> resolved slot 值 + 用 Go template 渲染 prompt。
-//
-// prompt_body 用 Go template 语法 {{.name.field}}，通用引用 bundle 任意字段：
-//   - {{.virtual_ip.full_body_url}} / {{.virtual_ip.avatar_url}} / {{.virtual_ip.three_view_url}} ...
-//   - {{.product.target_audience}} / {{.product.product_details}} ...
-//   - {{.scene_image.url}} / {{.scene_image.content}}（material/asset 按 slot.name 索引）
-//   - {{.prev_step.url}}（STEP_OUTPUT 前驱产出）
-//   - {{.const_slot}}（CONST 字面值）
-//
-// bundle 序列化成 map[string]any（json tag 字段名），Go template 自动按属性查找；
-// 加新素材类型/字段不需改渲染（bundle 序列化自动反映）。
-func (s *Service) resolveAndRender(ctx context.Context, sr *domain.StepRun, tpl *wfdomain.TemplateSnapshot, input domain.JobInput) (map[string]any, string, []ClaimAsset) {
-	resolved := map[string]any{}
-	assets := []ClaimAsset{}
-	data := map[string]any{}
-
-	// 1. bundle -> data（Go template 友好：json 序列化后字段按 json tag 小写）
-	if input.Product != nil {
-		data["product"] = toJSONMap(input.Product)
-	}
-	if input.VirtualIP != nil {
-		data["virtual_ip"] = toJSONMap(input.VirtualIP)
-	}
-	for _, m := range input.Materials {
-		data[m.Name] = toJSONMap(m)
-	}
-	for _, a := range input.Assets {
-		data[a.Name] = toJSONMap(a)
-	}
-
-	// 2. 加载 workflow + bindings + step_runs（STEP_OUTPUT 解析用）
-	job, err := s.jobRepo.Get(ctx, sr.JobID)
-	if err != nil {
-		return resolved, renderTemplateSafe(tpl.PromptBody, data), assets
-	}
-	wf, err := s.wfRepo.Get(ctx, job.WorkflowID)
-	if err != nil {
-		return resolved, renderTemplateSafe(tpl.PromptBody, data), assets
-	}
-	var bindings []wfdomain.SlotBinding
-	for _, step := range wf.Steps {
-		if step.Key == sr.StepKey {
-			bindings = step.SlotBindings
-			break
-		}
-	}
-	allSRs, _ := s.stepRunRepo.ListByJob(ctx, sr.JobID)
-	srByKey := make(map[string]*domain.StepRun, len(allSRs))
-	for _, s2 := range allSRs {
-		srByKey[s2.StepKey] = s2
-	}
-
-	// 3. 解析 binding：STEP_OUTPUT/CONST 填 data + resolved + assets；WORKFLOW_INPUT 从 data 取填 resolved
-	for _, b := range bindings {
-		switch b.Source {
-		case wfdomain.SourceWorkflowInput:
-			if slotData, ok := data[b.Ref].(map[string]any); ok {
-				resolved[b.ToInput] = slotData
-				url, _ := slotData["url"].(string)
-				content, _ := slotData["content"].(string)
-				assets = append(assets, ClaimAsset{Label: b.ToInput, URL: url, Content: content})
-			}
-		case wfdomain.SourceStepOutput:
-			if prev, ok := srByKey[b.Ref]; ok && prev.SelectedIndex != nil && *prev.SelectedIndex < len(prev.Candidates) {
-				c := prev.Candidates[*prev.SelectedIndex]
-				slotData := map[string]any{"url": c.URL, "content": c.Content}
-				data[b.ToInput] = slotData
-				resolved[b.ToInput] = slotData
-				assets = append(assets, ClaimAsset{Label: b.ToInput, URL: c.URL, Content: c.Content})
-			}
-		case wfdomain.SourceConst:
-			data[b.ToInput] = b.ConstValue
-			resolved[b.ToInput] = map[string]any{"value": b.ConstValue}
-			assets = append(assets, ClaimAsset{Label: b.ToInput, Content: b.ConstValue})
-		}
-	}
-
-	// 4. Go template 渲染（parse/execute 失败回退原文）
-	prompt := renderTemplateSafe(tpl.PromptBody, data)
-	return resolved, prompt, assets
-}
-
-// renderTemplateSafe 用 Go template 渲染 prompt（parse/execute 失败则回退原文，不阻塞 claim）。
-func renderTemplateSafe(promptBody string, data map[string]any) string {
-	tmpl, err := template.New("prompt").Parse(promptBody)
-	if err != nil {
-		return promptBody
-	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return promptBody
-	}
-	return buf.String()
-}
-
-// toJSONMap 把 struct 值转成 map[string]any（Go template 友好，字段按 json tag 小写）。
-func toJSONMap(v any) map[string]any {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil
-	}
-	var m map[string]any
-	json.Unmarshal(b, &m)
-	return m
-}
-
-// —— CompleteStepRun ——
-func (s *Service) Complete(ctx context.Context, stepRunID string, candidates []domain.Candidate) (*domain.StepRun, error) {
-	sr, err := s.stepRunRepo.Get(ctx, stepRunID)
-	if err != nil {
-		return nil, err
-	}
-	if sr.Status != domain.SRClaimed {
-		return nil, fmt.Errorf("step_run %s status %s, expected claimed", stepRunID, sr.Status)
-	}
-	if len(candidates) == 0 {
-		return nil, errors.New("no candidates provided")
-	}
-	_ = s.stepRunRepo.UpdateCandidates(ctx, stepRunID, candidates)
-	needsApproval := domain.NeedsApproval(sr.ApprovalPolicy, len(candidates))
-	if sr.NeedsConfirm || needsApproval {
-		// → NEED_CONFIRM
-		_ = s.stepRunRepo.UpdateStatus(ctx, stepRunID, domain.SRNeedConfirm, nil)
-		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobNeedConfirm, "")
-	} else {
-		// 直接 SUCCEEDED：取 primary candidate（无 primary 标记则取第 0 个）
-		primaryIdx := 0
-		primary := candidates[0]
-		for i, c := range candidates {
-			if c.IsPrimary {
-				primaryIdx = i
-				primary = c
-				break
-			}
-		}
-		if err := s.finalizeStepRun(ctx, sr, primary, &primaryIdx, ""); err != nil {
-			return nil, err
-		}
-	}
-	return s.stepRunRepo.Get(ctx, stepRunID)
-}
-
 func approvalPolicyFromWorkflow(policy wfdomain.ApprovalPolicy) domain.ApprovalPolicy {
 	if policy == wfdomain.ApprovalAlways {
 		return domain.ApprovalAlways
@@ -503,108 +295,32 @@ func approvalPolicyFromWorkflow(policy wfdomain.ApprovalPolicy) domain.ApprovalP
 	return domain.ApprovalWhenMultipleCandidates
 }
 
-// —— ConfirmStepRun ——
-func (s *Service) Confirm(ctx context.Context, stepRunID string, selectedIndex int) (*domain.StepRun, error) {
-	sr, err := s.stepRunRepo.Get(ctx, stepRunID)
-	if err != nil {
-		return nil, err
-	}
-	if sr.Status != domain.SRNeedConfirm {
-		return nil, fmt.Errorf("step_run %s status %s, expected need_confirm", stepRunID, sr.Status)
-	}
-	if selectedIndex < 0 || selectedIndex >= len(sr.Candidates) {
-		return nil, fmt.Errorf("selected_index %d out of range [0, %d)", selectedIndex, len(sr.Candidates))
-	}
-	selected := sr.Candidates[selectedIndex]
-	job, err := s.jobRepo.Get(ctx, sr.JobID)
-	if err != nil {
-		return nil, err
-	}
-	if job.ConductorWorkflowID != "" && s.engine != nil {
-		approval, _, err := s.currentApprovalTask(ctx, job, sr)
-		if err != nil {
-			return nil, err
-		}
-		// Do not trust a stale local candidate projection from an earlier round.
-		var current []domain.Candidate
-		encoded, err := json.Marshal(approval.Input["candidates"])
-		if err != nil || json.Unmarshal(encoded, &current) != nil || selectedIndex >= len(current) || current[selectedIndex] != selected {
-			return nil, errors.New("approval candidates changed; refresh the step before confirming")
-		}
-		if err := s.engine.CompleteTask(ctx, job.ConductorWorkflowID, approval.ReferenceTaskName, map[string]any{
-			"decision": "accept", "selected_index": selectedIndex, "selected_candidate": selected,
-		}); err != nil {
-			return nil, fmt.Errorf("complete conductor approval task: %w", err)
-		}
-		_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRClaimed, map[string]any{"selected_index": selectedIndex})
-		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobRunning, "")
-		return s.stepRunRepo.Get(ctx, stepRunID)
-	}
-	if err := s.finalizeStepRun(ctx, sr, selected, &selectedIndex, ""); err != nil {
-		return nil, err
-	}
-	return s.stepRunRepo.Get(ctx, stepRunID)
-}
-
-// —— RegenerateStepRun ——
-func (s *Service) Regenerate(ctx context.Context, stepRunID string) (*domain.StepRun, error) {
-	sr, err := s.stepRunRepo.Get(ctx, stepRunID)
-	if err != nil {
-		return nil, err
-	}
-	if sr.Status != domain.SRNeedConfirm {
-		return nil, fmt.Errorf("step_run %s status %s, expected need_confirm", stepRunID, sr.Status)
-	}
-	job, err := s.jobRepo.Get(ctx, sr.JobID)
-	if err != nil {
-		return nil, err
-	}
-	if job.ConductorWorkflowID != "" && s.engine != nil {
-		approval, iteration, err := s.currentApprovalTask(ctx, job, sr)
-		if err != nil {
-			return nil, err
-		}
-		if iteration == 0 {
-			return nil, errors.New("this published workflow has no regeneration loop; publish a new version")
-		}
-		if err := s.engine.CompleteTask(ctx, job.ConductorWorkflowID, approval.ReferenceTaskName, map[string]any{"decision": "regenerate"}); err != nil {
-			return nil, fmt.Errorf("complete conductor regeneration decision: %w", err)
-		}
-		_ = s.stepRunRepo.UpdateCandidates(ctx, stepRunID, []domain.Candidate{})
-		_ = s.stepRunRepo.UpdateStatus(ctx, stepRunID, domain.SRBlocked, map[string]any{"selected_index": nil})
-		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobRunning, "")
-		return s.stepRunRepo.Get(ctx, stepRunID)
-	}
-	_ = s.stepRunRepo.UpdateStatus(ctx, stepRunID, domain.SRPending, map[string]any{"candidates": "[]"})
-	_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobRunning, "")
-	return sr, nil
-}
-
-// —— FailStepRun ——
-// 按 workflow_execution §5：step_run=failed + Job=failed + advanceDAG(cascade skip 下游)。
-// 让在跑的前驱 step 跑完（不中断已 claimed 前驱），仅把后续未启动 step 置 skipped。
-func (s *Service) Fail(ctx context.Context, stepRunID string, reason string) (*domain.StepRun, error) {
-	sr, err := s.stepRunRepo.Get(ctx, stepRunID)
-	if err != nil {
-		return nil, err
-	}
-	// 状态守卫：仅 claimed/need_confirm/pending 可 -> failed（已 succeeded/skipped/failed 不允许）
-	switch sr.Status {
-	case domain.SRClaimed, domain.SRNeedConfirm, domain.SRPending:
-	default:
-		return nil, fmt.Errorf("step_run %s status %s, expected claimed/need_confirm/pending", stepRunID, sr.Status)
-	}
-	_ = s.stepRunRepo.UpdateFailure(ctx, stepRunID, reason)
-	_ = s.stepRunRepo.UpdateStatus(ctx, stepRunID, domain.SRFailed, nil)
-	_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobFailed, reason)
-	// 级联跳过下游：advanceDAG 会把依赖本 step 的 BLOCKED step_run -> SKIPPED（任一依赖 FAILED/SKIPPED）
-	s.advanceDAG(ctx, sr.JobID, sr.StepKey)
-	return sr, nil
-}
-
 // —— CancelJob ——
-// 仅 running/pending/need_confirm 可 -> cancelled；已 succeeded/failed/cancelled 不可 cancel。
+// Native cancellation persists intent before asynchronous engine termination.
+// Cached failed/succeeded state cannot veto an active Conductor execution.
 func (s *Service) Cancel(ctx context.Context, jobID string) (*domain.Job, error) {
+	job, err := s.jobRepo.Get(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if job.Status == domain.JobCancelled {
+		return job, nil
+	}
+	if job.Origin == "native" && job.ConductorWorkflowID != "" {
+		if s.engine == nil {
+			return nil, errors.New("conductor cancellation unavailable")
+		}
+		execution, err := s.engine.Get(ctx, job.ConductorWorkflowID)
+		if err != nil || execution == nil {
+			return nil, errors.New("conductor cancellation state unavailable")
+		}
+		if execution.WorkflowInstanceID != "" && execution.WorkflowInstanceID != job.ConductorWorkflowID {
+			return nil, errors.New("conductor cancellation identity conflict")
+		}
+		if execution.Status != "RUNNING" && execution.Status != "PAUSED" {
+			return nil, errors.New("conductor execution is not active; cannot cancel")
+		}
+	}
 	if cancellations, ok := s.starts.(domain.ExecutionStartCancellationRepo); ok {
 		handled, err := cancellations.CancelInitialStart(ctx, jobID)
 		if err != nil {
@@ -614,9 +330,8 @@ func (s *Service) Cancel(ctx context.Context, jobID string) (*domain.Job, error)
 			return s.jobRepo.Get(ctx, jobID)
 		}
 	}
-	job, err := s.jobRepo.Get(ctx, jobID)
-	if err != nil {
-		return nil, err
+	if job.Origin == "native" {
+		return nil, errors.New("native cancellation command unavailable")
 	}
 	if job.Status.IsTerminal() {
 		return nil, fmt.Errorf("job %s status %s is terminal, cannot cancel", jobID, job.Status)
@@ -626,7 +341,9 @@ func (s *Service) Cancel(ctx context.Context, jobID string) (*domain.Job, error)
 			return nil, fmt.Errorf("terminate conductor workflow: %w", err)
 		}
 	}
-	_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobCancelled, "cancelled by user")
+	if err := s.jobRepo.UpdateStatus(ctx, jobID, domain.JobCancelled, "cancelled by user"); err != nil {
+		return nil, errors.New("workflow cancellation was not persisted")
+	}
 	return s.jobRepo.Get(ctx, jobID)
 }
 
@@ -646,26 +363,37 @@ func (s *Service) Retry(ctx context.Context, jobID string, reason string, inputO
 	if job.ConductorWorkflowID == "" || s.engine == nil {
 		return nil, errors.New("conductor execution unavailable")
 	}
-	if s.reviews != nil && s.tx == nil {
+	if s.tx == nil {
 		return nil, errors.New("rerun transaction unavailable")
 	}
-	if job.Status != domain.JobFailed {
-		return nil, errors.New("input override rerun requires a failed execution")
+	if job.Status == domain.JobCancelled {
+		return nil, errors.New("cancelled execution cannot change input")
+	}
+	before, err := s.engine.Get(ctx, job.ConductorWorkflowID)
+	if err != nil || before == nil || before.WorkflowInstanceID != job.ConductorWorkflowID {
+		return nil, errors.New("conductor rerun state unavailable or conflicting")
+	}
+	if before.Status != "FAILED" && before.Status != "TIMED_OUT" {
+		return nil, errors.New("input override rerun requires a failed or timed out native execution")
 	}
 	frozen, err := s.freezeRetryInput(ctx, job, *inputOverride)
 	if err != nil {
 		return nil, err
 	}
 	expected := *job
-	if err := s.engine.RerunWorkflow(ctx, job.ConductorWorkflowID, map[string]any{
+	input := taskcontext.PreserveTrace(before.Input, map[string]any{
 		"job_id": job.ID, "inputs": conductorInputs(frozen),
-	}); err != nil {
-		return nil, fmt.Errorf("rerun conductor workflow: %w", err)
+	})
+	submitErr := s.engine.RerunWorkflow(ctx, job.ConductorWorkflowID, input)
+	observed, err := s.engine.Get(ctx, job.ConductorWorkflowID)
+	if err != nil || !confirmedRerun(before, observed, input, submitErr != nil) {
+		return nil, errors.New("conductor rerun outcome unconfirmed; query existing execution before retrying")
 	}
-	if err := s.commitNativeJobRetry(ctx, expected, reason, &frozen); err != nil {
+	if err := s.commitRerunProjection(ctx, expected, reason, &frozen); err != nil {
 		return nil, err
 	}
-	return s.jobRepo.Get(ctx, jobID)
+	updated, _, err := s.Get(ctx, jobID)
+	return updated, err
 }
 
 // RetryStepRun is a convenient entry point to the parent execution's native
@@ -690,17 +418,16 @@ func (s *Service) GetStepRun(ctx context.Context, stepRunID string) (*domain.Ste
 	if err != nil {
 		return nil, err
 	}
-	if _, _, err := s.Get(ctx, sr.JobID); err != nil {
-		return nil, err
-	}
-	sr, err = s.stepRunRepo.Get(ctx, stepRunID)
+	_, steps, err := s.Get(ctx, sr.JobID)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.annotateReviews(ctx, sr.JobID, []*domain.StepRun{sr}); err != nil {
-		return nil, err
+	for _, step := range steps {
+		if step.ID == stepRunID {
+			return step, nil
+		}
 	}
-	return sr, nil
+	return nil, gorm.ErrRecordNotFound
 }
 
 func (s *Service) Get(ctx context.Context, id string) (*domain.Job, []*domain.StepRun, error) {
@@ -718,6 +445,10 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Job, []*domain.St
 		return nil, nil, err
 	}
 	if err := s.annotateReviews(ctx, id, steps); err != nil {
+		return nil, nil, err
+	}
+	steps, err = s.candidateViews(ctx, job, steps)
+	if err != nil {
 		return nil, nil, err
 	}
 	return job, steps, nil
@@ -789,209 +520,6 @@ func (s *Service) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, 
 		}
 	}
 	return items, total, nil
-}
-
-// —— finalizeStepRun: 落产物 + SUCCEEDED + 推进 DAG ——
-func (s *Service) finalizeStepRun(ctx context.Context, sr *domain.StepRun, selected domain.Candidate, selectedIndex *int, resultKey string) error {
-	// 1. 调 materials 落 generated_asset
-	job, err := s.jobRepo.Get(ctx, sr.JobID)
-	if err != nil {
-		return err
-	}
-	if job.Status == domain.JobCancelled {
-		return nil
-	}
-	if err := checkExecutionSnapshot(ctx, job); err != nil {
-		return err
-	}
-	if s.engine != nil && resultKey == "" {
-		return errors.New("native generation result identity is required")
-	}
-	if err := s.checkGenerationSnapshot(ctx, job.ID, sr.ID); err != nil {
-		return err
-	}
-	request := &client.UpsertGenAssetReq{
-		Scope: job.Scope, AssetKind: sr.AssetKind,
-		Name: safeName(sr.StepKey, sr.ID),
-		URL:  selected.URL, Content: selected.Content,
-		OwnerUserID: job.SubmittedBy, Visibility: "private",
-		JobID: sr.JobID, StepRunID: sr.ID, TemplateID: sr.TemplateID, TemplateVersion: sr.TemplateVersion,
-		ResultKey: resultKey,
-	}
-	if job.Input.Product != nil {
-		request.SourceProductID = job.Input.Product.ID
-	}
-	if job.Input.VirtualIP != nil {
-		request.SourceVirtualIPID = job.Input.VirtualIP.ID
-	}
-	assetID, err := s.materials.UpsertGeneratedAsset(ctx, request)
-	if err != nil {
-		return errors.New("generated asset persistence unavailable")
-	}
-	if strings.TrimSpace(assetID) == "" {
-		return errors.New("generated asset persistence returned no identity")
-	}
-	// The external idempotent upsert must remain outside the database transaction.
-	// Cancellation and concurrent finalizers serialize with the local projection.
-	err = s.withExecutionProjection(ctx, sr.JobID, sr.ID, func(txCtx context.Context, current *domain.Job) error {
-		if current.Status == domain.JobCancelled {
-			return nil
-		}
-		if err := s.checkGenerationSnapshot(txCtx, sr.JobID, sr.ID); err != nil {
-			return err
-		}
-		fresh, err := s.stepRunRepo.Get(txCtx, sr.ID)
-		if err != nil {
-			return err
-		}
-		if fresh.Status == domain.SRSucceeded && fresh.OutputAssetID != "" {
-			if fresh.OutputAssetID != assetID {
-				return errors.New("generated asset identity conflicts with finalized step")
-			}
-			return nil
-		}
-		if err := s.stepRunRepo.UpdateOutput(txCtx, sr.ID, assetID); err != nil {
-			return err
-		}
-		updates := map[string]any{}
-		if selectedIndex != nil {
-			updates["selected_index"] = *selectedIndex
-		}
-		return s.stepRunRepo.UpdateStatus(txCtx, sr.ID, domain.SRSucceeded, updates)
-	})
-	if err != nil {
-		return err
-	}
-	// Native execution advancement belongs exclusively to Conductor. Local step
-	// completion alone is not proof that the engine has completed the workflow.
-	if s.engine != nil {
-		return nil
-	}
-	// 3. 推进 DAG: 下游 BLOCKED -> PENDING
-	s.advanceDAG(ctx, sr.JobID, sr.StepKey)
-	// 4. 检查 sink 是否 SUCCEEDED -> Job SUCCEEDED
-	s.checkJobCompletion(ctx, sr.JobID)
-	return nil
-}
-
-// advanceDAG: 检查哪些 BLOCKED step_run 的所有 STEP_OUTPUT 依赖已 SUCCEEDED → PENDING。
-// 任一依赖 FAILED/SKIPPED → cascade SKIPPED。
-func (s *Service) advanceDAG(ctx context.Context, jobID string, completedStepKey string) {
-	blocked, err := s.stepRunRepo.ListByJobAndStatus(ctx, jobID, domain.SRBlocked)
-	if err != nil || len(blocked) == 0 {
-		return
-	}
-	// 加载 workflow 取 bindings（依赖关系）
-	job, err := s.jobRepo.Get(ctx, jobID)
-	if err != nil {
-		return
-	}
-	wf, err := s.wfRepo.Get(ctx, job.WorkflowID)
-	if err != nil {
-		return
-	}
-	// step_key -> step（含 bindings）
-	stepByKey := make(map[string]wfdomain.Step, len(wf.Steps))
-	for _, step := range wf.Steps {
-		stepByKey[step.Key] = step
-	}
-	// 加载全部 step_run（查依赖状态）
-	allSRs, _ := s.stepRunRepo.ListByJob(ctx, jobID)
-	srByKey := make(map[string]*domain.StepRun, len(allSRs))
-	for _, sr := range allSRs {
-		srByKey[sr.StepKey] = sr
-	}
-	// 迭代直到一轮无变更（处理多级 cascade：A failed -> B skipped -> C skipped）
-	for {
-		changed := false
-		for _, sr := range blocked {
-			// 跳过已非 blocked 的（前一轮可能已推进）
-			if srByKey[sr.StepKey].Status != domain.SRBlocked {
-				continue
-			}
-			step, ok := stepByKey[sr.StepKey]
-			if !ok {
-				continue
-			}
-			// 收集该 step 的 STEP_OUTPUT 依赖
-			allDepsSucceeded := true
-			anyDepFailed := false
-			for _, b := range step.SlotBindings {
-				if b.Source != wfdomain.SourceStepOutput {
-					continue
-				}
-				dep, ok := srByKey[b.Ref]
-				if !ok {
-					allDepsSucceeded = false
-					continue
-				}
-				switch dep.Status {
-				case domain.SRSucceeded:
-					// ok
-				case domain.SRFailed, domain.SRSkipped:
-					anyDepFailed = true
-				default:
-					allDepsSucceeded = false
-				}
-			}
-			if anyDepFailed {
-				_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRSkipped, nil)
-				srByKey[sr.StepKey].Status = domain.SRSkipped
-				changed = true
-			} else if allDepsSucceeded {
-				_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRPending, nil)
-				srByKey[sr.StepKey].Status = domain.SRPending
-				changed = true
-			}
-		}
-		if !changed {
-			break
-		}
-	}
-}
-
-// checkJobCompletion: 如果没有 PENDING/CLAIMED/NEED_CONFIRM 的 step_run → Job SUCCEEDED。
-func (s *Service) checkJobCompletion(ctx context.Context, jobID string) {
-	all, err := s.stepRunRepo.ListByJob(ctx, jobID)
-	if err != nil {
-		return
-	}
-	allDone := true
-	for _, sr := range all {
-		if sr.Status != domain.SRSucceeded && sr.Status != domain.SRSkipped {
-			allDone = false
-			break
-		}
-	}
-	if allDone {
-		_ = s.jobRepo.UpdateStatus(ctx, jobID, domain.JobSucceeded, "")
-	}
-}
-
-// safeName 生成 asset 名（取 ID 前 8 字符，不足取全部）。
-func safeName(stepKey, id string) string {
-	if len(id) > 8 {
-		return fmt.Sprintf("%s_%s", stepKey, id[:8])
-	}
-	return fmt.Sprintf("%s_%s", stepKey, id)
-}
-
-var _ = strings.TrimSpace
-var _ = json.Marshal
-
-// StartClaimTimeoutScanner 后台扫描 CLAIMED 超时的 step_run → 回 PENDING。
-// 每 60s 扫一次，超时阈值 10min（worker 崩溃保护）。
-func (s *Service) StartClaimTimeoutScanner(ctx context.Context) {
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.scanStaleClaimed(ctx)
-		}
-	}
 }
 
 func conductorInputs(input domain.JobInput) map[string]any {
@@ -1102,6 +630,11 @@ func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error
 			}
 		case "approval":
 			if s.reviews != nil {
+				if task.Status == "COMPLETED" {
+					if err := s.projectCompletedReview(ctx, job.ID, stepRun.ID, task); err != nil {
+						return err
+					}
+				}
 				if task.Status == "IN_PROGRESS" || task.Status == "SCHEDULED" {
 					if err := s.projectWaitingReview(ctx, job.ID, stepRun.ID, task); err != nil {
 						return err
@@ -1185,10 +718,12 @@ func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error
 			}
 			return s.jobRepo.UpdateStatus(txCtx, job.ID, domain.JobSucceeded, "")
 		})
-	case "FAILED", "FAILED_WITH_TERMINAL_ERROR", "TIMED_OUT", "TERMINATED":
+	case "FAILED", "FAILED_WITH_TERMINAL_ERROR", "TIMED_OUT":
 		return s.projectExecutionStatus(ctx, job.ID, domain.JobFailed, "conductor workflow "+execution.Status)
+	case "TERMINATED":
+		return s.projectExecutionStatus(ctx, job.ID, domain.JobCancelled, "conductor workflow TERMINATED")
 	case "PAUSED":
-		return s.projectExecutionStatus(ctx, job.ID, domain.JobNeedConfirm, "")
+		return s.projectExecutionStatus(ctx, job.ID, domain.JobPaused, "")
 	default:
 		if execution.Status == "RUNNING" {
 			if s.reviews != nil {
@@ -1222,34 +757,4 @@ func parseTaskReference(reference string) (string, string, bool) {
 		}
 	}
 	return "", "", false
-}
-
-func approvalTaskReference(stepKey string) string {
-	return "step__" + sanitizeTaskReference(stepKey) + "__approval"
-}
-
-func sanitizeTaskReference(value string) string {
-	var builder strings.Builder
-	for _, char := range value {
-		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_' {
-			builder.WriteRune(char)
-		} else {
-			builder.WriteByte('_')
-		}
-	}
-	return builder.String()
-}
-
-func (s *Service) scanStaleClaimed(ctx context.Context) {
-	timeout := 600
-	if s.jobCfg != nil && s.jobCfg.ClaimTimeoutSeconds > 0 {
-		timeout = int(s.jobCfg.ClaimTimeoutSeconds)
-	}
-	n, err := s.stepRunRepo.ReclaimStale(ctx, timeout)
-	if err != nil {
-		return
-	}
-	if n > 0 {
-		fmt.Printf("claim timeout: reclaimed %d stale step_runs\n", n)
-	}
 }

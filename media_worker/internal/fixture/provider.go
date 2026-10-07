@@ -2,6 +2,7 @@ package fixture
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -27,6 +28,7 @@ type ProviderBinding struct {
 	CapabilityKey     string   `json:"capability_key"`
 	CapabilityVersion int      `json:"capability_version"`
 	ResultURLs        []string `json:"result_urls"`
+	ResultFiles       []string `json:"result_files"`
 }
 
 type providerTaskRef struct{ job, step string }
@@ -59,17 +61,25 @@ func NewProviderExecutor(bindings []ProviderBinding) (*Executor, error) {
 	}
 	e := &Executor{providerResults: make(map[providerTaskRef]ProviderBinding)}
 	for _, binding := range bindings {
-		if strings.TrimSpace(binding.JobID) == "" || strings.TrimSpace(binding.StepKey) == "" || binding.JobID != strings.TrimSpace(binding.JobID) || binding.StepKey != strings.TrimSpace(binding.StepKey) || !supportedProvider(binding.CapabilityKey, binding.CapabilityVersion) || len(binding.ResultURLs) == 0 {
+		if strings.TrimSpace(binding.JobID) == "" || strings.TrimSpace(binding.StepKey) == "" || binding.JobID != strings.TrimSpace(binding.JobID) || binding.StepKey != strings.TrimSpace(binding.StepKey) || !supportedProvider(binding.CapabilityKey, binding.CapabilityVersion) || (len(binding.ResultURLs) == 0) == (len(binding.ResultFiles) == 0) || len(binding.ResultFiles) > 8 {
 			return nil, errors.New("invalid provider fixture Job/Step binding")
 		}
 		ref := providerTaskRef{binding.JobID, binding.StepKey}
 		if _, exists := e.providerResults[ref]; exists {
 			return nil, errors.New("duplicate provider fixture Job/Step binding")
 		}
-		if err := validateResultURLs(binding.ResultURLs); err != nil {
-			return nil, err
+		if len(binding.ResultURLs) > 0 {
+			if err := validateResultURLs(binding.ResultURLs); err != nil {
+				return nil, err
+			}
+		}
+		for _, file := range binding.ResultFiles {
+			if strings.TrimSpace(file) == "" {
+				return nil, errors.New("invalid provider fixture result file")
+			}
 		}
 		binding.ResultURLs = append([]string(nil), binding.ResultURLs...)
+		binding.ResultFiles = append([]string(nil), binding.ResultFiles...)
 		e.providerResults[ref] = binding
 	}
 	return e, nil
@@ -102,7 +112,7 @@ func (e *Executor) AvailableCapabilities() []gateway.Capability {
 	return available
 }
 
-func (e *Executor) executeProvider(task gateway.Task) (map[string]any, error) {
+func (e *Executor) executeProvider(ctx context.Context, task gateway.Task) (map[string]any, error) {
 	if !supportedProvider(task.CapabilityKey, task.CapabilityVersion) {
 		return nil, errors.New("unsupported provider fixture Capability")
 	}
@@ -145,6 +155,22 @@ func (e *Executor) executeProvider(task gateway.Task) (map[string]any, error) {
 	candidates := make([]map[string]any, len(binding.ResultURLs))
 	for i, raw := range binding.ResultURLs {
 		candidates[i] = map[string]any{"index": i, "url": raw, "content": "", "is_primary": i == 0}
+	}
+	if len(binding.ResultFiles) > 0 {
+		if e.uploadFile == nil {
+			return nil, errors.New("provider fixture file uploader unavailable")
+		}
+		candidates = make([]map[string]any, len(binding.ResultFiles))
+		for i, file := range binding.ResultFiles {
+			path, err := e.uploadFile(ctx, task, i, file)
+			if err != nil {
+				return nil, err
+			}
+			if path == "" {
+				return nil, errors.New("provider fixture upload unconfirmed")
+			}
+			candidates[i] = map[string]any{"index": i, "object_path": path, "content": "", "is_primary": i == 0}
+		}
 	}
 	return map[string]any{"candidates": candidates, "provenance": map[string]any{"profile": ProviderProfile, "source": source, "mock": true}}, nil
 }

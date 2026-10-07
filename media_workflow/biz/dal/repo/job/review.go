@@ -106,12 +106,9 @@ func (r *JobRepo) AcceptReview(ctx context.Context, review domain.ReviewDecision
 		}
 		return existing, false, nil
 	}
-	var candidates []domain.Candidate
-	if review.AcceptedRetryCount != nil && *review.AcceptedRetryCount != int(job.RetryCount) {
-		return nil, false, domain.ErrReviewConflict
-	}
-	if job.ConductorWorkflowID != review.ConductorWorkflowID || domain.JobStatus(job.Status).IsTerminal() ||
-		step.Status != string(domain.SRNeedConfirm) || json.Unmarshal(step.Candidates, &candidates) != nil || !review.MatchesCandidates(candidates) {
+	// Native HUMAN identity is checked by the service and delivery flow.
+	// Local status, candidates and retry count are projections, not authority.
+	if job.ConductorWorkflowID != review.ConductorWorkflowID || domain.JobStatus(job.Status) == domain.JobCancelled {
 		return nil, false, domain.ErrReviewConflict
 	}
 	result := tx.Exec(`INSERT INTO media_workflow.step_run_reviews
@@ -127,14 +124,7 @@ func (r *JobRepo) AcceptReview(ctx context.Context, review domain.ReviewDecision
 	if result.RowsAffected != 1 {
 		return nil, false, domain.ErrReviewConflict
 	}
-	if err := tx.Model(&step).Updates(map[string]any{"status": string(domain.SRClaimed), "selected_index": review.SelectedIndex}).Error; err != nil {
-		return nil, false, err
-	}
-	if err := tx.Exec(`UPDATE media_workflow.jobs SET status=CASE
-		WHEN EXISTS (SELECT 1 FROM media_workflow.step_runs WHERE job_id=? AND status='need_confirm')
-		THEN 'need_confirm' ELSE 'running' END WHERE id=?`, job.ID, job.ID).Error; err != nil {
-		return nil, false, err
-	}
+	// Only save the decision; Conductor advances execution after delivery.
 	review.Status = "pending"
 	return &review, true, nil
 }

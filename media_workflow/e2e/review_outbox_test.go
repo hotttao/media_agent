@@ -394,7 +394,7 @@ func TestReviewOutboxPersistence(t *testing.T) {
 			t.Fatalf("opposite decision was accepted for the same generation: %v", err)
 		}
 	})
-	t.Run("ownership and candidate drift", func(t *testing.T) {
+	t.Run("ownership and non-authoritative candidate projection", func(t *testing.T) {
 		review := seed("authority")
 		foreign := review
 		foreign.DecidedBy = "other-owner"
@@ -405,8 +405,8 @@ func TestReviewOutboxPersistence(t *testing.T) {
 		if err := db.Model(&model.StepRun{}).Where("id=?", review.StepRunID).Update("candidates", datatypes.JSON(`[{"content":"new-round"}]`)).Error; err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := accept(review); !errors.Is(err, domain.ErrReviewConflict) || count(review.StepRunID) != 0 {
-			t.Fatal("stale candidate snapshot was accepted")
+		if _, _, err := accept(review); err != nil || count(review.StepRunID) != 1 {
+			t.Fatal("cached candidate drift vetoed native frozen decision", err)
 		}
 	})
 	t.Run("user command and stale waiting projection", func(t *testing.T) {
@@ -427,9 +427,10 @@ func TestReviewOutboxPersistence(t *testing.T) {
 		if err != nil || receipt.LastReviewID == "" || receipt.LastReviewStatus != "pending" {
 			t.Fatalf("user command failed: %v", err)
 		}
-		// A stale waiting HUMAN must not make an already accepted round actionable.
+		// Receipt state is separate from native waiting state; accepting locally
+		// must not claim a Step or advance Job execution before engine delivery.
 		j, steps, err := svc.Get(ctx, review.JobID)
-		if err != nil || j.Status != domain.JobRunning || len(steps) != 1 || steps[0].Status != domain.SRClaimed || steps[0].LastReviewID != receipt.LastReviewID {
+		if err != nil || j.Status != domain.JobNeedConfirm || len(steps) != 1 || steps[0].Status != domain.SRNeedConfirm || steps[0].LastReviewID != receipt.LastReviewID {
 			t.Fatalf("stale read re-exposed submitted review: %v", err)
 		}
 		if err := db.Model(&model.Job{}).Where("id=?", review.JobID).Update("status", "succeeded").Error; err != nil {

@@ -3,7 +3,6 @@ package job
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	domain "media_agent/media_workflow/biz/domain/job"
 	"media_agent/media_workflow/biz/shared/taskref"
@@ -45,10 +44,13 @@ func (s *Service) currentApprovalTask(ctx context.Context, job *domain.Job, sr *
 	}
 	execution, err := s.engine.Get(ctx, job.ConductorWorkflowID)
 	if err != nil {
-		return nil, 0, fmt.Errorf("load conductor execution: %w", err)
+		return nil, 0, ErrSubmitAuthorityUnavailable
 	}
 	if execution == nil || execution.Status != "RUNNING" {
 		return nil, 0, errors.New("workflow is not running; refresh before reviewing")
+	}
+	if execution.WorkflowInstanceID != "" && execution.WorkflowInstanceID != job.ConductorWorkflowID {
+		return nil, 0, domain.ErrReviewConflict
 	}
 	latest := latestGeneration(execution)
 	var waiting *domain.EngineTask

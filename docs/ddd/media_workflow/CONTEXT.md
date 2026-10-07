@@ -46,6 +46,10 @@ Template 的不可变快照，通过单调递增 version 区分，update 时新�
 继续一个失败Execution中尚未成功的任务；从某个节点发起也作用于所属Execution，不表示仅重跑该节点及其下游。它不同于审批重新生成或改变输入重新开始。
 _禁用替代词_：Regeneration、Execution Start、整单重新生成。
 
+**Execution Rerun（整次输入覆盖重跑）**:
+以明确指定的新输入重新执行整次Execution，已有成功任务也会重新执行。它不同于保留成功任务的失败继续或节点候选审批中的重新生成。
+_禁用替代词_：Execution Retry、Regeneration、单节点重试。
+
 **Execution Capability（执行能力）**:
 可被生成 Worker 实现的、带版本的Provider操作契约，例如Doubao生图、Doubao生视频、即梦生图；声明固定输入与技术输出媒体类型，不表示模特图、定妆图、首帧等业务用途。Template引用已发布能力并决定业务槽位、提示词映射与最终Asset Kind。
 _禁用替代词_：Conductor Task、Worker、Template
@@ -152,6 +156,10 @@ _禁用替代词_：Batch、Stage（除非专指展示层）
 
 ### 执行
 
+**Execution Pause（执行暂停）**:
+执行暂时停止继续调度、但尚未终结的状态；它不是候选审批等待，也不是执行失败。
+_禁用替代词_：Need Confirm、Cancellation、Failure。
+
 **Execution Retry Epoch（执行重试周期）**:
 历史整次重跑记录所使用的周期标记，不用于决定当前执行能否继续或哪些节点应运行；原生失败继续不创建新的业务周期。它不同于候选生成轮次或Worker投递次数。
 _禁用替代词_：Generation、Dispatch Attempt、Review Delivery Attempt。
@@ -201,7 +209,7 @@ _禁用替代词_：step execution、step instance。
 _禁用替代词_：Worker Result Receipt、Conductor Ack、Retry Record。
 
 **Step Review Decision（步骤确认决定）**:
-Step Run 按 Step Approval Policy 等待确认时由用户提交的 `accept(candidate)` 或 `regenerate(feedback)` 决定；accept 固定唯一输出并推进 DAG，regenerate 保留旧轮候选审计并开始独立的新一轮生成，不取消其他步骤。
+用户对当前审批轮提交的 `accept(candidate)` 或 `regenerate(feedback)` 不可变决定。决定回执与执行状态不同，接受决定不等于节点已完成。
 _禁用替代词_：Retry、Multi-output Step、Candidate
 
 **Step Execution Fragment（步骤执行片段）**:
@@ -209,11 +217,14 @@ Conductor 中承载一个业务 Step 的固定版本子工作流。它编排复�
 _禁用替代词_：Business Step、Template
 
 **Worker Dispatch（客户端任务派发）**:
-一个 Conductor Capability Task 被 `media_workflow` 领取并租约式交付给某个 Media Worker 的持久记录；以不透明 `dispatch_id` 对外，绑定 Job、Step Run、attempt、User、Organization、Credential 与 Worker Instance。它与 Job/Step Run 分属不同一致性边界。
+能力任务交付给某个Media Worker的持久凭据与审计记录，绑定任务尝试、业务归属和执行者身份。它与Job/StepRun分属不同一致性边界，不拥有任务调度或超时判定。
+
+**Worker Artifact Upload（执行产物对象上传）**:
+绑定当前任务尝试与候选位置、把执行器产生的二进制内容保存为不可变对象的过程。对象上传不等于候选被接受、任务已完成或业务资源已登记。
 _禁用替代词_：Conductor Task、Step Run、Worker Job
 
 **Worker Result Receipt（Worker 结果收据）**:
-`media_workflow` 接收 Worker 完成或失败结果后生成的幂等收据；先持久化结果 Inbox，再异步更新 Conductor，避免 Conductor 暂时不可用导致客户端重复执行 Provider 副作用。
+Worker完成或失败结果已由原生Task确认的回写凭据；不代表整个Workflow完成，也不代表最终素材已登记。
 _禁用替代词_：Conductor Ack、Generated Asset、Step Output
 
 ### 校验

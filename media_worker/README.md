@@ -1,5 +1,19 @@
 # media_worker
 
+## 执行日志关联
+
+网关领取响应中的只读 `_traceparent` 元数据由客户端提取为 Task 关联字段，并从Provider输入中移除。心跳、上传准备、完成/失败回写沿用标准W3C header；直接Storage PUT既不带API Token也不带追踪header。完成/失败/未确认日志记录trace_id和不透明Dispatch，不打印提示词、候选或上游错误正文。
+
+私有结果日志只保留关联字段和待交付结果，仍不复制任务输入；重启恢复使用原关联。关联不是身份、幂等键或执行资格，坏/缺字段不阻断旧任务。客户端不引入exporter，服务端使用既有本地非采样关联；源码已完成，跨服务运行日志证据见追踪plan，不以单测代替部署验收。
+
+## 失败回写契约
+
+成功回写候选结果；失败请求可携带`failure_kind`：`transient`由Conductor的Task Definition决定自动重试，`permanent`停止该Task的自动重试。旧请求省略分类仍为永久失败。客户端不会自动重跑生成函数；HTTP发送重试只是使用同键交付相同结果。
+
+executor可通过错误的`Permanent() bool`方法声明分类，包装错误通过`errors.As`识别；明确返回false时发送transient，未分类fixture错误保持permanent。回写经网关由media_workflow直接代理Conductor，200/submitted表示精确Task结果已确认，不表示整个Workflow完成。服务端不再写结果Inbox或启动后台发送器。render_template/Finalize仍由服务端内部Worker执行。
+
+未确认结果先保存到`--state-dir`/`MEDIA_WORKER_STATE_DIR`（默认当前目录`.worker-state`），目录0700、文件0600，按网关/实例/凭据摘要隔离，不保存Token或复制提示词输入。客户端重启先恢复交付，不重新调用executor；发送失败保留相同结果/幂等键，确认后删除自己的待交付文件，409/410保留`.rejected`文件供检查。相同命名空间仅允许一个客户端进程持有文件锁。不要删除/更换该目录来规避恢复；轮换凭据后旧命名空间需使用原授权身份核对。生成副作用完成但文件落盘前的窗口仍要求Provider幂等，不声称端到端exactly-once。
+
 客户端 Capability Worker。它只访问统一网关，不配置或访问 Conductor。
 
 ## 新 Provider 契约联调
@@ -42,6 +56,14 @@ go -C media_worker run ./cmd/media_worker
 配置文件需在轮询前写好，运行期间不修改。仍须先审计该用户的整个待执行队列：当前poll按Capability而非Job筛选，Job/Step绑定不是服务器队列隔离机制。不要让本次fixture领取其他用户任务；匹配不到的任务会返回测试失败。结果签名URL可能过期，实际联调前须通过Materials重新解析；不要输出或提交配置内容。失败注入沿用下文fixture参数，计数仍仅保存在当前进程中。
 
 ## 旧契约兼容联调
+
+### 本地文件结果（实现待公开网关整体验收）
+
+Provider 配置可使用 `"result_files": ["/private/results/frame.png"]` 替代 `result_urls`，两者互斥。客户端嗅探 PNG/JPEG/WebP/GIF/MP4/WebM，限制图片16MiB、视频256MiB，计算SHA256/MD5，通过绑定Dispatch/attempt/候选位置的网关上传接口申请短期PUT。此接口要求已有的 `workflow.worker.upload` scope。
+
+文件直接PUT对象存储，不转发Worker Token、不自动跟随重定向。成功、412或响应丢失后重新申请，由服务端HEAD核对元数据再确认；结果只回写 `object_path`，查询时服务端在响应副本解析短期访问URL。上传不确认时不会回写成功。当前单测/race覆盖此路径，尚不代表部署后的完整流程验收。
+
+上传发生在结果日志落盘之前；进程在此窗口退出仍依赖Provider侧幂等与固定结果文件恢复，不承诺生成exactly-once。新文件内容生成新对象键，已取消任务的旧签名可能产生未引用对象，不自动删除用户数据。
 
 联调示例：
 

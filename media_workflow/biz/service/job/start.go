@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	domain "media_agent/media_workflow/biz/domain/job"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
+	"media_agent/media_workflow/biz/shared/taskcontext"
 	"media_agent/media_workflow/biz/workflow/executable"
 )
 
@@ -27,7 +28,7 @@ func (s *Service) enqueueInitialStart(ctx context.Context, j *domain.Job, steps 
 	if err != nil {
 		return nil, err
 	}
-	inputJSON, err := json.Marshal(map[string]any{"job_id": j.ID, "inputs": conductorInputs(j.Input)})
+	inputJSON, err := json.Marshal(taskcontext.CaptureTrace(ctx, map[string]any{"job_id": j.ID, "inputs": conductorInputs(j.Input)}))
 	if err != nil {
 		return nil, errors.New("invalid frozen workflow input")
 	}
@@ -79,6 +80,7 @@ func (s *Service) enqueueInitialStart(ctx context.Context, j *domain.Job, steps 
 	}
 	if accepted == j {
 		j.CompilationHash = command.CompilationHash
+		taskcontext.Log(ctx, taskcontext.Event{Event: "workflow_submission_accepted", JobID: j.ID})
 	}
 	// Returning the accepted aggregate avoids a fallible read after commit.
 	// The dispatcher, not this request, binds the Conductor execution later.

@@ -14,6 +14,9 @@ _禁用替代词_：Workspace Library、Tenant Scope、Team Library
 用户为某个 Organization 和 Scope 上传二进制内容、取得稳定 Object Path、再由 Material、Virtual IP 或 Product 引用的独立过程。media_materials 通过 S3 Storage Port 写入对象；上传成功不等于已经创建业务资源，尚未被业务资源引用的内容属于待回收对象。
 _禁用替代词_：Material Upload（只有创建 Material 时才可使用）、Direct Storage Upload、Attachment
 
+**Worker Artifact Upload（执行产物对象上传）**:
+见[Workflow执行上下文](../media_workflow/CONTEXT.md)。本服务提供企业命名空间内的短期对象写入凭据，业务资源登记仍是独立过程。
+
 **Library Object Resolution（企业资源对象解析）**:
 Organization 成员为一个属于该企业命名空间的 Object Path 申请短期 Resolved URL 的读取授权过程；返回地址只用于直接访问 Storage Provider，不持久化。
 _禁用替代词_：Public Image URL、Storage Proxy、Permanent URL

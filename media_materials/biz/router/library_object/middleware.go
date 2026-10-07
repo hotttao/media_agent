@@ -47,6 +47,10 @@ func _internalMw() []app.HandlerFunc {
 }
 
 func _resolveinternallibraryobjectMw() []app.HandlerFunc {
+	return internalObjectAuth()
+}
+
+func internalObjectAuth() []app.HandlerFunc {
 	return []app.HandlerFunc{func(ctx context.Context, c *app.RequestContext) {
 		expected := os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN")
 		actual := c.Request.Header.Peek("X-Media-Materials-Internal-Token")
@@ -62,4 +66,8 @@ func _resolveinternallibraryobjectMw() []app.HandlerFunc {
 func _v10Mw() []app.HandlerFunc {
 	// your code...
 	return nil
+}
+
+func _prepareinternallibraryobjectuploadMw() []app.HandlerFunc {
+	return internalObjectAuth()
 }

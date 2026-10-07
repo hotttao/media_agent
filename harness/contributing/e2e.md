@@ -1,5 +1,40 @@
 # E2E 测试
 
+## 原生 rerun 与真实本地交付时间边界
+
+`media-cli/e2e/workflow_boundary_probe_test.go` 必须显式设置 `MEDIA_E2E_BOUNDARY_PROBE=1`、已核对的 `MEDIA_E2E_BOUNDARY_JOB_ID` 和 User/Worker API Token。Submit 单独调用 `TestWorkflowBoundaryProbeSubmit`，先审计整个 User 队列，只接受一个固定键部分执行。协议门禁 `TestWorkflowNativeRerunAndLeaseBoundaryGateway` 使用真实 HTTP，明确失败首节点后执行 input_override 整次原生 rerun，检查固定版本输入审计与原 trace，分别等待真实 90 秒时间过期再发心跳/Complete；不改数据库租约，不在测试内启动模型 Worker，不审批，结束后取消原实例。
+
+失败后先只读核对精确实例；上游可能已经提交，不能直接重跑 Submit/rerun 掩盖未知结果。该门禁约需 200 秒，超时应至少 5 分钟。取消后的同一测试 Job 不再运行整套门禁，也不能把部分执行当成第二条完整模型验收。Token、提示词、完整输入和签名 URL 均不得输出。
+
+## 异步trace与原生状态部署复验
+
+`media-cli/e2e/workflow_trace_probe_test.go` 的Submit门禁显式使用`MEDIA_E2E_TRACE_PROBE=1`和已有完整样本`MEDIA_E2E_TRACE_SOURCE_JOB_ID`；核对Owner/企业和整个User队列，刷新稳定对象引用，仅接受固定键的一个部分执行，不启动Worker/不审批。结果记录Job ID与非秘密trace_id，禁止输出Input、Token和签名URL。
+
+对已核对的`MEDIA_E2E_TRACE_JOB_ID`/`MEDIA_E2E_TRACE_ENGINE_ID`，`TestWorkflowTraceProbeNativePauseResumeProjection`仅对原实例执行Conductor原生pause/resume并检查公开Job投影；失败时只尝试恢复自己的PAUSED实例。必须结束暂停后再准备Provider文件配置，不并行这些依赖步骤。配置准备后在测试进程外启动独立客户端，只注册图像能力。
+
+`TestWorkflowTraceProbeCancelAtFirstApproval`等待首节点两候选可访问，只发送取消/同取消重放，再查询原实例TERMINATED，不确认或执行后续节点。随后停止该客户端；API、后台启动、内部Renderer、客户端回写及Materials日志须具有同一trace_id，不能只以X-Trace-ID响应头证明跨服务。只读审计启动记录cancelled、Generated Asset零新增与Inbox零新增。该部分执行不是第二条完整Workflow、真实Provider或历史恢复验收。
+
+## Worker本地文件产物上传
+
+Provider单样本流程沿用下文独立CLI Submit/外部Worker门禁。配置准备时设置`MEDIA_E2E_PROVIDER_FILE_RESULTS=1`：只下载已知真实结果为新私有文件，配置使用`result_files`，不在测试进程内执行Worker或预上传本次结果。必须先核对整个User待执行队列；仅Submit一个Job，客户端只调用网关与签名Storage PUT，不访问Conductor。
+
+`TestProviderCapabilityExecution`继续执行审批/反馈循环、显式失败和CLI原生retry，`TestWorkflowCompletedOutputsGateway`在文件模式下增加完整对象SHA256与本地结果逐一比较。`TestWorkerArtifactUploadGatewayRejectsInvalidAdmission`使用已有完成Dispatch，验证无Token/User身份拒绝和原Worker410；只提供环境中的Worker凭证，不打印Token/签名URL，不创建对象或新任务。
+
+决策接受是异步的，不把仍未更新的首轮缓存当作第二轮结果。当已确认regenerate后门禁退出，明确核对原生决定并设置`MEDIA_E2E_PROVIDER_REGENERATION_ALREADY_REQUESTED=1`继续同一个样本，不重发regenerate或Submit。仅适用于已核对该决定的恢复观察，不用于掩盖未知结果。技术签名PUT单测/真实Seaweed协议、公开客户端业务流程分别记录。
+
+## Provider失败分类与原生自动retry
+
+```bash
+MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 \
+go -C media_workflow test -tags=e2e -race ./biz/workflow/worker_gateway \
+  -run '^TestProviderFailureClassificationNativeRetry$' -count=1 -v -timeout=2m
+
+go -C media_workflow test -tags=e2e -race ./e2e \
+  -run '^TestProviderFailureDirectProxyPersistence$' -count=1 -v -timeout=2m
+```
+
+第一项使用真实Conductor、唯一技术定义/实例与受控业务端口，通过直接fail/complete验证临时故障自动retry与永久故障不retry，不重置failed缓存。第二项使用隔离PG及明确引擎桩，验证分类/终态重放、分类冲突、Dispatch记账、Inbox零新增与Job不变。仅清理测试资源，不代替公开网关/独立CLI/客户端完整验收。
+
 ## Conductor原生失败恢复（技术门禁）
 
 ```bash
@@ -20,7 +55,7 @@ go -C media_workflow test -tags=e2e -race ./biz/workflow/worker_gateway \
   -run '^TestNativeTaskDeliveryIgnoresFailedProjection$' -count=1 -v -timeout=2m
 ```
 
-门禁创建自身唯一技术SIMPLE定义/实例，本地Job为受控端口并始终缓存failed。实际Gateway直接核对原实例RUNNING与精确活动Task、正常交付和回写完成；不callback、不改本地running、不重置节点。结束仅清理自身技术实例/定义，不调用模型、不修改用户Job/数据库。缺地址明确Skip。此技术门禁不替代公开HTTP/独立CLI及数据库/进程恢复的完整业务验收。
+门禁创建唯一技术定义/实例，本地Job始终缓存failed。代理在真实Task更新已提交后丢弃响应，Gateway查询同Task确认，再在lease过期后重放同结果，只有一次POST且Inbox零写入。不callback、不重置；只清理测试资源，不调用模型/用户库，不替代公开HTTP/独立CLI门禁。
 
 ## Provider Capability纠正单样本
 
@@ -277,14 +312,14 @@ go -C media-cli test ./e2e -run '^TestWorkflowWorkerGatewayAPIToken$' -count=1 -
 
 Worker Gateway 边界测试为现有企业创建临时稳定 Worker 身份和 poll-only API Token，通过网关验证有效注册、User 不能冒充 Worker、scope 不足拒绝，以及撤销后注册/轮询立即拒绝。只清理本次创建的身份和凭据；不模拟登录，不调用旧 Service Token 接口，不用有效 Token 领取队列任务，不替代完整 Worker 执行门禁。
 
-业务授权的独立 PostgreSQL 门禁为 `TestPersonalDispatchAuthorizationIsolation`：隔离真实仓储与结果 Inbox，逐项改变 User、Organization、Worker Actor、credential、instance、auth source、attempt，对 heartbeat/complete/fail 三种操作断言拒绝；拒绝后无结果、无 lease/status 变化、无 Conductor 调用。正确身份 complete 与重复请求仅保存一条收据，由持久投递器处理，不在 HTTP 请求内推进 Conductor。它不创建真实运行环境的企业/身份，也不证明网关能验证第二企业 Token；网关交换与撤销依赖上面的独立 HTTP 门禁。
+业务授权门禁`TestPersonalDispatchAuthorizationIsolation`使用隔离PG及明确引擎桩，逐项改变User、企业、Actor、credential、instance、auth source、attempt，拒绝后无lease/status变化、Inbox写入或引擎更新。正确身份complete直接提交并核对原Task，重放不新增Inbox。它不创建运行环境身份，不代替公开网关JWT/撤销验证。
 
 ```bash
 go -C media_workflow test -tags=e2e -race ./e2e \
-  -run '^(TestPersonalDispatchAuthorizationIsolation|TestDispatchInboxConcurrentReplayAndDeliveryRetry)$' -count=1 -v
+  -run '^(TestPersonalDispatchAuthorizationIsolation|TestLegacyDispatchInboxConcurrentReplayAndDeliveryRetry)$' -count=1 -v
 ```
 
-后一个门禁在同样的隔离 PostgreSQL 验证八个并发结果重放得到同一收据、complete/fail 冲突、Conductor 暂时失败后收据保留，以及重试后提交。Conductor adapter 在该用例为故障注入桩，不冒充真实 Conductor 网络故障验收；完整执行另按下文单样本门禁验证。
+后一个门禁仅保留历史Inbox表/仓储的并发去重与旧协议兼容证据，投递复现在测试函数中，不代表生产仍有发送器，也不证明当前直接交付。当前恢复门禁见文首原生Task响应丢失测试与客户端真实子进程恢复；完整网关/CLI执行另验。
 
 ### Personal Worker 单样本执行门禁
 

@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"io"
 	"mime"
@@ -8,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -89,6 +91,40 @@ func TestWorkflowCompletedOutputsGateway(t *testing.T) {
 			t.Fatalf("node %s output has invalid Range response or media type (status=%d)", step.Key, response.StatusCode)
 		}
 		t.Logf("node %s persisted output readable (Range 206, %s)", step.Key, contentType)
+		if os.Getenv("MEDIA_E2E_PROVIDER_FILE_RESULTS") == "1" {
+			if !strings.Contains(asset.Path, "/worker_generated/") {
+				t.Fatal("file fixture reused a pre-uploaded legacy object")
+			}
+			position, ext := 0, ".png"
+			if step.Key == "model_image" {
+				position = 1
+			}
+			if step.Key == "video" {
+				ext = ".mp4"
+			}
+			fixture := filepath.Join(filepath.Dir(os.Getenv("MEDIA_E2E_PROVIDER_FIXTURE_CONFIG")), step.Key+"-"+strconv.Itoa(position)+ext)
+			file, err := os.Open(fixture)
+			if err != nil {
+				t.Fatal("private expected file unavailable")
+			}
+			wantDigest := sha256.New()
+			wantSize, err := io.Copy(wantDigest, file)
+			file.Close()
+			if err != nil || wantSize != size {
+				t.Fatal("fixture size differs from stored output")
+			}
+			full, err := storage.Get(asset.URL)
+			if err != nil {
+				t.Fatal("full object read unavailable")
+			}
+			gotDigest := sha256.New()
+			gotSize, readErr := io.Copy(gotDigest, io.LimitReader(full.Body, size+1))
+			full.Body.Close()
+			if full.StatusCode != 200 || readErr != nil || gotSize != size || string(gotDigest.Sum(nil)) != string(wantDigest.Sum(nil)) {
+				t.Fatal("uploaded result bytes differ from client fixture")
+			}
+			t.Logf("node %s uploaded bytes match local fixture (SHA256)", step.Key)
+		}
 	}
 }
 

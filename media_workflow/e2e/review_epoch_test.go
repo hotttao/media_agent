@@ -70,15 +70,19 @@ func TestReviewRetryEpochPersistence(t *testing.T) {
 	if steps.UpdateStatus(ctx, sr.ID, domain.SRNeedConfirm, nil) != nil {
 		t.Fatal("new approval wait seed failed")
 	}
-	if _, err := accept(makeReview("stale-observation", 0)); !errors.Is(err, domain.ErrReviewConflict) {
-		t.Fatal("stale observed cycle accepted after retry")
+	duplicate := makeReview("duplicate-task", 0)
+	duplicate.ConductorTaskID = old.ConductorTaskID
+	duplicate.RequestDigest, _ = duplicate.Digest()
+	if _, err := accept(duplicate); !errors.Is(err, domain.ErrReviewConflict) {
+		t.Fatal("second decision accepted for the same exact native task")
 	}
-	fresh := makeReview("review-fresh", 1)
+	// The count is immutable audit metadata, not task execution authority.
+	fresh := makeReview("review-fresh", 0)
 	if _, err := accept(fresh); err != nil {
 		t.Fatal("fresh cycle approval rejected")
 	}
 	reloaded, err := repo.NewJobRepo(db).GetReviewByKey(ctx, sr.ID, fresh.IdempotencyKey)
-	if err != nil || reloaded.AcceptedRetryCount == nil || *reloaded.AcceptedRetryCount != 1 || reloaded.Validate() != nil {
+	if err != nil || reloaded.AcceptedRetryCount == nil || *reloaded.AcceptedRetryCount != 0 || reloaded.Validate() != nil {
 		t.Fatal("epoch or digest lost through persistence")
 	}
 	if db.Exec("UPDATE media_workflow.step_run_reviews SET accepted_retry_count=9 WHERE id=?", fresh.ID).Error == nil {

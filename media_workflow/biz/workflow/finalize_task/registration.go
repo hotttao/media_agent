@@ -118,11 +118,9 @@ func (h Handler) Execute(ctx context.Context, input Input) (Output, error) {
 	request := &client.UpsertGenAssetReq{Scope: j.Scope, AssetKind: step.AssetKind, Name: step.StepKey + "_" + nameID,
 		URL: registrationURL, Content: selected.Content, OwnerUserID: j.SubmittedBy, Visibility: "private",
 		JobID: j.ID, StepRunID: step.ID, TemplateID: step.TemplateID, TemplateVersion: step.TemplateVersion, ResultKey: resultKey}
-	if j.Input.Product != nil {
-		request.SourceProductID = j.Input.Product.ID
-	}
-	if j.Input.VirtualIP != nil {
-		request.SourceVirtualIPID = j.Input.VirtualIP.ID
+	request.SourceProductID, request.SourceVirtualIPID, err = generationSources(j, execution)
+	if err != nil {
+		return Output{}, err
 	}
 	id, err := h.Assets.UpsertGeneratedAsset(ctx, request)
 	if err != nil {
@@ -135,6 +133,49 @@ func (h Handler) Execute(ctx context.Context, input Input) (Output, error) {
 		return Output{}, taskerror.Retryable("finalize_registration_identity_invalid")
 	}
 	return Output{OutputResourceID: id, OutputResource: Resource{ID: id, AssetRef: assetRef, URL: registrationURL, Content: selected.Content, AssetKind: step.AssetKind}}, nil
+}
+
+// Native workflowInput is authoritative during an input-override rerun. Job's
+// local input/audit commit may lag behind the engine and must not attribute a
+// new generation to the prior Product or Virtual IP.
+func generationSources(j *domain.Job, execution *domain.EngineExecution) (string, string, error) {
+	raw, exists := execution.Input["inputs"]
+	if !exists {
+		// Compatibility for older definitions without the current input envelope.
+		var product, vip string
+		if j.Input.Product != nil {
+			product = j.Input.Product.ID
+		}
+		if j.Input.VirtualIP != nil {
+			vip = j.Input.VirtualIP.ID
+		}
+		return product, vip, nil
+	}
+	var inputs map[string]any
+	if decode(raw, &inputs) != nil || inputs == nil {
+		return "", "", taskerror.Permanent("finalize_workflow_input_invalid")
+	}
+	source := func(name string) (string, error) {
+		value, exists := inputs[name]
+		if !exists {
+			return "", nil
+		}
+		var envelope struct {
+			Value *struct {
+				ID string `json:"id"`
+			} `json:"value"`
+		}
+		if decode(value, &envelope) != nil || envelope.Value == nil || strings.TrimSpace(envelope.Value.ID) == "" {
+			return "", taskerror.Permanent("finalize_source_input_invalid")
+		}
+		return envelope.Value.ID, nil
+	}
+	product, err := source("product")
+	if err != nil {
+		return "", "", err
+	}
+	vip, err := source("virtual_ip")
+	return product, vip, err
 }
 
 func successfulInvocation(execution *domain.EngineExecution, stepKey string) (*domain.EngineTask, error) {

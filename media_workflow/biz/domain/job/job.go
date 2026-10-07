@@ -12,6 +12,7 @@ const (
 	JobAwaitingResume JobStatus = "awaiting_resume"
 	JobPending        JobStatus = "pending"
 	JobRunning        JobStatus = "running"
+	JobPaused         JobStatus = "paused"
 	JobNeedConfirm    JobStatus = "need_confirm"
 	JobSucceeded      JobStatus = "succeeded"
 	JobFailed         JobStatus = "failed"

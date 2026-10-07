@@ -8,7 +8,10 @@ import (
 	domain "media_agent/media_workflow/biz/domain/job"
 )
 
-func (s *Service) commitNativeJobRetry(ctx context.Context, expected domain.Job, reason string, inputOverride *domain.JobInput) error {
+// Invalidate only the business read projection after a confirmed whole rerun.
+// Conductor already removed the old tasks. No local task is queued or scheduled;
+// generated assets and immutable reviews remain available for historical audit.
+func (s *Service) commitRerunProjection(ctx context.Context, expected domain.Job, reason string, inputOverride *domain.JobInput) error {
 	commit := func(txCtx context.Context) error {
 		if s.reviews != nil {
 			if err := s.reviews.LockReviewProjection(txCtx, expected.ID, ""); err != nil {
@@ -19,7 +22,7 @@ func (s *Service) commitNativeJobRetry(ctx context.Context, expected domain.Job,
 		if err != nil {
 			return err
 		}
-		if current == nil || current.Status != domain.JobFailed || current.ConductorWorkflowID != expected.ConductorWorkflowID || current.CompilationHash != expected.CompilationHash || current.RetryCount != expected.RetryCount {
+		if current == nil || current.Status == domain.JobCancelled || current.ConductorWorkflowID != expected.ConductorWorkflowID || current.CompilationHash != expected.CompilationHash || current.RetryCount != expected.RetryCount {
 			return errors.New("retry snapshot superseded")
 		}
 		steps, err := s.stepRunRepo.ListByJob(txCtx, expected.ID)

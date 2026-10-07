@@ -103,7 +103,7 @@ func (r *ManagedRuntime) Poll(ctx context.Context, key string, version int) (*jo
 		if err != nil {
 			return nil, err
 		}
-		return dispatchForDelivery(existing, resolved)
+		return r.flow.dispatchForDelivery(ctx, existing, resolved)
 	}
 	if !errors.Is(err, jobdomain.ErrDispatchNotFound) {
 		return nil, err
@@ -163,10 +163,18 @@ func (r *ManagedRuntime) Poll(ctx context.Context, key string, version int) (*jo
 	if err != nil {
 		return nil, err
 	}
-	return dispatchForDelivery(dispatch, resolved)
+	return r.flow.dispatchForDelivery(ctx, dispatch, resolved)
 }
 
 func (r *ManagedRuntime) authorize(ctx context.Context, id string, attempt int) (*jobdomain.WorkerDispatch, error) {
+	dispatch, err := r.authorizeResultIdentity(ctx, id, attempt)
+	if err != nil {
+		return nil, err
+	}
+	return r.flow.requireActiveDispatch(ctx, dispatch, attempt)
+}
+
+func (r *ManagedRuntime) authorizeResultIdentity(ctx context.Context, id string, attempt int) (*jobdomain.WorkerDispatch, error) {
 	dispatch, err := r.flow.Dispatches.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -181,7 +189,10 @@ func (r *ManagedRuntime) authorize(ctx context.Context, id string, attempt int) 
 	if _, err := r.capability(ctx, binding); err != nil {
 		return nil, err
 	}
-	return r.flow.checkDispatchLease(ctx, dispatch, attempt)
+	if dispatch.Attempt != attempt {
+		return nil, jobdomain.ErrDispatchConflict
+	}
+	return dispatch, nil
 }
 
 func (r *ManagedRuntime) Heartbeat(ctx context.Context, id string, attempt int) error {
@@ -195,6 +206,9 @@ func (r *ManagedRuntime) Heartbeat(ctx context.Context, id string, attempt int) 
 	}); err != nil {
 		return err
 	}
+	if _, err := r.flow.requireActiveDispatch(ctx, dispatch, attempt); err != nil {
+		return err
+	}
 	_, err = r.flow.Dispatches.ExtendLease(ctx, id, attempt, r.flow.now().Add(r.flow.lease()))
 	return err
 }
@@ -203,20 +217,27 @@ func (r *ManagedRuntime) Complete(ctx context.Context, id string, attempt int, i
 	if !validCandidates(output["candidates"]) {
 		return nil, ErrInvalidOutput
 	}
-	if _, err := r.authorize(ctx, id, attempt); err != nil {
+	dispatch, err := r.authorizeResultIdentity(ctx, id, attempt)
+	if err != nil {
 		return nil, err
 	}
-	return r.flow.persistResult(ctx, id, attempt, "complete", idempotencyKey, output)
+	return r.flow.deliverResult(ctx, dispatch, "complete", idempotencyKey, output)
 }
 
 func (r *ManagedRuntime) Fail(ctx context.Context, id string, attempt int, idempotencyKey, reason string) (*jobdomain.WorkerResultReceipt, error) {
-	if reason == "" {
-		return nil, ErrInvalidRequest
-	}
-	if _, err := r.authorize(ctx, id, attempt); err != nil {
+	return r.FailWithKind(ctx, id, attempt, idempotencyKey, reason, FailurePermanent)
+}
+
+func (r *ManagedRuntime) FailWithKind(ctx context.Context, id string, attempt int, idempotencyKey, reason, kind string) (*jobdomain.WorkerResultReceipt, error) {
+	result, err := failureResult(reason, kind)
+	if err != nil {
 		return nil, err
 	}
-	return r.flow.persistResult(ctx, id, attempt, "fail", idempotencyKey, map[string]any{"reason": reason})
+	dispatch, err := r.authorizeResultIdentity(ctx, id, attempt)
+	if err != nil {
+		return nil, err
+	}
+	return r.flow.deliverResult(ctx, dispatch, "fail", idempotencyKey, result)
 }
 
 // LeaseInterval is used by the internal runner to renew a dispatch during work.

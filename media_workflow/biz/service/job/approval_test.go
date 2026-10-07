@@ -14,37 +14,14 @@ func TestRegenerationDoesNotRerunLegacyOrNonwaitingExecution(t *testing.T) {
 		{"terminal", "step_7331_approval__1", "IN_PROGRESS", "COMPLETED"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			svc, jobs, steps := newTestService(false)
-			engine := &mockWorkflowEngine{execution: &domain.EngineExecution{Status: tc.workflowStatus, Tasks: []domain.EngineTask{{ReferenceTaskName: tc.ref, Status: tc.status}}}}
-			svc.engine = engine
-			jobs.jobs["job1"] = &domain.Job{ID: "job1", Status: domain.JobNeedConfirm, ConductorWorkflowID: "execution"}
-			sr := makeClaimedStepRun(steps, false)
-			sr.Status = domain.SRNeedConfirm
-			sr.Candidates = []domain.Candidate{{Content: "old"}}
-			if _, err := svc.Regenerate(context.Background(), sr.ID); err == nil {
-				t.Fatal("unsupported regeneration succeeded")
-			}
-			if engine.completedRef != "" || engine.rerunTaskID != "" || engine.terminated || sr.Status != domain.SRNeedConfirm || len(sr.Candidates) != 1 {
-				t.Fatal("rejected regeneration changed execution")
+			svc, reviews, engine, cmd := reviewCommandFixture()
+			task := &engine.execution.Tasks[0]
+			task.ReferenceTaskName, task.Status, engine.execution.Status = tc.ref, tc.status, tc.workflowStatus
+			cmd.Decision = "regenerate"
+			if _, err := svc.DecideReview(context.Background(), cmd); err == nil || reviews.writes != 0 || engine.rerunTaskID != "" || engine.terminated {
+				t.Fatal("unsupported regeneration changed execution", err)
 			}
 		})
-	}
-}
-
-func TestConfirmRejectsStaleLocalCandidates(t *testing.T) {
-	svc, jobs, steps := newTestService(false)
-	engine := &mockWorkflowEngine{execution: &domain.EngineExecution{Status: "RUNNING", Tasks: []domain.EngineTask{{ReferenceTaskName: "step_7331_approval__2", Status: "IN_PROGRESS", Input: map[string]any{"candidates": []domain.Candidate{{Content: "new"}}}}}}}
-	svc.engine = engine
-	jobs.jobs["job1"] = &domain.Job{ID: "job1", Status: domain.JobNeedConfirm, ConductorWorkflowID: "execution"}
-	sr := makeClaimedStepRun(steps, false)
-	sr.Status = domain.SRNeedConfirm
-	sr.Candidates = []domain.Candidate{{Content: "old"}}
-	if _, err := svc.Confirm(context.Background(), sr.ID, 0); err == nil || engine.completedRef != "" {
-		t.Fatal("stale local candidate completed a newer approval")
-	}
-	sr.Candidates = []domain.Candidate{{Content: "new"}}
-	if _, err := svc.Confirm(context.Background(), sr.ID, 0); err != nil || engine.completedRef != "step_7331_approval__2" || engine.completedOutput["decision"] != "accept" {
-		t.Fatalf("current candidate was not accepted: %v", err)
 	}
 }
 
@@ -88,7 +65,7 @@ func TestCurrentApprovalIgnoresOldWaitingTaskWhenNewRoundStarted(t *testing.T) {
 	jobs.jobs["job1"] = &domain.Job{ID: "job1", Status: domain.JobNeedConfirm, ConductorWorkflowID: "execution"}
 	sr := makeClaimedStepRun(steps, false)
 	sr.Status = domain.SRNeedConfirm
-	if _, err := svc.Regenerate(context.Background(), sr.ID); err == nil || engine.completedRef != "" {
+	if _, _, err := svc.currentApprovalTask(context.Background(), jobs.jobs["job1"], sr); err == nil || engine.completedRef != "" {
 		t.Fatal("old waiting task was completed after a newer round began")
 	}
 }

@@ -2,12 +2,34 @@ package job
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"media_agent/hertz_infra/authn/internaljwt"
 	domain "media_agent/media_workflow/biz/domain/job"
 )
+
+func TestReviewUsesNativeCandidatesDespiteStaleProjection(t *testing.T) {
+	for _, status := range []domain.JobStatus{domain.JobFailed, domain.JobSucceeded, domain.JobRunning} {
+		t.Run(string(status), func(t *testing.T) {
+			svc, reviews, engine, cmd := reviewCommandFixture()
+			svc.jobRepo.(*mockJobRepo).jobs["job1"].Status = status
+			svc.stepRunRepo.(*mockStepRunRepo).items[cmd.StepRunID].Status = domain.SRFailed
+			current := []domain.Candidate{{Content: "native current result"}}
+			engine.execution.Tasks[0].Input["candidates"] = current
+			if _, err := svc.DecideReview(context.Background(), cmd); err != nil {
+				t.Fatal("projection incorrectly vetoed native approval", err)
+			}
+			var output struct {
+				SelectedCandidate domain.Candidate `json:"selected_candidate"`
+			}
+			if json.Unmarshal(reviews.review.OutputJSON, &output) != nil || output.SelectedCandidate != current[0] {
+				t.Fatal("decision selected cached rather than native candidate")
+			}
+		})
+	}
+}
 
 type commandReviewStore struct {
 	domain.ReviewRepo
@@ -17,6 +39,28 @@ type commandReviewStore struct {
 }
 
 type commandReviewTx struct{}
+
+func (*commandReviewStore) LockReviewProjection(context.Context, string, string) error { return nil }
+
+func TestCompletedApprovalProjectsSelectionOnlyAfterNativeCompletion(t *testing.T) {
+	svc, _, engine, cmd := reviewCommandFixture()
+	if _, err := svc.DecideReview(context.Background(), cmd); err != nil {
+		t.Fatal(err)
+	}
+	step := svc.stepRunRepo.(*mockStepRunRepo).items[cmd.StepRunID]
+	if step.SelectedIndex != nil || step.Status != domain.SRNeedConfirm {
+		t.Fatal("local acceptance advanced execution")
+	}
+	task := engine.execution.Tasks[0]
+	task.Status = "COMPLETED"
+	task.Output = map[string]any{"decision": "accept", "selected_index": 0}
+	if err := svc.projectCompletedReview(context.Background(), "job1", cmd.StepRunID, task); err != nil {
+		t.Fatal(err)
+	}
+	if step.SelectedIndex == nil || *step.SelectedIndex != 0 || step.Status != domain.SRClaimed {
+		t.Fatal("native completed selection not projected")
+	}
+}
 
 func (commandReviewTx) RunInTx(ctx context.Context, fn func(context.Context) error) error {
 	return fn(ctx)
@@ -36,7 +80,6 @@ func (r *commandReviewStore) AcceptReview(_ context.Context, review domain.Revie
 		return nil, false, domain.ErrReviewConflict
 	}
 	r.review, r.writes = &review, r.writes+1
-	r.steps.items[review.StepRunID].Status = domain.SRClaimed
 	return r.review, true, nil
 }
 func (r *commandReviewStore) LatestReviewsByJob(context.Context, string) ([]domain.ReviewDecision, error) {
@@ -63,7 +106,7 @@ func reviewCommandFixture() (*Service, *commandReviewStore, *mockWorkflowEngine,
 func TestReviewCommandPersistsBeforeDeliveryAndReplaysAfterCompletion(t *testing.T) {
 	svc, reviews, engine, cmd := reviewCommandFixture()
 	receipt, err := svc.DecideReview(context.Background(), cmd)
-	if err != nil || receipt.LastReviewID == "" || receipt.LastReviewStatus != "pending" || receipt.Status != domain.SRClaimed {
+	if err != nil || receipt.LastReviewID == "" || receipt.LastReviewStatus != "pending" || receipt.Status != domain.SRNeedConfirm {
 		t.Fatalf("decision not accepted: %v", err)
 	}
 	if engine.completedRef != "" || reviews.writes != 1 || *reviews.review.SelectedIndex != 0 || reviews.review.Generation != 2 {
@@ -98,7 +141,7 @@ func TestReviewCommandRejectsUnauthorizedOrUnsupportedInputs(t *testing.T) {
 			case "feedback":
 				cmd.Decision, cmd.Feedback = "regenerate", "must not silently drop"
 			case "stale":
-				engine.execution.Tasks[0].Input["candidates"] = []domain.Candidate{{Content: "new"}}
+				engine.execution.Tasks[0].Retried = true
 			case "index":
 				cmd.SelectedIndex = 7 // Candidate.Index is not its array position.
 			}

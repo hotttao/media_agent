@@ -23,6 +23,7 @@ func Register(r *server.Hertz) {
 			_internal := _api.Group("/internal", _internalMw()...)
 			{
 				_v1 := _internal.Group("/v1", _v1Mw()...)
+				_v1.POST("/library-objects:prepareUpload", append(_prepareinternallibraryobjectuploadMw(), library_object.PrepareInternalLibraryObjectUpload)...)
 				_v1.GET("/library-objects:resolve", append(_resolveinternallibraryobjectMw(), library_object.ResolveInternalLibraryObject)...)
 			}
 		}
