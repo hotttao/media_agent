@@ -141,7 +141,7 @@ func main() {
 	compilationRepo := wfrepo.NewCompilationRepo(db)
 	conductorClient := conductor.NewClient(os.Getenv("CONDUCTOR_URL"))
 	publishFlow := &publication.Flow{
-		Templates: tplLookup, Capabilities: capabilityRepo, Intents: compilationRepo, Workflows: wfRepo, Tx: txRunner,
+		Templates: tplLookup, Capabilities: capabilityRepo, AssetKinds: materialsClient, Intents: compilationRepo, Workflows: wfRepo, Tx: txRunner,
 	}
 	wfSvc := wfsvc.NewService(wfRepo, wfGrantRepo, txRunner, tplLookup, publishFlow)
 	wfSvc.ConfigurePublications(compilationRepo)
@@ -232,18 +232,13 @@ func main() {
 	workerFlow := &workergateway.Flow{
 		StorageOrigin: os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"),
 		Dispatches:    dispatchRepo, Jobs: jobRepo, StepRuns: stepRunRepo,
-		Capabilities: capabilityRepo, Engine: executionEngine, ImportedAssets: materialsClient,
+		Capabilities: capabilityRepo, Engine: executionEngine, Executions: executionEngine, ImportedAssets: materialsClient,
 	}
 	workerhandler.Flow = workerFlow
 	workerSubmitterCtx, workerSubmitterCancel := context.WithCancel(context.Background())
 	defer workerSubmitterCancel()
 	go workerFlow.RunResultSubmitter(workerSubmitterCtx, time.Second)
 	go workerFlow.RunLeaseReaper(workerSubmitterCtx, 15*time.Second)
-
-	// claim 超时扫描（后台 goroutine）
-	scannerCtx, scannerCancel := context.WithCancel(context.Background())
-	defer scannerCancel()
-	go jobSvc.StartClaimTimeoutScanner(scannerCtx)
 
 	// auth 中间件（OAuth client + cookie JWT + Bearer service token）
 	mediaAuthURL := "http://127.0.0.1:8001"

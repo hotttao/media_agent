@@ -86,14 +86,20 @@ func (r *ManagedRuntime) Poll(ctx context.Context, key string, version int) (*jo
 		if err != nil {
 			return nil, err
 		}
-		if job.OrganizationID == "" || job.SubmittedBy != existing.UserID || job.OrganizationID != existing.OrganizationID || job.ConductorWorkflowID != existing.ConductorWorkflowID || job.Status.IsTerminal() {
+		if job.OrganizationID == "" || job.SubmittedBy != existing.UserID || job.OrganizationID != existing.OrganizationID || job.ConductorWorkflowID != existing.ConductorWorkflowID {
 			return nil, ErrForbidden
+		}
+		if err := r.flow.requireActiveTask(ctx, job, existing.ConductorWorkflowID, existing.ConductorTaskID, existing.Attempt); err != nil {
+			return nil, err
 		}
 		var input map[string]any
 		if err := json.Unmarshal(existing.InputJSON, &input); err != nil {
 			return nil, err
 		}
-		resolved, err := r.flow.resolveInputRefs(ctx, job, input)
+		if err := validateProviderInputs(capability, input); err != nil {
+			return nil, err
+		}
+		resolved, err := r.flow.resolveCapabilityInputRefs(ctx, job, input, capability)
 		if err != nil {
 			return nil, err
 		}
@@ -118,18 +124,27 @@ func (r *ManagedRuntime) Poll(ctx context.Context, key string, version int) (*jo
 	if err != nil {
 		return nil, err
 	}
-	if job.OrganizationID == "" || job.SubmittedBy == "" || job.ConductorWorkflowID != task.WorkflowInstanceID || job.Status.IsTerminal() {
+	if job.OrganizationID == "" || job.SubmittedBy == "" || job.ConductorWorkflowID != task.WorkflowInstanceID {
 		return nil, ErrForbidden
 	}
 	step, err := r.flow.StepRuns.GetByJobAndStepKey(ctx, jobID, stepKey)
 	if err != nil {
 		return nil, err
 	}
+	if err := validateProviderInputs(capability, task.Input); err != nil {
+		return nil, err
+	}
+	if step.JobID != job.ID || step.StepKey != stepKey || task.TaskType != capability.ConductorTaskDef {
+		return nil, ErrForbidden
+	}
+	if err := r.flow.requireActiveTask(ctx, job, task.WorkflowInstanceID, task.TaskID, task.RetryCount+1); err != nil {
+		return nil, err
+	}
 	input, err := json.Marshal(task.Input)
 	if err != nil {
 		return nil, err
 	}
-	resolved, err := r.flow.resolveInputRefs(ctx, job, task.Input)
+	resolved, err := r.flow.resolveCapabilityInputRefs(ctx, job, task.Input, capability)
 	if err != nil {
 		return nil, err
 	}

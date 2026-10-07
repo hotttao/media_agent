@@ -630,7 +630,8 @@ func (s *Service) Cancel(ctx context.Context, jobID string) (*domain.Job, error)
 	return s.jobRepo.Get(ctx, jobID)
 }
 
-// —— RetryJob ——
+// Retry continues the existing Conductor execution. An input override retains
+// the explicit legacy rerun contract; it is not a failure-continuation retry.
 func (s *Service) Retry(ctx context.Context, jobID string, reason string, inputOverride *domain.JobInput) (*domain.Job, error) {
 	job, err := s.jobRepo.Get(ctx, jobID)
 	if err != nil {
@@ -639,209 +640,60 @@ func (s *Service) Retry(ctx context.Context, jobID string, reason string, inputO
 	if job.Origin == "legacy_import" {
 		return nil, errors.New("historical execution cannot use ordinary Retry; use the resume recovery path")
 	}
+	if inputOverride == nil {
+		return s.continueExecution(ctx, job, reason)
+	}
+	if job.ConductorWorkflowID == "" || s.engine == nil {
+		return nil, errors.New("conductor execution unavailable")
+	}
+	if s.reviews != nil && s.tx == nil {
+		return nil, errors.New("rerun transaction unavailable")
+	}
 	if job.Status != domain.JobFailed {
-		return nil, fmt.Errorf("job %s status %s, expected failed", jobID, job.Status)
+		return nil, errors.New("input override rerun requires a failed execution")
 	}
-	maxRetries := 3
-	if s.jobCfg != nil && s.jobCfg.MaxRetries > 0 {
-		maxRetries = int(s.jobCfg.MaxRetries)
-	}
-	if job.RetryCount >= maxRetries {
-		return nil, errors.New("max retries exceeded")
-	}
-	if inputOverride != nil {
-		frozen, err := s.freezeRetryInput(ctx, job, *inputOverride)
-		if err != nil {
-			return nil, err
-		}
-		inputOverride = &frozen
-	}
-	if job.ConductorWorkflowID != "" && s.engine != nil {
-		if s.reviews != nil && s.tx == nil {
-			return nil, errors.New("retry transaction unavailable")
-		}
-		expectedJob := *job
-		retryInput := job.Input
-		if inputOverride != nil {
-			retryInput = *inputOverride
-		}
-		if err := s.engine.RerunWorkflow(ctx, job.ConductorWorkflowID, map[string]any{
-			"job_id": job.ID, "inputs": conductorInputs(retryInput),
-		}); err != nil {
-			return nil, fmt.Errorf("rerun conductor workflow: %w", err)
-		}
-		if err := s.commitNativeJobRetry(ctx, expectedJob, reason, inputOverride); err != nil {
-			return nil, err
-		}
-		return s.jobRepo.Get(ctx, jobID)
-	}
-	// 重置 failed/skipped/need_confirm step_runs → pending（仅重置非 succeeded 的）
-	// succeeded 的保留；failed → pending；skipped/need_confirm → pending（重新评估依赖）
-	stepRuns, err := s.stepRunRepo.ListByJob(ctx, jobID)
+	frozen, err := s.freezeRetryInput(ctx, job, *inputOverride)
 	if err != nil {
 		return nil, err
 	}
-	// 先把 failed → pending，skipped → blocked（重新等依赖评估）
-	for _, sr := range stepRuns {
-		switch sr.Status {
-		case domain.SRFailed:
-			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRPending, nil)
-		case domain.SRSkipped:
-			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRBlocked, nil)
-		case domain.SRNeedConfirm:
-			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRPending, map[string]any{"candidates": "[]"})
-		}
+	expected := *job
+	if err := s.engine.RerunWorkflow(ctx, job.ConductorWorkflowID, map[string]any{
+		"job_id": job.ID, "inputs": conductorInputs(frozen),
+	}); err != nil {
+		return nil, fmt.Errorf("rerun conductor workflow: %w", err)
 	}
-	// 重新跑 DAG 推进：把能解锁的 blocked → pending
-	s.advanceDAG(ctx, jobID, "")
-	// input override
-	if inputOverride != nil {
-		_ = s.jobRepo.UpdateInput(ctx, jobID, *inputOverride)
+	if err := s.commitNativeJobRetry(ctx, expected, reason, &frozen); err != nil {
+		return nil, err
 	}
-	// 追加 retry history + count
-	record := domain.RetryRecord{RetryAt: time.Now(), Reason: reason, InputOverride: inputOverride}
-	_ = s.jobRepo.AppendRetryHistory(ctx, jobID, record, job.RetryCount+1)
 	return s.jobRepo.Get(ctx, jobID)
 }
 
-// —— GetJob / ListJobs ——
-// -- RetryStepRun（重跑单步 + 下游）--
-// RetryStepRun 重置 failed/skipped 的 step_run -> pending + retry_count+1，并重置其下游 -> blocked；
-// input_override 覆盖 job.input bundle（Claim 时重新解析）。Job -> running，advanceDAG 推进。
+// RetryStepRun is a convenient entry point to the parent execution's native
+// retry. Conductor, not the selected business node, owns the recovery scope.
 func (s *Service) RetryStepRun(ctx context.Context, stepRunID, reason string, inputOverride *domain.JobInput) (*domain.StepRun, error) {
 	sr, err := s.stepRunRepo.Get(ctx, stepRunID)
 	if err != nil {
 		return nil, err
 	}
-	if sr.Status != domain.SRFailed && sr.Status != domain.SRSkipped {
-		return nil, fmt.Errorf("step_run %s status %s, expected failed/skipped", stepRunID, sr.Status)
+	if inputOverride != nil {
+		return nil, errors.New("step retry cannot change input; use the whole-job input override rerun")
 	}
-	job, err := s.jobRepo.Get(ctx, sr.JobID)
+	if _, err := s.Retry(ctx, sr.JobID, reason, nil); err != nil {
+		return nil, err
+	}
+	return s.GetStepRun(ctx, stepRunID)
+}
+
+// GetStepRun refreshes the parent execution projection before returning a step.
+func (s *Service) GetStepRun(ctx context.Context, stepRunID string) (*domain.StepRun, error) {
+	sr, err := s.stepRunRepo.Get(ctx, stepRunID)
 	if err != nil {
 		return nil, err
 	}
-	if job.Origin == "legacy_import" {
-		return nil, errors.New("historical execution cannot use ordinary StepRun Retry")
+	if _, _, err := s.Get(ctx, sr.JobID); err != nil {
+		return nil, err
 	}
-	if job.ConductorWorkflowID != "" && s.engine != nil {
-		if s.reviews != nil && s.tx == nil {
-			return nil, errors.New("retry transaction unavailable")
-		}
-		if inputOverride != nil {
-			return nil, errors.New("conductor step retry does not support input_override; retry the whole job instead")
-		}
-		if job.Status != domain.JobFailed {
-			return nil, errors.New("step retry requires a failed job")
-		}
-		maxRetries := 3
-		if s.jobCfg != nil && s.jobCfg.MaxRetries > 0 {
-			maxRetries = int(s.jobCfg.MaxRetries)
-		}
-		if sr.RetryCount >= maxRetries || job.RetryCount >= maxRetries {
-			return nil, errors.New("max retries exceeded")
-		}
-		var impact *executable.RetryImpact
-		var frozenSteps []*domain.StepRun
-		expectedJob, expectedStep := *job, *sr
-		if s.compilations != nil {
-			impact, frozenSteps, err = s.loadFrozenRetryImpact(ctx, job, sr.StepKey)
-			if err != nil {
-				return nil, err
-			}
-		}
-		execution, err := s.engine.Get(ctx, job.ConductorWorkflowID)
-		if err != nil {
-			return nil, fmt.Errorf("load conductor execution: %w", err)
-		}
-		if execution == nil || (execution.Status != "FAILED" && execution.Status != "TIMED_OUT" && execution.Status != "FAILED_WITH_TERMINAL_ERROR") {
-			return nil, errors.New("conductor execution is not failed; refresh before retrying")
-		}
-		latest := latestGeneration(execution)
-		var renderTaskID string
-		for _, task := range execution.Tasks {
-			stepKey, phase, ok := parseTaskReference(task.ReferenceTaskName)
-			if ok && stepKey == sr.StepKey && phase == "render" && currentGeneration(task, latest) {
-				if renderTaskID != "" {
-					return nil, errors.New("ambiguous current render tasks; refresh before retrying")
-				}
-				renderTaskID = task.TaskID
-			}
-		}
-		if renderTaskID == "" {
-			return nil, fmt.Errorf("conductor render task for step %s not found", sr.StepKey)
-		}
-		if err := validateStepRerunIsolation(execution, sr.StepKey, renderTaskID); err != nil {
-			return nil, err
-		}
-		if err := s.engine.RerunFromTask(ctx, job.ConductorWorkflowID, renderTaskID); err != nil {
-			return nil, fmt.Errorf("rerun conductor step: %w", err)
-		}
-		if err := s.commitNativeStepRetry(ctx, expectedJob, expectedStep, reason, impact, frozenSteps); err != nil {
-			return nil, err
-		}
-		return s.stepRunRepo.Get(ctx, sr.ID)
-	}
-	if inputOverride != nil {
-		frozen, err := s.freezeRetryInput(ctx, job, *inputOverride)
-		if err != nil {
-			return nil, err
-		}
-		inputOverride = &frozen
-	}
-	updates := map[string]any{
-		"retry_count": sr.RetryCount + 1,
-		"candidates":  "[]", "failure_reason": "", "claimed_by": "", "output_asset_id": "",
-	}
-	_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRPending, updates)
-	s.resetDownstream(ctx, sr.JobID, sr.StepKey)
-	if inputOverride != nil {
-		_ = s.jobRepo.UpdateInput(ctx, sr.JobID, *inputOverride)
-	}
-	job, err = s.jobRepo.Get(ctx, sr.JobID)
-	if err == nil {
-		_ = s.jobRepo.UpdateStatus(ctx, sr.JobID, domain.JobRunning, "")
-		record := domain.RetryRecord{RetryAt: time.Now(), Reason: reason, InputOverride: inputOverride}
-		_ = s.jobRepo.AppendRetryHistory(ctx, sr.JobID, record, job.RetryCount+1)
-	}
-	s.advanceDAG(ctx, sr.JobID, sr.StepKey)
-	return s.stepRunRepo.Get(ctx, sr.ID)
-}
-
-// resetDownstream 重置依赖 completedStepKey 输出的下游 step_run（非 succeeded）-> blocked。
-func (s *Service) resetDownstream(ctx context.Context, jobID, completedStepKey string) {
-	job, err := s.jobRepo.Get(ctx, jobID)
-	if err != nil {
-		return
-	}
-	wf, err := s.wfRepo.Get(ctx, job.WorkflowID)
-	if err != nil {
-		return
-	}
-	downstreamKeys := make(map[string]bool)
-	for _, step := range wf.Steps {
-		for _, b := range step.SlotBindings {
-			if b.Source == wfdomain.SourceStepOutput && b.Ref == completedStepKey {
-				downstreamKeys[step.Key] = true
-			}
-		}
-	}
-	if len(downstreamKeys) == 0 {
-		return
-	}
-	allSRs, _ := s.stepRunRepo.ListByJob(ctx, jobID)
-	for _, sr := range allSRs {
-		if !downstreamKeys[sr.StepKey] {
-			continue
-		}
-		if sr.Status != domain.SRSucceeded {
-			_ = s.stepRunRepo.UpdateStatus(ctx, sr.ID, domain.SRBlocked, nil)
-		}
-	}
-}
-
-// GetStepRun 读单条 step_run（只读）。
-func (s *Service) GetStepRun(ctx context.Context, stepRunID string) (*domain.StepRun, error) {
-	sr, err := s.stepRunRepo.Get(ctx, stepRunID)
+	sr, err = s.stepRunRepo.Get(ctx, stepRunID)
 	if err != nil {
 		return nil, err
 	}
@@ -856,7 +708,7 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Job, []*domain.St
 	if err != nil {
 		return nil, nil, err
 	}
-	if job.ConductorWorkflowID != "" && !job.Status.IsTerminal() {
+	if job.ConductorWorkflowID != "" && s.engine != nil {
 		if err := s.reconcileConductor(ctx, job); err != nil && !errors.Is(err, errExecutionSnapshotStale) {
 			return nil, nil, fmt.Errorf("reconcile conductor execution: %w", err)
 		}
@@ -926,7 +778,7 @@ func (s *Service) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, 
 		return nil, 0, err
 	}
 	for index, job := range items {
-		if job.ConductorWorkflowID == "" || job.Status.IsTerminal() || s.engine == nil {
+		if job.ConductorWorkflowID == "" || s.engine == nil {
 			continue
 		}
 		if err := s.reconcileConductor(ctx, job); err != nil && !errors.Is(err, errExecutionSnapshotStale) {
@@ -946,7 +798,7 @@ func (s *Service) finalizeStepRun(ctx context.Context, sr *domain.StepRun, selec
 	if err != nil {
 		return err
 	}
-	if job.Status.IsTerminal() {
+	if job.Status == domain.JobCancelled {
 		return nil
 	}
 	if err := checkExecutionSnapshot(ctx, job); err != nil {
@@ -982,7 +834,7 @@ func (s *Service) finalizeStepRun(ctx context.Context, sr *domain.StepRun, selec
 	// The external idempotent upsert must remain outside the database transaction.
 	// Cancellation and concurrent finalizers serialize with the local projection.
 	err = s.withExecutionProjection(ctx, sr.JobID, sr.ID, func(txCtx context.Context, current *domain.Job) error {
-		if current.Status.IsTerminal() {
+		if current.Status == domain.JobCancelled {
 			return nil
 		}
 		if err := s.checkGenerationSnapshot(txCtx, sr.JobID, sr.ID); err != nil {
@@ -1172,7 +1024,7 @@ func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error
 	if err != nil {
 		return err
 	}
-	if current.Status.IsTerminal() {
+	if current.Status == domain.JobCancelled {
 		return nil
 	}
 	if err := checkExecutionSnapshot(ctx, current); err != nil {
@@ -1199,7 +1051,7 @@ func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error
 	})
 	waitingApproval := false
 	for _, task := range tasks {
-		if !currentGeneration(task, latest) {
+		if task.Retried || !currentGeneration(task, latest) {
 			continue
 		}
 		stepKey, phase, ok := parseTaskReference(task.ReferenceTaskName)
@@ -1225,7 +1077,7 @@ func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error
 					if err := s.stepRunRepo.UpdateCandidates(ctx, stepRun.ID, []domain.Candidate{}); err != nil {
 						return err
 					}
-					if err := s.stepRunRepo.UpdateStatus(ctx, stepRun.ID, domain.SRClaimed, map[string]any{"selected_index": nil}); err != nil {
+					if err := s.stepRunRepo.UpdateStatus(ctx, stepRun.ID, domain.SRClaimed, map[string]any{"selected_index": nil, "retry_count": task.RetryCount, "failure_reason": "", "finished_at": nil}); err != nil {
 						return err
 					}
 				}
@@ -1278,18 +1130,30 @@ func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error
 		case "finalize":
 			if task.Status == "COMPLETED" && (stepRun.Status != domain.SRSucceeded || strings.TrimSpace(stepRun.OutputAssetID) == "") {
 				resource, _ := task.Output["output_resource"].(map[string]any)
-				candidate := domain.Candidate{}
-				candidate.URL, _ = resource["url"].(string)
-				candidate.Content, _ = resource["content"].(string)
-				if candidate.URL == "" && candidate.Content == "" {
-					return fmt.Errorf("conductor finalize task %s returned no resource", task.ReferenceTaskName)
+				id, _ := task.Output["output_resource_id"].(string)
+				resourceID, _ := resource["id"].(string)
+				if !strings.HasPrefix(id, "gen_") || resourceID != id {
+					return errors.New("finalize returned no registered asset identity")
 				}
-				resultKey, err := currentGenerationResultKey(job.ConductorWorkflowID, stepRun, execution)
-				if err != nil {
-					return err
-				}
-				finalizeCtx := withGenerationSnapshot(ctx, job.ConductorWorkflowID, stepRun, execution)
-				if err := s.finalizeStepRun(finalizeCtx, stepRun, candidate, stepRun.SelectedIndex, resultKey); err != nil {
+				if err := s.withExecutionProjection(ctx, job.ID, stepRun.ID, func(txCtx context.Context, current *domain.Job) error {
+					if current.Status == domain.JobCancelled {
+						return nil
+					}
+					fresh, err := s.stepRunRepo.Get(txCtx, stepRun.ID)
+					if err != nil {
+						return err
+					}
+					if fresh.Status == domain.SRSucceeded && fresh.OutputAssetID != "" {
+						if fresh.OutputAssetID != id {
+							return errors.New("finalize asset identity conflicts with projected output")
+						}
+						return nil
+					}
+					if err := s.stepRunRepo.UpdateOutput(txCtx, stepRun.ID, id); err != nil {
+						return err
+					}
+					return s.stepRunRepo.UpdateStatus(txCtx, stepRun.ID, domain.SRSucceeded, nil)
+				}); err != nil {
 					return err
 				}
 			} else if task.Status == "FAILED" || task.Status == "FAILED_WITH_TERMINAL_ERROR" || task.Status == "TIMED_OUT" {
@@ -1304,7 +1168,7 @@ func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error
 	switch execution.Status {
 	case "COMPLETED":
 		return s.withExecutionProjection(ctx, job.ID, "", func(txCtx context.Context, current *domain.Job) error {
-			if current.Status.IsTerminal() {
+			if current.Status == domain.JobCancelled {
 				return nil
 			}
 			steps, err := s.stepRunRepo.ListByJob(txCtx, job.ID)

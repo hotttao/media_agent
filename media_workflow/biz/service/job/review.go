@@ -176,7 +176,7 @@ func (s *Service) projectWaitingReview(ctx context.Context, jobID, stepID string
 		if err != nil {
 			return err
 		}
-		if j.Status.IsTerminal() {
+		if j.Status == domain.JobCancelled {
 			return nil
 		}
 		if err := checkExecutionSnapshot(txCtx, j); err != nil {
@@ -217,7 +217,7 @@ func (s *Service) refreshReviewJobStatus(ctx context.Context, jobID string) erro
 		if err != nil {
 			return err
 		}
-		if j.Status.IsTerminal() {
+		if j.Status == domain.JobCancelled {
 			return nil
 		}
 		if err := checkExecutionSnapshot(txCtx, j); err != nil {

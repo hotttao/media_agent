@@ -9,6 +9,17 @@ type InputType string
 
 type ExecutionTarget string
 
+// MediaType describes Provider data, not a Template's business Asset Kind.
+type MediaType string
+
+const (
+	MediaImage MediaType = "IMAGE"
+	MediaVideo MediaType = "VIDEO"
+	MediaText  MediaType = "TEXT"
+)
+
+func (m MediaType) Valid() bool { return m == MediaImage || m == MediaVideo || m == MediaText }
+
 const (
 	InputString          InputType = "string"
 	InputResourceRef     InputType = "resource_ref"
@@ -25,9 +36,23 @@ func (t ExecutionTarget) Valid() bool {
 }
 
 type Input struct {
-	Name     string    `json:"name"`
-	Type     InputType `json:"type"`
-	Required bool      `json:"required"`
+	Name      string    `json:"name"`
+	Type      InputType `json:"type"`
+	Required  bool      `json:"required"`
+	MediaType MediaType `json:"media_type,omitempty"`
+	MinItems  int       `json:"min_items,omitempty"`
+	MaxItems  int       `json:"max_items,omitempty"`
+}
+
+func (i Input) ValidMediaConstraint() bool {
+	if i.MinItems < 0 || i.MaxItems < 0 || (i.MaxItems > 0 && i.MinItems > i.MaxItems) || (i.Type != InputResourceRefList && (i.MinItems != 0 || i.MaxItems != 0)) {
+		return false
+	}
+	return i.MediaType == "" || (i.MediaType.Valid() && (i.Type == InputResourceRef || i.Type == InputResourceRefList))
+}
+
+func (i Input) AcceptsResourceCount(count int) bool {
+	return i.Type == InputResourceRefList && i.ValidMediaConstraint() && count >= 0 && count >= i.MinItems && (i.MaxItems == 0 || count <= i.MaxItems)
 }
 
 type Capability struct {
@@ -35,8 +60,11 @@ type Capability struct {
 	Version           int
 	Provider          string
 	Mode              string
+	GenerationMethod  GenerationMethod
+	GenerationType    GenerationType
 	Inputs            []Input
 	OutputAssetKind   string
+	OutputMediaType   MediaType
 	ConductorTaskDef  string
 	ExecutionTarget   ExecutionTarget
 	ManagedPoolKey    string

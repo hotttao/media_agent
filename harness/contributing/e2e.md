@@ -1,5 +1,49 @@
 # E2E 测试
 
+## Conductor原生失败恢复（技术门禁）
+
+```bash
+MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 \
+go -C media_workflow test -tags=e2e -race ./e2e \
+  -run '^TestConductorNativeRetryCompiledParallelWorkflow$' -count=1 -v -timeout=2m
+```
+
+实际编译器生成FORK_JOIN/DO_WHILE/SWITCH图，仅将SIMPLE任务名称别名到测试独享队列，不修改引用、表达式或图。完成B旁支、失败A调用后POST原生retry，保留B全部Task身份/状态/输入输出和A既有render，继续A调用、等待JOIN异步decider、合流完成。不使用本地重置、execution_retries、恢复Task或手工重排队。
+
+bounded poll为空不判断失败；继续同一实例到终态/超时。测试只创建/清理自身独立定义/实例，不连接用户数据库，不执行真实模型。技术门禁不替代公开Gateway/独立CLI/真实客户端Worker的完整业务验收。缺Conductor配置明确Skip。旧持久重试命令方案已按用户执行边界废弃，测试代码备份撤出，不再作为当前门禁。
+
+## 原生Task交付不受失败缓存阻塞
+
+```bash
+MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 \
+go -C media_workflow test -tags=e2e -race ./biz/workflow/worker_gateway \
+  -run '^TestNativeTaskDeliveryIgnoresFailedProjection$' -count=1 -v -timeout=2m
+```
+
+门禁创建自身唯一技术SIMPLE定义/实例，本地Job为受控端口并始终缓存failed。实际Gateway直接核对原实例RUNNING与精确活动Task、正常交付和回写完成；不callback、不改本地running、不重置节点。结束仅清理自身技术实例/定义，不调用模型、不修改用户Job/数据库。缺地址明确Skip。此技术门禁不替代公开HTTP/独立CLI及数据库/进程恢复的完整业务验收。
+
+## Provider Capability纠正单样本
+
+`media_ai_workflow_migrate`显式提供`--image-capability jimeng.i2i.multi_image_prompt@1 --video-capability doubao.i2v.first_frame_prompt@1`，创建独立模板名称和新发布Workflow，不改旧模板/Compilation。Worker使用`provider_fixture`，不得继续拿业务分类Capability的旧fixture冒充底层Provider契约。
+
+先完整审计待执行队列并通过独立CLI只提交一个Job，然后设置现有网关/User API Token/企业、`MEDIA_E2E_SAMPLE_JOB_ID`及`MEDIA_E2E_PROVIDER_SAMPLE=1`：
+
+```bash
+MEDIA_E2E_PROVIDER_FIXTURE_CONFIG=/absolute/private/new-fixture.json \
+go -C media-cli test ./e2e -run '^TestProviderCapabilityFixtureConfig$' -count=1 -v
+```
+
+该门禁只读取已确认Job、模板版本/Capability与受控媒体，确认队列只有此样本活跃，创建新的0600配置（禁止覆盖已有文件）；不Submit、不启动Worker。签名URL不输出，文件只放私有目录，启动前须保持新鲜。之后在测试进程外按`media_worker/README.md`显式启动真实客户端，凭据为Worker Actor的API Token，不是User Token。
+
+```bash
+MEDIA_E2E_CLI_BINARY=/absolute/path/to/media-cli \
+go -C media-cli test ./e2e -run '^TestProviderCapabilityExecution$' -count=1 -v -timeout=3m
+```
+
+Execution用HTTP观察/请求regenerate及同键重放，通过独立CLI进行失败Step Retry和confirm（预期model两候选、失败序号2）；整个测试不提交另一个Job，也不在测试中实现或启动Worker。结束后停止客户端fixture，后端常驻。成功节点的图片/视频另做无API Token的Storage Range206读取。
+
+首次自动重试若因现存交付窗口失败，必须保留失败证据并核对原实例，不自动修复或重发Submit。`MEDIA_E2E_PROVIDER_CONTINUE_AFTER_RETRY=1`仅观察已确认决定/Retry的同一Job，不再发送regenerate/retry，也不自动重排队；受控管理恢复必须在报告中单列。2026-10-06本次唯一样本首轮失败、人工回收一条未交付任务后恢复成功，不能据此关闭可靠Retry门禁；详见[验收记录](../../docs/review/media_workflow/workflow/0003-conductor-compilation/provider-capability-acceptance.md)。
+
 发布恢复公开门禁 `TestWorkflowPublicationGateway` 与独立命令门禁 `TestWorkflowPublicationCLI` 位于 `media-cli/e2e/workflow_publication_test.go`。预置 `MEDIA_GATEWAY_ADDR`、`MEDIA_API_TOKEN`、授权的 `MEDIA_E2E_PUBLICATION_SOURCE_ID`；CLI另需绝对路径 `MEDIA_E2E_CLI_BINARY`。两者只复制源Workflow为唯一测试定义、发布并查询收敛，最后归档自身资源；不启动Job、Worker或模型，不改借用源。HTTP验证8路同版本单回执/202/完成重放/归档拒绝；CLI真实独立进程发布与查询，不能用HTTP测试替代。Conductor网络失效/进程重启另由Workflow隔离库故障门禁证明。
 
 ## 测试分工

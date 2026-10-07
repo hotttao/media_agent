@@ -102,7 +102,6 @@ func (m *mockJobRepo) AppendRetryHistory(_ context.Context, id string, record do
 	j := m.jobs[id]
 	j.RetryHistory = append(j.RetryHistory, record)
 	j.RetryCount = retryCount
-	j.Status = domain.JobRunning
 	return nil
 }
 
@@ -170,6 +169,9 @@ func (m *mockStepRunRepo) UpdateStatus(_ context.Context, id string, status doma
 		sr.FinishedAt = &now
 	}
 	if updates != nil {
+		if count, ok := updates["retry_count"].(int); ok {
+			sr.RetryCount = count
+		}
 		if v, ok := updates["selected_index"]; ok {
 			if idx, ok2 := v.(int); ok2 {
 				sr.SelectedIndex = &idx
@@ -241,6 +243,16 @@ type mockWorkflowEngine struct {
 	terminated      bool
 	correlationID   string
 	taskToDomain    map[string]string
+	retryCalls      int
+	retryErr        error
+}
+
+func (m *mockWorkflowEngine) RetryWorkflow(context.Context, string) error {
+	m.retryCalls++
+	if m.retryErr == nil {
+		m.execution.Status = "RUNNING"
+	}
+	return m.retryErr
 }
 
 func (m *mockWorkflowEngine) Start(_ context.Context, _ string, _ int, correlationID string, _ map[string]any, taskToDomain map[string]string) (string, error) {
@@ -565,24 +577,16 @@ func TestRetry_NotFailedRejected(t *testing.T) {
 	}
 }
 
-func TestRetry_FailedResetsSteps(t *testing.T) {
-	svc, jobRepo, srRepo := newTestService(false)
-	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", Status: domain.JobFailed, RetryCount: 0, SubmittedBy: "u1"}
-	srRepo.items["sr1"] = &domain.StepRun{ID: "sr1", JobID: "job1", StepKey: "s1", Status: domain.SRFailed, Platform: "gpt", GenWay: "i2i"}
-
-	j, err := svc.Retry(context.Background(), "job1", "retry reason", nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestRetryRejectsExecutionWithoutConductor(t *testing.T) {
+	svc, jobs, steps := newTestService(false)
+	jobs.jobs["job1"] = &domain.Job{ID: "job1", Status: domain.JobFailed}
+	sr := makeClaimedStepRun(steps, false)
+	sr.Status = domain.SRFailed
+	if _, err := svc.Retry(context.Background(), "job1", "retry", nil); err == nil {
+		t.Fatal("retry fell back to a local scheduler")
 	}
-	if j.Status != domain.JobRunning {
-		t.Errorf("job status = %s, want running", j.Status)
-	}
-	if j.RetryCount != 1 {
-		t.Errorf("retry_count = %d, want 1", j.RetryCount)
-	}
-	sr, _ := srRepo.Get(context.Background(), "sr1")
-	if sr.Status != domain.SRPending {
-		t.Errorf("step status = %s, want pending", sr.Status)
+	if sr.Status != domain.SRFailed || jobs.jobs["job1"].Status != domain.JobFailed {
+		t.Fatal("unbound execution was mutated")
 	}
 }
 
@@ -885,9 +889,11 @@ func TestConductorApprovalConfirmAndFinalize(t *testing.T) {
 
 	engine.execution = &domain.EngineExecution{Status: "COMPLETED", Tasks: []domain.EngineTask{{
 		ReferenceTaskName: "step__s1__finalize", Status: "COMPLETED", Output: map[string]any{
-			"output_resource": map[string]any{"url": "b.png", "content": "approved"},
+			"output_resource":    map[string]any{"url": "b.png", "content": "approved"},
+			"output_resource_id": "gen_fake_id",
 		},
 	}, {TaskID: "invoke-1", ReferenceTaskName: "step__s1__invoke", Status: "COMPLETED"}}}
+	engine.execution.Tasks[0].Output["output_resource"].(map[string]any)["id"] = "gen_fake_id"
 	job, steps, err = svc.Get(context.Background(), "job1")
 	if err != nil || job.Status != domain.JobSucceeded || steps[0].Status != domain.SRSucceeded || steps[0].OutputAssetID != "gen_fake_id" {
 		t.Fatalf("approved step was not finalized: job=%#v steps=%#v err=%v", job, steps, err)
@@ -923,18 +929,19 @@ func TestConductorCancelTerminatesExecution(t *testing.T) {
 	}
 }
 
-func TestConductorRetryRerunsWholeExecution(t *testing.T) {
-	svc, jobRepo, srRepo := newTestService(false)
-	engine := &mockWorkflowEngine{}
+func TestConductorRetryContinuesWithoutResettingSteps(t *testing.T) {
+	svc, jobs, steps := newTestService(false)
+	engine := &mockWorkflowEngine{execution: &domain.EngineExecution{Status: "FAILED"}}
 	svc.engine = engine
-	input := domain.JobInput{Materials: []domain.MaterialData{{Name: "scene", URL: "scene.png"}}}
-	jobRepo.jobs["job1"] = &domain.Job{ID: "job1", WorkflowID: "wf1", Status: domain.JobFailed, ConductorWorkflowID: "execution-1", Input: input}
-	sr := makeClaimedStepRun(srRepo, false)
+	jobs.jobs["job1"] = &domain.Job{ID: "job1", Status: domain.JobFailed, ConductorWorkflowID: "execution-1"}
+	sr := makeClaimedStepRun(steps, false)
 	sr.Status = domain.SRFailed
-
-	job, err := svc.Retry(context.Background(), "job1", "retry", nil)
-	if err != nil || engine.rerunInput == nil || job.Status != domain.JobRunning || sr.Status != domain.SRBlocked {
-		t.Fatalf("retry failed: job=%#v step=%#v input=%#v err=%v", job, sr, engine.rerunInput, err)
+	sr.Candidates = []domain.Candidate{{Content: "retained"}}
+	j, err := svc.Retry(context.Background(), "job1", "retry", nil)
+	if err != nil || engine.retryCalls != 1 || engine.rerunInput != nil || engine.rerunTaskID != "" ||
+		j.Status != domain.JobRunning || sr.Status != domain.SRFailed || len(sr.Candidates) != 1 ||
+		j.RetryCount != 0 || len(j.RetryHistory) != 1 {
+		t.Fatalf("native retry reset state or reran render: err=%v", err)
 	}
 }
 

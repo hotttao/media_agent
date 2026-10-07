@@ -53,8 +53,10 @@ type ObjectInfo struct {
 }
 
 type ResolvedObject struct {
-	URL       string
-	ExpiresAt int64
+	URL         string
+	ExpiresAt   int64
+	ContentType string
+	SizeBytes   int64
 }
 
 type Client struct {
@@ -152,7 +154,8 @@ func (c *Client) Stat(ctx context.Context, objectPath string) (ObjectInfo, error
 }
 
 func (c *Client) PresignGet(ctx context.Context, objectPath string) (ResolvedObject, error) {
-	if _, err := c.Stat(ctx, objectPath); err != nil {
+	info, err := c.Stat(ctx, objectPath)
+	if err != nil {
 		return ResolvedObject{}, err
 	}
 	result, err := c.presigner.PresignGetObject(ctx,
@@ -162,7 +165,7 @@ func (c *Client) PresignGet(ctx context.Context, objectPath string) (ResolvedObj
 	if err != nil {
 		return ResolvedObject{}, fmt.Errorf("%w: presign object: %v", ErrUnavailable, err)
 	}
-	return ResolvedObject{URL: result.URL, ExpiresAt: time.Now().Add(c.ttl).Unix()}, nil
+	return ResolvedObject{URL: result.URL, ExpiresAt: time.Now().Add(c.ttl).Unix(), ContentType: info.ContentType, SizeBytes: info.SizeBytes}, nil
 }
 
 func (c *Client) Delete(ctx context.Context, objectPath string) error {

@@ -101,7 +101,7 @@ func currentGenerationResultKey(engineID string, step *domain.StepRun, execution
 	for i := range execution.Tasks {
 		task := &execution.Tasks[i]
 		key, phase, ok := parseTaskReference(task.ReferenceTaskName)
-		if !ok || key != step.StepKey || phase != "invoke" || !currentGeneration(*task, latest) {
+		if !ok || task.Retried || key != step.StepKey || phase != "invoke" || !currentGeneration(*task, latest) {
 			continue
 		}
 		if task.Status == "IN_PROGRESS" || task.Status == "SCHEDULED" {

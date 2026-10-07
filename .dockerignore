@@ -1,4 +1,8 @@
 .git
+.env
+.env.*
+**/.env
+**/.env.*
 media_logs
 media_auth/.env.agent-gateway.local
 media_auth/.env.platform-token.local
@@ -7,5 +11,7 @@ media_agent_gateway/.secrets
 media_agent_gateway/.env.agent-proxy.local
 media_workflow/.env*
 media_materials/.env*
+media_worker/.env*
+media_worker/.fixture*.json
 media_workflow/.migration_reports
 **/node_modules

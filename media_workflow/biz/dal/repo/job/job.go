@@ -139,6 +139,8 @@ func (r *JobRepo) UpdateStatus(ctx context.Context, id string, status domain.Job
 	if status.IsTerminal() {
 		now := time.Now()
 		updates["finished_at"] = now
+	} else {
+		updates["finished_at"] = nil
 	}
 	if status == domain.JobRunning {
 		now := time.Now()
@@ -172,7 +174,6 @@ func (r *JobRepo) AppendRetryHistory(ctx context.Context, id string, record doma
 	histJSON, _ := json.Marshal(history)
 	_, err = Q.Job.WithContext(ctx).Where(Q.Job.ID.Eq(id)).Updates(map[string]any{
 		"retry_history": datatypes.JSON(histJSON), "retry_count": retryCount,
-		"status": string(domain.JobRunning), "failure_reason": "", "finished_at": nil,
 	})
 	return err
 }

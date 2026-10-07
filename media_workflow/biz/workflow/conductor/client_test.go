@@ -59,6 +59,25 @@ func TestApprovalAndExecutionControlEndpoints(t *testing.T) {
 	}
 }
 
+func TestNativeRetryUsesEngineEndpointWithoutResetPayload(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Method != http.MethodPost || r.URL.RequestURI() != "/api/workflow/execution%2F1/retry" || r.ContentLength != 0 {
+			t.Error("native retry changed execution identity or supplied reset payload")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	if err := client.RetryWorkflow(t.Context(), "execution/1"); err != nil {
+		t.Fatal(err)
+	}
+	if client.RetryWorkflow(t.Context(), "") == nil || calls != 1 {
+		t.Fatal("missing identity reached native retry endpoint")
+	}
+}
+
 func TestStartWorkflowUsesRequestBodyAndTaskDomain(t *testing.T) {
 	var got StartWorkflowRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

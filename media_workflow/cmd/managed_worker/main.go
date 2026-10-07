@@ -52,11 +52,12 @@ func run() error {
 	defer sqlDB.Close()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	engine := &conductor.ExecutionEngine{Client: conductor.NewClient(os.Getenv("CONDUCTOR_URL"))}
 	flow := &worker_gateway.Flow{
 		StorageOrigin:  os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"),
 		ImportedAssets: client.NewMaterialsClient(os.Getenv("MEDIA_MATERIALS_URL")),
 		Dispatches:     jobrepo.NewDispatchRepo(db), Jobs: jobrepo.NewJobRepo(db), StepRuns: jobrepo.NewStepRunRepo(db),
-		Capabilities: capabilityrepo.NewRepo(db), Engine: &conductor.ExecutionEngine{Client: conductor.NewClient(os.Getenv("CONDUCTOR_URL"))},
+		Capabilities: capabilityrepo.NewRepo(db), Engine: engine, Executions: engine,
 	}
 	instanceID := worker.GetInstanceId()
 	if instanceID == "" {

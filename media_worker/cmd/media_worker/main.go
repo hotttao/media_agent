@@ -24,6 +24,7 @@ func main() {
 	apiToken := flag.String("token", envOr("MEDIA_WORKER_API_TOKEN", ""), "opaque Personal Worker API Token")
 	workerID := flag.String("worker-id", envOr("MEDIA_WORKER_ID", defaultWorkerID()), "stable client worker id")
 	profile := flag.String("profile", envOr("MEDIA_WORKER_PROFILE", ""), "execution profile; use media_ai_fixture only for integration testing")
+	fixtureConfig := flag.String("fixture-config", envOr("MEDIA_WORKER_FIXTURE_CONFIG", ""), "private Provider fixture JSON file with explicit Job/Step results")
 	capabilityList := flag.String("capabilities", envOr("MEDIA_WORKER_CAPABILITIES", ""), "comma-separated capability key@version allowlist")
 	fixtureAssetsURL := flag.String("fixture-assets-url", envOr("MEDIA_WORKER_FIXTURE_ASSETS_URL", "http://192.168.2.38"), "media_ai fixture asset service base URL (test profile only)")
 	fixtureVideoResultURL := flag.String("fixture-video-result-url", envOr("MEDIA_WORKER_FIXTURE_VIDEO_RESULT_URL", ""), "pre-uploaded target-storage video URL for the historical fixture")
@@ -40,10 +41,30 @@ func main() {
 	if *apiToken == "" {
 		log.Fatal("MEDIA_WORKER_API_TOKEN or -token is required")
 	}
-	if *profile != "media_ai_fixture" {
-		log.Fatalf("profile %q is not implemented; integration requires -profile media_ai_fixture", *profile)
+	if *profile != "media_ai_fixture" && *profile != fixture.ProviderProfile {
+		log.Fatal("integration requires media_ai_fixture or provider_fixture profile")
 	}
-	executor, err := fixture.NewExecutor(*fixtureAssetsURL)
+	var executor *fixture.Executor
+	var err error
+	if *profile == fixture.ProviderProfile {
+		if *fixtureConfig == "" {
+			log.Fatal("provider_fixture requires MEDIA_WORKER_FIXTURE_CONFIG")
+		}
+		if *fixtureVideoResultURL != "" || *fixtureModelResultURL != "" || *fixtureModelResultURLs != "" || *fixtureStyleResultURL != "" || *fixtureFirstFrameResultURL != "" {
+			log.Fatal("provider_fixture cannot use legacy business Capability result overrides")
+		}
+		file, openErr := os.Open(*fixtureConfig)
+		if openErr != nil {
+			log.Fatal("cannot open provider fixture configuration")
+		}
+		executor, err = fixture.ReadProviderConfig(file)
+		file.Close()
+	} else {
+		if *fixtureConfig != "" {
+			log.Fatal("fixture-config requires provider_fixture profile")
+		}
+		executor, err = fixture.NewExecutor(*fixtureAssetsURL)
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -53,31 +74,33 @@ func main() {
 			log.Fatal("fixture failure requires a step and call between one and eight")
 		}
 	}
-	if err := executor.SetVideoResultURL(*fixtureVideoResultURL); err != nil {
-		log.Fatal(err)
-	}
-	for key, resultURL := range map[string]string{
-		"media.image.model":       *fixtureModelResultURL,
-		"media.image.style":       *fixtureStyleResultURL,
-		"media.image.first_frame": *fixtureFirstFrameResultURL,
-	} {
-		if err := executor.SetResultURL(key, resultURL); err != nil {
+	if *profile == "media_ai_fixture" {
+		if err := executor.SetVideoResultURL(*fixtureVideoResultURL); err != nil {
 			log.Fatal(err)
 		}
+		for key, resultURL := range map[string]string{
+			"media.image.model":       *fixtureModelResultURL,
+			"media.image.style":       *fixtureStyleResultURL,
+			"media.image.first_frame": *fixtureFirstFrameResultURL,
+		} {
+			if err := executor.SetResultURL(key, resultURL); err != nil {
+				log.Fatal(err)
+			}
+		}
+		if *fixtureModelResultURLs != "" {
+			if *fixtureModelResultURL != "" {
+				log.Fatal("configure either single or multiple model results, not both")
+			}
+			urls, err := parseFixtureResultURLs(*fixtureModelResultURLs)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if err := executor.SetResultURLs("media.image.model", urls); err != nil {
+				log.Fatal(err)
+			}
+		}
 	}
-	if *fixtureModelResultURLs != "" {
-		if *fixtureModelResultURL != "" {
-			log.Fatal("configure either single or multiple model results, not both")
-		}
-		urls, err := parseFixtureResultURLs(*fixtureModelResultURLs)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err := executor.SetResultURLs("media.image.model", urls); err != nil {
-			log.Fatal(err)
-		}
-	}
-	capabilities := fixture.Capabilities()
+	capabilities := executor.AvailableCapabilities()
 	capabilities, err = selectCapabilities(capabilities, *capabilityList)
 	if err != nil {
 		log.Fatal(err)
@@ -133,10 +156,10 @@ func runCapability(ctx context.Context, client *gateway.Client, workerID string,
 			continue
 		}
 		if executeErr != nil {
-			log.Printf("failed dispatch=%s capability=%s@%d profile=media_ai_fixture", task.DispatchID, capability.Key, capability.Version)
+			log.Printf("failed dispatch=%s capability=%s@%d", task.DispatchID, capability.Key, capability.Version)
 			continue
 		}
-		log.Printf("completed dispatch=%s capability=%s@%d profile=media_ai_fixture", task.DispatchID, capability.Key, capability.Version)
+		log.Printf("completed dispatch=%s capability=%s@%d", task.DispatchID, capability.Key, capability.Version)
 	}
 }
 

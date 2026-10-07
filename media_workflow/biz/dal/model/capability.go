@@ -7,8 +7,11 @@ type ExecutionCapability struct {
 	Version          int        `gorm:"column:version;primaryKey"`
 	Provider         string     `gorm:"column:provider;not null"`
 	Mode             string     `gorm:"column:mode;not null"`
+	GenerationMethod *string    `gorm:"column:generation_method"`
+	GenerationType   *string    `gorm:"column:generation_type"`
 	InputSchema      []byte     `gorm:"column:input_schema;type:jsonb;not null"`
 	OutputAssetKind  string     `gorm:"column:output_asset_kind;not null"`
+	OutputMediaType  *string    `gorm:"column:output_media_type"`
 	ConductorTaskDef string     `gorm:"column:conductor_task_def;not null"`
 	ExecutionTarget  string     `gorm:"column:execution_target;not null"`
 	ManagedPoolKey   *string    `gorm:"column:managed_pool_key"`

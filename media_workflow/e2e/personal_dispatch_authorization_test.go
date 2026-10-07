@@ -22,7 +22,7 @@ func TestPersonalDispatchAuthorizationIsolation(t *testing.T) {
 	db := newDatabase(t)
 	ctx := context.Background()
 	if err := db.Create(&model.Job{ID: "job-auth", OrganizationID: "org-a", Scope: "e2e", WorkflowID: "wf-auth", WorkflowVersion: 1,
-		Input: datatypes.JSON(`{}`), Status: "running", RetryHistory: datatypes.JSON(`[]`), SubmittedBy: "owner", SubmittedAt: time.Now()}).Error; err != nil {
+		Input: datatypes.JSON(`{}`), Status: "running", RetryHistory: datatypes.JSON(`[]`), SubmittedBy: "owner", SubmittedAt: time.Now(), ConductorWorkflowID: "engine-auth"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&model.StepRun{ID: "step-auth", JobID: "job-auth", StepKey: "image", StepOrder: 1,
@@ -41,8 +41,8 @@ func TestPersonalDispatchAuthorizationIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine := &resultEngine{}
-	flow := &worker_gateway.Flow{Dispatches: repo, Jobs: jobrepo.NewJobRepo(db), Engine: engine}
+	engine := &resultEngine{execution: &jobdomain.EngineExecution{WorkflowInstanceID: "engine-auth", Status: "RUNNING", Tasks: []jobdomain.EngineTask{{TaskID: "task-auth", Status: "IN_PROGRESS", Input: map[string]any{"job_id": "job-auth"}}}}}
+	flow := &worker_gateway.Flow{Dispatches: repo, Jobs: jobrepo.NewJobRepo(db), Engine: engine, Executions: engine}
 	owner := worker_gateway.Principal{UserID: "owner", OrganizationID: "org-a", ActorID: "Worker:one", CredentialID: "credential-one", AuthSource: "api_token"}
 	output := map[string]any{"candidates": []any{map[string]any{"content": "test-only"}}}
 	cases := []struct {

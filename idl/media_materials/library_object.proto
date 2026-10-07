@@ -30,6 +30,8 @@ message ResolveLibraryObjectReq {
 message ResolveLibraryObjectResp {
   string url = 1;
   int64 expires_at = 2;
+  string content_type = 3;
+  int64 size_bytes = 4;
 }
 
 message UploadLibraryObjectReq {

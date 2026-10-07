@@ -49,6 +49,18 @@ func toDomain(row *model.ExecutionCapability) (*domain.Capability, error) {
 	if err := json.Unmarshal(row.InputSchema, &inputs); err != nil {
 		return nil, err
 	}
+	for _, input := range inputs {
+		if !input.ValidMediaConstraint() {
+			return nil, fmt.Errorf("invalid capability input media constraint")
+		}
+	}
+	var outputMedia domain.MediaType
+	if row.OutputMediaType != nil {
+		outputMedia = domain.MediaType(*row.OutputMediaType)
+		if !outputMedia.Valid() || row.OutputAssetKind != "" {
+			return nil, fmt.Errorf("invalid provider capability output contract")
+		}
+	}
 	var retry struct {
 		RetryCount        int    `json:"retry_count"`
 		RetryLogic        string `json:"retry_logic"`
@@ -71,12 +83,22 @@ func toDomain(row *model.ExecutionCapability) (*domain.Capability, error) {
 	if executionTarget == domain.ExecutionTargetManagedWorker && managedPoolKey == "" {
 		return nil, fmt.Errorf("managed capability %s@%d requires managed pool", row.CapabilityKey, row.Version)
 	}
-	return &domain.Capability{
+	result := &domain.Capability{
 		Key: row.CapabilityKey, Version: row.Version, Provider: row.Provider, Mode: row.Mode,
-		Inputs: inputs, OutputAssetKind: row.OutputAssetKind, ConductorTaskDef: row.ConductorTaskDef,
+		Inputs: inputs, OutputAssetKind: row.OutputAssetKind, OutputMediaType: outputMedia, ConductorTaskDef: row.ConductorTaskDef,
 		ExecutionTarget: executionTarget, ManagedPoolKey: managedPoolKey,
 		RetryCount: retry.RetryCount, RetryLogic: retry.RetryLogic,
 		RetryDelaySeconds: retry.RetryDelaySeconds, TimeoutSeconds: row.TimeoutSeconds,
 		Status: row.Status, CreatedAt: row.CreatedAt, PublishedAt: row.PublishedAt,
-	}, nil
+	}
+	if row.GenerationMethod != nil {
+		result.GenerationMethod = domain.GenerationMethod(*row.GenerationMethod)
+	}
+	if row.GenerationType != nil {
+		result.GenerationType = domain.GenerationType(*row.GenerationType)
+	}
+	if err := result.ValidateContract(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }

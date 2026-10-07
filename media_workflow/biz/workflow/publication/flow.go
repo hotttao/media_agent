@@ -11,6 +11,7 @@ import (
 	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
 	templatedomain "media_agent/media_workflow/biz/domain/template"
 	workflowdomain "media_agent/media_workflow/biz/domain/workflow"
+	"media_agent/media_workflow/biz/shared"
 	"media_agent/media_workflow/biz/workflow/compiler"
 	"media_agent/media_workflow/biz/workflow/conductor"
 	"media_agent/media_workflow/biz/workflow/executable"
@@ -22,6 +23,7 @@ import (
 type Flow struct {
 	Templates    workflowdomain.TemplateLookup
 	Capabilities capabilitydomain.Repo
+	AssetKinds   shared.AssetKindLookup
 	Intents      workflowdomain.PublicationRepo
 	Workflows    workflowdomain.Repo
 	Tx           interface {
@@ -122,14 +124,61 @@ func (f *Flow) compile(ctx context.Context, workflow *workflowdomain.Workflow) (
 		if err != nil {
 			return nil, fmt.Errorf("load capability %s@%d: %w", template.CapabilityKey, template.CapabilityVersion, err)
 		}
+		if capability.OutputMediaType != "" {
+			if f.AssetKinds == nil {
+				return nil, errors.New("publication asset kind lookup unavailable")
+			}
+			names := []string{template.OutputAssetKind}
+			for _, slot := range template.Inputs {
+				if slot.ResourceType == "MATERIAL" || slot.ResourceType == "ASSET" {
+					names = append(names, slot.AssetKind)
+				}
+			}
+			kinds, missing, err := f.AssetKinds.BatchGet(ctx, names)
+			if err != nil || len(missing) != 0 {
+				return nil, errors.New("publication asset kind metadata unavailable")
+			}
+			media := func(name, resourceType string) (capabilitydomain.MediaType, error) {
+				kind := kinds[name]
+				if kind == nil || kind.ResourceType != resourceType || (kind.Status != "SYSTEM" && kind.Status != "ENABLED") || !capabilitydomain.MediaType(kind.MediaType).Valid() {
+					return "", errors.New("publication asset kind metadata incompatible")
+				}
+				return capabilitydomain.MediaType(kind.MediaType), nil
+			}
+			outMedia, err := media(template.OutputAssetKind, "ASSET")
+			if err != nil {
+				return nil, err
+			}
+			for i, slot := range template.Inputs {
+				if slot.ResourceType == "TEXT" {
+					continue
+				}
+				// These aggregate slots expose the selected product image or
+				// Virtual IP full-body image, not an AssetKind registry entry.
+				if slot.ResourceType == "PRODUCT" || slot.ResourceType == "VIRTUAL_IP" {
+					templateInputs[i].MediaType = capabilitydomain.MediaImage
+					continue
+				}
+				templateInputs[i].MediaType, err = media(slot.AssetKind, slot.ResourceType)
+				if err != nil {
+					return nil, err
+				}
+			}
+			ref := semantic.TemplateRef{ID: step.TemplateID, Version: step.TemplateVersion}
+			resolved := snapshots.Templates[ref]
+			resolved.OutputMediaType = outMedia
+			resolved.Inputs = templateInputs
+			snapshots.Templates[ref] = resolved
+		}
 		inputs := make([]semantic.CapabilityInput, 0, len(capability.Inputs))
 		for _, input := range capability.Inputs {
-			inputs = append(inputs, semantic.CapabilityInput{Name: input.Name, Type: semantic.ValueType(input.Type), Required: input.Required})
+			inputs = append(inputs, semantic.CapabilityInput{Name: input.Name, Type: semantic.ValueType(input.Type), Required: input.Required, MediaType: input.MediaType, MinItems: input.MinItems, MaxItems: input.MaxItems})
 		}
 		snapshots.Capabilities[semantic.CapabilityRef{Key: capability.Key, Version: capability.Version}] = semantic.CapabilitySnapshot{
 			Key: capability.Key, Version: capability.Version, ConductorTaskDef: capability.ConductorTaskDef,
 			ExecutionTarget: capability.ExecutionTarget, ManagedPoolKey: capability.ManagedPoolKey,
 			Inputs: inputs, OutputAssetKind: capability.OutputAssetKind,
+			Provider: capability.Provider, GenerationMethod: capability.GenerationMethod, GenerationType: capability.GenerationType, OutputMediaType: capability.OutputMediaType,
 		}
 		capabilitiesByTask[capability.ConductorTaskDef] = capability
 	}

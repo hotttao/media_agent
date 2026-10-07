@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
 	"net/url"
 	"path"
 	"sort"
@@ -53,12 +54,15 @@ type FailCommand struct {
 }
 
 type Flow struct {
-	StorageOrigin  string
-	Dispatches     jobdomain.DispatchRepo
-	Jobs           jobdomain.JobRepo
-	StepRuns       jobdomain.StepRunRepo
-	Capabilities   capabilitydomain.Repo
-	Engine         jobdomain.CapabilityTaskEngine
+	StorageOrigin string
+	Dispatches    jobdomain.DispatchRepo
+	Jobs          jobdomain.JobRepo
+	StepRuns      jobdomain.StepRunRepo
+	Capabilities  capabilitydomain.Repo
+	Engine        jobdomain.CapabilityTaskEngine
+	Executions    interface {
+		Get(context.Context, string) (*jobdomain.EngineExecution, error)
+	}
 	ImportedAssets interface {
 		GetImportedGeneratedAsset(context.Context, string) (*client.ImportedGeneratedAsset, error)
 		ResolveInternalObject(context.Context, string, string) (client.ResolvedStorageObject, error)
@@ -116,14 +120,27 @@ func (f *Flow) Poll(ctx context.Context, cmd PollCommand) (*jobdomain.WorkerDisp
 		if err != nil {
 			return nil, err
 		}
-		if job.OrganizationID == "" || job.OrganizationID != cmd.OrganizationID || job.SubmittedBy != cmd.UserID || job.Status.IsTerminal() || job.ConductorWorkflowID != existing.ConductorWorkflowID {
+		if job.OrganizationID == "" || job.OrganizationID != cmd.OrganizationID || job.SubmittedBy != cmd.UserID || job.ConductorWorkflowID != existing.ConductorWorkflowID {
 			return nil, ErrForbidden
+		}
+		if err := f.requireActiveTask(ctx, job, existing.ConductorWorkflowID, existing.ConductorTaskID, existing.Attempt); err != nil {
+			return nil, err
 		}
 		var input map[string]any
 		if err := json.Unmarshal(existing.InputJSON, &input); err != nil {
 			return nil, err
 		}
-		resolved, err := f.resolveInputRefs(ctx, job, input)
+		contract, err := f.Capabilities.Get(ctx, existing.CapabilityKey, existing.CapabilityVersion)
+		if err != nil {
+			return nil, err
+		}
+		if contract.ExecutionTarget != capabilitydomain.ExecutionTargetPersonalWorker {
+			return nil, ErrForbidden
+		}
+		if err := validateProviderInputs(contract, input); err != nil {
+			return nil, err
+		}
+		resolved, err := f.resolveCapabilityInputRefs(ctx, job, input, contract)
 		if err != nil {
 			return nil, fmt.Errorf("resolve task inputs: %w", err)
 		}
@@ -153,14 +170,23 @@ func (f *Flow) Poll(ctx context.Context, cmd PollCommand) (*jobdomain.WorkerDisp
 		return nil, fmt.Errorf("load task job: %w", err)
 	}
 	if job.OrganizationID == "" || job.OrganizationID != cmd.OrganizationID ||
-		job.SubmittedBy != cmd.UserID || job.ConductorWorkflowID != task.WorkflowInstanceID || job.Status.IsTerminal() {
+		job.SubmittedBy != cmd.UserID || job.ConductorWorkflowID != task.WorkflowInstanceID {
 		return nil, ErrForbidden
 	}
 	stepRun, err := f.StepRuns.GetByJobAndStepKey(ctx, jobID, stepKey)
 	if err != nil {
 		return nil, fmt.Errorf("load task step run: %w", err)
 	}
-	resolved, err := f.resolveInputRefs(ctx, job, task.Input)
+	if err := validateProviderInputs(capability, task.Input); err != nil {
+		return nil, err
+	}
+	if stepRun.JobID != job.ID || stepRun.StepKey != stepKey || task.TaskType != capability.ConductorTaskDef {
+		return nil, ErrForbidden
+	}
+	if err := f.requireActiveTask(ctx, job, task.WorkflowInstanceID, task.TaskID, task.RetryCount+1); err != nil {
+		return nil, err
+	}
+	resolved, err := f.resolveCapabilityInputRefs(ctx, job, task.Input, capability)
 	if err != nil {
 		return nil, fmt.Errorf("resolve task inputs: %w", err)
 	}
@@ -201,6 +227,42 @@ func dispatchForDelivery(dispatch *jobdomain.WorkerDispatch, input map[string]an
 }
 
 func (f *Flow) resolveInputRefs(ctx context.Context, job *jobdomain.Job, input map[string]any) (map[string]any, error) {
+	return f.resolveTypedInputRefs(ctx, job, input, nil)
+}
+
+func (f *Flow) resolveCapabilityInputRefs(ctx context.Context, job *jobdomain.Job, input map[string]any, contract *capabilitydomain.Capability) (map[string]any, error) {
+	if err := validateProviderInputs(contract, input); err != nil {
+		return nil, err
+	}
+	expected := make(map[string]capabilitydomain.MediaType)
+	if contract.OutputMediaType != "" {
+		for _, field := range contract.Inputs {
+			if field.MediaType == "" {
+				continue
+			}
+			var refs []string
+			switch value := input[field.Name].(type) {
+			case string:
+				refs = []string{value}
+			case []string:
+				refs = value
+			case []any:
+				for _, item := range value {
+					refs = append(refs, item.(string))
+				}
+			}
+			for _, ref := range refs {
+				if old, exists := expected[ref]; exists && old != field.MediaType {
+					return nil, ErrInvalidTask
+				}
+				expected[ref] = field.MediaType
+			}
+		}
+	}
+	return f.resolveTypedInputRefs(ctx, job, input, expected)
+}
+
+func (f *Flow) resolveTypedInputRefs(ctx context.Context, job *jobdomain.Job, input map[string]any, expected map[string]capabilitydomain.MediaType) (map[string]any, error) {
 	cache := map[string]string{}
 	var resolve func(any) (any, error)
 	resolve = func(value any) (any, error) {
@@ -237,8 +299,17 @@ func (f *Flow) resolveInputRefs(ctx context.Context, job *jobdomain.Job, input m
 				if resolved.URL == "" || resolved.ExpiresAt <= f.now().Add(30*time.Second).Unix() {
 					return nil, ErrForbidden
 				}
+				if media := expected[item]; media != "" {
+					contentType, _, err := mime.ParseMediaType(resolved.ContentType)
+					if err != nil || resolved.SizeBytes <= 0 || !strings.HasPrefix(contentType, strings.ToLower(string(media))+"/") {
+						return nil, ErrInvalidTask
+					}
+				}
 				cache[item] = resolved.URL
 				return resolved.URL, nil
+			}
+			if expected[item] != "" {
+				return nil, ErrForbidden
 			}
 			if job.Origin != "legacy_import" || !strings.HasPrefix(item, "gen_") {
 				return item, nil
@@ -268,6 +339,16 @@ func (f *Flow) resolveInputRefs(ctx context.Context, job *jobdomain.Job, input m
 					return nil, err
 				}
 				out[i] = result
+			}
+			return out, nil
+		case []string:
+			out := make([]string, len(item))
+			for i, child := range item {
+				resolved, err := resolve(child)
+				if err != nil {
+					return nil, err
+				}
+				out[i] = resolved.(string)
 			}
 			return out, nil
 		case map[string]any:
@@ -453,17 +534,17 @@ func (f *Flow) checkDispatchLease(ctx context.Context, dispatch *jobdomain.Worke
 	if dispatch.Attempt != attempt {
 		return nil, jobdomain.ErrDispatchConflict
 	}
+	if !dispatch.LeaseActive(f.now()) && dispatch.Status != jobdomain.DispatchResultReceived {
+		return nil, jobdomain.ErrDispatchExpired
+	}
 	if dispatch.Status != jobdomain.DispatchResultReceived {
 		job, err := f.Jobs.Get(ctx, dispatch.JobID)
 		if err != nil {
 			return nil, fmt.Errorf("load dispatch job: %w", err)
 		}
-		if job.Status.IsTerminal() {
-			return nil, jobdomain.ErrDispatchExpired
+		if err := f.requireActiveTask(ctx, job, dispatch.ConductorWorkflowID, dispatch.ConductorTaskID, dispatch.Attempt); err != nil {
+			return nil, err
 		}
-	}
-	if !dispatch.LeaseActive(f.now()) && dispatch.Status != jobdomain.DispatchResultReceived {
-		return nil, jobdomain.ErrDispatchExpired
 	}
 	return dispatch, nil
 }

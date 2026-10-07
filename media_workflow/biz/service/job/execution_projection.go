@@ -16,8 +16,8 @@ type executionSnapshot struct {
 }
 
 func checkExecutionSnapshot(ctx context.Context, current *domain.Job) error {
-	// Terminal state is handled by each projection without additional writes.
-	if current.Status.IsTerminal() {
+	// Cancellation intent is guarded separately; cached failures are refreshable.
+	if current.Status == domain.JobCancelled {
 		return nil
 	}
 	if snapshot, ok := ctx.Value(executionSnapshotKey{}).(executionSnapshot); ok && snapshot.jobID == current.ID &&
@@ -43,7 +43,7 @@ func (s *Service) withExecutionProjection(ctx context.Context, jobID, stepID str
 		if err := checkExecutionSnapshot(txCtx, current); err != nil {
 			return err
 		}
-		if !current.Status.IsTerminal() {
+		if current.Status != domain.JobCancelled {
 			if err := s.checkGenerationSnapshot(txCtx, jobID, stepID); err != nil {
 				return err
 			}
@@ -62,7 +62,7 @@ func (s *Service) withExecutionProjection(ctx context.Context, jobID, stepID str
 
 func (s *Service) projectExecutionStatus(ctx context.Context, jobID string, status domain.JobStatus, reason string) error {
 	return s.withExecutionProjection(ctx, jobID, "", func(txCtx context.Context, current *domain.Job) error {
-		if current.Status.IsTerminal() {
+		if current.Status == domain.JobCancelled {
 			return nil
 		}
 		return s.jobRepo.UpdateStatus(txCtx, jobID, status, reason)
@@ -71,15 +71,15 @@ func (s *Service) projectExecutionStatus(ctx context.Context, jobID string, stat
 
 func (s *Service) withActiveStepProjection(ctx context.Context, jobID, stepID string, fn func(context.Context) error) error {
 	return s.withExecutionProjection(ctx, jobID, stepID, func(txCtx context.Context, current *domain.Job) error {
-		if current.Status.IsTerminal() {
+		if current.Status == domain.JobCancelled {
 			return nil
 		}
 		step, err := s.stepRunRepo.Get(txCtx, stepID)
 		if err != nil {
 			return err
 		}
-		// Retry resets affected steps explicitly. A delayed snapshot must not
-		// overwrite a finalized step while another branch is still running.
+		// Native retry preserves successful tasks. A delayed snapshot must not
+		// overwrite their business output while another branch is still running.
 		if step.Status == domain.SRSucceeded && step.OutputAssetID != "" {
 			return nil
 		}

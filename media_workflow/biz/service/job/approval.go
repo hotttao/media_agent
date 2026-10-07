@@ -40,7 +40,7 @@ func currentGeneration(task domain.EngineTask, latest map[string]int) bool {
 }
 
 func (s *Service) currentApprovalTask(ctx context.Context, job *domain.Job, sr *domain.StepRun) (*domain.EngineTask, int, error) {
-	if job.Status.IsTerminal() {
+	if job.Status == domain.JobCancelled {
 		return nil, 0, errors.New("cannot review a terminal job")
 	}
 	execution, err := s.engine.Get(ctx, job.ConductorWorkflowID)
@@ -55,7 +55,7 @@ func (s *Service) currentApprovalTask(ctx context.Context, job *domain.Job, sr *
 	for i := range execution.Tasks {
 		task := &execution.Tasks[i]
 		key, phase, ok := parseTaskReference(task.ReferenceTaskName)
-		if !ok || key != sr.StepKey || phase != "approval" || !currentGeneration(*task, latest) || task.Status != "IN_PROGRESS" {
+		if !ok || task.Retried || key != sr.StepKey || phase != "approval" || !currentGeneration(*task, latest) || task.Status != "IN_PROGRESS" {
 			continue
 		}
 		if waiting != nil {

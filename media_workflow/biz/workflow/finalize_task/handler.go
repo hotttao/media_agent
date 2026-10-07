@@ -1,20 +1,16 @@
 package finalize_task
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"fmt"
+
+	domain "media_agent/media_workflow/biz/domain/job"
 )
 
 const TaskDefinitionName = "media_finalize_step_v1"
 
 var ErrApprovalRequired = errors.New("approval required")
 
-type Candidate struct {
-	URL     string `json:"url"`
-	Content string `json:"content,omitempty"`
-}
+type Candidate = domain.Candidate
 
 type Input struct {
 	StepKey           string      `json:"step_key"`
@@ -39,34 +35,30 @@ type Output struct {
 	OutputResource   Resource `json:"output_resource"`
 }
 
-type Handler struct{}
-
-func (Handler) Execute(input Input) (Output, error) {
+func selectCandidate(input Input) (Candidate, error) {
 	if len(input.Candidates) == 0 {
-		return Output{}, errors.New("capability returned no candidates")
+		return Candidate{}, errors.New("capability returned no candidates")
 	}
+	var selected Candidate
 	if input.SelectedCandidate != nil {
+		found := false
 		for _, candidate := range input.Candidates {
 			if candidate == *input.SelectedCandidate {
-				return finalize(input, candidate)
+				selected, found = candidate, true
+				break
 			}
 		}
-		return Output{}, errors.New("selected candidate does not belong to the current generation")
+		if !found {
+			return Candidate{}, errors.New("selected candidate is not in the current generation")
+		}
+	} else {
+		if len(input.Candidates) > 1 || input.ApprovalPolicy == "always" {
+			return Candidate{}, ErrApprovalRequired
+		}
+		selected = input.Candidates[0]
 	}
-	if len(input.Candidates) > 1 || input.ApprovalPolicy == "always" {
-		return Output{}, ErrApprovalRequired
+	if selected.URL == "" && selected.ObjectPath == "" && selected.Content == "" {
+		return Candidate{}, errors.New("candidate is empty")
 	}
-	return finalize(input, input.Candidates[0])
-}
-
-func finalize(input Input, candidate Candidate) (Output, error) {
-	if candidate.URL == "" && candidate.Content == "" {
-		return Output{}, errors.New("candidate url and content are both empty")
-	}
-	digest := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%s", input.JobID, input.StepKey, candidate.URL, candidate.Content)))
-	id := "result_" + hex.EncodeToString(digest[:12])
-	return Output{
-		OutputResourceID: id,
-		OutputResource:   Resource{ID: id, AssetRef: candidate.URL, URL: candidate.URL, Content: candidate.Content, AssetKind: input.OutputAssetKind},
-	}, nil
+	return selected, nil
 }

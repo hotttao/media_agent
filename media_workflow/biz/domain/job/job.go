@@ -108,10 +108,11 @@ type VirtualIpData struct {
 }
 
 type Candidate struct {
-	Index     int    `json:"index"`
-	URL       string `json:"url"`
-	Content   string `json:"content"`
-	IsPrimary bool   `json:"is_primary"`
+	Index      int    `json:"index"`
+	URL        string `json:"url"`
+	ObjectPath string `json:"object_path,omitempty"`
+	Content    string `json:"content"`
+	IsPrimary  bool   `json:"is_primary"`
 }
 
 type Job struct {

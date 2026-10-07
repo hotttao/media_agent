@@ -30,6 +30,12 @@ type CapabilityTaskEngine interface {
 	UpdateCapabilityTask(ctx context.Context, result CapabilityTaskResult) error
 }
 
+// FailureRetryEngine continues unsuccessful tasks using the execution engine's
+// own semantics; it does not reset business steps or change workflow input.
+type FailureRetryEngine interface {
+	RetryWorkflow(context.Context, string) error
+}
+
 // ApprovalTaskEngine submits to an immutable engine task identity. Reference
 // names can be reused during Retry and must never redirect a durable decision.
 type ApprovalTaskEngine interface {
@@ -50,19 +56,28 @@ type CapabilityTaskResult struct {
 }
 
 type EngineExecution struct {
-	Status string
-	Output map[string]any
-	Tasks  []EngineTask
+	WorkflowInstanceID string
+	DefinitionName     string
+	DefinitionVersion  int
+	Definition         map[string]any
+	Input              map[string]any
+	TaskDomains        map[string]string
+	Status             string
+	Output             map[string]any
+	Tasks              []EngineTask
 }
 
 type EngineTask struct {
-	Sequence          *int
-	TaskID            string
-	TaskType          string
-	ReferenceTaskName string
-	Status            string
-	Input             map[string]any
-	Output            map[string]any
+	Sequence                          *int
+	TaskID                            string
+	TaskType                          string
+	ReferenceTaskName                 string
+	Status                            string
+	Input                             map[string]any
+	Output                            map[string]any
+	ScheduledTime, StartTime, EndTime int64
+	RetryCount                        int
+	Retried                           bool
 }
 
 type StepRunRepo interface {

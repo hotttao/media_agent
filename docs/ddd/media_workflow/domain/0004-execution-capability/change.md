@@ -29,3 +29,9 @@
 - Execution Capability 对应 Worker 由客户端 `media_worker` 承载，允许访问本地模型、CLI、GPU 与 Provider 凭证。
 - 服务端仅运行 Renderer、finalizer 等 Internal Execution Task。
 - 联调增加显式 Mock Profile，用冻结的 `media_ai` 样本完整执行一个视频生成 Workflow；确认后再迁移全部数据。
+## 2026-10-06：纠正Provider能力与业务用途的混淆
+
+- 用Provider操作契约代替业务步骤独占能力；一个生图能力供多个业务模板复用。
+- 技术输出Media Type与Template业务Asset Kind解耦；旧字段/版本只作兼容，新注册/模板/Workflow使用新版本，不改既有IR和执行。
+- 本轮保持mock联调边界，真实Provider适配、UI、历史全量迁移及Conductor启动幂等不自动扩入。
+- 重新以001原始四类Task为基线，generation_method区分媒体转换，generation_type区分首帧/多图模式；规范Key绑定三维，version固定契约，首帧一图、多图有序至少一图。先前三种种子草稿已撤回，不作为最终能力目录。

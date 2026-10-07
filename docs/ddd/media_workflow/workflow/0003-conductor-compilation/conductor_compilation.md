@@ -50,6 +50,11 @@ Compilation 状态为 `pending -> registering -> registered | failed`。幂等�
 
 ## 编译输出约束
 
+- Capability身份按platform/generation_method/generation_type构造，再以version固定输入输出契约；首帧和多图模式即使同属i2i/i2v也分别注册。内部provider列表达platform，mode旧字段只作兼容分类；Worker不能从业务步骤名猜平台或生成类型。
+
+- 同一个Provider生图Capability可被模特图、定妆图、首帧等不同Template引用。接受发布时校验Template业务Asset Kind的Media Type与Capability技术输出兼容，再将Provider能力版本、类型约束、Invocation Mapping与业务输出分类共同冻结到IR；Backend Compiler只把映射降低为固定Worker参数，不根据业务节点名称选择Provider。
+- Provider Capability使用固定参数名，例如`prompt/images[]`；业务Slot通过Invocation Mapping提供顺序确定的ImageRef，不能统一改成业务用途专属`resources[]`。Renderer、审批与Finalize不改归属。旧发布Compilation/Definition/Job不原位重编译，新流程使用新Template/Workflow版本。
+
 - 循环内task reference采用step key编码，避免Conductor保留的`__`迭代分隔符；原始step_key保留在input。循环外Finalize保留稳定引用。
 - Capability Task 的 input 必须保留 `job_id=${workflow.input.job_id}`、原始 `step_key` 和冻结的 `capability_key/capability_version`；它们是服务端 Dispatch 归属校验所需的执行元数据，不是 Provider 参数。缺少这些字段的旧发布定义不得通过解析 task reference 猜测身份或绕过 Dispatch 校验；迁移联调样本时先通过业务 API 结束旧执行，再创建并发布新的样本定义。保留旧 Compilation 与执行快照，不原位覆盖。
 - `ExecutableWorkflowIR` 是 Semantic Compiler 与 Backend Compiler 的稳定边界；Conductor Definition 和 FlowGram 文档均不得充当 IR。

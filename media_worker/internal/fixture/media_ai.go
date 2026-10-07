@@ -23,6 +23,7 @@ func Capabilities() []gateway.Capability { return append([]gateway.Capability(ni
 type Executor struct {
 	baseURL           string
 	resultURLs        map[string][]string
+	providerResults   map[providerTaskRef]ProviderBinding
 	failureMu         sync.Mutex
 	failureStep       string
 	failureCall       int
@@ -89,6 +90,9 @@ func (e *Executor) SetResultURL(capabilityKey, raw string) error {
 // SetResultURLs configures distinct already-stored candidates for a fixture.
 // Validate the whole configuration before replacing any existing result.
 func (e *Executor) SetResultURLs(capabilityKey string, urls []string) error {
+	if e.providerResults != nil {
+		return fmt.Errorf("provider fixtures require explicit Job/Step bindings")
+	}
 	supported := false
 	for _, capability := range capabilities {
 		if capability.Key == capabilityKey {
@@ -103,13 +107,26 @@ func (e *Executor) SetResultURLs(capabilityKey string, urls []string) error {
 		delete(e.resultURLs, capabilityKey)
 		return nil
 	}
+	if err := validateResultURLs(urls); err != nil {
+		return err
+	}
+	e.resultURLs[capabilityKey] = append([]string(nil), urls...)
+	return nil
+}
+
+func validResultURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u != nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil && u.Fragment == ""
+}
+
+func validateResultURLs(urls []string) error {
 	if len(urls) > 8 {
 		return fmt.Errorf("fixture supports at most eight candidates")
 	}
 	seen := map[string]bool{}
 	for _, raw := range urls {
 		u, err := url.Parse(raw)
-		if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.Fragment != "" {
+		if err != nil || !validResultURL(raw) {
 			return fmt.Errorf("fixture result must be an HTTP(S) storage URL without credentials or fragment")
 		}
 		object := u.Scheme + "://" + u.Host + u.EscapedPath()
@@ -118,11 +135,13 @@ func (e *Executor) SetResultURLs(capabilityKey string, urls []string) error {
 		}
 		seen[object] = true
 	}
-	e.resultURLs[capabilityKey] = append([]string(nil), urls...)
 	return nil
 }
 
 func (e *Executor) Execute(task gateway.Task) (map[string]any, error) {
+	if e.providerResults != nil {
+		return e.executeProvider(task)
+	}
 	if task.CapabilityVersion != 1 {
 		return nil, fmt.Errorf("media_ai fixture does not support capability version %d", task.CapabilityVersion)
 	}

@@ -118,7 +118,19 @@ type taskEngineStub struct {
 
 func (e *taskEngineStub) PollCapabilityTask(_ context.Context, taskType, workerID, executionDomain string) (*jobdomain.CapabilityTask, error) {
 	e.pollType, e.pollWorker, e.pollDomain = taskType, workerID, executionDomain
+	if e.task != nil && e.task.TaskType == "" {
+		e.task.TaskType = taskType
+	}
 	return e.task, nil
+}
+
+func (e *taskEngineStub) Get(context.Context, string) (*jobdomain.EngineExecution, error) {
+	if e.task == nil {
+		return nil, errors.New("missing test execution")
+	}
+	return &jobdomain.EngineExecution{WorkflowInstanceID: e.task.WorkflowInstanceID, Status: "RUNNING", Tasks: []jobdomain.EngineTask{{
+		TaskID: e.task.TaskID, TaskType: e.task.TaskType, Input: e.task.Input, Status: "IN_PROGRESS", RetryCount: e.task.RetryCount,
+	}}}, nil
 }
 
 func (e *taskEngineStub) UpdateCapabilityTask(_ context.Context, result jobdomain.CapabilityTaskResult) error {
@@ -205,7 +217,7 @@ func newPollFlow(now time.Time) (*Flow, *dispatchRepoStub, *taskEngineStub) {
 		Capabilities: &capabilityRepoStub{item: &capabilitydomain.Capability{
 			Key: "jimeng.image", Version: 1, ConductorTaskDef: "jimeng_image_v1", ExecutionTarget: capabilitydomain.ExecutionTargetPersonalWorker,
 		}},
-		Engine: engine, Now: func() time.Time { return now }, Lease: time.Minute,
+		Engine: engine, Executions: engine, Now: func() time.Time { return now }, Lease: time.Minute,
 	}, dispatches, engine
 }
 
@@ -287,7 +299,7 @@ func TestPollRejectsForeignOrUnboundJobOrganization(t *testing.T) {
 
 func TestPollReturnsActiveDispatchWithoutPollingConductor(t *testing.T) {
 	flow, dispatches, engine := newPollFlow(time.Now())
-	dispatches.active = &jobdomain.WorkerDispatch{ID: "dispatch-existing", JobID: "job-1", ConductorWorkflowID: "workflow-1", InputJSON: []byte(`{}`)}
+	dispatches.active = &jobdomain.WorkerDispatch{ID: "dispatch-existing", JobID: "job-1", ConductorWorkflowID: "workflow-1", ConductorTaskID: "task-1", Attempt: 2, InputJSON: []byte(`{}`)}
 
 	got, err := flow.Poll(context.Background(), PollCommand{
 		Principal:        Principal{UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token"},
@@ -304,6 +316,7 @@ func TestPollReturnsActiveDispatchWithoutPollingConductor(t *testing.T) {
 func TestCompleteIsIdempotentAfterReceiptWasSubmitted(t *testing.T) {
 	now := time.Now()
 	flow, dispatches, engine := newPollFlow(now)
+	engine.task.RetryCount = 0
 	dispatches.dispatch = &jobdomain.WorkerDispatch{
 		ID: "dispatch-1", ConductorTaskID: "task-1", ConductorWorkflowID: "workflow-1", Attempt: 1,
 		UserID: "user-1", OrganizationID: "org-1", CredentialID: "credential-1", ActorID: "Worker:worker-1", AuthSource: "api_token", WorkerInstanceID: "desktop-1",

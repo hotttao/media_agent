@@ -2,6 +2,7 @@ package library_object
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -29,10 +30,17 @@ func TestResolveLibraryObjectAuthorizationAndErrors(t *testing.T) {
 	h.GET("/api/v1/library-objects:resolve", ResolveLibraryObject)
 
 	t.Run("returns presigned URL for organization object", func(t *testing.T) {
-		Resolver = fakeResolver{result: objectstorage.ResolvedObject{URL: "http://storage.test/media/object?signature=x", ExpiresAt: 42}}
+		Resolver = fakeResolver{result: objectstorage.ResolvedObject{URL: "http://storage.test/media/object?signature=x", ExpiresAt: 42, ContentType: "image/png", SizeBytes: 100}}
 		response := ut.PerformRequest(h.Engine, "GET", "/api/v1/library-objects:resolve?organization_id=org-1&object_path=materials/org-1/ai_clothing/material/image.png", nil)
 		if got := response.Result().StatusCode(); got != 200 {
 			t.Fatalf("status=%d body=%s", got, response.Result().Body())
+		}
+		var body struct {
+			ContentType string `json:"content_type"`
+			SizeBytes   int64  `json:"size_bytes"`
+		}
+		if json.Unmarshal(response.Result().Body(), &body) != nil || body.ContentType != "image/png" || body.SizeBytes != 100 {
+			t.Fatal("stored media metadata missing from resolution response")
 		}
 	})
 
@@ -70,7 +78,7 @@ func TestResolveLibraryObjectAuthorizationAndErrors(t *testing.T) {
 func TestResolveInternalLibraryObjectIsOrganizationScoped(t *testing.T) {
 	previous := Resolver
 	t.Cleanup(func() { Resolver = previous })
-	Resolver = fakeResolver{result: objectstorage.ResolvedObject{URL: "http://storage.test/media/materials/org-1/image.png?fresh=1", ExpiresAt: 42}}
+	Resolver = fakeResolver{result: objectstorage.ResolvedObject{URL: "http://storage.test/media/materials/org-1/image.png?fresh=1", ExpiresAt: 42, ContentType: "image/png", SizeBytes: 100}}
 	h := server.Default()
 	h.GET("/api/internal/v1/library-objects:resolve", ResolveInternalLibraryObject)
 	for _, test := range []struct {
@@ -84,6 +92,15 @@ func TestResolveInternalLibraryObjectIsOrganizationScoped(t *testing.T) {
 		response := ut.PerformRequest(h.Engine, "GET", "/api/internal/v1/library-objects:resolve?organization_id=org-1&object_path="+test.path, nil)
 		if got := response.Result().StatusCode(); got != test.want {
 			t.Fatalf("path=%q status=%d want=%d", test.path, got, test.want)
+		}
+		if test.want == 200 {
+			var body struct {
+				ContentType string `json:"content_type"`
+				SizeBytes   int64  `json:"size_bytes"`
+			}
+			if json.Unmarshal(response.Result().Body(), &body) != nil || body.ContentType != "image/png" || body.SizeBytes != 100 {
+				t.Fatal("internal resolution omitted stored media metadata")
+			}
 		}
 	}
 }

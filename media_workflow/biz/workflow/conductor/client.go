@@ -84,6 +84,10 @@ type Task struct {
 	InputData          map[string]any `json:"inputData"`
 	OutputData         map[string]any `json:"outputData"`
 	RetryCount         int            `json:"retryCount"`
+	Retried            bool           `json:"retried"`
+	ScheduledTime      int64          `json:"scheduledTime"`
+	StartTime          int64          `json:"startTime"`
+	EndTime            int64          `json:"endTime"`
 }
 
 func (c *Client) Poll(ctx context.Context, taskType, workerID, domain string) (*Task, error) {
@@ -140,6 +144,13 @@ func (c *Client) RerunFromTask(ctx context.Context, workflowID, taskID string) e
 	return c.doJSON(ctx, http.MethodPost, "/api/workflow/"+url.PathEscape(workflowID)+"/rerun", request, nil)
 }
 
+func (c *Client) RetryWorkflow(ctx context.Context, workflowID string) error {
+	if strings.TrimSpace(workflowID) == "" {
+		return errorsNew("Conductor workflow identity required")
+	}
+	return c.doJSON(ctx, http.MethodPost, "/api/workflow/"+url.PathEscape(workflowID)+"/retry", nil, nil)
+}
+
 func (c *Client) RerunWorkflow(ctx context.Context, workflowID string, input map[string]any) error {
 	request := map[string]any{"reRunFromWorkflowId": workflowID, "workflowInput": input}
 	return c.doJSON(ctx, http.MethodPost, "/api/workflow/"+url.PathEscape(workflowID)+"/rerun", request, nil)
@@ -162,10 +173,38 @@ type WorkflowExecution struct {
 	Tasks              []Task            `json:"tasks"`
 	Input              map[string]any    `json:"input"`
 	TaskToDomain       map[string]string `json:"taskToDomain"`
+	DefinitionJSON     json.RawMessage   `json:"-"`
 	WorkflowDefinition struct {
 		Name    string `json:"name"`
 		Version int    `json:"version"`
 	} `json:"workflowDefinition"`
+}
+
+// Retain the complete definition for reconciliation, including fields not
+// otherwise needed by the typed execution reader.
+func (e *WorkflowExecution) UnmarshalJSON(data []byte) error {
+	type plain WorkflowExecution
+	var typed plain
+	if err := json.Unmarshal(data, &typed); err != nil {
+		return err
+	}
+	var envelope struct {
+		Definition json.RawMessage `json:"workflowDefinition"`
+		Input      json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return err
+	}
+	*e = WorkflowExecution(typed)
+	e.DefinitionJSON = envelope.Definition
+	if len(envelope.Input) > 0 {
+		decoder := json.NewDecoder(bytes.NewReader(envelope.Input))
+		decoder.UseNumber()
+		if err := decoder.Decode(&e.Input); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *Client) GetByCorrelation(ctx context.Context, name, correlationID string) (string, error) {

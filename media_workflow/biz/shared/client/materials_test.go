@@ -22,11 +22,11 @@ func TestResolveInternalObjectUsesServiceCredentialAndPath(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"url":"https://storage.example/fresh","expires_at":` +
-			strconv.FormatInt(time.Now().Add(time.Minute).Unix(), 10) + `}`))
+			strconv.FormatInt(time.Now().Add(time.Minute).Unix(), 10) + `,"content_type":"video/mp4","size_bytes":123}`))
 	}))
 	defer server.Close()
 	resolved, err := NewMaterialsClient(server.URL).ResolveInternalObject(context.Background(), "org-1", "materials/org-1/ai_clothing/material/movement.mp4")
-	if err != nil || resolved.URL != "https://storage.example/fresh" {
+	if err != nil || resolved.URL != "https://storage.example/fresh" || resolved.ContentType != "video/mp4" || resolved.SizeBytes != 123 {
 		t.Fatalf("object resolution failed: result=%+v err=%v", resolved, err)
 	}
 }

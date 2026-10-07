@@ -11,7 +11,7 @@ related_workflow:
 
 ## 一句话职责
 
-Execution 把一个已编译 Workflow 版本实例化为 Job 与 StepRun，以业务数据库记录权威状态，并由 Conductor 持久编排技术任务。
+Execution保存已编译Workflow实例的业务归属、冻结输入、审批和产物关联；Job与StepRun状态是Conductor执行事实的查询投影，不是另一个调度权威。
 
 ### 生成结果与节点引用不变量
 
@@ -43,8 +43,8 @@ StepRun 是稳定业务节点，一次被接受的 Generation Result 是独立�
 | 接收 Worker 结果 | 校验 attempt/schema/object ref，写 Result Inbox 与稳定收据 | `CompleteWorkerTask/FailWorkerTask` |
 | 应用步骤结果 | 幂等处理下游完成或失败事件 | `ApplyStepResult` |
 | 接受候选 | 对 needs_confirm StepRun 选择唯一候选，待下游确认后推进 DAG | `ConfirmStepRun` |
-| 重新生成 | 记录用户反馈并请求下游创建新 attempt | `RegenerateStepRun` |
-| 重试执行 | 重置允许重试的步骤 | `RetryStepRun/RetryJob` |
+| 重新生成 | 将反馈提交精确HUMAN，由Conductor循环开启新轮 | `RegenerateStepRun` |
+| 重试执行 | 两个入口均代理所属Conductor实例的原生retry，不限定单节点范围 | `RetryStepRun/RetryJob` |
 | 取消执行 | 阻止新步骤并请求取消下游任务 | `CancelJob` |
 | 导入未完成执行 | 从完整旧图片谱系建立待继续 Job 与已完成 StepRun，不触发 Conductor | `ImportIncompleteExecution` |
 | 导入已完成执行 | 从一条完整旧 Video 谱系建立终态 Job 与四个历史成功 StepRun，不触发 Conductor | `ImportCompletedExecution` |
@@ -68,8 +68,8 @@ StepRun 是稳定业务节点，一次被接受的 Generation Result 是独立�
 - regenerate 反馈最多 8192 字节，按原文冻结并参与命令摘要与幂等比较。确认不能携带反馈；目标定义必须声明支持反馈才可接受非空反馈。反馈只影响本节点紧邻下一轮，不修改 Template Version 或 Invocation Mapping。
 - accept 只有在下游确认 Candidate 并完成业务资源登记后，才把 StepRun 置为 succeeded。
 - 已提交决定以不透明 Review ID 和投递状态作为回执；`pending` 不表示仍可再次审批，`applied` 不表示步骤已产出业务资源。同键异内容冲突，显式同键重放在任务进入下一轮或终态后仍返回原决定，且仍受当前权限约束。
-- regenerate 保留旧候选审计，递增 StepRun attempt 后重新派发；它不是 failed 状态的 Retry。
-- 单节点失败 Retry 只影响目标及依赖下游，不得再次执行无关已完成旁支。引擎任务顺序不等于业务依赖；冻结依赖图与输出由 Execution 维护，引擎恢复由 Workflow 协调。无法隔离时拒绝直接重跑，不修改重试计数、候选、历史或状态。
+- regenerate保留旧候选审计，通过HUMAN决定与DO_WHILE开启新轮，不递增本地attempt来调度任务。
+- Step Retry只是所属实例原生retry的入口，可恢复多个失败/取消Task。成功任务及其产物由Conductor保留；业务不计算影响集合、不挑选renderer、不重置节点。原生失败继续不改变输入或本地rerun周期，StepRun技术retry_count取自当前能力Task。
 - 同一节点的新一轮生成与能力 Task 的失败重试分别识别；重新生成不增加失败 `retry_count`。审计保留旧轮，当前候选、确认状态与输出只能来自最新轮；其他并行节点及已完成上游不改变。
 - WorkerDispatch 是独立聚合，避免长轮询、心跳和高频租约更新锁住 Job；它只保存 Job/StepRun ID，不直接修改 Job 内部对象。
 - 任务归属必须在 Conductor poll 前通过 Execution Domain 隔离，禁止先从共享队列领取再检查 owner。
@@ -93,6 +93,12 @@ StepRun 是稳定业务节点，一次被接受的 Generation Result 是独立�
 | WorkerDispatchExpired | 租约到期或任务取消 | dispatch_id, step_run_id, attempt | Conductor Adapter、审计 |
 
 ## 数据模型
+
+### 执行状态权威与业务投影
+
+Conductor拥有Task/Workflow的执行状态、技术retry_count、循环轮次及失败恢复。Execution聚合保存归属、冻结输入/编译关联、业务审批/生成资源关联与查询投影，不自行拥有Task调度和重跑状态机。失败恢复不新建execution_retries聚合/表，不持久化另一套发送租约、重置计划或witness。
+
+普通失败继续保留成功任务和产物；审批重新生成以精确Human Task/循环轮次辨识新结果。Job/StepRun终态缓存不能与引擎已经恢复的状态冲突；旧结果/决定仍按精确Task、Dispatch和生成身份拒绝，不能只由本地RetryCount决定执行资格。取消意图、资源登记和业务幂等仍是本地事实，投影事务不包含外部调用。
 
 ### `execution_starts`
 
@@ -261,7 +267,7 @@ Job 和 StepRun 使用 ULID；下游幂等键由 `step_run_id + attempt` 派生�
 2. 事务内保存 Job、全部 StepRun 和 `StartConductorWorkflow` Outbox。
 3. Adapter 事务外按 Compilation mapping 启动 Conductor，以 `job_id` 为 correlationId；超时不确定时先按 correlationId 查询，不盲目重启。
 
-启动请求必须携带服务端派生的 `taskToDomain`：Personal Capability 使用 User Domain，Managed Capability 使用受控 Managed Pool Domain。Job/StepRun 是 UI 与业务 API 的查询源，Conductor 状态仅用于运维诊断。
+启动请求必须携带服务端派生的 `taskToDomain`：Personal Capability 使用 User Domain，Managed Capability 使用受控 Managed Pool Domain。Conductor是运行状态权威；Job/StepRun提供权限过滤后的业务读模型，不能以缓存终态阻止引擎状态刷新。
 
 ### PollWorkerTask / HeartbeatWorkerTask
 
@@ -280,9 +286,9 @@ Job 和 StepRun 使用 ULID；下游幂等键由 `step_run_id + attempt` 派生�
 
 ### ApplyStepResult
 
-1. 以 event_id 和 downstream_task_id 去重，过期 attempt 直接忽略。
-2. 更新当前 StepRun；需要选候选时进入 needs_confirm，否则记录 output_resource_id。
-3. 解锁后继 StepRun 或汇总 Job 终态，同时写下一步 Outbox。
+结果按精确Conductor Task与生成身份更新读模型，不解锁后继或决定Job完成。后继调度与Workflow终态由Conductor负责；资源登记在引擎调度的Finalize Worker中完成，查询不产生资源副作用。
+
+Finalize以成功invoke的Task ID派生Generation Result键，在Materials幂等登记后才报告原Finalize Task完成。它不写Job/StepRun状态；查询仅投影该Task返回的真实Generated Asset ID，不再次Upsert，不制造result_占位身份。登记重放、新轮独立产物与取消晚到资产遵守Materials的既有幂等边界。
 
 ### ConfirmStepRun / RegenerateStepRun
 

@@ -13,10 +13,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	texttemplate "text/template"
 	"time"
 
+	capabilitydomain "media_agent/media_workflow/biz/domain/capability"
 	templatedomain "media_agent/media_workflow/biz/domain/template"
 )
 
@@ -32,6 +34,8 @@ type config struct {
 	bearerToken       string
 	archiveWorkflowID string
 	dryRun            bool
+	imageCapability   string
+	videoCapability   string
 }
 
 type client struct {
@@ -50,18 +54,23 @@ type templateRecord struct {
 	PromptBody        string                           `json:"prompt_body"`
 	OutputAssetKind   string                           `json:"output_asset_kind"`
 	CapabilityKey     string                           `json:"capability_key"`
+	CapabilityVersion int                              `json:"capability_version"`
 	InvocationMapping templatedomain.InvocationMapping `json:"invocation_mapping"`
 	Status            int                              `json:"status"`
 }
 
 type templateSpec struct {
-	Key             string
-	Name            string
-	Prompt          string
-	OutputAssetKind string
-	CapabilityKey   string
-	Slots           []map[string]any
-	Invocation      map[string]any
+	Key               string
+	Name              string
+	Prompt            string
+	OutputAssetKind   string
+	CapabilityKey     string
+	CapabilityVersion int
+	Platform          string
+	GenerationMethod  string
+	GenerationType    string
+	Slots             []map[string]any
+	Invocation        map[string]any
 }
 
 func main() {
@@ -76,6 +85,8 @@ func main() {
 	flag.StringVar(&cfg.archiveWorkflowID, "archive-workflow-id", "", "新 Workflow 发布成功后归档旧联调 Workflow ID")
 	promptDir := flag.String("prompt-dir", env("GPT_IMAGE2_PROMPT_DIR", "/home/tao/code/github/gpt_image2/prompts"), "gpt_image2 提示词目录")
 	flag.BoolVar(&cfg.dryRun, "dry-run", false, "只输出迁移定义")
+	flag.StringVar(&cfg.imageCapability, "image-capability", env("MEDIA_SAMPLE_IMAGE_CAPABILITY", ""), "显式Provider生图Capability key@version；须与视频能力一起提供")
+	flag.StringVar(&cfg.videoCapability, "video-capability", env("MEDIA_SAMPLE_VIDEO_CAPABILITY", ""), "显式Provider生视频Capability key@version；不提供时保留旧fixture模式")
 	flag.Parse()
 	cfg.baseURL = strings.TrimRight(cfg.baseURL, "/")
 	if cfg.sessionCookie == "" && cfg.sessionStatePath != "" {
@@ -90,6 +101,9 @@ func main() {
 	}
 
 	specs, err := fixtureTemplates(*promptDir)
+	if err == nil && (cfg.imageCapability != "" || cfg.videoCapability != "") {
+		specs, err = providerFixtureTemplates(specs, cfg.imageCapability, cfg.videoCapability)
+	}
 	if err != nil {
 		log.Fatalf("读取 gpt_image2 提示词: %v", err)
 	}
@@ -211,6 +225,13 @@ func fixtureTemplates(promptDir string) ([]templateSpec, error) {
 }
 
 func (c *client) createAndPublishTemplate(ctx context.Context, spec templateSpec) (resourceRef, error) {
+	version, platform, method, kind := spec.CapabilityVersion, spec.Platform, spec.GenerationMethod, spec.GenerationType
+	if version == 0 {
+		version = 1
+	}
+	if platform == "" {
+		platform, method, kind = "client", spec.CapabilityKey, "media_ai_fixture"
+	}
 	var listed struct {
 		Items []templateRecord `json:"items"`
 	}
@@ -221,9 +242,9 @@ func (c *client) createAndPublishTemplate(ctx context.Context, spec templateSpec
 	payload := map[string]any{
 		"name": spec.Name, "description": "从 media_ai scripts/workflow-cli 迁移的单样本联调模板",
 		"prompt_body": spec.Prompt, "inputs": spec.Slots, "output_asset_kind": spec.OutputAssetKind,
-		"platform": "client", "gen_way": spec.CapabilityKey, "gen_type": "media_ai_fixture",
+		"platform": platform, "gen_way": method, "gen_type": kind,
 		"needs_confirm": false, "candidate_count": 1,
-		"capability_key": spec.CapabilityKey, "capability_version": 1, "invocation_mapping": spec.Invocation,
+		"capability_key": spec.CapabilityKey, "capability_version": version, "invocation_mapping": spec.Invocation,
 	}
 	for _, existing := range listed.Items {
 		if existing.Name != spec.Name {
@@ -232,7 +253,7 @@ func (c *client) createAndPublishTemplate(ctx context.Context, spec templateSpec
 		if existing.Status == 3 {
 			return resourceRef{}, fmt.Errorf("Template %q 已归档，不能复用", spec.Name)
 		}
-		if existing.PromptBody == spec.Prompt && existing.OutputAssetKind == spec.OutputAssetKind && existing.CapabilityKey == spec.CapabilityKey && sameInvocationMapping(existing.InvocationMapping, spec.Invocation) {
+		if existing.PromptBody == spec.Prompt && existing.OutputAssetKind == spec.OutputAssetKind && existing.CapabilityKey == spec.CapabilityKey && (existing.CapabilityVersion == version || (spec.Platform == "" && existing.CapabilityVersion == 0)) && sameInvocationMapping(existing.InvocationMapping, spec.Invocation) {
 			if existing.Status == 1 {
 				if err := c.json(ctx, http.MethodPost, "/api/v1/templates/"+url.PathEscape(existing.ID)+"/publish", nil, nil); err != nil {
 					return resourceRef{}, err
@@ -368,7 +389,7 @@ func (c *client) json(ctx context.Context, method, endpoint string, payload, res
 		return err
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("%s %s: HTTP %d: %s", method, endpoint, response.StatusCode, strings.TrimSpace(string(responseBody)))
+		return fmt.Errorf("%s %s: HTTP %d", method, endpoint, response.StatusCode)
 	}
 	if result != nil && len(responseBody) > 0 {
 		if err := json.Unmarshal(responseBody, result); err != nil {
@@ -376,6 +397,48 @@ func (c *client) json(ctx context.Context, method, endpoint string, payload, res
 		}
 	}
 	return nil
+}
+
+// Explicit provider selection creates distinct template names and keeps old
+// published business-capability versions intact. This sample maps two image
+// inputs in each image step, and one first frame in its video step.
+func providerFixtureTemplates(legacy []templateSpec, imageRef, videoRef string) ([]templateSpec, error) {
+	parse := func(ref string, video bool) (string, int, string, string, string, error) {
+		parts := strings.Split(ref, "@")
+		if len(parts) != 2 {
+			return "", 0, "", "", "", errors.New("both explicit Provider capability references are required")
+		}
+		version, err := strconv.Atoi(parts[1])
+		key := strings.Split(parts[0], ".")
+		if err != nil || version <= 0 || version > 2147483647 || len(key) != 3 {
+			return "", 0, "", "", "", errors.New("invalid Provider capability reference")
+		}
+		method, kind := capabilitydomain.GenerationMethod(key[1]), capabilitydomain.GenerationType(key[2])
+		canonical, err := capabilitydomain.ContractKey(key[0], method, kind, capabilitydomain.ExecutionTargetPersonalWorker)
+		if err != nil || canonical != parts[0] || (!video && (method != capabilitydomain.ImageToImage || kind != capabilitydomain.MultiImagePrompt)) || (video && method != capabilitydomain.ImageToVideo) {
+			return "", 0, "", "", "", errors.New("Provider capability does not match sample image/video mapping")
+		}
+		return canonical, version, key[0], key[1], key[2], nil
+	}
+	imageKey, imageVersion, imagePlatform, imageMethod, imageKind, err := parse(imageRef, false)
+	if err != nil {
+		return nil, err
+	}
+	videoKey, videoVersion, videoPlatform, videoMethod, videoKind, err := parse(videoRef, true)
+	if err != nil {
+		return nil, err
+	}
+	result := append([]templateSpec(nil), legacy...)
+	for i := range result {
+		spec := &result[i]
+		spec.CapabilityKey, spec.CapabilityVersion, spec.Platform, spec.GenerationMethod, spec.GenerationType = imageKey, imageVersion, imagePlatform, imageMethod, imageKind
+		if spec.Key == "video" {
+			spec.CapabilityKey, spec.CapabilityVersion, spec.Platform, spec.GenerationMethod, spec.GenerationType = videoKey, videoVersion, videoPlatform, videoMethod, videoKind
+		}
+		spec.Name += " · " + spec.CapabilityKey + "@" + strconv.Itoa(spec.CapabilityVersion)
+		spec.Invocation = map[string]any{"prompt": spec.Invocation["prompt"], "images": spec.Invocation["resources"]}
+	}
+	return result, nil
 }
 
 func env(name, fallback string) string {

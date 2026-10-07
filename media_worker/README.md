@@ -2,6 +2,47 @@
 
 客户端 Capability Worker。它只访问统一网关，不配置或访问 Conductor。
 
+## 新 Provider 契约联调
+
+新样本使用 `MEDIA_WORKER_PROFILE=provider_fixture`，复用原注册、轮询、心跳和结果回写，不执行 `media_render_template_v1` 或 Finalize。支持 `jimeng.i2i.first_frame_prompt@1`、`jimeng.i2i.multi_image_prompt@1`、`doubao.i2v.first_frame_prompt@1`、`doubao.i2v.multi_image_prompt@1`。这是项目 mock 协议，不是已接入真实模型，也不证明豆包原生 API 的多图模式。
+
+先创建单个测试 Job，再用其精确 ID 创建私有配置 `media_worker/.fixture.local.json`（0600，已忽略），通过 `MEDIA_WORKER_FIXTURE_CONFIG` 指定路径。配置示意：
+
+```json
+{
+  "tasks": [
+    {
+      "job_id": "<本次测试JobID>",
+      "step_key": "model_image",
+      "capability_key": "jimeng.i2i.multi_image_prompt",
+      "capability_version": 1,
+      "result_urls": ["https://storage.example/<本次企业已上传模特图对象>"]
+    },
+    {
+      "job_id": "<同一测试JobID>",
+      "step_key": "style_image",
+      "capability_key": "jimeng.i2i.multi_image_prompt",
+      "capability_version": 1,
+      "result_urls": ["https://storage.example/<本次企业已上传定妆图对象>"]
+    }
+  ]
+}
+```
+
+同一生图能力按精确 Job/Step 返回不同结果；输入 prompt 已在服务端 Render，images 是按映射顺序交付的数组。每条绑定须有1–8个不同存储对象的结果 URL，多候选仍走用户审批。未知 Job/Step、版本不符、内部任务、缺失prompt、首帧传入多张图片均拒绝，不回退旧固定样本。启动时仅注册配置中使用的能力；`MEDIA_WORKER_CAPABILITIES` 可进一步缩小，但不能扩大。不能混用旧的 `MEDIA_WORKER_FIXTURE_*_RESULT_URL(S)` 覆盖变量。
+
+统一网关/Worker Token配置沿用下文；从仓库根目录运行：
+
+```bash
+export MEDIA_WORKER_PROFILE=provider_fixture
+export MEDIA_WORKER_FIXTURE_CONFIG="$PWD/media_worker/.fixture.local.json"
+go -C media_worker run ./cmd/media_worker
+```
+
+配置文件需在轮询前写好，运行期间不修改。仍须先审计该用户的整个待执行队列：当前poll按Capability而非Job筛选，Job/Step绑定不是服务器队列隔离机制。不要让本次fixture领取其他用户任务；匹配不到的任务会返回测试失败。结果签名URL可能过期，实际联调前须通过Materials重新解析；不要输出或提交配置内容。失败注入沿用下文fixture参数，计数仍仅保存在当前进程中。
+
+## 旧契约兼容联调
+
 联调示例：
 
 测试Worker凭据已通过公开API签发，保存在本目录被Git忽略的`.env`（0600）。它与User接口测试Token不同，绑定稳定Worker身份和企业；不要复制User Token冒充Worker。需要新增身份/凭据时，先用User API Token执行CLI：

@@ -376,6 +376,23 @@ func (s *Service) validateCapability(ctx context.Context, key string, version in
 	if err != nil {
 		return fmt.Errorf("capability %s@%d is not published: %w", key, version, err)
 	}
+	if capability.OutputMediaType != "" {
+		if s.kindLookup == nil {
+			return errors.New("asset kind lookup unavailable")
+		}
+		kinds, missing, err := s.kindLookup.BatchGet(ctx, []string{outputAssetKind})
+		if err != nil {
+			return fmt.Errorf("lookup output asset kind: %w", err)
+		}
+		kind := kinds[outputAssetKind]
+		if len(missing) != 0 || kind == nil || kind.ResourceType != "ASSET" || (kind.Status != "SYSTEM" && kind.Status != "ENABLED") {
+			return errors.New("output asset kind unavailable")
+		}
+		if capabilitydomain.MediaType(kind.MediaType) != capability.OutputMediaType {
+			return fmt.Errorf("template output media %q does not match capability %q", kind.MediaType, capability.OutputMediaType)
+		}
+		return nil
+	}
 	if capability.OutputAssetKind != outputAssetKind {
 		return fmt.Errorf("capability %s@%d output_asset_kind=%q, template uses %q", key, version, capability.OutputAssetKind, outputAssetKind)
 	}

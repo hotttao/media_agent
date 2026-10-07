@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"media_agent/media_workflow/biz/shared/taskerror"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -137,6 +139,9 @@ func (c *MaterialsClient) UpsertGeneratedAsset(ctx context.Context, req *UpsertG
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != http.StatusRequestTimeout && resp.StatusCode != http.StatusTooManyRequests {
+			return "", taskerror.Permanent("materials_registration_rejected")
+		}
 		return "", fmt.Errorf("materials UpsertGeneratedAsset: status %d", resp.StatusCode)
 	}
 	var out struct {
@@ -169,8 +174,10 @@ type ImportedGeneratedAsset struct {
 }
 
 type ResolvedStorageObject struct {
-	URL       string `json:"url"`
-	ExpiresAt int64  `json:"expires_at"`
+	URL         string `json:"url"`
+	ExpiresAt   int64  `json:"expires_at"`
+	ContentType string `json:"content_type"`
+	SizeBytes   int64  `json:"size_bytes"`
 }
 
 // ResolveInternalObject exchanges a stable, organization-scoped Object Path

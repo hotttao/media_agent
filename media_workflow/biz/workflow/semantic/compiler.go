@@ -22,9 +22,12 @@ const (
 )
 
 type CapabilityInput struct {
-	Name     string
-	Type     ValueType
-	Required bool
+	Name      string
+	Type      ValueType
+	Required  bool
+	MediaType capabilitydomain.MediaType
+	MinItems  int
+	MaxItems  int
 }
 
 type CapabilitySnapshot struct {
@@ -35,12 +38,17 @@ type CapabilitySnapshot struct {
 	ManagedPoolKey   string
 	Inputs           []CapabilityInput
 	OutputAssetKind  string
+	Provider         string
+	GenerationMethod capabilitydomain.GenerationMethod
+	GenerationType   capabilitydomain.GenerationType
+	OutputMediaType  capabilitydomain.MediaType
 }
 
 type TemplateSlot struct {
-	Name     string
-	Resource bool
-	Required bool
+	Name      string
+	Resource  bool
+	Required  bool
+	MediaType capabilitydomain.MediaType
 }
 
 type TemplateSnapshot struct {
@@ -49,6 +57,7 @@ type TemplateSnapshot struct {
 	Body              string
 	Inputs            []TemplateSlot
 	OutputAssetKind   string
+	OutputMediaType   capabilitydomain.MediaType
 	CapabilityKey     string
 	CapabilityVersion int
 	Invocation        templatedomain.InvocationMapping
@@ -107,7 +116,11 @@ func Compile(wf workflowdomain.Workflow, snapshots Snapshots) (executable.Execut
 		if !ok {
 			return executable.ExecutableWorkflowIR{}, fmt.Errorf("step %q capability %s@%d not found", step.Key, tpl.CapabilityKey, tpl.CapabilityVersion)
 		}
-		if tpl.OutputAssetKind != capability.OutputAssetKind {
+		if capability.OutputMediaType != "" {
+			if !capability.OutputMediaType.Valid() || tpl.OutputMediaType != capability.OutputMediaType {
+				return executable.ExecutableWorkflowIR{}, fmt.Errorf("step %q output media type does not match capability", step.Key)
+			}
+		} else if tpl.OutputAssetKind != capability.OutputAssetKind {
 			return executable.ExecutableWorkflowIR{}, fmt.Errorf("step %q output asset kind %q does not match capability %q", step.Key, tpl.OutputAssetKind, capability.OutputAssetKind)
 		}
 		if err := validateExecutionTarget(capability); err != nil {
@@ -125,6 +138,16 @@ func Compile(wf workflowdomain.Workflow, snapshots Snapshots) (executable.Execut
 		if err := validateInvocation(tpl.Invocation, slots, capability.Inputs); err != nil {
 			return executable.ExecutableWorkflowIR{}, fmt.Errorf("step %q invocation mapping: %w", step.Key, err)
 		}
+		var frozenInputs []capabilitydomain.Input
+		frozenProvider, frozenMethod, frozenType := "", "", ""
+		if capability.OutputMediaType != "" {
+			frozenProvider = capability.Provider
+			frozenMethod = string(capability.GenerationMethod)
+			frozenType = string(capability.GenerationType)
+			for _, input := range capability.Inputs {
+				frozenInputs = append(frozenInputs, capabilitydomain.Input{Name: input.Name, Type: capabilitydomain.InputType(input.Type), Required: input.Required, MediaType: input.MediaType, MinItems: input.MinItems, MaxItems: input.MaxItems})
+			}
+		}
 
 		ir.Steps = append(ir.Steps, executable.ExecutableStepIR{
 			Key: step.Key, Order: step.Order, DependsOn: dependencies,
@@ -133,6 +156,8 @@ func Compile(wf workflowdomain.Workflow, snapshots Snapshots) (executable.Execut
 			Capability: executable.CapabilityIR{
 				Key: capability.Key, Version: capability.Version, ConductorTaskDef: capability.ConductorTaskDef,
 				ExecutionTarget: string(capability.ExecutionTarget), ManagedPoolKey: capability.ManagedPoolKey,
+				Provider: frozenProvider, GenerationMethod: frozenMethod, GenerationType: frozenType,
+				OutputMediaType: string(capability.OutputMediaType), Inputs: frozenInputs,
 			},
 			Invocation: cloneMapping(tpl.Invocation), OutputAssetKind: tpl.OutputAssetKind,
 			ApprovalPolicy:   string(step.ApprovalPolicy),
@@ -210,6 +235,10 @@ func compileBindings(step workflowdomain.Step, slots map[string]TemplateSlot, se
 func validateInvocation(mapping templatedomain.InvocationMapping, slots map[string]TemplateSlot, inputs []CapabilityInput) error {
 	declared := make(map[string]struct{}, len(inputs))
 	for _, input := range inputs {
+		constraint := capabilitydomain.Input{Type: capabilitydomain.InputType(input.Type), MediaType: input.MediaType, MinItems: input.MinItems, MaxItems: input.MaxItems}
+		if !constraint.ValidMediaConstraint() {
+			return fmt.Errorf("input %q has invalid media constraints", input.Name)
+		}
 		declared[input.Name] = struct{}{}
 		expr, ok := mapping[input.Name]
 		if !ok {
@@ -224,6 +253,20 @@ func validateInvocation(mapping templatedomain.InvocationMapping, slots map[stri
 		}
 		if actual != input.Type {
 			return fmt.Errorf("input %q expects %s, got %s", input.Name, input.Type, actual)
+		}
+		if actual == TypeResourceList && !constraint.AcceptsResourceCount(len(expr.Items)) {
+			return fmt.Errorf("input %q resource count violates capability limits", input.Name)
+		}
+		if input.MediaType != "" {
+			items := []templatedomain.InvocationExpression{expr}
+			if actual == TypeResourceList {
+				items = expr.Items
+			}
+			for _, item := range items {
+				if slots[item.Slot].MediaType != input.MediaType {
+					return fmt.Errorf("input %q slot %q media type does not match capability", input.Name, item.Slot)
+				}
+			}
 		}
 	}
 	for name := range mapping {

@@ -89,6 +89,9 @@ func TestS3ClientPutIsIdempotentAndPresigns(t *testing.T) {
 	if resolved.ExpiresAt <= time.Now().Unix() {
 		t.Fatalf("expires_at=%d is not in the future", resolved.ExpiresAt)
 	}
+	if resolved.ContentType != "image/png" || resolved.SizeBytes != 3 {
+		t.Fatal("presign did not preserve HeadObject media metadata")
+	}
 }
 
 func TestS3ClientRejectsIncompleteConfiguration(t *testing.T) {

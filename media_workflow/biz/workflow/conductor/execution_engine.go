@@ -75,15 +75,28 @@ func (e *ExecutionEngine) Get(ctx context.Context, workflowID string) (*jobdomai
 	if err != nil {
 		return nil, err
 	}
-	result := &jobdomain.EngineExecution{Status: execution.Status, Output: execution.Output}
+	result := &jobdomain.EngineExecution{WorkflowInstanceID: execution.WorkflowID, Status: execution.Status, Output: execution.Output, DefinitionName: execution.WorkflowDefinition.Name, DefinitionVersion: execution.WorkflowDefinition.Version, Input: execution.Input, TaskDomains: execution.TaskToDomain}
+	if len(execution.DefinitionJSON) > 0 {
+		decoder := json.NewDecoder(bytes.NewReader(execution.DefinitionJSON))
+		decoder.UseNumber()
+		if err := decoder.Decode(&result.Definition); err != nil {
+			return nil, errors.New("invalid Conductor execution definition")
+		}
+	}
 	for _, task := range execution.Tasks {
 		result.Tasks = append(result.Tasks, jobdomain.EngineTask{
 			Sequence: task.Sequence,
 			TaskID:   task.TaskID, TaskType: task.TaskType, ReferenceTaskName: task.ReferenceTaskName, Status: task.Status,
 			Input: task.InputData, Output: task.OutputData,
+			ScheduledTime: task.ScheduledTime, StartTime: task.StartTime, EndTime: task.EndTime, RetryCount: task.RetryCount,
+			Retried: task.Retried,
 		})
 	}
 	return result, nil
+}
+
+func (e *ExecutionEngine) RetryWorkflow(ctx context.Context, workflowID string) error {
+	return e.Client.RetryWorkflow(ctx, workflowID)
 }
 
 func (e *ExecutionEngine) CompleteTask(ctx context.Context, workflowID, taskReferenceName string, output map[string]any) error {
@@ -132,3 +145,4 @@ func (e *ExecutionEngine) UpdateCapabilityTask(ctx context.Context, result jobdo
 var _ jobdomain.WorkflowEngine = (*ExecutionEngine)(nil)
 var _ jobdomain.ExecutionStartEngine = (*ExecutionEngine)(nil)
 var _ jobdomain.CapabilityTaskEngine = (*ExecutionEngine)(nil)
+var _ jobdomain.FailureRetryEngine = (*ExecutionEngine)(nil)

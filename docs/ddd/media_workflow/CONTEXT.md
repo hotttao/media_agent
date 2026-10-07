@@ -42,9 +42,21 @@ _禁用替代词_：argument、parameter、variable。
 **Template Version（模板版本号）**:
 Template 的不可变快照，通过单调递增 version 区分，update 时新建 +1 的 version（保留旧可查询）。归 `template` domain。
 
+**Execution Retry（执行失败恢复）**:
+继续一个失败Execution中尚未成功的任务；从某个节点发起也作用于所属Execution，不表示仅重跑该节点及其下游。它不同于审批重新生成或改变输入重新开始。
+_禁用替代词_：Regeneration、Execution Start、整单重新生成。
+
 **Execution Capability（执行能力）**:
-可被生成 Worker 实现的、带版本的执行契约；声明输入 schema、唯一输出类别、Provider 路由、Conductor Task Definition 与不可变 `execution_target`。Template 只引用已发布的 `(capability_key, capability_version)`，不直接绑定临时队列名、Worker 实例或 Provider API。
+可被生成 Worker 实现的、带版本的Provider操作契约，例如Doubao生图、Doubao生视频、即梦生图；声明固定输入与技术输出媒体类型，不表示模特图、定妆图、首帧等业务用途。Template引用已发布能力并决定业务槽位、提示词映射与最终Asset Kind。
 _禁用替代词_：Conductor Task、Worker、Template
+
+**Generation Method（生成方式）**:
+Capability输入到输出的媒体转换方式，例如文生图(t2i)、图生图(i2i)、文生视频(t2v)、图生视频(i2v)；字段统一称为`generation_method`。它不表示API、网页或CLI调用手段，也不表示模特图等业务用途。
+_禁用替代词_：gen_way、Provider调用方式、业务节点名称
+
+**Generation Type（生成类型）**:
+同一生成方式下固定的输入模式，例如首帧加提示词(first_frame_prompt)、多图加提示词(multi_image_prompt)。它不表示模特图、定妆图等业务用途，也不等同于输出媒体类型。
+_禁用替代词_：Asset Kind、generation_method、业务步骤
 
 **Capability Worker（能力执行器）**:
 实现 Execution Capability 的执行组件。`personal_worker` 运行在用户环境并经 Worker Gateway API 领取 User Execution Domain；`managed_worker` 运行在 media_workflow 内部并领取 Managed Execution Domain。二者都不承担模板渲染、Workflow 编译或业务资源授权。
@@ -131,7 +143,7 @@ _禁用替代词_：Semantic Compiler
 _禁用替代词_：prepare_step、Execution Capability
 
 **Internal Execution Task（内部执行任务）**:
-由 `media_workflow` 自己拥有并执行的 Conductor 技术任务，例如模板渲染与单输出收口。它不属于 Execution Capability，也不得被下发给客户端 Media Worker。
+由 `media_workflow` 自己拥有并执行的 Conductor 技术任务，例如模板渲染、已接受产物登记与唯一输出收口。它不属于 Execution Capability，也不得被下发给客户端 Media Worker。
 _禁用替代词_：Capability Worker
 
 **Topological Wave（拓扑波次）**:
@@ -141,7 +153,7 @@ _禁用替代词_：Batch、Stage（除非专指展示层）
 ### 执行
 
 **Execution Retry Epoch（执行重试周期）**:
-同一 Execution 因失败重试进入的执行周期，用于区分重试前后的审批和状态事实；不同于用户要求重新生成的候选轮次，也不同于 Worker 消息投递次数。
+历史整次重跑记录所使用的周期标记，不用于决定当前执行能否继续或哪些节点应运行；原生失败继续不创建新的业务周期。它不同于候选生成轮次或Worker投递次数。
 _禁用替代词_：Generation、Dispatch Attempt、Review Delivery Attempt。
 
 **Generation Result（生成结果）**:

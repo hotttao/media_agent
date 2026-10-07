@@ -1,5 +1,27 @@
 # workflow_execution 变更记录
 
+## 2026-10-07 · Finalize登记先于原生Task完成
+
+登记在Conductor调度的Finalize Worker中执行，不再依赖Get/List观察。Materials同键登记重放与Conductor技术重交付相结合，返回真实资产身份/稳定对象引用；Worker不更新业务执行状态或推进DAG。内部错误区分永久契约错误与临时服务故障，后者使用原生重试策略。
+
+## 2026-10-07 · 原生Retry入口接线与缓存窗口撤出
+
+Job/Step失败继续统一POST原实例retry，已RUNNING请求只查询，响应不明确不盲重发。Worker按原实例及Task状态直接交付，不等待本地Retry提交、不使用callback=2修补缓存。保留成功结果与已通过Human决定；旧rerun周期仅为输入覆盖兼容，不代表原生恢复周期。部署全流程、Finalize登记和旧调度器退役仍待完成。
+
+## 2026-10-07 · 原生失败继续替代自建重跑恢复
+
+普通失败恢复优先原生retry，人工重新生成使用HUMAN/DO_WHILE；不再接入发送租约、冻结重置计划或证据控制层。实际编译图的并行成功旁支/失败调用继续门禁通过；原误判为失败的空poll改为同实例异步JOIN观察，不新增补偿。公开接线和input_override兼容迁移仍需验收。
+
+## 2026-10-07 · 重试只读恢复协调
+
+- 冻结可比较基线，发送前核对原快照；uncertain恢复只GET，同一流程POST最多一次。
+- witness要求新输入/原定义路由及完整Task重置，不依赖正常HTTP响应或RUNNING窗口。半写入证据等待，engine_confirmed仅交后续应用。
+
+## 2026-10-07 · 重试投递领取和发送边界
+
+- 领取与短事务标发送分离；外部Rerun只能发生在uncertain提交之后，恢复领取不产生第二次POST。
+- 所有租约写入按token和数据库有效期fencing，释放退避不改业务事实；取消后的晚到引擎清理继续独立验证。
+
 ## 2026-10-05 · 独立生成结果的跨服务登记
 
 Finalize 使用稳定结果键登记独立产物，同轮重放原 ID、新轮新 ID。Materials Asset/回执同事务，外部登记与 Execution 当前引用保存分属不同事务；登记成功而本地失败时重放原键恢复，不覆盖历史 Asset。用户已采纳该语义，替代默认覆盖方案。
@@ -137,3 +159,16 @@ Finalize 使用稳定结果键登记独立产物，同轮重放原 ID、新轮�
 ## 2026-10-06：初次启动精确对账
 
 - 唯一候选必须再读取实例、核对Definition版本/输入/Task Domain。缺字段、不同命令、重复实例不绑定/终止，不自动重发。
+# 2026-10-06 · Provider契约交付校验
+
+- 领取及重交付执行发布schema、Capability引用、参数类型/资源数量校验；新媒体参数限制企业受控对象，解析HeadObject ContentType/SizeBytes检查媒体及非空，同时刷新签名URL。
+- 客户端新增独立Provider fixture profile，以精确Job/Step配置已知结果，不按业务节点命名定义底层能力；内部Render仍由media_workflow执行。旧profile保留，不能混用覆盖参数。
+- 校验失败不创建新Dispatch；Conductor已领取任务依其超时/重试处理，不把参数拒绝当作生成结果成功。
+# 2026-10-07 · 重试窗口内延迟交付
+
+- 对已归属native Job仍failed、但原引擎实例已running的任务，核对唯一精确活动任务和完整输入后用原Task ID回调延迟2秒；不创建Dispatch、不返回媒体、不中断旁支。
+- Personal/Managed都保留身份/实例/输入约束，取消、成功、错实例和歧义不重排队。只补偿交付窗口，不代表持久Retry意图和崩溃恢复已经完成。
+# 2026-10-07 · 持久执行重试协调
+
+- 在Rerun前持久接受命令，发送前标uncertain；通过原实例的冻结标识及执行变化证据恢复，不依赖RUNNING或盲目重发。
+- 冻结计划来自Job原Compilation，应用和命令applied同事务；终态基线与引擎证据仅摘要化保存，不冻结签名URL。标识原子性及取消/晚到操作必须用真实引擎门禁验证。

@@ -112,7 +112,7 @@ func TestManagedWorkerConductorRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = api.TerminateWorkflow(context.Background(), workflowID, "isolated test cleanup") })
-	job := &model.Job{ID: jobID, Scope: "e2e", WorkflowID: name, WorkflowVersion: 1,
+	job := &model.Job{ID: jobID, OrganizationID: "e2e-org", Scope: "e2e", WorkflowID: name, WorkflowVersion: 1,
 		Input: datatypes.JSON(`{}`), Status: "running", RetryHistory: datatypes.JSON(`[]`), SubmittedBy: "e2e-owner", SubmittedAt: time.Now(), ConductorWorkflowID: workflowID}
 	if err := db.Create(job).Error; err != nil {
 		t.Fatal(err)
@@ -129,7 +129,7 @@ func TestManagedWorkerConductorRoundTrip(t *testing.T) {
 	}
 	repo := jobrepo.NewDispatchRepo(db)
 	flow := &worker_gateway.Flow{Dispatches: repo, Jobs: jobrepo.NewJobRepo(db), StepRuns: jobrepo.NewStepRunRepo(db),
-		Capabilities: capabilityrepo.NewRepo(db), Engine: &conductor.ExecutionEngine{Client: api}}
+		Capabilities: capabilityrepo.NewRepo(db), Engine: &conductor.ExecutionEngine{Client: api}, Executions: &conductor.ExecutionEngine{Client: api}}
 	runtime, err := worker_gateway.NewManagedRuntime(ctx, flow, "server-e2e", "instance-e2e", []worker_gateway.ManagedBinding{{CapabilityKey: name, CapabilityVersion: 1, PoolKey: pool}})
 	if err != nil {
 		t.Fatal(err)
@@ -242,8 +242,16 @@ func TestManagedWorkerConductorRoundTrip(t *testing.T) {
 
 type resultEngine struct {
 	jobdomain.CapabilityTaskEngine
-	fail   bool
-	result jobdomain.CapabilityTaskResult
+	fail      bool
+	result    jobdomain.CapabilityTaskResult
+	execution *jobdomain.EngineExecution
+}
+
+func (e *resultEngine) Get(context.Context, string) (*jobdomain.EngineExecution, error) {
+	if e.execution == nil {
+		return nil, errors.New("test engine snapshot unavailable")
+	}
+	return e.execution, nil
 }
 
 func (e *resultEngine) UpdateCapabilityTask(_ context.Context, result jobdomain.CapabilityTaskResult) error {

@@ -40,7 +40,7 @@ func (a *projectionAssets) UpsertGeneratedAsset(context.Context, *client.UpsertG
 	if a.after != nil {
 		a.after()
 	}
-	return "stable-generated-asset", nil
+	return "gen_stable", nil
 }
 
 type failProjectionStatus struct {
@@ -78,7 +78,7 @@ func TestExecutionProjectionAtomicPersistence(t *testing.T) {
 	}
 	makeService := func(stepRepo domain.StepRunRepo, assets *projectionAssets) *service.Service {
 		engine := projectionEngine{execution: &domain.EngineExecution{Status: "COMPLETED", Tasks: []domain.EngineTask{{
-			ReferenceTaskName: "step__image__finalize", Status: "COMPLETED", Output: map[string]any{"output_resource": map[string]any{"content": "rendered text"}},
+			ReferenceTaskName: "step__image__finalize", Status: "COMPLETED", Output: map[string]any{"output_resource_id": "gen_stable", "output_resource": map[string]any{"id": "gen_stable", "content": "rendered text"}},
 		}, {TaskID: "successful-invoke", ReferenceTaskName: "step__image__invoke", Status: "COMPLETED"}}}}
 		svc := service.NewService(jobs, stepRepo, dal.NewTxRunner(db), nil, nil, assets, nil, nil, engine)
 		svc.ConfigureReviews(jobs)
@@ -101,21 +101,23 @@ func TestExecutionProjectionAtomicPersistence(t *testing.T) {
 	}
 	fault.fail = false
 	current, restored, err := svc.Get(ctx, j.ID)
-	if err != nil || current.Status != domain.JobSucceeded || len(restored) != 1 || restored[0].OutputAssetID != "stable-generated-asset" || restored[0].Status != domain.SRSucceeded || assets.calls != 2 {
+	if err != nil || current.Status != domain.JobSucceeded || len(restored) != 1 || restored[0].OutputAssetID != "gen_stable" || restored[0].Status != domain.SRSucceeded || assets.calls != 0 {
 		t.Fatal("reconciliation did not restore persisted output")
 	}
-	if _, _, err := svc.Get(ctx, j.ID); err != nil || assets.calls != 2 {
+	if _, _, err := svc.Get(ctx, j.ID); err != nil || assets.calls != 0 {
 		t.Fatal("terminal read repeated material save")
 	}
 
 	cancelled, cancelStep := seed("cancel")
-	cancelAssets := &projectionAssets{after: func() {
-		if err := jobs.UpdateStatus(ctx, cancelled.ID, domain.JobCancelled, ""); err != nil {
-			t.Fatal("cancel setup failed")
-		}
-	}}
+	cancelAssets := &projectionAssets{}
+	if err := jobs.UpdateStatus(ctx, cancelled.ID, domain.JobCancelled, ""); err != nil {
+		t.Fatal(err)
+	}
 	if _, _, err := makeService(steps, cancelAssets).Get(ctx, cancelled.ID); err != nil {
-		t.Fatal("late cancellation projection failed")
+		t.Fatal("cancelled projection failed")
+	}
+	if cancelAssets.calls != 0 {
+		t.Fatal("cancelled query registered an asset")
 	}
 	current, err = jobs.Get(ctx, cancelled.ID)
 	persisted, stepErr := steps.Get(ctx, cancelStep.ID)
@@ -123,7 +125,7 @@ func TestExecutionProjectionAtomicPersistence(t *testing.T) {
 		t.Fatal("late finalizer revived cancelled aggregate")
 	}
 
-	for _, boundary := range []string{"before_registration", "during_registration"} {
+	for _, boundary := range []string{"before_query", "after_snapshot"} {
 		regenerating, regenerateStep := seed("regenerate_" + boundary)
 		candidates := []domain.Candidate{{Content: "old result"}}
 		if steps.UpdateCandidates(ctx, regenerateStep.ID, candidates) != nil || steps.UpdateStatus(ctx, regenerateStep.ID, domain.SRNeedConfirm, nil) != nil {
@@ -144,23 +146,21 @@ func TestExecutionProjectionAtomicPersistence(t *testing.T) {
 			}
 		}
 		assetPort := &projectionAssets{}
-		if boundary == "before_registration" {
+		if boundary == "before_query" {
 			regenerate()
-		} else {
-			assetPort.after = regenerate
 		}
 		oldEngine := projectionEngine{execution: &domain.EngineExecution{Status: "RUNNING", Tasks: []domain.EngineTask{
 			{TaskID: "old-success", ReferenceTaskName: taskref.Reference("image", "invoke") + "__1", Status: "COMPLETED"},
-			{TaskID: "old-finalize", ReferenceTaskName: "step__image__finalize", Status: "COMPLETED", Output: map[string]any{"output_resource": map[string]any{"content": "old result"}}},
+			{TaskID: "old-finalize", ReferenceTaskName: "step__image__finalize", Status: "COMPLETED", Output: map[string]any{"output_resource_id": "gen_old", "output_resource": map[string]any{"id": "gen_old", "content": "old result"}}},
 		}}}
+		if boundary == "after_snapshot" {
+			oldEngine.afterRead = regenerate
+		}
 		regenerateSvc := service.NewService(jobs, steps, dal.NewTxRunner(db), nil, nil, assetPort, nil, nil, oldEngine)
 		regenerateSvc.ConfigureReviews(jobs)
 		current, _, err = regenerateSvc.Get(ctx, regenerating.ID)
 		persisted, stepErr = steps.Get(ctx, regenerateStep.ID)
 		wantCalls := 0
-		if boundary == "during_registration" {
-			wantCalls = 1
-		}
 		if err != nil || stepErr != nil || current.Status != domain.JobRunning || current.RetryCount != 0 || persisted.Status != domain.SRClaimed || persisted.OutputAssetID != "" || assetPort.calls != wantCalls {
 			t.Fatal("persisted regeneration boundary allowed old result reattachment")
 		}
@@ -212,7 +212,7 @@ func TestExecutionProjectionAtomicPersistence(t *testing.T) {
 		retrying, retryStep := seed("retry_snapshot_" + phase)
 		assetPort := &projectionAssets{}
 		task := domain.EngineTask{TaskID: "old-task", ReferenceTaskName: "step__image__" + phase, Status: "COMPLETED",
-			Output: map[string]any{"prompt": "old prompt", "candidates": []domain.Candidate{{Content: "old candidate"}}, "output_resource": map[string]any{"content": "old result"}},
+			Output: map[string]any{"prompt": "old prompt", "candidates": []domain.Candidate{{Content: "old candidate"}}, "output_resource_id": "gen_old", "output_resource": map[string]any{"id": "gen_old", "content": "old result"}},
 			Input:  map[string]any{"candidates": []domain.Candidate{{Content: "old candidate"}}},
 		}
 		if phase == "approval" {

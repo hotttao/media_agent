@@ -29,23 +29,25 @@ func main() {
 	defer cancel()
 
 	renderHandler := render_task.Handler{}
-	finalizeHandler := finalize_task.Handler{}
 	db, err := gorm.Open(postgres.Open(os.Getenv("POSTGRES_DSN")), &gorm.Config{})
 	if err != nil {
-		log.Fatalf("connect history restore database: %v", err)
+		log.Fatal("internal worker database connection unavailable")
 	}
 	materialsURL := os.Getenv("MEDIA_MATERIALS_URL")
 	if materialsURL == "" {
-		log.Fatal("MEDIA_MATERIALS_URL is required for historical restore")
+		log.Fatal("MEDIA_MATERIALS_URL is required for internal execution tasks")
 	}
 	restoreHandler := restore_task.Handler{
 		Jobs: job.NewJobRepo(db), Steps: job.NewStepRunRepo(db), Assets: client.NewMaterialsClient(materialsURL),
 	}
+	api := conductor.NewClient(conductorURL)
+	finalizeHandler := finalize_task.Handler{Jobs: job.NewJobRepo(db), Steps: job.NewStepRunRepo(db),
+		Executions: &conductor.ExecutionEngine{Client: api}, Assets: client.NewMaterialsClient(materialsURL), StorageOrigin: os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"), StorageBucket: os.Getenv("MEDIA_STORAGE_BUCKET")}
 	runner := conductor.Runner{
-		Client: conductor.NewClient(conductorURL), WorkerID: workerID,
+		Client: api, WorkerID: workerID,
 		Handlers: map[string]conductor.Handler{
 			render_task.TaskDefinitionName:   conductor.JSONHandler(renderHandler.Execute),
-			finalize_task.TaskDefinitionName: conductor.JSONHandler(finalizeHandler.Execute),
+			finalize_task.TaskDefinitionName: conductor.JSONHandlerContext(finalizeHandler.Execute),
 			restore_task.TaskDefinitionName:  conductor.JSONHandlerContext(restoreHandler.Execute),
 		},
 	}

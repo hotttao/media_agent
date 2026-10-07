@@ -84,7 +84,7 @@ func projectionFixture() (*Service, *mockJobRepo, *mockStepRunRepo, *mockWorkflo
 	jobs.jobs[sr.JobID] = &domain.Job{ID: sr.JobID, WorkflowID: "wf1", Status: domain.JobRunning, ConductorWorkflowID: "execution"}
 	jobs.stepRuns[sr.JobID] = []*domain.StepRun{sr}
 	engine := &mockWorkflowEngine{execution: &domain.EngineExecution{Status: "COMPLETED", Tasks: []domain.EngineTask{{
-		ReferenceTaskName: "step__s1__finalize", Status: "COMPLETED", Output: map[string]any{"output_resource": map[string]any{"content": "result"}},
+		ReferenceTaskName: "step__s1__finalize", Status: "COMPLETED", Output: map[string]any{"output_resource_id": "gen_generated", "output_resource": map[string]any{"id": "gen_generated", "content": "result"}},
 	}, {TaskID: "successful-invoke", ReferenceTaskName: "step__s1__invoke", Status: "COMPLETED"}}}}
 	svc.engine = engine
 	return svc, jobs, steps, engine, sr
@@ -92,16 +92,16 @@ func projectionFixture() (*Service, *mockJobRepo, *mockStepRunRepo, *mockWorkflo
 
 func TestFinalizePersistenceFailureNeverCompletesJob(t *testing.T) {
 	failure := errors.New("injected persistence failure")
-	for _, stage := range []string{"asset", "empty_identity", "output", "status"} {
+	for _, stage := range []string{"missing_identity", "empty_identity", "output", "status"} {
 		t.Run(stage, func(t *testing.T) {
-			svc, jobs, steps, _, sr := projectionFixture()
+			svc, jobs, steps, engine, sr := projectionFixture()
 			assets := &projectionAssetSaver{id: "generated"}
 			repo := &projectionStepRepo{mockStepRunRepo: steps}
 			switch stage {
-			case "asset":
-				assets.err = failure
+			case "missing_identity":
+				delete(engine.execution.Tasks[0].Output, "output_resource_id")
 			case "empty_identity":
-				assets.id = " "
+				engine.execution.Tasks[0].Output["output_resource_id"] = " "
 			case "output":
 				repo.outputErr = failure
 			case "status":
@@ -114,12 +114,14 @@ func TestFinalizePersistenceFailureNeverCompletesJob(t *testing.T) {
 			if jobs.jobs[sr.JobID].Status != domain.JobRunning || sr.Status == domain.SRSucceeded {
 				t.Fatal("failed persistence advanced local success")
 			}
-			// A subsequent reconciliation retries the stable upsert and finishes.
-			assets.id, assets.err, repo.outputErr, repo.statusErr = "generated", nil, nil, nil
+			// Restore a registered engine output or the local projection write;
+			// queries never register an asset themselves.
+			engine.execution.Tasks[0].Output["output_resource_id"] = "gen_generated"
+			repo.outputErr, repo.statusErr = nil, nil
 			if err := svc.reconcileConductor(context.Background(), jobs.jobs[sr.JobID]); err != nil {
 				t.Fatal(err)
 			}
-			if jobs.jobs[sr.JobID].Status != domain.JobSucceeded || sr.OutputAssetID != "generated" {
+			if jobs.jobs[sr.JobID].Status != domain.JobSucceeded || sr.OutputAssetID != "gen_generated" || assets.calls != 0 {
 				t.Fatal("persistence recovery did not complete")
 			}
 		})
@@ -158,14 +160,14 @@ func TestNativeFinalizeDoesNotCompleteRunningEngine(t *testing.T) {
 	}
 }
 
-func TestFinalizeDoesNotReviveCancellationDuringAssetSave(t *testing.T) {
-	svc, jobs, _, _, sr := projectionFixture()
-	svc.materials = &projectionAssetSaver{id: "generated", after: func() { jobs.jobs[sr.JobID].Status = domain.JobCancelled }}
+func TestLateFinalizeSnapshotDoesNotReviveCancellation(t *testing.T) {
+	svc, jobs, _, engine, sr := projectionFixture()
+	svc.engine = delayedProjectionEngine{WorkflowEngine: engine, afterRead: func() { jobs.jobs[sr.JobID].Status = domain.JobCancelled }}
 	if err := svc.reconcileConductor(context.Background(), jobs.jobs[sr.JobID]); err != nil {
 		t.Fatal(err)
 	}
 	if jobs.jobs[sr.JobID].Status != domain.JobCancelled || sr.Status == domain.SRSucceeded || sr.OutputAssetID != "" {
-		t.Fatal("late asset save revived a cancelled job")
+		t.Fatal("late projection revived cancellation")
 	}
 }
 
@@ -284,12 +286,12 @@ func TestRetrySupersedesInFlightExecutionSnapshot(t *testing.T) {
 	}
 }
 
-func TestRetryDuringAssetSaveRejectsLocalFinalization(t *testing.T) {
+func TestQueryNeverTriggersAssetRegistration(t *testing.T) {
 	svc, jobs, _, _, sr := projectionFixture()
-	assets := &projectionAssetSaver{id: "old-generated", after: func() { jobs.jobs[sr.JobID].RetryCount++ }}
+	assets := &projectionAssetSaver{id: "unexpected", after: func() { jobs.jobs[sr.JobID].RetryCount++ }}
 	svc.materials = assets
 	current, _, err := svc.Get(context.Background(), sr.JobID)
-	if err != nil || current.Status != domain.JobRunning || current.RetryCount != 1 || sr.Status != domain.SRClaimed || sr.OutputAssetID != "" || assets.calls != 1 {
-		t.Fatal("retry during external save allowed old result to finalize", err)
+	if err != nil || current.Status != domain.JobSucceeded || current.RetryCount != 0 || sr.OutputAssetID != "gen_generated" || assets.calls != 0 {
+		t.Fatal("query performed registration instead of pure projection", err)
 	}
 }

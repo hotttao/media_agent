@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
+
+	"media_agent/media_workflow/biz/shared/taskcontext"
+	"media_agent/media_workflow/biz/shared/taskerror"
 )
 
 type Handler func(context.Context, map[string]any) (map[string]any, error)
@@ -15,6 +19,7 @@ type Runner struct {
 	WorkerID     string
 	PollInterval time.Duration
 	Handlers     map[string]Handler
+	TaskDomains  map[string]string
 }
 
 func (r *Runner) Run(ctx context.Context) error {
@@ -32,9 +37,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		interval = 500 * time.Millisecond
 	}
 	errCh := make(chan error, len(r.Handlers))
+	workerCtx, cancelWorkers := context.WithCancel(ctx)
+	var workers sync.WaitGroup
+	defer func() { cancelWorkers(); workers.Wait() }()
 	for taskType, handler := range r.Handlers {
+		workers.Add(1)
 		go func(taskType string, handler Handler) {
-			errCh <- r.runTaskType(ctx, taskType, handler, interval)
+			defer workers.Done()
+			errCh <- r.runTaskType(workerCtx, taskType, handler, interval)
 		}(taskType, handler)
 	}
 	select {
@@ -50,8 +60,11 @@ func (r *Runner) runTaskType(ctx context.Context, taskType string, handler Handl
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		task, err := r.Client.Poll(ctx, taskType, r.WorkerID, "")
+		task, err := r.Client.Poll(ctx, taskType, r.WorkerID, r.TaskDomains[taskType])
 		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			log.Printf("internal worker poll %s: %v", taskType, err)
 			if !wait(ctx, interval) {
 				return ctx.Err()
@@ -64,16 +77,24 @@ func (r *Runner) runTaskType(ctx context.Context, taskType string, handler Handl
 			}
 			continue
 		}
-		output, executeErr := handler(ctx, task.InputData)
+		taskCtx := taskcontext.WithIdentity(ctx, taskcontext.Identity{WorkflowID: task.WorkflowInstanceID, TaskID: task.TaskID, TaskType: task.TaskType, Reference: task.ReferenceTaskName})
+		output, executeErr := handler(taskCtx, task.InputData)
 		result := TaskResult{
 			WorkflowInstanceID: task.WorkflowInstanceID, TaskID: task.TaskID, WorkerID: r.WorkerID,
 			Status: "COMPLETED", OutputData: output,
 		}
 		if executeErr != nil {
-			result.Status = "FAILED_WITH_TERMINAL_ERROR"
-			result.ReasonForIncompletion = executeErr.Error()
+			result.Status = "FAILED"
+			if taskerror.IsPermanent(executeErr) {
+				result.Status = "FAILED_WITH_TERMINAL_ERROR"
+			}
+			result.OutputData = nil
+			result.ReasonForIncompletion = taskerror.Reason(executeErr)
 		}
 		if err := r.Client.UpdateTask(ctx, result); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			log.Printf("internal worker update %s task=%s: %v", taskType, task.TaskID, err)
 		}
 	}
@@ -87,11 +108,11 @@ func JSONHandlerContext[Input any, Output any](execute func(context.Context, Inp
 	return func(ctx context.Context, raw map[string]any) (map[string]any, error) {
 		encoded, err := json.Marshal(raw)
 		if err != nil {
-			return nil, err
+			return nil, taskerror.Permanent("internal_task_input_invalid")
 		}
 		var input Input
 		if err := json.Unmarshal(encoded, &input); err != nil {
-			return nil, err
+			return nil, taskerror.Permanent("internal_task_input_invalid")
 		}
 		output, err := execute(ctx, input)
 		if err != nil {

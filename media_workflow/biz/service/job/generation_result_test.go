@@ -64,62 +64,48 @@ func (s *generationAssetSaver) UpsertGeneratedAsset(_ context.Context, req *clie
 	return "gen_" + req.ResultKey, nil
 }
 
-func TestNativeFinalizeUsesSuccessfulTaskKeyAndLatestOutput(t *testing.T) {
-	svc, jobs, steps, engine, sr := projectionFixture()
+func TestNativeFinalizeQueryPreservesExistingAssetWithoutRegistration(t *testing.T) {
+	svc, _, _, engine, sr := projectionFixture()
 	assets := &generationAssetSaver{}
 	svc.materials = assets
-	firstKey, _ := domain.GenerationResultKey("execution", sr.ID, "successful-invoke")
 	if _, _, err := svc.Get(context.Background(), sr.JobID); err != nil {
 		t.Fatal(err)
 	}
-	firstID := sr.OutputAssetID
-	if len(assets.keys) != 1 || assets.keys[0] != firstKey || firstID != "gen_"+firstKey {
-		t.Fatal("native finalize did not forward generation key")
-	}
-	// Explicit reset models the persisted retry boundary, not implementation
-	// of the engine retry itself. The stable StepRun must accept the new round.
-	jobs.jobs[sr.JobID].Status = domain.JobRunning
-	jobs.jobs[sr.JobID].RetryCount++
-	if err := steps.UpdateStatus(context.Background(), sr.ID, domain.SRClaimed, nil); err != nil {
-		t.Fatal(err)
-	}
-	if err := steps.UpdateOutput(context.Background(), sr.ID, ""); err != nil {
-		t.Fatal(err)
-	}
-	engine.execution.Tasks[1].TaskID = "new-successful-invoke"
+	first := sr.OutputAssetID
+	engine.execution.Tasks[0].Output = map[string]any{"output_resource_id": "gen_late", "output_resource": map[string]any{"id": "gen_late"}}
 	if _, _, err := svc.Get(context.Background(), sr.JobID); err != nil {
 		t.Fatal(err)
 	}
-	if len(assets.keys) != 2 || assets.keys[0] == assets.keys[1] || sr.OutputAssetID == firstID {
-		t.Fatal("new round did not move stable step to new output")
+	if len(assets.keys) != 0 || first != "gen_generated" || sr.OutputAssetID != first {
+		t.Fatal("query re-registered or replaced a successful branch")
 	}
 }
 
-func TestAmbiguousNativeFinalizeDoesNotCallMaterials(t *testing.T) {
+func TestNativeQueryProjectsRegisteredOutputWithoutRecomputingProviderExecution(t *testing.T) {
 	svc, _, _, engine, sr := projectionFixture()
 	assets := &generationAssetSaver{}
 	svc.materials = assets
 	engine.execution.Tasks = append(engine.execution.Tasks, domain.EngineTask{TaskID: "another-success", ReferenceTaskName: "step__s1__invoke", Status: "COMPLETED"})
-	if _, _, err := svc.Get(context.Background(), sr.JobID); err == nil || len(assets.keys) != 0 || sr.OutputAssetID != "" {
-		t.Fatal("ambiguous execution registered an output")
+	if _, _, err := svc.Get(context.Background(), sr.JobID); err != nil || len(assets.keys) != 0 || sr.OutputAssetID != "gen_generated" {
+		t.Fatal("query reran resource registration or provider validation", err)
 	}
 }
 
-func TestFinalizeProjectionRetryKeepsGenerationIdentity(t *testing.T) {
+func TestFinalizeProjectionRetryKeepsRegisteredAssetIdentity(t *testing.T) {
 	svc, _, steps, _, sr := projectionFixture()
 	assets := &generationAssetSaver{}
 	svc.materials = assets
 	repo := &projectionStepRepo{mockStepRunRepo: steps, outputErr: errors.New("injected local failure")}
 	svc.stepRunRepo = repo
 	if _, _, err := svc.Get(context.Background(), sr.JobID); err == nil {
-		t.Fatal("local write failure was ignored")
+		t.Fatal("projection error ignored")
 	}
 	repo.outputErr = nil
 	if _, _, err := svc.Get(context.Background(), sr.JobID); err != nil {
 		t.Fatal(err)
 	}
-	if len(assets.keys) != 2 || assets.keys[0] == "" || assets.keys[0] != assets.keys[1] || sr.OutputAssetID != "gen_"+assets.keys[0] {
-		t.Fatal("local projection retry changed accepted generation identity")
+	if len(assets.keys) != 0 || sr.OutputAssetID != "gen_generated" {
+		t.Fatal("projection registered another asset")
 	}
 }
 
@@ -133,34 +119,27 @@ func (r *generationReviewRepo) LatestReviewsByJob(context.Context, string) ([]do
 }
 func (*generationReviewRepo) LockReviewProjection(context.Context, string, string) error { return nil }
 
-func TestRegenerationReviewFencesLateFinalize(t *testing.T) {
-	for _, boundary := range []string{"before_registration", "during_registration"} {
-		t.Run(boundary, func(t *testing.T) {
+func TestRegenerationReviewFencesLateFinalizeProjection(t *testing.T) {
+	for _, timing := range []string{"before_query", "after_snapshot"} {
+		t.Run(timing, func(t *testing.T) {
 			svc, jobs, _, engine, sr := projectionFixture()
 			engine.execution.Status = "RUNNING"
 			engine.execution.Tasks[1].ReferenceTaskName = taskref.Reference(sr.StepKey, "invoke") + "__1"
 			reviews := &generationReviewRepo{}
 			svc.reviews, svc.tx = reviews, commandReviewTx{}
 			regenerate := func() {
-				reviews.reviews = []domain.ReviewDecision{{JobID: sr.JobID, StepRunID: sr.ID, ConductorWorkflowID: "execution", Generation: 1, Decision: "regenerate", ConductorTaskID: "approval-old"}}
+				reviews.reviews = []domain.ReviewDecision{{JobID: sr.JobID, StepRunID: sr.ID, ConductorWorkflowID: "execution", Generation: 1, Decision: "regenerate", ConductorTaskID: "old"}}
 			}
-			assets := &projectionAssetSaver{id: "late-generated"}
-			if boundary == "before_registration" {
+			if timing == "before_query" {
 				regenerate()
 			} else {
-				assets.after = regenerate
+				svc.engine = delayedProjectionEngine{WorkflowEngine: engine, afterRead: regenerate}
 			}
+			assets := &projectionAssetSaver{id: "unexpected"}
 			svc.materials = assets
 			current, _, err := svc.Get(context.Background(), sr.JobID)
-			if err != nil || current.Status != domain.JobRunning || sr.Status == domain.SRSucceeded || sr.OutputAssetID != "" || jobs.jobs[sr.JobID].RetryCount != 0 {
-				t.Fatal("late generation reattached after regeneration review", err)
-			}
-			wantCalls := 0
-			if boundary == "during_registration" {
-				wantCalls = 1
-			}
-			if assets.calls != wantCalls {
-				t.Fatal("incorrect registration boundary")
+			if err != nil || current.Status != domain.JobRunning || sr.Status == domain.SRSucceeded || sr.OutputAssetID != "" || jobs.jobs[sr.JobID].RetryCount != 0 || assets.calls != 0 {
+				t.Fatal("late projection changed an accepted regeneration", err)
 			}
 		})
 	}

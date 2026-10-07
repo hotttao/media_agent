@@ -67,8 +67,7 @@ func _step_runsMw() []app.HandlerFunc {
 }
 
 func _claimsteprunMw() []app.HandlerFunc {
-	// your code...
-	return nil
+	return []app.HandlerFunc{retiredLocalWorkerAPI}
 }
 
 func _step_run_idMw() []app.HandlerFunc {
@@ -77,8 +76,7 @@ func _step_run_idMw() []app.HandlerFunc {
 }
 
 func _completesteprunMw() []app.HandlerFunc {
-	// your code...
-	return nil
+	return []app.HandlerFunc{retiredLocalWorkerAPI}
 }
 
 func _confirmsteprunMw() []app.HandlerFunc {
@@ -87,8 +85,14 @@ func _confirmsteprunMw() []app.HandlerFunc {
 }
 
 func _failsteprunMw() []app.HandlerFunc {
-	// your code...
-	return nil
+	return []app.HandlerFunc{retiredLocalWorkerAPI}
+}
+
+// Retain an explicit retirement response while old generated clients still
+// name these routes. No local task pool or state mutation is reachable here.
+func retiredLocalWorkerAPI(_ context.Context, c *app.RequestContext) {
+	c.JSON(consts.StatusGone, map[string]string{"error": "local worker API retired; use the authenticated Worker Gateway"})
+	c.Abort()
 }
 
 func _regeneratesteprunMw() []app.HandlerFunc {
