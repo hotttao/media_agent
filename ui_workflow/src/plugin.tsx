@@ -18,6 +18,7 @@ import {
   registerPanel,
 } from "@/foundation/lib/plugin-host";
 import { QueryProvider } from "@/foundation/providers/query-provider";
+import { UiBoundary } from "@/foundation/providers/ui-boundary";
 import { MaterialsApp } from "@/pages/materials/app";
 import { WorkflowApp } from "@/pages/workflow/app";
 import pluginCss from "./index.css?inline";
@@ -38,7 +39,9 @@ function withQueryProvider(Comp: PanelComp): PanelComp {
   return function Panel({ workspaceId, instanceId }: PluginPanelProps) {
     return (
       <QueryProvider>
-        <Comp workspaceId={workspaceId} instanceId={instanceId} />
+        <UiBoundary>
+          <Comp workspaceId={workspaceId} instanceId={instanceId} />
+        </UiBoundary>
       </QueryProvider>
     );
   };

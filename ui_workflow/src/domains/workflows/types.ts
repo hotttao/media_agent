@@ -1,6 +1,12 @@
 /** media_workflow Workflow types. Fields per idl/media_workflow/*.proto. */
 
-export type WorkflowStatus = "draft" | "published" | "archived";
+export type WorkflowStatus =
+  | "draft"
+  | "published"
+  | "archived"
+  | "publishing"
+  | "publish_failed"
+  | "unknown";
 export type Visibility = "private" | "team" | "public";
 export type SlotBindingSource = "workflow_input" | "step_output" | "const";
 
@@ -21,6 +27,8 @@ export interface WorkflowStep {
 }
 
 export interface WorkflowInput {
+  organization_id?: string;
+  workspace_id?: string;
   scope: string;
   name: string;
   description?: string;
@@ -42,10 +50,15 @@ export interface Workflow {
   input_schema?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  created_by?: string;
+  organization_id?: string;
+  workspace_id?: string;
+  publication_status?: string;
 }
 
 export interface WorkflowListParams {
   scope?: string;
+  name?: string;
   status?: WorkflowStatus;
   page?: number;
   page_size?: number;

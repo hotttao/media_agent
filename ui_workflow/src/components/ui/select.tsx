@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { useFullscreenContainer } from "@/foundation/hooks/useFullscreenContainer";
 import { cn } from "@/foundation/lib/utils";
+import { usePortalContainer } from "./portal-context";
 
 const Select = SelectPrimitive.Root;
 
@@ -37,7 +38,10 @@ const SelectScrollUpButton = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.ScrollUpButton
     ref={ref}
-    className={cn("flex cursor-default items-center justify-center py-1", className)}
+    className={cn(
+      "flex cursor-default items-center justify-center py-1",
+      className,
+    )}
     {...props}
   >
     <ChevronUp className="h-4 w-4" />
@@ -51,21 +55,26 @@ const SelectScrollDownButton = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.ScrollDownButton
     ref={ref}
-    className={cn("flex cursor-default items-center justify-center py-1", className)}
+    className={cn(
+      "flex cursor-default items-center justify-center py-1",
+      className,
+    )}
     {...props}
   >
     <ChevronDown className="h-4 w-4" />
   </SelectPrimitive.ScrollDownButton>
 ));
-SelectScrollDownButton.displayName = SelectPrimitive.ScrollDownButton.displayName;
+SelectScrollDownButton.displayName =
+  SelectPrimitive.ScrollDownButton.displayName;
 
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
 >(({ className, children, position = "popper", ...props }, ref) => {
   const fullscreenContainer = useFullscreenContainer();
+  const portalContainer = usePortalContainer();
   return (
-    <SelectPrimitive.Portal container={fullscreenContainer}>
+    <SelectPrimitive.Portal container={portalContainer ?? fullscreenContainer}>
       <SelectPrimitive.Content
         ref={ref}
         className={cn(
@@ -117,7 +126,8 @@ interface SelectItemExtraProps {
 
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & SelectItemExtraProps
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> &
+    SelectItemExtraProps
 >(({ className, children, description, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
@@ -133,7 +143,11 @@ const SelectItem = React.forwardRef<
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-    {description && <span className="mt-0.5 text-tiny text-muted-foreground">{description}</span>}
+    {description && (
+      <span className="mt-0.5 text-tiny text-muted-foreground">
+        {description}
+      </span>
+    )}
   </SelectPrimitive.Item>
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;

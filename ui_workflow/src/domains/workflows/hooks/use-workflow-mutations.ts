@@ -20,9 +20,9 @@ export function usePublishWorkflow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => publishWorkflow(id),
-    onSuccess: (workflow) => {
+    onSuccess: (_receipt, id) => {
       qc.invalidateQueries({ queryKey: ["workflows"] });
-      qc.invalidateQueries({ queryKey: ["workflow", workflow.id] });
+      qc.invalidateQueries({ queryKey: ["workflow", id] });
     },
   });
 }
@@ -30,11 +30,16 @@ export function usePublishWorkflow() {
 export function useUpdateWorkflow() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<WorkflowInput> }) =>
-      updateWorkflow(id, patch),
-    onSuccess: (workflow) => {
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: Partial<WorkflowInput>;
+    }) => updateWorkflow(id, patch),
+    onSuccess: (_receipt, { id }) => {
       qc.invalidateQueries({ queryKey: ["workflows"] });
-      qc.invalidateQueries({ queryKey: ["workflow", workflow.id] });
+      qc.invalidateQueries({ queryKey: ["workflow", id] });
     },
   });
 }

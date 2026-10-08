@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { OryBrowserFlow, OryUiNode } from "@/foundation/lib/ory-flow";
 import { cn } from "@/foundation/lib/utils";
+import { PasswordField } from "@/foundation/components/password-field";
 
 interface OryFlowFormProps {
   kind: "login" | "registration";
@@ -86,16 +87,19 @@ export function OryFlowForm({
         const label = t(`auth.fields.${attributes.name.replaceAll(".", "_")}`, {
           defaultValue: node.meta.label?.text ?? attributes.name,
         });
+        const Field = attributes.type === "password" ? PasswordField : Input;
         return (
           <div className="space-y-2" key={`${node.group}-${attributes.name}`}>
             <Label htmlFor={id}>
               {label}
               {attributes.required ? " *" : ""}
             </Label>
-            <Input
+            <Field
               id={id}
               name={attributes.name}
-              type={attributes.type}
+              {...(attributes.type === "password"
+                ? {}
+                : { type: attributes.type })}
               defaultValue={attributes.value ?? ""}
               required={attributes.required}
               disabled={attributes.disabled || isSubmitting}

@@ -1,4 +1,5 @@
 import { api } from "@/foundation/lib/api-client";
+import { wireStatus } from "@/foundation/lib/wire-status";
 import type {
   SlotBinding,
   ValidationResult,
@@ -49,16 +50,20 @@ function toWire(input: Partial<WorkflowInput>): Record<string, unknown> {
 }
 
 function fromWire(workflow: Workflow): Workflow {
-  const wireStatus = String(workflow.status ?? "").toLowerCase();
-  const numericStatus = Number(workflow.status);
   return {
     ...workflow,
-    status:
-      numericStatus === 2 || wireStatus.includes("published")
-        ? "published"
-        : numericStatus === 3 || wireStatus.includes("archived")
-          ? "archived"
-          : "draft",
+    status: wireStatus(
+      workflow.status,
+      [
+        "unknown",
+        "draft",
+        "published",
+        "archived",
+        "publishing",
+        "publish_failed",
+      ],
+      ["wf_", "workflow_status_"],
+    ),
     steps: (workflow.steps ?? []).map((step: WorkflowStep) => {
       const rawBindings = step.slot_bindings as unknown as
         | SlotBinding[]
@@ -112,34 +117,67 @@ export async function getWorkflow(id: string): Promise<Workflow> {
   );
 }
 
-export async function createWorkflow(input: WorkflowInput): Promise<Workflow> {
-  return fromWire(
-    await api.request<Workflow>("/workflows", {
+export async function createWorkflow(
+  input: WorkflowInput,
+): Promise<{ id: string; version: number }> {
+  return api.request<{ id: string; version: number }>(
+    `/workflows${buildQuery({ scope: input.scope })}`,
+    {
       method: "POST",
       body: JSON.stringify(toWire(input)),
-    }),
+    },
   );
 }
 
 export async function updateWorkflow(
   id: string,
   patch: Partial<WorkflowInput>,
-): Promise<Workflow> {
-  return fromWire(
-    await api.request<Workflow>(`/workflows/${encodeURIComponent(id)}`, {
+): Promise<{ version: number }> {
+  return api.request<{ version: number }>(
+    `/workflows/${encodeURIComponent(id)}`,
+    {
       method: "PUT",
       body: JSON.stringify(toWire(patch)),
-    }),
+    },
   );
 }
 
 export async function validateWorkflow(
   input: WorkflowInput,
 ): Promise<ValidationResult> {
-  return api.request<ValidationResult>("/workflows/validate", {
+  const response = await api.request<
+    ValidationResult & {
+      valid?: boolean;
+      derived_edges?: ValidationResult["edges"];
+      reject_reasons?: { subject?: string; message: string }[];
+    }
+  >("/workflows/validate", {
     method: "POST",
     body: JSON.stringify(toWire(input)),
   });
+  const errors =
+    response.reject_reasons?.map((reason) => ({
+      step_key: reason.subject,
+      message: reason.message,
+    })) ??
+    response.errors ??
+    [];
+  return {
+    ...response,
+    edges: response.derived_edges ?? response.edges ?? [],
+    errors: errors.length
+      ? errors
+      : response.valid === false ||
+          (response.valid !== true &&
+            !response.errors &&
+            !response.reject_reasons)
+        ? [
+            {
+              message: "Workflow validation did not return a successful result",
+            },
+          ]
+        : [],
+  };
 }
 
 export async function archiveWorkflow(id: string): Promise<Workflow> {

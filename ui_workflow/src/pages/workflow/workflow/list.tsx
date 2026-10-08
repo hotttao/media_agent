@@ -1,161 +1,168 @@
-import { Archive, ArrowUpRight, GitBranch, Plus, Sparkles } from "lucide-react";
+import { ArrowUpRight, GitBranch, Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { useArchiveWorkflow } from "@/domains/workflows/hooks/use-workflow-mutations";
 import { useWorkflowsList } from "@/domains/workflows/hooks/use-workflows-list";
-import { cn } from "@/foundation/lib/utils";
+import type { WorkflowStatus } from "@/domains/workflows/types";
+import {
+  ResourceListLayout,
+  ListPagination,
+  ListState,
+} from "@/foundation/components/resource-list-layout";
+import { formatDetailDate } from "@/foundation/components/detail-layout";
+import { hostShim } from "@/foundation/lib/host-shim";
 
-const statusLabel = {
-  draft: "草稿",
-  published: "已发布",
-  archived: "已归档",
-} as const;
+const PAGE_SIZE = 20;
+const STATUSES: WorkflowStatus[] = [
+  "draft",
+  "publishing",
+  "publish_failed",
+  "published",
+  "archived",
+];
 
 export function WorkflowList({
   onSelect,
   onCreate,
+  instanceId,
 }: {
   onSelect: (id: string) => void;
   onCreate?: () => void;
+  instanceId: string;
 }) {
-  const { data, isLoading, isError, error } = useWorkflowsList();
-  const archiveWorkflow = useArchiveWorkflow();
-  if (isLoading)
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <Spinner className="h-5 w-5" />
-      </div>
-    );
-  if (isError)
-    return (
-      <div className="flex flex-1 items-center justify-center p-8 text-sm text-destructive">
-        无法加载工作流：{error instanceof Error ? error.message : "请求失败"}
-      </div>
-    );
-
-  const items = data?.items ?? [];
+  const { t } = useTranslation();
+  const [name, setName] = hostShim.useInstanceState(
+    instanceId,
+    "workflow_list_name",
+    () => "",
+  );
+  const [status, setStatus] = hostShim.useInstanceState<
+    WorkflowStatus | undefined
+  >(instanceId, "workflow_list_status", () => undefined);
+  const [page, setPage] = hostShim.useInstanceState(
+    instanceId,
+    "workflow_list_page",
+    () => 1,
+  );
+  const query = useWorkflowsList({
+    name: name || undefined,
+    status,
+    page,
+    page_size: PAGE_SIZE,
+  });
+  const items = query.data?.items ?? [];
   return (
-    <div className="h-full overflow-y-auto bg-gradient-to-b from-slate-50/80 to-background dark:from-slate-950/80">
-      <div className="mx-auto max-w-[1500px] p-4 sm:p-6 lg:p-8">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
-              Workflow Studio
-            </div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              工作流
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              把素材、Template、审批与生成能力组合成可复用的媒体生产流程。
-            </p>
-          </div>
-          {onCreate ? (
-            <Button onClick={onCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              新建工作流
-            </Button>
-          ) : null}
-        </div>
-        {items.length === 0 ? (
-          <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed bg-card/70 p-8 text-center">
-            <div className="rounded-2xl bg-primary/10 p-4 text-primary">
-              <GitBranch className="h-7 w-7" />
-            </div>
-            <h2 className="mt-5 text-lg font-semibold">还没有工作流</h2>
-            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-              创建第一个流程，通过可视化节点连接生成步骤。
-            </p>
-            {onCreate ? (
-              <Button className="mt-5" onClick={onCreate}>
-                开始创建
-              </Button>
-            ) : null}
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {items.map((workflow) => (
-              <article
-                key={workflow.id}
-                className="group relative overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
-              >
-                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/80 via-violet-400/70 to-cyan-400/70 opacity-0 transition group-hover:opacity-100" />
-                <div className="flex items-start justify-between gap-3">
-                  <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
+    <ResourceListLayout
+      title={t("nav.workflows")}
+      description={t("v12.workflowsHint")}
+      search={name}
+      onSearch={(value) => {
+        setName(value);
+        setPage(1);
+      }}
+      filterLabel={t("v12.filterStatus")}
+      actions={
+        onCreate ? (
+          <Button onClick={onCreate}>
+            <Plus className="h-4 w-4" />
+            {t("v12.newWorkflow")}
+          </Button>
+        ) : null
+      }
+      filters={[undefined, ...STATUSES].map((item) => (
+        <button
+          type="button"
+          key={item ?? "all"}
+          className="media-filter-option"
+          aria-pressed={status === item}
+          onClick={() => {
+            setStatus(item);
+            setPage(1);
+          }}
+        >
+          {item ? t(`v12.definitionStatus.${item}`) : t("v12.all")}
+        </button>
+      ))}
+    >
+      {query.isLoading ? (
+        <ListState loading />
+      ) : query.isError ? (
+        <ListState
+          error={query.error.message || t("v12.loadError")}
+          onRetry={() => void query.refetch()}
+        />
+      ) : items.length === 0 ? (
+        <ListState
+          empty={name || status ? t("v12.noMatches") : t("v12.emptyWorkflows")}
+        />
+      ) : (
+        <div className="space-y-3">
+          {items.map((workflow) => (
+            <article key={workflow.id} className="media-resource-row">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex min-w-0 flex-1 items-center gap-4">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent/25">
                     <GitBranch className="h-5 w-5" />
-                  </div>
-                  <span
-                    className={cn(
-                      "rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                      workflow.status === "published"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : workflow.status === "archived"
-                          ? "bg-slate-100 text-slate-600"
-                          : "bg-amber-100 text-amber-700",
-                    )}
-                  >
-                    {statusLabel[workflow.status]}
                   </span>
-                </div>
-                <button
-                  type="button"
-                  className="mt-5 block w-full text-left"
-                  onClick={() => onSelect(workflow.id)}
-                >
-                  <h2 className="line-clamp-1 text-lg font-semibold group-hover:text-primary">
-                    {workflow.name}
-                  </h2>
-                  <p className="mt-2 line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">
-                    {workflow.description || "暂无说明"}
-                  </p>
-                </button>
-                <div className="mt-5 grid grid-cols-3 gap-2 rounded-xl bg-muted/45 p-3 text-center">
-                  <Metric label="节点" value={String(workflow.steps.length)} />
-                  <Metric label="版本" value={`v${workflow.version}`} />
-                  <Metric
-                    label="输出"
-                    value={workflow.output_step_key || "—"}
-                  />
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="truncate text-xs text-muted-foreground">
-                    {workflow.scope}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {workflow.status !== "archived" ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="归档"
-                        onClick={() => archiveWorkflow.mutate(workflow.id)}
-                      >
-                        <Archive className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="查看"
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      className="text-left hover:underline"
                       onClick={() => onSelect(workflow.id)}
                     >
-                      <ArrowUpRight className="h-4 w-4" />
-                    </Button>
+                      <h2 className="text-base font-semibold">
+                        {workflow.name}
+                      </h2>
+                    </button>
+                    <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+                      {workflow.description || t("v12.noDescription")}
+                    </p>
                   </div>
                 </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="truncate text-sm font-semibold">{value}</div>
-      <div className="mt-0.5 text-[10px] text-muted-foreground">{label}</div>
-    </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs">
+                    v{workflow.version}
+                  </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs ${workflow.status === "published" ? "bg-success/10 text-success" : workflow.status === "publish_failed" ? "bg-destructive/10 text-destructive" : "bg-accent/20 text-warning"}`}
+                  >
+                    {t(`v12.definitionStatus.${workflow.status}`)}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`${t("v12.view")} ${workflow.name}`}
+                    onClick={() => onSelect(workflow.id)}
+                  >
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
+                {workflow.steps.length > 0 ? (
+                  <span>
+                    {t("v12.nodes", { count: workflow.steps.length })}
+                  </span>
+                ) : null}
+                <span>
+                  {t("v12.scope")}: {workflow.scope}
+                </span>
+                <span>
+                  {t("v12.output")}: {workflow.output_step_key || "—"}
+                </span>
+                <span>{formatDetailDate(workflow.updated_at)}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+      {!query.isError && !query.isLoading ? (
+        <ListPagination
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={query.data?.total ?? 0}
+          onPage={setPage}
+        />
+      ) : null}
+    </ResourceListLayout>
   );
 }

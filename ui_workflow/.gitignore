@@ -19,6 +19,7 @@ coverage
 # Locale files (except English, which is the default)
 src/locales/*
 !src/locales/en-US.json
+!src/locales/zh-CN.json
 
 # Editor directories and files
 

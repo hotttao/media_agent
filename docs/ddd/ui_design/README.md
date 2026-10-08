@@ -23,6 +23,8 @@ Agent Request 交互见 [agent-request-flow.md](agent-request-flow.md)。
 Workflow 选择输入并创建执行见 [workflow-execution-flow.md](workflow-execution-flow.md)。
 Workflow 可视化定义与编辑见 [workflow-authoring-flow.md](workflow-authoring-flow.md)。
 
+Penpot v1.2 的七个核心用户旅程及交互修订见 [workflow-v1.2-flow.md](workflow-v1.2-flow.md)。用户已确认设计，视觉沿用 v1.1，实施保留 Slot 接入契约。后端查询支持边界见 [对齐审查](../../review/ui_design/penpot-v1.2-backend-alignment.md)，实施见 [spec](../../spec/ui_design/workflow-v1.2.md) 与 [plan](../../plan/ui_design/workflow-v1.2.md)。
+
 ## 设计与验证
 
 | 设计对象 | 主要验证 |

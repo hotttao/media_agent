@@ -10,10 +10,20 @@ import {
   Play,
   Send,
   Trash2,
+  Settings2,
 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { JobStatusBadge } from "@/domains/jobs/components/status-badge";
 import { useJobsList } from "@/domains/jobs/hooks/use-jobs-list";
 import { getJob } from "@/domains/jobs/lib/api";
@@ -27,12 +37,8 @@ import {
 } from "@/domains/workflows/hooks/use-workflow-mutations";
 import type { WorkflowStep } from "@/domains/workflows/types";
 import { cn } from "@/foundation/lib/utils";
+import { AppStudioHeader } from "@/foundation/components/app-studio-header";
 
-const statusLabel = {
-  draft: "草稿",
-  published: "已发布",
-  archived: "已归档",
-} as const;
 const visibilityLabel = {
   private: "仅自己",
   team: "部门",
@@ -52,6 +58,7 @@ export function WorkflowShow({
   onOpenJob: (jobId: string) => void;
   onRun: () => void;
 }) {
+  const { t } = useTranslation();
   const { data: workflow, isLoading } = useWorkflow(id);
   const { data: templates } = useTemplatesList({
     scope: workflow?.scope,
@@ -71,6 +78,9 @@ export function WorkflowShow({
   const archiveWorkflow = useArchiveWorkflow();
   const publishWorkflow = usePublishWorkflow();
   const [selectedStepKey, setSelectedStepKey] = useState<string>();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [executionsOpen, setExecutionsOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   if (isLoading)
     return (
@@ -86,9 +96,9 @@ export function WorkflowShow({
     );
 
   return (
-    <div className="h-full overflow-y-auto bg-gradient-to-b from-slate-50/80 to-background dark:from-slate-950/80">
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
-        <header className="flex flex-wrap items-start justify-between gap-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <AppStudioHeader>
           <div className="flex min-w-0 items-start gap-3">
             <Button
               variant="outline"
@@ -99,7 +109,10 @@ export function WorkflowShow({
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div className="min-w-0">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="max-w-[30vw] truncate text-base font-semibold">
+                  {workflow.name}
+                </h1>
                 <span
                   className={cn(
                     "rounded-full px-2.5 py-1 text-[11px] font-semibold",
@@ -110,21 +123,30 @@ export function WorkflowShow({
                         : "bg-amber-100 text-amber-700",
                   )}
                 >
-                  {statusLabel[workflow.status]}
+                  {t(`v12.definitionStatus.${workflow.status}`)}
                 </span>
                 <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
                   v{workflow.version}
                 </span>
               </div>
-              <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
-                {workflow.name}
-              </h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                {workflow.description || "这个工作流还没有说明。"}
-              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings2 className="mr-1.5 h-4 w-4" />
+              {t("studio.settings")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setExecutionsOpen(true)}
+            >
+              {t("studio.activeExecutions", { count: activeJobs.length })}
+            </Button>
             {workflow.status === "published" ? (
               <Button onClick={onRun}>
                 <Play className="mr-2 h-4 w-4" />
@@ -145,91 +167,132 @@ export function WorkflowShow({
               编辑
             </Button>
           </div>
-        </header>
+        </AppStudioHeader>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <InfoCard
-            icon={GitBranch}
-            label="生成节点"
-            value={`${workflow.steps.length} 个`}
-          />
-          <InfoCard
-            icon={Boxes}
-            label="最终输出"
-            value={workflow.output_step_key}
-          />
-          <InfoCard
-            icon={Eye}
-            label="可见范围"
-            value={visibilityLabel[workflow.visibility]}
-          />
-          <InfoCard
-            icon={CalendarClock}
-            label="业务范围"
-            value={workflow.scope}
-          />
-        </section>
+        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("studio.settings")}</DialogTitle>
+              <DialogDescription>
+                {workflow.description || t("studio.noDescription")}
+              </DialogDescription>
+            </DialogHeader>
+            <section className="grid gap-3 sm:grid-cols-2">
+              <InfoCard
+                icon={GitBranch}
+                label="生成节点"
+                value={`${workflow.steps.length} 个`}
+              />
+              <InfoCard
+                icon={Boxes}
+                label="最终输出"
+                value={workflow.output_step_key}
+              />
+              <InfoCard
+                icon={Eye}
+                label="可见范围"
+                value={visibilityLabel[workflow.visibility]}
+              />
+              <InfoCard
+                icon={CalendarClock}
+                label="业务范围"
+                value={workflow.scope}
+              />
+            </section>
+            {workflow.status !== "archived" ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setSettingsOpen(false);
+                  setArchiveOpen(true);
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {t("studio.archive")}
+              </Button>
+            ) : null}
+          </DialogContent>
+        </Dialog>
 
-        {activeJobs.length > 0 ? (
-          <section className="rounded-2xl border border-border/70 bg-card p-5">
-            <h2 className="font-semibold">正在执行 · {activeJobs.length}</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              打开执行记录，查看每个节点的位置、结果和待确认事项。
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {activeJobs.map((job, index) => {
-                const stepRuns = activeDetails[index]?.data?.step_runs ?? [];
-                const focus =
-                  stepRuns.find((step) => step.status === "need_confirm") ??
-                  stepRuns.find(
-                    (step) =>
-                      step.status === "running" || step.status === "claimed",
-                  ) ??
-                  stepRuns.find((step) => step.status === "pending");
-                return (
-                  <button
-                    key={job.id}
-                    type="button"
-                    onClick={() => onOpenJob(job.id)}
-                    className="rounded-xl border border-border p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
-                  >
-                    <JobStatusBadge status={job.status} />
-                    <span className="mt-2 block text-sm font-medium">
-                      {focus
-                        ? `${focus.step_key} · ${focus.status === "need_confirm" ? "待确认" : focus.status === "pending" ? "等待执行" : "执行中"}`
-                        : "正在获取节点状态…"}
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {
-                        stepRuns.filter((step) => step.status === "succeeded")
-                          .length
-                      }
-                      /{stepRuns.length} 个节点已完成
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
-            <div>
-              <h2 className="font-semibold">流程拓扑</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                由 Slot Binding 推导依赖，画布不是第二份业务事实。
+        <Dialog open={executionsOpen} onOpenChange={setExecutionsOpen}>
+          <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {t("studio.activeExecutions", { count: activeJobs.length })}
+              </DialogTitle>
+              <DialogDescription>{t("studio.executionHint")}</DialogDescription>
+            </DialogHeader>
+            {activeJobs.length > 0 ? (
+              <section className="rounded-2xl border border-border/70 bg-card p-5">
+                <h2 className="font-semibold">
+                  正在执行 · {activeJobs.length}
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  打开执行记录，查看每个节点的位置、结果和待确认事项。
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {activeJobs.map((job, index) => {
+                    const stepRuns =
+                      activeDetails[index]?.data?.step_runs ?? [];
+                    const focus =
+                      stepRuns.find((step) => step.status === "need_confirm") ??
+                      stepRuns.find(
+                        (step) =>
+                          step.status === "running" ||
+                          step.status === "claimed",
+                      ) ??
+                      stepRuns.find((step) => step.status === "pending");
+                    return (
+                      <button
+                        key={job.id}
+                        type="button"
+                        onClick={() => onOpenJob(job.id)}
+                        className="rounded-xl border border-border p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+                      >
+                        <JobStatusBadge status={job.status} />
+                        <span className="mt-2 block text-sm font-medium">
+                          {focus
+                            ? `${focus.step_key} · ${focus.status === "need_confirm" ? "待确认" : focus.status === "pending" ? "等待执行" : "执行中"}`
+                            : "正在获取节点状态…"}
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {
+                            stepRuns.filter(
+                              (step) => step.status === "succeeded",
+                            ).length
+                          }
+                          /{stepRuns.length} 个节点已完成
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : (
+              <p className="py-6 text-sm text-muted-foreground">
+                {t("studio.noActiveExecutions")}
               </p>
-            </div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground">
-              <Play className="h-3.5 w-3.5" />
-              FlowGram
-            </div>
-          </div>
-          <div className="grid min-h-[540px] xl:grid-cols-[minmax(0,1fr)_340px]">
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {publishWorkflow.error || archiveWorkflow.error ? (
+          <p role="alert" className="px-4 py-2 text-sm text-destructive">
+            {publishWorkflow.error?.message || archiveWorkflow.error?.message}
+          </p>
+        ) : null}
+        <section
+          className={cn(
+            "workflow-definition-studio",
+            selectedStepKey && "has-selection",
+          )}
+        >
+          <div className="workflow-workbench-canvas">
             <WorkflowGraph
               model={{
                 steps: workflow.steps,
+                layout: "studio",
                 outputStepKey: workflow.output_step_key,
                 templateNameByID: Object.fromEntries(
                   (templates?.items ?? []).map((template) => [
@@ -238,38 +301,79 @@ export function WorkflowShow({
                   ]),
                 ),
               }}
-              className="h-[540px]"
+              className="absolute inset-0"
               selectedNodeId={selectedStepKey}
               onNodeSelect={setSelectedStepKey}
             />
-            <StepDetails
-              step={workflow.steps.find((item) => item.key === selectedStepKey)}
-              isOutput={selectedStepKey === workflow.output_step_key}
-            />
+            <div className="pointer-events-none absolute bottom-4 left-4 max-w-[80%] rounded-full border bg-background/90 px-3 py-1.5 text-xs text-muted-foreground">
+              {t("studio.canvasLegend")}
+            </div>
           </div>
+          {selectedStepKey ? (
+            <div className="workflow-workbench-panel">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="m-2 self-end"
+                onClick={() => setSelectedStepKey(undefined)}
+              >
+                {t("editor.closePanel")}
+              </Button>
+              <StepDetails
+                step={workflow.steps.find(
+                  (item) => item.key === selectedStepKey,
+                )}
+                isOutput={selectedStepKey === workflow.output_step_key}
+                templateName={
+                  templates?.items.find(
+                    (template) =>
+                      template.id ===
+                      workflow.steps.find(
+                        (step) => step.key === selectedStepKey,
+                      )?.template_id,
+                  )?.name
+                }
+              />
+            </div>
+          ) : null}
         </section>
 
-        {workflow.status !== "archived" ? (
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/20 bg-destructive/[0.03] p-5">
-            <div>
-              <h2 className="font-medium">归档工作流</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                归档后不能再用于创建新的任务，已有执行记录会保留。
+        <Dialog
+          open={archiveOpen}
+          onOpenChange={(open) => {
+            if (!archiveWorkflow.isPending) setArchiveOpen(open);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("studio.archive")}</DialogTitle>
+              <DialogDescription>{t("studio.archiveHint")}</DialogDescription>
+            </DialogHeader>
+            {archiveWorkflow.error ? (
+              <p role="alert" className="text-sm text-destructive">
+                {archiveWorkflow.error.message}
               </p>
-            </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                archiveWorkflow.mutate(id);
-                onBack();
-              }}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              归档
-            </Button>
-          </section>
-        ) : null}
+            ) : null}
+            <DialogFooter>
+              <Button
+                variant="outline"
+                disabled={archiveWorkflow.isPending}
+                onClick={() => setArchiveOpen(false)}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={archiveWorkflow.isPending}
+                onClick={() =>
+                  archiveWorkflow.mutate(id, { onSuccess: onBack })
+                }
+              >
+                {t("studio.archive")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
@@ -278,9 +382,11 @@ export function WorkflowShow({
 function StepDetails({
   step,
   isOutput,
+  templateName,
 }: {
   step?: WorkflowStep;
   isOutput: boolean;
+  templateName?: string;
 }) {
   return (
     <aside className="border-t bg-background/70 p-5 xl:border-l xl:border-t-0">
@@ -311,7 +417,8 @@ function StepDetails({
             <div>
               <dt className="text-xs text-muted-foreground">Template</dt>
               <dd className="mt-1 break-all font-medium">
-                {step.template_id} · v{step.template_version ?? "latest"}
+                {templateName || step.template_id} · v
+                {step.template_version ?? "latest"}
               </dd>
             </div>
             <div>

@@ -1,4 +1,9 @@
 import { useEffect, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
+import { getTemplateVersion } from "@/domains/templates/lib/api";
+import { useTranslation } from "react-i18next";
+import { ListState } from "@/foundation/components/resource-list-layout";
+import { hostShim } from "@/foundation/lib/host-shim";
 import { Spinner } from "@/components/ui/spinner";
 import { useTemplatesList } from "@/domains/templates/hooks/use-templates-list";
 import { WorkflowForm } from "@/domains/workflows/components/workflow-form";
@@ -15,33 +20,81 @@ import type {
 export function WorkflowEdit({
   id,
   onDone,
+  instanceId,
 }: {
   id: string;
   onDone: () => void;
+  instanceId: string;
 }) {
-  const { data: workflow, isLoading } = useWorkflow(id);
+  const { t } = useTranslation();
+  const {
+    data: workflow,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useWorkflow(id);
   const updateWorkflow = useUpdateWorkflow();
   const validate = useValidateWorkflow();
-  const [value, setValue] = useState<WorkflowInput | null>(null);
-  const [validationResult, setValidationResult] =
-    useState<ValidationResult | null>(null);
+  const [value, setValue] = hostShim.useInstanceState<WorkflowInput | null>(
+    instanceId,
+    `workflow_draft_${id}`,
+    () => null,
+  );
+  const [validationResult, setValidationResult] = useState<{
+    fingerprint: string;
+    result: ValidationResult;
+  } | null>(null);
   const { data: templates } = useTemplatesList({
     scope: value?.scope || undefined,
     page_size: 100,
   });
+  const references = [
+    ...new Map(
+      (value?.steps ?? [])
+        .filter((step) => step.template_id && step.template_version)
+        .map((step) => [`${step.template_id}@${step.template_version}`, step]),
+    ).values(),
+  ];
+  const versions = useQueries({
+    queries: references.map((step) => ({
+      queryKey: ["template-version", step.template_id, step.template_version],
+      queryFn: () =>
+        getTemplateVersion(step.template_id, step.template_version!),
+    })),
+  });
+  const templateOptions = [
+    ...new Map(
+      [
+        ...(templates?.items ?? []),
+        ...versions.flatMap((query) => (query.data ? [query.data] : [])),
+      ].map((template) => [`${template.id}@${template.version}`, template]),
+    ).values(),
+  ];
 
   useEffect(() => {
     if (workflow) {
-      setValue({
-        scope: workflow.scope,
-        name: workflow.name,
-        description: workflow.description,
-        output_step_key: workflow.output_step_key,
-        steps: workflow.steps,
-        visibility: workflow.visibility,
-      });
+      setValue(
+        (current) =>
+          current ?? {
+            scope: workflow.scope,
+            name: workflow.name,
+            description: workflow.description,
+            output_step_key: workflow.output_step_key,
+            steps: workflow.steps,
+            visibility: workflow.visibility,
+          },
+      );
     }
-  }, [workflow]);
+  }, [workflow, setValue]);
+
+  if (isError)
+    return (
+      <ListState
+        error={error.message || t("editor.loadError")}
+        onRetry={() => void refetch()}
+      />
+    );
 
   if (isLoading || !value) {
     return (
@@ -55,18 +108,48 @@ export function WorkflowEdit({
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <WorkflowForm
         value={value}
+        resolveTemplate={async (option) => ({
+          ...(await getTemplateVersion(option.id, option.version)),
+          name: option.name,
+        })}
         onChange={setValue}
         onSubmit={() =>
-          updateWorkflow.mutate({ id, patch: value }, { onSuccess: onDone })
+          updateWorkflow.mutate(
+            { id, patch: value },
+            {
+              onSuccess: () => {
+                setValue(null);
+                onDone();
+              },
+            },
+          )
         }
-        submitLabel="Save"
+        submitLabel={t("editor.savedDraft")}
         isPending={updateWorkflow.isPending}
         onCancel={onDone}
         onValidate={() =>
-          validate.mutate(value, { onSuccess: setValidationResult })
+          validate.mutate(value, {
+            onSuccess: (result) =>
+              setValidationResult({
+                fingerprint: JSON.stringify(value),
+                result,
+              }),
+          })
         }
-        validationResult={validationResult}
-        templateOptions={templates?.items}
+        validationResult={
+          validationResult?.fingerprint === JSON.stringify(value)
+            ? validationResult.result
+            : null
+        }
+        templateOptions={templateOptions.map((template) => ({
+          ...template,
+          name:
+            template.name ||
+            templates?.items.find((head) => head.id === template.id)?.name ||
+            template.id,
+        }))}
+        metadataLocked
+        error={updateWorkflow.error?.message || validate.error?.message}
       />
     </div>
   );

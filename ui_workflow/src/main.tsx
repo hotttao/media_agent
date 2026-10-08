@@ -18,6 +18,7 @@ import { AuthProvider } from "@/foundation/providers/auth-provider";
 import { QueryProvider } from "@/foundation/providers/query-provider";
 import { ThemeProvider } from "@/foundation/providers/theme-provider";
 import "./index.css";
+import { UiBoundary } from "@/foundation/providers/ui-boundary";
 
 let authenticationRedirectStarted = false;
 
@@ -48,11 +49,13 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <QueryProvider>
-      <ThemeProvider defaultTheme="dark">
+      <ThemeProvider defaultTheme="light">
         <AuthProvider>
           <TooltipProvider>
-            <App />
-            <Toaster />
+            <UiBoundary>
+              <App />
+              <Toaster />
+            </UiBoundary>
           </TooltipProvider>
         </AuthProvider>
       </ThemeProvider>

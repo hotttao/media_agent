@@ -1,4 +1,10 @@
 import { Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import {
+  defaultImageInvocation,
+  updateTemplateSlot,
+  providerIdentity,
+} from "@/domains/templates/lib/invocation-editing";
 import { useAssetKinds } from "@/domains/materials/hooks/use-asset-kinds";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,22 +19,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type {
-	InvocationExpression,
   TemplateInput,
   TemplateSlotInput,
   TemplateSlotResourceType,
   Visibility,
 } from "@/domains/templates/types";
-
-const CAPABILITIES = [
-  { key: "media.image.model", label: "生成人物图", output: "model_image" },
-  { key: "media.image.style", label: "生成定妆图", output: "style_image" },
-  { key: "media.image.first_frame", label: "生成首帧图", output: "first_frame" },
-  { key: "media.video.generate", label: "生成视频", output: "ai_video" },
-  { key: "media.video.clip", label: "视频剪辑", output: "final_video" },
-  { key: "media.content.ai_fill", label: "生成发布文案", output: "final_video" },
-  { key: "media.publish.feishu", label: "发布到飞书", output: "final_video" },
-] as const;
 
 const SLOT_RESOURCE_TYPES: TemplateSlotResourceType[] = [
   "MATERIAL",
@@ -42,21 +37,6 @@ const VISIBILITY_OPTIONS: Visibility[] = ["private", "team", "public"];
 
 function emptySlot(): TemplateSlotInput {
   return { name: "", asset_kind: "", resource_type: "ASSET", required: false };
-}
-
-function invocationForSlots(
-  slots: TemplateSlotInput[],
-): Record<string, InvocationExpression> {
-  const mapping: Record<string, InvocationExpression> = {
-    prompt: { op: "render_template" },
-  };
-  const resources = slots
-    .filter((slot) => slot.resource_type !== "TEXT" && slot.name)
-    .map((slot) => ({ op: "asset_ref" as const, slot: slot.name }));
-  if (resources.length > 0) {
-    mapping.resources = { op: "list", items: resources };
-  }
-  return mapping;
 }
 
 /**
@@ -79,6 +59,7 @@ export function TemplateForm({
   submitLabel,
   isPending,
   onCancel,
+  scopeLocked = false,
 }: {
   value: TemplateInput;
   onChange: (v: TemplateInput) => void;
@@ -86,80 +67,91 @@ export function TemplateForm({
   submitLabel: string;
   isPending: boolean;
   onCancel: () => void;
+  scopeLocked?: boolean;
 }) {
-  const { data: assetKinds } = useAssetKinds("ASSET");
+  const { t } = useTranslation();
+  const { data: assetKinds } = useAssetKinds();
 
   function updateSlot(index: number, patch: Partial<TemplateSlotInput>) {
-    const next = value.inputs.map((s, i) => (i === index ? { ...s, ...patch } : s));
-    onChange({ ...value, inputs: next, invocation_mapping: invocationForSlots(next) });
+    onChange(updateTemplateSlot(value, index, patch));
   }
 
   function addSlot() {
     const next = [...value.inputs, emptySlot()];
-    onChange({ ...value, inputs: next, invocation_mapping: invocationForSlots(next) });
+    onChange({ ...value, inputs: next });
   }
 
   function removeSlot(index: number) {
     const next = value.inputs.filter((_, i) => i !== index);
-    onChange({ ...value, inputs: next, invocation_mapping: invocationForSlots(next) });
+    onChange({ ...value, inputs: next });
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="template-workbench">
       <div className="grid gap-2">
-        <Label>Scope</Label>
+        <Label>{t("v12.scope")}</Label>
         <Input
           value={value.scope}
+          disabled={scopeLocked}
           onChange={(e) => onChange({ ...value, scope: e.target.value })}
         />
       </div>
       <div className="grid gap-2">
-        <Label>Name</Label>
+        <Label>{t("templateFields.name")}</Label>
         <Input
           value={value.name}
           onChange={(e) => onChange({ ...value, name: e.target.value })}
         />
       </div>
       <div className="grid gap-2">
-        <Label>Description</Label>
+        <Label>{t("templateFields.description")}</Label>
         <Textarea
           value={value.description ?? ""}
           onChange={(e) => onChange({ ...value, description: e.target.value })}
         />
       </div>
-      <div className="grid gap-2">
-        <Label>Prompt Body</Label>
+      <div className="template-prompt grid gap-2">
+        <Label>{t("templateFields.prompt")}</Label>
         <Textarea
           className="font-mono text-xs"
           rows={10}
           value={value.prompt_body}
           onChange={(e) => onChange({ ...value, prompt_body: e.target.value })}
-          placeholder="Use {{.name}} to reference input slots"
+          placeholder={t("templateFields.promptHint", { example: "{{.name}}" })}
         />
       </div>
 
-      <div className="grid gap-2">
+      <div className="template-slots grid gap-2">
         <div className="flex items-center justify-between">
-          <Label>Inputs</Label>
+          <Label>{t("v12.inputs")}</Label>
           <Button type="button" variant="outline" size="sm" onClick={addSlot}>
-            Add input
+            {t("templateFields.addSlot")}
           </Button>
         </div>
         <div className="flex flex-col gap-2">
           {value.inputs.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No input slots.</p>
+            <p className="text-xs text-muted-foreground">
+              {t("templateFields.noSlots")}
+            </p>
           ) : null}
           {value.inputs.map((slot, i) => (
-            <div key={i} className="flex items-end gap-2">
+            <div
+              key={i}
+              className="flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3"
+            >
               <div className="grid flex-1 gap-1">
-                <Label className="text-xs">Name</Label>
+                <Label className="text-xs">
+                  {t("templateFields.slotName")}
+                </Label>
                 <Input
                   value={slot.name}
                   onChange={(e) => updateSlot(i, { name: e.target.value })}
                 />
               </div>
               <div className="grid w-40 gap-1">
-                <Label className="text-xs">Resource Type</Label>
+                <Label className="text-xs">
+                  {t("templateFields.resourceType")}
+                </Label>
                 <Select
                   value={slot.resource_type}
                   onValueChange={(v) => updateSlot(i, { resource_type: v })}
@@ -176,22 +168,43 @@ export function TemplateForm({
                   </SelectContent>
                 </Select>
               </div>
-              {slot.resource_type === "ASSET" || slot.resource_type === "MATERIAL" ? (
+              {slot.resource_type ? (
                 <div className="grid w-44 gap-1">
-                  <Label className="text-xs">Asset Kind</Label>
+                  <Label className="text-xs">
+                    {t("templateFields.assetKind")}
+                  </Label>
                   <Select
                     value={slot.asset_kind}
-                    onValueChange={(assetKind) => updateSlot(i, { asset_kind: assetKind })}
+                    onValueChange={(assetKind) =>
+                      updateSlot(i, { asset_kind: assetKind })
+                    }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select kind" />
+                      <SelectValue
+                        placeholder={t("templateFields.assetKind")}
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {(assetKinds ?? []).map((kind) => (
-                        <SelectItem key={kind.name} value={kind.name}>
-                          {kind.name}
-                        </SelectItem>
-                      ))}
+                      {(assetKinds ?? [])
+                        .filter(
+                          (kind) =>
+                            String(kind.resource_type) === slot.resource_type ||
+                            String(kind.resource_type) ===
+                              (
+                                {
+                                  MATERIAL: "1",
+                                  ASSET: "2",
+                                  PRODUCT: "3",
+                                  VIRTUAL_IP: "4",
+                                  TEXT: "5",
+                                } as Record<string, string>
+                              )[slot.resource_type],
+                        )
+                        .map((kind) => (
+                          <SelectItem key={kind.name} value={kind.name}>
+                            {kind.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -200,17 +213,19 @@ export function TemplateForm({
                 <Checkbox
                   id={`slot-required-${i}`}
                   checked={slot.required}
-                  onCheckedChange={(v) => updateSlot(i, { required: v === true })}
+                  onCheckedChange={(v) =>
+                    updateSlot(i, { required: v === true })
+                  }
                 />
                 <Label htmlFor={`slot-required-${i}`} className="text-xs">
-                  Required
+                  {t("templateFields.required")}
                 </Label>
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label="remove input"
+                aria-label={t("templateFields.removeSlot")}
                 onClick={() => removeSlot(i)}
               >
                 <Trash2 className="h-4 w-4" />
@@ -221,84 +236,103 @@ export function TemplateForm({
       </div>
 
       <div className="grid gap-2">
-        <Label>Execution Capability</Label>
-        <Select
+        <Label htmlFor="template-capability-key">
+          {t("templateEditor.capability")}
+        </Label>
+        <Input
+          id="template-capability-key"
           value={value.capability_key}
-          onValueChange={(key) => {
-            const capability = CAPABILITIES.find((item) => item.key === key);
+          placeholder="jimeng.i2i.multi_image_prompt"
+          onChange={(event) =>
             onChange({
               ...value,
-              capability_key: key,
-              capability_version: 1,
-              output_asset_kind: capability?.output ?? value.output_asset_kind,
-              platform: "client",
-              gen_way: key,
-              invocation_mapping: invocationForSlots(value.inputs),
-            });
-          }}
+              capability_key: event.target.value,
+              ...providerIdentity(event.target.value),
+            })
+          }
+        />
+        <Label htmlFor="template-capability-version">{t("v12.version")}</Label>
+        <Input
+          id="template-capability-version"
+          type="number"
+          min={1}
+          step={1}
+          value={value.capability_version}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              capability_version: Number(event.target.value),
+            })
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("templateEditor.catalogUnavailable")}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() =>
+            onChange({
+              ...value,
+              invocation_mapping: defaultImageInvocation(value.inputs),
+            })
+          }
         >
-          <SelectTrigger>
-            <SelectValue placeholder="Select capability" />
-          </SelectTrigger>
-          <SelectContent>
-            {CAPABILITIES.map((capability) => (
-              <SelectItem key={capability.key} value={capability.key}>
-                {capability.label} · {capability.key}@1
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          {t("templateEditor.resetMapping")}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          {t("templateEditor.mappingHint")}
+        </p>
       </div>
 
       <div className="grid gap-2">
-        <Label>Output Asset Kind</Label>
+        <Label>{t("templateFields.outputKind")}</Label>
         <Select
           value={value.output_asset_kind}
           onValueChange={(v) => onChange({ ...value, output_asset_kind: v })}
         >
           <SelectTrigger>
-            <SelectValue placeholder="Select output kind" />
+            <SelectValue placeholder={t("templateFields.outputKind")} />
           </SelectTrigger>
           <SelectContent>
-            {(assetKinds ?? []).map((k) => (
-              <SelectItem key={k.name} value={k.name}>
-                {k.name}
-              </SelectItem>
-            ))}
+            {(assetKinds ?? [])
+              .filter(
+                (kind) =>
+                  kind.resource_type === "ASSET" ||
+                  String(kind.resource_type) === "2",
+              )
+              .map((k) => (
+                <SelectItem key={k.name} value={k.name}>
+                  {k.name}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       </div>
       <div className="grid gap-2">
-        <Label>Platform</Label>
-        <Input
-          value={value.platform}
-          onChange={(e) => onChange({ ...value, platform: e.target.value })}
-        />
+        <Label>{t("templateFields.platform")}</Label>
+        <Input value={value.platform} readOnly />
       </div>
       <div className="grid gap-2">
-        <Label>Gen Way</Label>
-        <Input
-          value={value.gen_way}
-          onChange={(e) => onChange({ ...value, gen_way: e.target.value })}
-        />
+        <Label>{t("templateFields.generationMethod")}</Label>
+        <Input value={value.gen_way} readOnly />
       </div>
       <div className="grid gap-2">
-        <Label>Gen Type</Label>
-        <Input
-          value={value.gen_type ?? ""}
-          onChange={(e) => onChange({ ...value, gen_type: e.target.value })}
-        />
+        <Label>{t("templateFields.generationType")}</Label>
+        <Input value={value.gen_type ?? ""} readOnly />
       </div>
       <div className="flex items-center gap-2">
         <Checkbox
           id="needs-confirm"
           checked={value.needs_confirm ?? false}
-          onCheckedChange={(v) => onChange({ ...value, needs_confirm: v === true })}
+          onCheckedChange={(v) =>
+            onChange({ ...value, needs_confirm: v === true })
+          }
         />
-        <Label htmlFor="needs-confirm">Needs Confirm</Label>
+        <Label htmlFor="needs-confirm">{t("templateFields.review")}</Label>
       </div>
       <div className="grid gap-2">
-        <Label>Candidate Count</Label>
+        <Label>{t("templateFields.candidates")}</Label>
         <Input
           type="number"
           value={String(value.candidate_count ?? 0)}
@@ -308,10 +342,12 @@ export function TemplateForm({
         />
       </div>
       <div className="grid gap-2">
-        <Label>Visibility</Label>
+        <Label>{t("templateFields.visibility")}</Label>
         <Select
           value={value.visibility ?? "private"}
-          onValueChange={(v) => onChange({ ...value, visibility: v as Visibility })}
+          onValueChange={(v) =>
+            onChange({ ...value, visibility: v as Visibility })
+          }
         >
           <SelectTrigger>
             <SelectValue />
@@ -319,19 +355,30 @@ export function TemplateForm({
           <SelectContent>
             {VISIBILITY_OPTIONS.map((v) => (
               <SelectItem key={v} value={v}>
-                {v}
+                {t(`common.visibility.${v}`)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      <div className="flex gap-2">
-        <Button onClick={onSubmit} disabled={isPending}>
+      <div className="template-actions flex gap-2">
+        <Button
+          onClick={onSubmit}
+          disabled={
+            isPending ||
+            !value.name ||
+            !value.scope ||
+            !value.capability_key ||
+            !value.output_asset_kind ||
+            !Number.isInteger(value.capability_version) ||
+            value.capability_version < 1
+          }
+        >
           {submitLabel}
         </Button>
         <Button variant="ghost" onClick={onCancel}>
-          Cancel
+          {t("common.cancel")}
         </Button>
       </div>
     </div>

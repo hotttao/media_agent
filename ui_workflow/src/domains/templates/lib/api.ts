@@ -18,6 +18,7 @@
  * Template). Callers refetch via getTemplate/listTemplates as needed.
  */
 import { api } from "@/foundation/lib/api-client";
+import { wireStatus } from "@/foundation/lib/wire-status";
 import type {
   ChangeVisibilityInput,
   CreateTemplateResponse,
@@ -43,30 +44,53 @@ function buildQuery(params: object): string {
 export async function listTemplates(
   params: TemplateListParams = {},
 ): Promise<TemplatesPage> {
-  return api.request<TemplatesPage>(`/templates${buildQuery(params)}`);
+  const page = await api.request<TemplatesPage>(
+    `/templates${buildQuery(params)}`,
+  );
+  return { ...page, items: (page.items ?? []).map(fromWire) };
 }
 
 export async function getTemplate(id: string): Promise<Template> {
-  return api.request<Template>(`/templates/${encodeURIComponent(id)}`);
+  return fromWire(
+    await api.request<Template>(`/templates/${encodeURIComponent(id)}`),
+  );
+}
+
+function fromWire(template: Template): Template {
+  return {
+    ...template,
+    status: wireStatus(
+      template.status,
+      ["unknown", "draft", "published", "archived"],
+      ["tpl_", "template_status_"],
+    ),
+    inputs: template.inputs ?? [],
+  };
 }
 
 export async function createTemplate(
   input: TemplateInput,
 ): Promise<CreateTemplateResponse> {
-  return api.request<CreateTemplateResponse>("/templates", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return api.request<CreateTemplateResponse>(
+    `/templates${buildQuery({ scope: input.scope })}`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export async function updateTemplate(
   id: string,
   patch: Partial<TemplateInput>,
 ): Promise<UpdateTemplateResponse> {
-  return api.request<UpdateTemplateResponse>(`/templates/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    body: JSON.stringify(patch),
-  });
+  return api.request<UpdateTemplateResponse>(
+    `/templates/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    },
+  );
 }
 
 export async function archiveTemplate(id: string): Promise<Template> {
@@ -112,7 +136,9 @@ export async function getTemplateVersion(
   id: string,
   version: number,
 ): Promise<Template> {
-  return api.request<Template>(
-    `/templates/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}`,
+  return fromWire(
+    await api.request<Template>(
+      `/templates/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}`,
+    ),
   );
 }

@@ -6,5 +6,6 @@ export function useWorkflow(id: string | null | undefined) {
     queryKey: ["workflow", id],
     queryFn: () => getWorkflow(id as string),
     enabled: !!id,
+    refetchInterval: (query) => query.state.data?.status === "publishing" ? 2000 : false,
   });
 }

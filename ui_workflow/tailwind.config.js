@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: ["class"],
+  // v1.2 is a light product surface even when the future host is dark.
+  darkMode: ["class", ".media-workflow-dark"],
   // Source lives under src/ (see contributing/architecture.md L0-L3). The
   // template's original ./pages ./app ./components roots don't exist.
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
@@ -19,6 +20,7 @@ module.exports = {
         // Insert CJK fallbacks before `sans-serif` so Chrome/Edge Print-to-PDF
         // keeps Chinese glyphs (adapted from agent-platform/web/tailwind.config.js).
         sans: [
+          '"Plus Jakarta Sans"',
           "ui-sans-serif",
           "system-ui",
           '"PingFang SC"',

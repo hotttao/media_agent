@@ -71,7 +71,10 @@ export type JobStatus =
   | "need_confirm"
   | "succeeded"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "awaiting_resume"
+  | "paused"
+  | "unknown";
 
 export type StepRunStatus =
   | "pending"

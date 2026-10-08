@@ -7,10 +7,12 @@ import {
   type WorkflowJSON,
   type WorkflowNodeProps,
   WorkflowNodeRenderer,
+  useClientContext,
 } from "@flowgram.ai/free-layout-editor";
-import "@flowgram.ai/free-layout-editor/index.css";
 import { CheckCircle2, GitBranch, Layers3, ShieldCheck } from "lucide-react";
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import type { WorkflowStep } from "@/domains/workflows/types";
 import { cn } from "@/foundation/lib/utils";
 
@@ -32,10 +34,34 @@ type WorkflowGraphContextValue = {
 const WorkflowGraphContext = createContext<WorkflowGraphContextValue>({});
 const WorkflowNodeIdContext = createContext<string | undefined>(undefined);
 
+function ViewportTools() {
+  const context = useClientContext();
+  const { t } = useTranslation();
+  useEffect(() => {
+    const subscription = context.playground.onResize(() => {
+      void context.document.fitView(false);
+    });
+    return () => subscription.dispose();
+  }, [context]);
+  return (
+    <div className="absolute right-3 top-3 z-10">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => void context.document.fitView(false)}
+      >
+        {t("editorViewport.fit")}
+      </Button>
+    </div>
+  );
+}
+
 export type WorkflowGraphModel = {
   steps: WorkflowStep[];
   outputStepKey: string;
   templateNameByID?: Record<string, string>;
+  layout?: "studio" | "horizontal";
 };
 
 export type WorkflowExecutionStatus = Record<string, string>;
@@ -58,10 +84,16 @@ export function workflowToFlowDocument({
   steps,
   outputStepKey,
   templateNameByID,
+  layout,
 }: WorkflowGraphModel): WorkflowJSON {
   const levels = dependencyLevels(steps);
   const rows = new Map<number, number>();
   const nodes: WorkflowJSON["nodes"] = [];
+  // A compact zig-zag for a linear generation flow; branched DAGs keep rank layout.
+  // This is presentation state, never an additional DSL edge or input node.
+  const compact =
+    layout === "studio" &&
+    steps.every((step, index) => levels.get(step.key) === index + 1);
 
   for (const step of steps) {
     const level = levels.get(step.key) ?? 1;
@@ -70,7 +102,11 @@ export function workflowToFlowDocument({
     nodes.push({
       id: step.key,
       type: "generation_step",
-      meta: { position: { x: 64 + (level - 1) * 320, y: 56 + row * 184 } },
+      meta: {
+        position: compact
+          ? { x: 64 + ((level - 1) % 2) * 320, y: 56 + (level - 1) * 160 }
+          : { x: 64 + (level - 1) * 320, y: 56 + row * 184 },
+      },
       data: {
         title: step.key || "未命名节点",
         subtitle:
@@ -239,9 +275,13 @@ export function WorkflowGraph({
     <WorkflowGraphContext.Provider
       value={{ onNodeSelect, selectedNodeId, executionStatus }}
     >
-      <div className={cn("workflow-graph", className)}>
+      <div
+        data-testid="workflow-canvas"
+        className={cn("workflow-graph", className)}
+      >
         <FreeLayoutEditorProvider key={documentKey} {...props}>
           <EditorRenderer className="h-full w-full" />
+          <ViewportTools />
         </FreeLayoutEditorProvider>
       </div>
     </WorkflowGraphContext.Provider>

@@ -5,7 +5,6 @@
  */
 
 import { Plus } from "lucide-react";
-import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,13 +25,12 @@ type Resource = "template" | "workflow" | "job";
 type View = "list" | "show" | "create" | "edit";
 
 const RESOURCES: { id: Resource; labelKey: string }[] = [
-  { id: "template", labelKey: "nav.templates" },
   { id: "workflow", labelKey: "nav.workflows" },
+  { id: "template", labelKey: "nav.templates" },
   { id: "job", labelKey: "nav.jobs" },
 ];
 
 export function WorkflowApp({ instanceId }: { instanceId: string }) {
-  const [launchWorkflowID, setLaunchWorkflowID] = useState<string>();
   const { t } = useTranslation();
   const {
     useAppHeaderSlot,
@@ -44,7 +42,7 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
   const [resource, setResource] = useInstancePersistentState<Resource>(
     instanceId,
     "workflow_resource",
-    () => "template",
+    () => "workflow",
   );
   const [selectedId, setSelectedId] = useInstancePersistentState<string | null>(
     instanceId,
@@ -56,6 +54,15 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
     "workflow_view",
     () => "list",
   );
+  const [launchWorkflowID, setLaunchWorkflowID] = useInstanceState<
+    string | undefined
+  >(instanceId, "workflow_launchId", () => undefined);
+
+  function create() {
+    setLaunchWorkflowID(undefined);
+    setSelectedId(null);
+    setView("create");
+  }
 
   function changeResource(r: Resource) {
     setLaunchWorkflowID(undefined);
@@ -72,37 +79,44 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
   return (
     <>
       {headerSlot &&
+        view === "list" &&
         createPortal(
-          <AppHeaderButton
-            icon={Plus}
-            label={t("common.new")}
-            title={t("common.new")}
-            onClick={() => {
-              setLaunchWorkflowID(undefined);
-              setSelectedId(null);
-              setView("create");
-            }}
-          />,
+          <span className="media-workflow-ui">
+            <span className="media-header-actions">
+              <AppHeaderButton
+                icon={Plus}
+                label={t("common.new")}
+                title={t("common.new")}
+                onClick={create}
+              />
+            </span>
+          </span>,
           headerSlot,
         )}
-      <div className="flex h-full flex-col bg-background">
-        <div className="border-b border-foreground/[0.06] bg-card/80 px-4 py-3 backdrop-blur">
-          <Tabs
-            value={resource}
-            onValueChange={(v) => changeResource(v as Resource)}
-          >
-            <TabsList className="rounded-xl bg-muted/70 p-1">
-              {RESOURCES.map((r) => (
-                <TabsTrigger key={r.id} value={r.id}>
-                  {t(r.labelKey)}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
+      <div className="media-app media-surface flex h-full min-h-0 flex-col">
+        {!(resource === "workflow" && view !== "list") && (
+          <div className="media-subnav">
+            <Tabs
+              value={resource}
+              onValueChange={(v) => changeResource(v as Resource)}
+            >
+              <TabsList>
+                {RESOURCES.map((r) => (
+                  <TabsTrigger key={r.id} value={r.id}>
+                    {t(r.labelKey)}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+        )}
         <div className="min-h-0 flex-1">
           {resource === "template" && view === "list" && (
-            <TemplateList onSelect={select} />
+            <TemplateList
+              instanceId={instanceId}
+              onSelect={select}
+              onCreate={create}
+            />
           )}
           {resource === "template" && view === "show" && selectedId && (
             <TemplateShow
@@ -120,6 +134,7 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
 
           {resource === "workflow" && view === "list" && (
             <WorkflowList
+              instanceId={instanceId}
               onSelect={select}
               onCreate={() => setView("create")}
             />
@@ -143,14 +158,31 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
             />
           )}
           {resource === "workflow" && view === "create" && (
-            <WorkflowCreate onDone={() => setView("list")} />
+            <WorkflowCreate
+              instanceId={instanceId}
+              onDone={(id) => {
+                if (id) {
+                  setSelectedId(id);
+                  setView("show");
+                } else setView("list");
+              }}
+            />
           )}
           {resource === "workflow" && view === "edit" && selectedId && (
-            <WorkflowEdit id={selectedId} onDone={() => setView("show")} />
+            <WorkflowEdit
+              key={selectedId}
+              instanceId={instanceId}
+              id={selectedId}
+              onDone={() => setView("show")}
+            />
           )}
 
           {resource === "job" && view === "list" && (
-            <JobList onSelect={select} />
+            <JobList
+              instanceId={instanceId}
+              onSelect={select}
+              onCreate={create}
+            />
           )}
           {resource === "job" && view === "show" && selectedId && (
             <JobShow id={selectedId} onBack={() => setView("list")} />

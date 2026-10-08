@@ -19,7 +19,7 @@
 
 // ── Enums ───────────────────────────────────────────────────────────────
 
-export type TemplateStatus = "draft" | "published" | "archived";
+export type TemplateStatus = "draft" | "published" | "archived" | "unknown";
 
 export type Visibility = "private" | "team" | "public";
 
@@ -92,6 +92,7 @@ export interface Template {
  * create flow calls changeTemplateVisibility after create if non-default, and
  * the show page owns the dedicated visibility switch. */
 export interface TemplateInput {
+  organization_id?: string;
   scope: string;
   name: string;
   description?: string;

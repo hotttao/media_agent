@@ -90,19 +90,23 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
       {headerSlot &&
         canCreate &&
         createPortal(
-          <AppHeaderButton
-            icon={Plus}
-            label={t("common.new")}
-            title={t("common.new")}
-            onClick={() => {
-              setSelectedId(null);
-              setView("create");
-            }}
-          />,
+          <span className="media-workflow-ui">
+            <span className="media-header-actions">
+              <AppHeaderButton
+                icon={Plus}
+                label={t("common.new")}
+                title={t("common.new")}
+                onClick={() => {
+                  setSelectedId(null);
+                  setView("create");
+                }}
+              />
+            </span>
+          </span>,
           headerSlot,
         )}
-      <div className="flex h-full flex-col">
-        <div className="border-b border-foreground/[0.06] px-3 py-2">
+      <div className="media-app media-surface flex h-full min-h-0 flex-col">
+        <div className="media-subnav">
           <Tabs
             value={resource}
             onValueChange={(v) => changeResource(v as Resource)}

@@ -1,8 +1,77 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getWorkflow } from "./api";
+import { getWorkflow, validateWorkflow, updateWorkflow } from "./api";
 
 describe("workflow wire normalization", () => {
+  it("does not treat explicit rejection with an empty reasons array as valid", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ valid: false, reject_reasons: [] })),
+        ),
+    );
+    expect(
+      (
+        await validateWorkflow({
+          name: "x",
+          scope: "media",
+          steps: [],
+          output_step_key: "",
+        })
+      ).errors.length,
+    ).toBe(1);
+  });
   afterEach(() => vi.unstubAllGlobals());
+
+  it("reads actual rejection reasons instead of claiming validation succeeded", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            valid: false,
+            reject_reasons: [
+              { subject: "video", message: "Missing image input" },
+            ],
+            derived_edges: [],
+          }),
+        ),
+      ),
+    );
+    expect(
+      (
+        await validateWorkflow({
+          scope: "media",
+          name: "test",
+          steps: [],
+          output_step_key: "video",
+        })
+      ).errors,
+    ).toEqual([{ step_key: "video", message: "Missing image input" }]);
+  });
+  it("accepts a version-only save receipt without inventing a workflow ID or draft", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ version: 4 }))),
+    );
+    expect(await updateWorkflow("wf-1", { name: "new" })).toEqual({
+      version: 4,
+    });
+  });
+  it("does not interpret an incomplete validation response as success", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}")));
+    expect(
+      (
+        await validateWorkflow({
+          name: "x",
+          scope: "media",
+          steps: [],
+          output_step_key: "",
+        })
+      ).errors.length,
+    ).toBe(1);
+  });
 
   it("normalizes protobuf numeric status and binding source enums", async () => {
     vi.stubGlobal(

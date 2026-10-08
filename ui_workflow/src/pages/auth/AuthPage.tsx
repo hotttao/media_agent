@@ -1,10 +1,4 @@
-import {
-  CircleAlert,
-  Layers3,
-  ShieldCheck,
-  Sparkles,
-  Workflow,
-} from "lucide-react";
+import { CircleAlert, Layers3, ShieldCheck, Workflow } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -101,20 +95,19 @@ export function AuthPage({ kind }: AuthPageProps) {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,oklch(var(--primary)/0.18),transparent_34%),radial-gradient(circle_at_85%_80%,oklch(var(--primary)/0.10),transparent_30%)]" />
-      <div className="relative mx-auto grid min-h-screen max-w-7xl items-center gap-12 px-5 py-10 lg:grid-cols-[1.05fr_0.95fr] lg:px-12">
+    <main className="media-surface relative min-h-[100dvh] overflow-hidden text-foreground">
+      <div className="relative mx-auto grid min-h-[100dvh] max-w-7xl items-center gap-12 px-5 py-10 lg:grid-cols-[1.05fr_0.95fr] lg:px-12">
         <section
           className="hidden max-w-xl lg:block"
           aria-label={t("auth.introduction")}
         >
           <div className="mb-10 inline-flex items-center gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-              <Sparkles className="h-5 w-5" />
+            <span className="grid h-11 w-11 place-items-center rounded-xl bg-accent font-bold text-accent-foreground">
+              M
             </span>
             <div>
               <p className="text-lg font-semibold tracking-tight">
-                Media Agent
+                Media Workflow
               </p>
               <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
                 {t("auth.creativeOperations")}
@@ -149,10 +142,10 @@ export function AuthPage({ kind }: AuthPageProps) {
 
         <section className="mx-auto w-full max-w-md">
           <div className="mb-7 flex items-center gap-3 lg:hidden">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-primary-foreground">
-              <Sparkles className="h-5 w-5" />
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent font-bold text-accent-foreground">
+              M
             </span>
-            <span className="font-semibold">Media Agent</span>
+            <span className="font-semibold">Media Workflow</span>
           </div>
           <Card className="border-border/80 bg-card/90 shadow-2xl shadow-black/10 backdrop-blur-xl">
             <CardHeader className="space-y-3 px-6 pb-5 pt-7 sm:px-8 sm:pt-8">

@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import type { JobStatus, StepRunStatus } from "@/domains/jobs/types";
 import { cn } from "@/foundation/lib/utils";
+import { useTranslation } from "react-i18next";
 
 // Soft-tint status chips (consistent with materials/products visibility/
 // status badges). Picking distinct tints per semantic so that, e.g., running
@@ -14,6 +15,9 @@ const JOB_STATUS_STYLE: Record<JobStatus, string> = {
   succeeded: "bg-success/15 text-success",
   failed: "bg-destructive/10 text-destructive",
   cancelled: "bg-muted text-muted-foreground",
+  awaiting_resume: "bg-warning/15 text-warning",
+  paused: "bg-muted text-muted-foreground",
+  unknown: "bg-muted text-muted-foreground",
 };
 
 const STEP_RUN_STATUS_STYLE: Record<StepRunStatus, string> = {
@@ -34,6 +38,9 @@ const JOB_STATUS_LABEL: Record<JobStatus, string> = {
   succeeded: "已完成",
   failed: "失败",
   cancelled: "已取消",
+  awaiting_resume: "待继续",
+  paused: "已暂停",
+  unknown: "状态未知",
 };
 
 const STEP_RUN_STATUS_LABEL: Record<StepRunStatus, string> = {
@@ -48,9 +55,10 @@ const STEP_RUN_STATUS_LABEL: Record<StepRunStatus, string> = {
 };
 
 export function JobStatusBadge({ status }: { status: JobStatus }) {
+  const { t } = useTranslation();
   return (
     <Badge className={cn("font-medium capitalize", JOB_STATUS_STYLE[status])}>
-      {JOB_STATUS_LABEL[status]}
+      {t(`v12.jobStatus.${status}`, { defaultValue: JOB_STATUS_LABEL[status] })}
     </Badge>
   );
 }

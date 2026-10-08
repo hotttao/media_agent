@@ -24,6 +24,9 @@ const alias = { "@": resolve(__dirname, "./src") };
 
 const pluginConfig: UserConfig = {
   plugins,
+  // Library mode leaves dependency process.env references intact by default.
+  // This is public build metadata, not the developer's environment or secrets.
+  define: { "process.env": JSON.stringify({ NODE_ENV: "production" }) },
   publicDir: false,
   worker: { format: "es" },
   resolve: { alias },
@@ -63,6 +66,8 @@ const standaloneConfig: UserConfig = {
   server: {
     host: "0.0.0.0",
     port: 5173,
+    // Test/report writes must not reload a user's unsaved editing session.
+    watch: { ignored: ["**/*.test.ts", "**/*.test.tsx", "**/e2e/**"] },
     proxy: {
       // These pages still belong to Ory Login UI. Without the proxy Vite's
       // SPA fallback renders the business login page instead of recovery.

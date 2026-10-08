@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Slot host compatibility fixture</title>
+    <style>
+      :root { --primary: host-token; }
+      body { margin: 0; background: #173b35; color: #fff; font-family: Georgia, serif; }
+      #host-title { margin: 16px; font-size: 24px; }
+      #host-toolbar { display: flex; gap: 8px; margin: 16px; }
+      #host-panel { height: 700px; margin: 16px; }
+      #host-header { margin: 16px; }
+    </style>
+  </head>
+  <body>
+    <h1 id="host-title">宿主页面 · 不应被插件改色</h1>
+    <div id="host-toolbar"></div>
+    <div id="host-header"></div>
+    <div id="host-panel"></div>
+    <script type="module">
+      import React from "react";
+      import * as ReactDOM from "react-dom";
+      import { createRoot } from "react-dom/client";
+      import * as ReactJSXRuntime from "react/jsx-runtime";
+      const panels = new Map();
+      const bags = new Map();
+      const root = createRoot(document.getElementById("host-panel"));
+      function instanceState(instanceId, key, seed) {
+        const bagKey = `${instanceId}:${key}`;
+        const [value, setValue] = React.useState(() => bags.has(bagKey) ? bags.get(bagKey) : seed());
+        return [value, (next) => setValue(previous => {
+          const resolved = typeof next === "function" ? next(previous) : next;
+          bags.set(bagKey, resolved);
+          return resolved;
+        })];
+      }
+      function openPanel(id) {
+        const definition = panels.get(id);
+        root.render(React.createElement(definition.component, { workspaceId: "fixture-workspace", instanceId: `fixture:${id}` }));
+      }
+      window.tos = {
+        React, ReactDOM: { ...ReactDOM, createRoot }, ReactJSXRuntime,
+        events: { on() {} },
+        windows: {
+          useAppHeaderSlot: () => document.getElementById("host-header"),
+          AppHeaderButton: ({ label, onClick }) => React.createElement("button", { onClick }, label),
+        },
+        workspace: { useInstanceState: instanceState, useInstancePersistentState: instanceState },
+        registerPanel(definition) {
+          panels.set(definition.id, definition);
+          const button = document.createElement("button");
+          button.textContent = definition.id;
+          button.onclick = () => openPanel(definition.id);
+          document.getElementById("host-toolbar").appendChild(button);
+          if (definition.id === "media_workflow") openPanel(definition.id);
+        },
+      };
+      window.hostFixtureReady = true;
+    </script>
+  </body>
+</html>

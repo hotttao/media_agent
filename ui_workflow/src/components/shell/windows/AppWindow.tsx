@@ -94,9 +94,8 @@ export function AppWindow({
       ref={sectionRef}
       className={cn(
         "group/appwindow @container/panel relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-        "rounded-2xl border border-foreground/[0.08] bg-card/95",
-        "shadow-[0_24px_70px_-36px_rgba(15,23,42,0.55)] dark:ring-1 dark:ring-inset dark:ring-foreground/[0.04]",
-        "transition-shadow duration-300 ease-out hover:shadow-2xl",
+        "rounded-[18px] border border-foreground/[0.08] bg-background",
+        "shadow-[0_4px_14px_rgba(168,159,138,0.12)]",
         className,
       )}
     >
@@ -157,7 +156,7 @@ function WindowControls({
     <div
       className={cn(
         "flex shrink-0 items-center gap-0.5",
-        "opacity-0 transition-opacity duration-150",
+        "opacity-60 transition-opacity duration-150 focus-within:opacity-100",
         "group-hover/appwindow:opacity-100",
       )}
     >

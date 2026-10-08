@@ -22,6 +22,7 @@
  * a full workflows domain does not exist yet (see WorkflowOption in types.ts).
  */
 import { api } from "@/foundation/lib/api-client";
+import { wireStatus } from "@/foundation/lib/wire-status";
 import type {
   GetJobResponse,
   Job,
@@ -37,13 +38,15 @@ import type {
 } from "../types";
 
 const JOB_STATUSES: JobStatus[] = [
-  "pending",
+  "unknown",
   "pending",
   "running",
   "need_confirm",
   "succeeded",
   "failed",
   "cancelled",
+  "awaiting_resume",
+  "paused",
 ];
 const STEP_STATUSES: StepRunStatus[] = [
   "blocked",
@@ -77,10 +80,7 @@ function parseJSON<T>(value: string | T | undefined, fallback: T): T {
 function normalizeJob(job: WireJob): Job {
   return {
     ...job,
-    status:
-      typeof job.status === "number"
-        ? (JOB_STATUSES[job.status] ?? "pending")
-        : job.status,
+    status: wireStatus(job.status, JOB_STATUSES, ["job_status_"]),
     retry_history: parseJSON(job.retry_history, []),
   };
 }
