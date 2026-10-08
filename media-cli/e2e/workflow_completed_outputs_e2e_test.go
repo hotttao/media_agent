@@ -177,6 +177,9 @@ func TestWorkflowCompletedOutputsProbeContract(t *testing.T) {
 	t.Setenv("MEDIA_API_TOKEN", credential)
 	t.Setenv("MEDIA_E2E_ORGANIZATION_ID", "org")
 	t.Setenv("MEDIA_E2E_COMPLETED_JOB_ID", "job")
+	// This protocol fixture serves tiny pre-existing objects, not file uploads.
+	// An opt-in deployment gate in the same shell must not change its contract.
+	t.Setenv("MEDIA_E2E_PROVIDER_FILE_RESULTS", "")
 	TestWorkflowCompletedOutputsGateway(t)
 	if apiReads.Load() != 6 || mediaReads.Load() != 4 {
 		t.Fatal("not all four node outputs were independently probed")

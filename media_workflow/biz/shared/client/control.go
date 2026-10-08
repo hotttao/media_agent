@@ -14,6 +14,7 @@ import (
 )
 
 var ErrWorkspaceDelegationDenied = errors.New("Agent Workspace access denied")
+var ErrWorkspaceReadDenied = errors.New("Workspace access denied")
 
 // ControlClient checks Workspace ownership and permissions at media_control.
 // The acting user is carried by a service-authenticated header, never by the
@@ -29,6 +30,33 @@ type WorkspaceContext struct {
 	OrganizationID string `json:"organization_id"`
 	TeamID         string `json:"team_id"`
 	CreatedBy      string `json:"created_by"`
+}
+
+func (c *ControlClient) ListResourceWorkspaces(ctx context.Context, user string) ([]WorkspaceContext, error) {
+	if c.baseURL == "" || c.token == "" || user == "" {
+		return nil, fmt.Errorf("workspace access unavailable")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/workspaces", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Control-Service-Token", c.token)
+	req.Header.Set("X-Control-Acting-User-ID", user)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("workspace access unavailable")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("workspace access unavailable")
+	}
+	var out struct {
+		Workspaces []WorkspaceContext `json:"workspaces"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&out) != nil {
+		return nil, fmt.Errorf("workspace access unavailable")
+	}
+	return out.Workspaces, nil
 }
 
 func NewControlClient(baseURL, serviceToken string) *ControlClient {
@@ -54,6 +82,9 @@ func (c *ControlClient) GetWorkspaceForUser(ctx context.Context, workspaceID, us
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound {
+			return nil, ErrWorkspaceReadDenied
+		}
 		return nil, fmt.Errorf("get workspace: status %d", resp.StatusCode)
 	}
 	var result WorkspaceContext

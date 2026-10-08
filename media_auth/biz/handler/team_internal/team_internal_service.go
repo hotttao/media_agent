@@ -132,6 +132,7 @@ func AuthorizeTeam(ctx context.Context, c *app.RequestContext) {
 		}
 	}
 	c.JSON(consts.StatusOK, map[string]any{
+		"team_active": facts.TeamActive, "organization_active": facts.OrganizationActive,
 		"allowed": allowed, "fact_allowed": facts.Allowed, "keto_allowed": ketoAllowed,
 		"team_id": facts.TeamID, "organization_id": facts.OrganizationID,
 		"team_role": facts.TeamRole, "organization_role": facts.OrganizationRole,

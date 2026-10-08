@@ -26,11 +26,15 @@ func CreateWorkflow(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	w, err := Svc.Create(ctx, wfsvc.CreateCommand{
+		OrganizationID: req.GetOrganizationId(), WorkspaceID: req.GetWorkspaceId(),
 		Scope: req.GetScope(), Name: req.GetName(), Description: req.GetDescription(),
 		OutputStepKey: req.GetOutputStepKey(), Steps: stepsFromPB(req.GetSteps()),
 		CreatedBy: auth.CallerID(ctx),
 	})
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -46,9 +50,12 @@ func UpdateWorkflow(ctx context.Context, c *app.RequestContext) {
 	w, err := Svc.Update(ctx, wfsvc.UpdateCommand{
 		ID: req.GetId(), Name: req.GetName(), Description: req.GetDescription(),
 		OutputStepKey: req.GetOutputStepKey(), Steps: stepsFromPB(req.GetSteps()),
-		CallerID: auth.CallerID(ctx),
+		CallerID: auth.CallerID(ctx), TeamIDs: auth.TeamsFromContext(ctx),
 	})
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -61,8 +68,11 @@ func GetWorkflow(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	w, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx))
+	w, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusNotFound, err.Error())
 		return
 	}
@@ -86,8 +96,11 @@ func ListWorkflows(ctx context.Context, c *app.RequestContext) {
 	items, total, err := Svc.List(ctx, domain.ListQuery{
 		Scope: req.GetScope(), Name: req.GetName(), Status: req.GetStatus(), Visibility: req.GetVisibility(),
 		Limit: pageSize, Offset: (page - 1) * pageSize,
-	}, auth.CallerID(ctx))
+	}, auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusInternalServerError, err.Error())
 		return
 	}
@@ -104,8 +117,11 @@ func ArchiveWorkflow(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	w, err := Svc.Archive(ctx, req.GetId(), auth.CallerID(ctx))
+	w, err := Svc.Archive(ctx, req.GetId(), auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -120,6 +136,9 @@ func ValidateWorkflow(ctx context.Context, c *app.RequestContext) {
 	}
 	res, err := Svc.ValidateWorkflow(ctx, req.GetScope(), stepsFromPB(req.GetSteps()), req.GetOutputStepKey())
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -132,8 +151,15 @@ func GrantWorkflow(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	w, err := Svc.Grant(ctx, req.GetId(), req.GetTeamId(), req.GetPermission(), req.GetGrantedBy())
+	w, err := Svc.Grant(ctx, req.GetId(), req.GetTeamId(), req.GetPermission(), auth.CallerID(ctx))
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
+		if errors.Is(err, domain.ErrWorkflowForbidden) {
+			c.String(consts.StatusForbidden, "workflow access denied")
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -148,6 +174,9 @@ func RevokeWorkflow(ctx context.Context, c *app.RequestContext) {
 	}
 	w, err := Svc.Revoke(ctx, req.GetId(), req.GetTeamId(), auth.CallerID(ctx))
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -162,6 +191,9 @@ func ChangeWorkflowVisibility(ctx context.Context, c *app.RequestContext) {
 	}
 	w, err := Svc.ChangeVisibility(ctx, req.GetId(), req.GetVisibility(), auth.CallerID(ctx))
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -269,6 +301,7 @@ func schemaToPB(in []domain.InputSchemaEntry) *pb.WorkflowInputSchema {
 
 func toView(w *domain.Workflow) *pb.Workflow {
 	return &pb.Workflow{
+		OrganizationId: w.OrganizationID, WorkspaceId: w.WorkspaceID,
 		Id: w.ID, Scope: w.Scope, Name: w.Name, Description: w.Description,
 		OutputStepKey: w.OutputStepKey, Steps: stepsToPB(w.Steps),
 		Status: statusToPB(w.Status), Visibility: string(w.Visibility), Version: int32(w.Version),
@@ -280,6 +313,7 @@ func toView(w *domain.Workflow) *pb.Workflow {
 
 func summaryToView(s *domain.WorkflowSummary) *pb.Workflow {
 	return &pb.Workflow{
+		OrganizationId: s.OrganizationID, WorkspaceId: s.WorkspaceID,
 		Id: s.ID, Scope: s.Scope, Name: s.Name, Description: s.Description,
 		OutputStepKey: s.OutputStepKey, Status: statusToPB(s.Status),
 		Visibility: string(s.Visibility), Version: int32(s.Version),
@@ -315,6 +349,9 @@ func PublishWorkflow(ctx context.Context, c *app.RequestContext) {
 	}
 	w, err := Svc.Publish(ctx, req.GetId(), auth.CallerID(ctx))
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		status, code := consts.StatusBadRequest, "workflow_publication_unavailable"
 		switch {
 		case errors.Is(err, domain.ErrWorkflowForbidden):

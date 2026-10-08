@@ -32,6 +32,7 @@ func newTemplateInput(db *gorm.DB, opts ...gen.DOOption) templateInput {
 	_templateInput.TemplateID = field.NewString(tableName, "template_id")
 	_templateInput.Version = field.NewInt(tableName, "version")
 	_templateInput.Name = field.NewString(tableName, "name")
+	_templateInput.AssetKind = field.NewString(tableName, "asset_kind")
 	_templateInput.ResourceType = field.NewString(tableName, "resource_type")
 	_templateInput.Required = field.NewBool(tableName, "required")
 	_templateInput.DisplayOrder = field.NewInt(tableName, "display_order")
@@ -50,6 +51,7 @@ type templateInput struct {
 	TemplateID   field.String
 	Version      field.Int
 	Name         field.String
+	AssetKind    field.String
 	ResourceType field.String
 	Required     field.Bool
 	DisplayOrder field.Int
@@ -74,6 +76,7 @@ func (t *templateInput) updateTableName(table string) *templateInput {
 	t.TemplateID = field.NewString(table, "template_id")
 	t.Version = field.NewInt(table, "version")
 	t.Name = field.NewString(table, "name")
+	t.AssetKind = field.NewString(table, "asset_kind")
 	t.ResourceType = field.NewString(table, "resource_type")
 	t.Required = field.NewBool(table, "required")
 	t.DisplayOrder = field.NewInt(table, "display_order")
@@ -106,11 +109,12 @@ func (t *templateInput) GetFieldByName(fieldName string) (field.OrderExpr, bool)
 }
 
 func (t *templateInput) fillFieldMap() {
-	t.fieldMap = make(map[string]field.Expr, 8)
+	t.fieldMap = make(map[string]field.Expr, 9)
 	t.fieldMap["id"] = t.ID
 	t.fieldMap["template_id"] = t.TemplateID
 	t.fieldMap["version"] = t.Version
 	t.fieldMap["name"] = t.Name
+	t.fieldMap["asset_kind"] = t.AssetKind
 	t.fieldMap["resource_type"] = t.ResourceType
 	t.fieldMap["required"] = t.Required
 	t.fieldMap["display_order"] = t.DisplayOrder

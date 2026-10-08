@@ -59,6 +59,7 @@ type InvocationMapping map[string]InvocationExpression
 
 // Template 提示词模板（当前版本）。版本化：Update 时 version+1，旧版本入 TemplateVersion。
 type Template struct {
+	OrganizationID    string
 	ID                string
 	Scope             string
 	Name              string
@@ -84,6 +85,7 @@ type Template struct {
 
 // TemplateVersion 历史版本快照（Update 时追加）。
 type TemplateVersion struct {
+	Status            Status
 	TemplateID        string
 	Version           int
 	PromptBody        string

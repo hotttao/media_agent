@@ -1426,6 +1426,8 @@ components:
                     type: object
                     additionalProperties:
                         $ref: '#/components/schemas/InvocationExpression'
+                organization_id:
+                    type: string
         CreateTemplateResp:
             type: object
             properties:
@@ -1450,6 +1452,10 @@ components:
                     items:
                         $ref: '#/components/schemas/WorkflowStep'
                 created_by:
+                    type: string
+                organization_id:
+                    type: string
+                workspace_id:
                     type: string
         CreateWorkflowResp:
             type: object
@@ -1522,6 +1528,7 @@ components:
                     type: string
                 granted_by:
                     type: string
+                    description: Compatibility only; ignored. Grant issuer is the authenticated caller.
         HealthResponse:
             type: object
             properties:
@@ -2105,6 +2112,8 @@ components:
                     type: object
                     additionalProperties:
                         $ref: '#/components/schemas/InvocationExpression'
+                organization_id:
+                    type: string
         TemplateInputSlot:
             type: object
             properties:
@@ -2298,6 +2307,10 @@ components:
                 publication_id:
                     type: string
                 publication_status:
+                    type: string
+                organization_id:
+                    type: string
+                workspace_id:
                     type: string
         WorkflowInputSchema:
             type: object

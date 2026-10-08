@@ -28,6 +28,8 @@ func newWorkflow(db *gorm.DB, opts ...gen.DOOption) workflow {
 
 	tableName := _workflow.workflowDo.TableName()
 	_workflow.ALL = field.NewAsterisk(tableName)
+	_workflow.OrganizationID = field.NewString(tableName, "organization_id")
+	_workflow.WorkspaceID = field.NewString(tableName, "workspace_id")
 	_workflow.ID = field.NewString(tableName, "id")
 	_workflow.Scope = field.NewString(tableName, "scope")
 	_workflow.Name = field.NewString(tableName, "name")
@@ -50,20 +52,22 @@ func newWorkflow(db *gorm.DB, opts ...gen.DOOption) workflow {
 type workflow struct {
 	workflowDo workflowDo
 
-	ALL           field.Asterisk
-	ID            field.String
-	Scope         field.String
-	Name          field.String
-	Description   field.String
-	OutputStepKey field.String
-	Status        field.String
-	Visibility    field.String
-	Version       field.Int
-	InputSchema   field.Bytes
-	CreatedBy     field.String
-	CreatedAt     field.Time
-	UpdatedAt     field.Time
-	DeletedAt     field.Time
+	ALL            field.Asterisk
+	OrganizationID field.String
+	WorkspaceID    field.String
+	ID             field.String
+	Scope          field.String
+	Name           field.String
+	Description    field.String
+	OutputStepKey  field.String
+	Status         field.String
+	Visibility     field.String
+	Version        field.Int
+	InputSchema    field.Bytes
+	CreatedBy      field.String
+	CreatedAt      field.Time
+	UpdatedAt      field.Time
+	DeletedAt      field.Time
 
 	fieldMap map[string]field.Expr
 }
@@ -80,6 +84,8 @@ func (w workflow) As(alias string) *workflow {
 
 func (w *workflow) updateTableName(table string) *workflow {
 	w.ALL = field.NewAsterisk(table)
+	w.OrganizationID = field.NewString(table, "organization_id")
+	w.WorkspaceID = field.NewString(table, "workspace_id")
 	w.ID = field.NewString(table, "id")
 	w.Scope = field.NewString(table, "scope")
 	w.Name = field.NewString(table, "name")
@@ -117,7 +123,9 @@ func (w *workflow) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (w *workflow) fillFieldMap() {
-	w.fieldMap = make(map[string]field.Expr, 13)
+	w.fieldMap = make(map[string]field.Expr, 15)
+	w.fieldMap["organization_id"] = w.OrganizationID
+	w.fieldMap["workspace_id"] = w.WorkspaceID
 	w.fieldMap["id"] = w.ID
 	w.fieldMap["scope"] = w.Scope
 	w.fieldMap["name"] = w.Name

@@ -4,6 +4,7 @@ package template
 
 import (
 	"context"
+	"errors"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -23,7 +24,8 @@ func CreateTemplate(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	t, err := Svc.Create(ctx, tplsvc.CreateCommand{
-		Scope: req.GetScope(), Name: req.GetName(), Description: req.GetDescription(),
+		OrganizationID: resourceOrganization(ctx, req.GetOrganizationId()),
+		Scope:          req.GetScope(), Name: req.GetName(), Description: req.GetDescription(),
 		PromptBody: req.GetPromptBody(), Inputs: slotsFromPB(req.GetInputs()),
 		OutputAssetKind: req.GetOutputAssetKind(), Platform: req.GetPlatform(),
 		GenWay: req.GetGenWay(), GenType: req.GetGenType(),
@@ -33,6 +35,9 @@ func CreateTemplate(ctx context.Context, c *app.RequestContext) {
 		CreatedBy:         auth.CallerID(ctx),
 	})
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -46,7 +51,7 @@ func UpdateTemplate(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	t, err := Svc.Update(ctx, tplsvc.UpdateCommand{
-		ID: req.GetId(), Name: req.GetName(), Description: req.GetDescription(),
+		ID: req.GetId(), CallerID: auth.CallerID(ctx), TeamIDs: auth.TeamsFromContext(ctx), Name: req.GetName(), Description: req.GetDescription(),
 		PromptBody: req.GetPromptBody(), Inputs: slotsFromPB(req.GetInputs()),
 		OutputAssetKind: req.GetOutputAssetKind(), Platform: req.GetPlatform(),
 		GenWay: req.GetGenWay(), GenType: req.GetGenType(),
@@ -55,6 +60,13 @@ func UpdateTemplate(ctx context.Context, c *app.RequestContext) {
 		InvocationMapping: invocationFromPB(req.GetInvocationMapping()),
 	})
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
+		if errors.Is(err, domain.ErrTemplateForbidden) {
+			c.String(consts.StatusForbidden, "template access denied")
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -67,8 +79,11 @@ func GetTemplate(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	t, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx))
+	t, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusNotFound, err.Error())
 		return
 	}
@@ -81,8 +96,11 @@ func GetTemplateVersion(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	tv, err := Svc.GetVersion(ctx, req.GetId(), int(req.GetVersion()))
+	tv, err := Svc.GetVersionForCaller(ctx, req.GetId(), int(req.GetVersion()), auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusNotFound, err.Error())
 		return
 	}
@@ -106,8 +124,11 @@ func ListTemplates(ctx context.Context, c *app.RequestContext) {
 	items, total, err := Svc.List(ctx, domain.ListQuery{
 		Scope: req.GetScope(), Name: req.GetName(), Visibility: req.GetVisibility(),
 		Limit: pageSize, Offset: (page - 1) * pageSize,
-	}, auth.CallerID(ctx))
+	}, auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusInternalServerError, err.Error())
 		return
 	}
@@ -124,8 +145,15 @@ func ArchiveTemplate(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	t, err := Svc.Archive(ctx, req.GetId())
+	t, err := Svc.Archive(ctx, req.GetId(), auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
+		if errors.Is(err, domain.ErrTemplateForbidden) {
+			c.String(consts.StatusForbidden, "template access denied")
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -138,8 +166,15 @@ func GrantTemplate(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	t, err := Svc.Grant(ctx, req.GetId(), req.GetTeamId(), req.GetPermission(), req.GetGrantedBy())
+	t, err := Svc.Grant(ctx, req.GetId(), req.GetTeamId(), req.GetPermission(), auth.CallerID(ctx))
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
+		if errors.Is(err, domain.ErrTemplateForbidden) {
+			c.String(consts.StatusForbidden, "template access denied")
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -154,6 +189,9 @@ func RevokeTemplate(ctx context.Context, c *app.RequestContext) {
 	}
 	t, err := Svc.Revoke(ctx, req.GetId(), req.GetTeamId(), auth.CallerID(ctx))
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -168,6 +206,9 @@ func ChangeTemplateVisibility(ctx context.Context, c *app.RequestContext) {
 	}
 	t, err := Svc.ChangeVisibility(ctx, req.GetId(), req.GetVisibility(), auth.CallerID(ctx))
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
@@ -206,7 +247,8 @@ func statusToPB(s domain.Status) pb.TemplateStatus {
 
 func toView(t *domain.Template) *pb.Template {
 	return &pb.Template{
-		Id: t.ID, Scope: t.Scope, Name: t.Name, Description: t.Description,
+		OrganizationId: t.OrganizationID,
+		Id:             t.ID, Scope: t.Scope, Name: t.Name, Description: t.Description,
 		PromptBody: t.PromptBody, Inputs: slotsToPB(t.Inputs),
 		OutputAssetKind: t.OutputAssetKind, Platform: t.Platform, GenWay: t.GenWay, GenType: t.GenType,
 		NeedsConfirm: t.NeedsConfirm, CandidateCount: int32(t.CandidateCount),
@@ -224,7 +266,7 @@ func versionToView(tv *domain.TemplateVersion) *pb.Template {
 		NeedsConfirm: tv.NeedsConfirm, CandidateCount: int32(tv.CandidateCount),
 		CapabilityKey: tv.CapabilityKey, CapabilityVersion: int32(tv.CapabilityVersion),
 		InvocationMapping: invocationToPB(tv.InvocationMapping),
-		Status:            statusToPB(domain.StatusPublished), Version: int32(tv.Version),
+		Status:            statusToPB(tv.Status), Version: int32(tv.Version),
 		CreatedBy: tv.CreatedBy, CreatedAt: tv.CreatedAt.UnixNano(),
 	}
 }
@@ -272,8 +314,15 @@ func PublishTemplate(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	t, err := Svc.Publish(ctx, req.GetId())
+	t, err := Svc.Publish(ctx, req.GetId(), auth.CallerID(ctx))
 	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
+		if errors.Is(err, domain.ErrTemplateForbidden) {
+			c.String(consts.StatusForbidden, "template access denied")
+			return
+		}
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}

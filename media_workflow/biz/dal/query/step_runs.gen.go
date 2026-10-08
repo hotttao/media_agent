@@ -29,11 +29,17 @@ func newStepRun(db *gorm.DB, opts ...gen.DOOption) stepRun {
 	tableName := _stepRun.stepRunDo.TableName()
 	_stepRun.ALL = field.NewAsterisk(tableName)
 	_stepRun.ID = field.NewString(tableName, "id")
+	_stepRun.Origin = field.NewString(tableName, "origin")
+	_stepRun.SourceSystem = field.NewString(tableName, "source_system")
+	_stepRun.SourceRecordID = field.NewString(tableName, "source_record_id")
+	_stepRun.SourceSHA256 = field.NewString(tableName, "source_sha256")
+	_stepRun.SourceCreatedAt = field.NewTime(tableName, "source_created_at")
 	_stepRun.JobID = field.NewString(tableName, "job_id")
 	_stepRun.StepKey = field.NewString(tableName, "step_key")
 	_stepRun.StepOrder = field.NewInt(tableName, "step_order")
 	_stepRun.TemplateID = field.NewString(tableName, "template_id")
 	_stepRun.TemplateVersion = field.NewInt(tableName, "template_version")
+	_stepRun.ApprovalPolicy = field.NewString(tableName, "approval_policy")
 	_stepRun.Status = field.NewString(tableName, "status")
 	_stepRun.RetryCount = field.NewInt(tableName, "retry_count")
 	_stepRun.ResolvedInputs = field.NewField(tableName, "resolved_inputs")
@@ -63,11 +69,17 @@ type stepRun struct {
 
 	ALL             field.Asterisk
 	ID              field.String
+	Origin          field.String
+	SourceSystem    field.String
+	SourceRecordID  field.String
+	SourceSHA256    field.String
+	SourceCreatedAt field.Time
 	JobID           field.String
 	StepKey         field.String
 	StepOrder       field.Int
 	TemplateID      field.String
 	TemplateVersion field.Int
+	ApprovalPolicy  field.String
 	Status          field.String
 	RetryCount      field.Int
 	ResolvedInputs  field.Field
@@ -103,11 +115,17 @@ func (s stepRun) As(alias string) *stepRun {
 func (s *stepRun) updateTableName(table string) *stepRun {
 	s.ALL = field.NewAsterisk(table)
 	s.ID = field.NewString(table, "id")
+	s.Origin = field.NewString(table, "origin")
+	s.SourceSystem = field.NewString(table, "source_system")
+	s.SourceRecordID = field.NewString(table, "source_record_id")
+	s.SourceSHA256 = field.NewString(table, "source_sha256")
+	s.SourceCreatedAt = field.NewTime(table, "source_created_at")
 	s.JobID = field.NewString(table, "job_id")
 	s.StepKey = field.NewString(table, "step_key")
 	s.StepOrder = field.NewInt(table, "step_order")
 	s.TemplateID = field.NewString(table, "template_id")
 	s.TemplateVersion = field.NewInt(table, "template_version")
+	s.ApprovalPolicy = field.NewString(table, "approval_policy")
 	s.Status = field.NewString(table, "status")
 	s.RetryCount = field.NewInt(table, "retry_count")
 	s.ResolvedInputs = field.NewField(table, "resolved_inputs")
@@ -150,13 +168,19 @@ func (s *stepRun) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (s *stepRun) fillFieldMap() {
-	s.fieldMap = make(map[string]field.Expr, 24)
+	s.fieldMap = make(map[string]field.Expr, 30)
 	s.fieldMap["id"] = s.ID
+	s.fieldMap["origin"] = s.Origin
+	s.fieldMap["source_system"] = s.SourceSystem
+	s.fieldMap["source_record_id"] = s.SourceRecordID
+	s.fieldMap["source_sha256"] = s.SourceSHA256
+	s.fieldMap["source_created_at"] = s.SourceCreatedAt
 	s.fieldMap["job_id"] = s.JobID
 	s.fieldMap["step_key"] = s.StepKey
 	s.fieldMap["step_order"] = s.StepOrder
 	s.fieldMap["template_id"] = s.TemplateID
 	s.fieldMap["template_version"] = s.TemplateVersion
+	s.fieldMap["approval_policy"] = s.ApprovalPolicy
 	s.fieldMap["status"] = s.Status
 	s.fieldMap["retry_count"] = s.RetryCount
 	s.fieldMap["resolved_inputs"] = s.ResolvedInputs

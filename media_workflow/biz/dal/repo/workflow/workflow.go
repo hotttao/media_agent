@@ -41,6 +41,7 @@ func (r *Repo) Get(ctx context.Context, id string) (*domain.Workflow, error) {
 	var schema []domain.InputSchemaEntry
 	_ = json.Unmarshal(row.InputSchema, &schema)
 	w := &domain.Workflow{
+		OrganizationID: row.OrganizationID, WorkspaceID: row.WorkspaceID,
 		ID: row.ID, Scope: row.Scope, Name: row.Name, Description: row.Description,
 		OutputStepKey: row.OutputStepKey, Status: domain.Status(row.Status),
 		Visibility: domain.Visibility(row.Visibility), Version: row.Version,
@@ -64,23 +65,42 @@ func (r *Repo) Get(ctx context.Context, id string) (*domain.Workflow, error) {
 	return w, nil
 }
 
+func (r *Repo) GetForUpdate(ctx context.Context, id string) (*domain.Workflow, error) {
+	var row model.Workflow
+	if err := dal.FromContext(ctx, r.db).WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND deleted_at IS NULL", id).First(&row).Error; err != nil {
+		return nil, err
+	}
+	return r.Get(ctx, id)
+}
+
 func (r *Repo) List(ctx context.Context, q domain.ListQuery) ([]*domain.WorkflowSummary, int, error) {
-	Q := query.Use(dal.FromContext(ctx, r.db))
-	tx := Q.Workflow.WithContext(ctx).Where(Q.Workflow.DeletedAt.IsNull())
+	conn := dal.FromContext(ctx, r.db).WithContext(ctx)
+	tx := conn.Model(&model.Workflow{}).Where("deleted_at IS NULL")
+	if q.EnforceAccess {
+		acl := conn.Where("created_by = ? OR visibility = ?", q.CallerID, "public")
+		if len(q.TeamIDs) > 0 {
+			granted := conn.Model(&model.WorkflowGrant{}).Select("workflow_id").Where("team_id IN ? AND permission IN ?", q.TeamIDs, []string{"viewer", "editor"})
+			acl = acl.Or("visibility = ? AND id IN (?)", "team", granted)
+		}
+		tx = tx.Where(acl)
+	}
+	if q.EnforceBoundary {
+		tx = tx.Where("(organization_id = '' AND created_by = ?) OR (organization_id <> '' AND organization_id IN ? AND workspace_id IN ?)", q.CallerID, q.OrganizationIDs, q.WorkspaceIDs)
+	}
 	if q.Scope != "" {
-		tx = tx.Where(Q.Workflow.Scope.Eq(q.Scope))
+		tx = tx.Where("scope = ?", q.Scope)
 	}
 	if q.Name != "" {
-		tx = tx.Where(Q.Workflow.Name.Like("%" + q.Name + "%"))
+		tx = tx.Where("name LIKE ?", "%"+q.Name+"%")
 	}
 	if q.Status != "" {
-		tx = tx.Where(Q.Workflow.Status.Eq(q.Status))
+		tx = tx.Where("status = ?", q.Status)
 	}
 	if q.Visibility != "" {
-		tx = tx.Where(Q.Workflow.Visibility.Eq(q.Visibility))
+		tx = tx.Where("visibility = ?", q.Visibility)
 	}
-	total, err := tx.Count()
-	if err != nil {
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	if q.Limit > 0 {
@@ -89,8 +109,8 @@ func (r *Repo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Workflow
 	if q.Offset > 0 {
 		tx = tx.Offset(q.Offset)
 	}
-	rows, err := tx.Order(Q.Workflow.UpdatedAt.Desc()).Find()
-	if err != nil {
+	var rows []*model.Workflow
+	if err := tx.Order("updated_at DESC").Order("id ASC").Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
 	out := make([]*domain.WorkflowSummary, len(rows))
@@ -190,6 +210,7 @@ func (r *Repo) saveSteps(ctx context.Context, Q *query.Query, w *domain.Workflow
 func toModel(w *domain.Workflow) *model.Workflow {
 	schemaJSON, _ := json.Marshal(w.InputSchema)
 	return &model.Workflow{
+		OrganizationID: w.OrganizationID, WorkspaceID: w.WorkspaceID,
 		ID: w.ID, Scope: w.Scope, Name: w.Name, Description: w.Description,
 		OutputStepKey: w.OutputStepKey, Status: string(w.Status), Visibility: string(w.Visibility),
 		Version: w.Version, InputSchema: schemaJSON, CreatedBy: w.CreatedBy,
@@ -201,6 +222,7 @@ func summaryToDomain(row *model.Workflow) *domain.WorkflowSummary {
 	var schema []domain.InputSchemaEntry
 	_ = json.Unmarshal(row.InputSchema, &schema)
 	return &domain.WorkflowSummary{
+		OrganizationID: row.OrganizationID, WorkspaceID: row.WorkspaceID,
 		ID: row.ID, Scope: row.Scope, Name: row.Name, Description: row.Description,
 		OutputStepKey: row.OutputStepKey, Status: domain.Status(row.Status),
 		Visibility: domain.Visibility(row.Visibility), Version: row.Version,
@@ -248,6 +270,19 @@ func itoa(i int) string {
 type GrantRepo struct{ db *gorm.DB }
 
 func NewGrantRepo(db *gorm.DB) *GrantRepo { return &GrantRepo{db: db} }
+
+func (r *GrantRepo) ListGrants(ctx context.Context, workflowID string) ([]*domain.Grant, error) {
+	Q := query.Use(dal.FromContext(ctx, r.db))
+	rows, err := Q.WorkflowGrant.WithContext(ctx).Where(Q.WorkflowGrant.WorkflowID.Eq(workflowID)).Find()
+	if err != nil {
+		return nil, err
+	}
+	grants := make([]*domain.Grant, 0, len(rows))
+	for _, row := range rows {
+		grants = append(grants, &domain.Grant{WorkflowID: row.WorkflowID, TeamID: row.TeamID, Permission: domain.Permission(row.Permission), GrantedBy: row.GrantedBy, GrantedAt: row.GrantedAt})
+	}
+	return grants, nil
+}
 
 func (r *GrantRepo) AddGrant(ctx context.Context, g *domain.Grant) error {
 	row := &model.WorkflowGrant{

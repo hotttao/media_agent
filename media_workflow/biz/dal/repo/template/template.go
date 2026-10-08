@@ -54,6 +54,7 @@ func (r *Repo) Save(ctx context.Context, t *domain.Template) error {
 	tv := &model.TemplateVersion{
 		ID:         "tv_" + row.ID + "_" + pad(t.Version),
 		TemplateID: row.ID, Version: t.Version,
+		Status:     string(t.Status),
 		PromptBody: t.PromptBody, OutputAssetKind: t.OutputAssetKind,
 		Platform: t.Platform, GenWay: t.GenWay, GenType: t.GenType,
 		NeedsConfirm: t.NeedsConfirm, CandidateCount: t.CandidateCount,
@@ -81,6 +82,14 @@ func (r *Repo) Get(ctx context.Context, id string) (*domain.Template, error) {
 	return toDomain(row, inputs), nil
 }
 
+func (r *Repo) GetForUpdate(ctx context.Context, id string) (*domain.Template, error) {
+	var row model.Template
+	if err := dal.FromContext(ctx, r.db).WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND deleted_at IS NULL", id).First(&row).Error; err != nil {
+		return nil, err
+	}
+	return r.Get(ctx, id)
+}
+
 func (r *Repo) GetVersion(ctx context.Context, id string, version int) (*domain.TemplateVersion, error) {
 	Q := query.Use(dal.FromContext(ctx, r.db))
 	row, err := Q.TemplateVersion.WithContext(ctx).
@@ -91,13 +100,13 @@ func (r *Repo) GetVersion(ctx context.Context, id string, version int) (*domain.
 			current, currentErr := r.Get(ctx, id)
 			if currentErr == nil && current.Version == version {
 				return &domain.TemplateVersion{
-					TemplateID: current.ID, Version: current.Version,
+					TemplateID: current.ID, Version: current.Version, Status: current.Status,
 					PromptBody: current.PromptBody, OutputAssetKind: current.OutputAssetKind,
 					Platform: current.Platform, GenWay: current.GenWay, GenType: current.GenType,
 					NeedsConfirm: current.NeedsConfirm, CandidateCount: current.CandidateCount,
 					CapabilityKey: current.CapabilityKey, CapabilityVersion: current.CapabilityVersion,
 					InvocationMapping: current.InvocationMapping,
-					Inputs: current.Inputs, CreatedBy: current.CreatedBy, CreatedAt: current.CreatedAt,
+					Inputs:            current.Inputs, CreatedBy: current.CreatedBy, CreatedAt: current.CreatedAt,
 				}, nil
 			}
 		}
@@ -112,7 +121,7 @@ func (r *Repo) GetVersion(ctx context.Context, id string, version int) (*domain.
 		return nil, err
 	}
 	return &domain.TemplateVersion{
-		TemplateID: row.TemplateID, Version: row.Version,
+		TemplateID: row.TemplateID, Version: row.Version, Status: domain.Status(row.Status),
 		PromptBody: row.PromptBody, OutputAssetKind: row.OutputAssetKind,
 		Platform: row.Platform, GenWay: row.GenWay, GenType: row.GenType,
 		NeedsConfirm: row.NeedsConfirm, CandidateCount: row.CandidateCount,
@@ -123,19 +132,30 @@ func (r *Repo) GetVersion(ctx context.Context, id string, version int) (*domain.
 }
 
 func (r *Repo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Template, int, error) {
-	Q := query.Use(dal.FromContext(ctx, r.db))
-	tx := Q.Template.WithContext(ctx).Where(Q.Template.DeletedAt.IsNull())
+	conn := dal.FromContext(ctx, r.db).WithContext(ctx)
+	tx := conn.Model(&model.Template{}).Where("deleted_at IS NULL")
+	if q.EnforceAccess {
+		acl := conn.Where("created_by = ? OR visibility = ?", q.CallerID, "public")
+		if len(q.TeamIDs) > 0 {
+			granted := conn.Model(&model.TemplateGrant{}).Select("template_id").Where("team_id IN ? AND permission IN ?", q.TeamIDs, []string{"viewer", "editor"})
+			acl = acl.Or("visibility = ? AND id IN (?)", "team", granted)
+		}
+		tx = tx.Where(acl)
+	}
+	if q.EnforceBoundary {
+		tx = tx.Where("(organization_id = '' AND created_by = ?) OR (organization_id <> '' AND organization_id IN ?)", q.CallerID, q.OrganizationIDs)
+	}
 	if q.Scope != "" {
-		tx = tx.Where(Q.Template.Scope.Eq(q.Scope))
+		tx = tx.Where("scope = ?", q.Scope)
 	}
 	if q.Name != "" {
-		tx = tx.Where(Q.Template.Name.Like("%" + q.Name + "%"))
+		tx = tx.Where("name LIKE ?", "%"+q.Name+"%")
 	}
 	if q.Visibility != "" {
-		tx = tx.Where(Q.Template.Visibility.Eq(q.Visibility))
+		tx = tx.Where("visibility = ?", q.Visibility)
 	}
-	total, err := tx.Count()
-	if err != nil {
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	if q.Limit > 0 {
@@ -144,8 +164,8 @@ func (r *Repo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Template
 	if q.Offset > 0 {
 		tx = tx.Offset(q.Offset)
 	}
-	rows, err := tx.Order(Q.Template.UpdatedAt.Desc()).Find()
-	if err != nil {
+	var rows []*model.Template
+	if err := tx.Order("updated_at DESC").Order("id ASC").Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
 	out := make([]*domain.Template, len(rows))
@@ -171,7 +191,7 @@ func (r *Repo) Update(ctx context.Context, t *domain.Template, snapshot *domain.
 		}
 		tv := &model.TemplateVersion{
 			ID:         "tv_" + snapshot.TemplateID + "_" + pad(snapshot.Version),
-			TemplateID: snapshot.TemplateID, Version: snapshot.Version,
+			TemplateID: snapshot.TemplateID, Version: snapshot.Version, Status: string(snapshot.Status),
 			PromptBody: snapshot.PromptBody, OutputAssetKind: snapshot.OutputAssetKind,
 			Platform: snapshot.Platform, GenWay: snapshot.GenWay, GenType: snapshot.GenType,
 			NeedsConfirm: snapshot.NeedsConfirm, CandidateCount: snapshot.CandidateCount,
@@ -190,7 +210,8 @@ func (r *Repo) Update(ctx context.Context, t *domain.Template, snapshot *domain.
 	if _, err := Q.Template.WithContext(ctx).
 		Where(Q.Template.ID.Eq(t.ID), Q.Template.DeletedAt.IsNull()).
 		Updates(map[string]any{
-			"name": row.Name, "description": row.Description, "prompt_body": row.PromptBody,
+			"status": string(t.Status),
+			"name":   row.Name, "description": row.Description, "prompt_body": row.PromptBody,
 			"output_asset_kind": row.OutputAssetKind, "platform": row.Platform,
 			"gen_way": row.GenWay, "gen_type": row.GenType,
 			"needs_confirm": row.NeedsConfirm, "candidate_count": row.CandidateCount,
@@ -228,14 +249,15 @@ func (r *Repo) Update(ctx context.Context, t *domain.Template, snapshot *domain.
 	}
 	return dal.FromContext(ctx, r.db).WithContext(ctx).
 		Clauses(clause.OnConflict{DoNothing: true}).Create(&model.TemplateVersion{
-			ID: "tv_" + t.ID + "_" + pad(t.Version), TemplateID: t.ID, Version: t.Version,
-			PromptBody: t.PromptBody, OutputAssetKind: t.OutputAssetKind,
-			Platform: t.Platform, GenWay: t.GenWay, GenType: t.GenType,
-			NeedsConfirm: t.NeedsConfirm, CandidateCount: t.CandidateCount,
-			CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion,
-			InvocationMapping: invocationJSON, InputsSnapshot: inputsJSON,
-			CreatedBy: t.CreatedBy, CreatedAt: time.Now(),
-		}).Error
+		ID: "tv_" + t.ID + "_" + pad(t.Version), TemplateID: t.ID, Version: t.Version,
+		Status:     string(t.Status),
+		PromptBody: t.PromptBody, OutputAssetKind: t.OutputAssetKind,
+		Platform: t.Platform, GenWay: t.GenWay, GenType: t.GenType,
+		NeedsConfirm: t.NeedsConfirm, CandidateCount: t.CandidateCount,
+		CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion,
+		InvocationMapping: invocationJSON, InputsSnapshot: inputsJSON,
+		CreatedBy: t.CreatedBy, CreatedAt: time.Now(),
+	}).Error
 }
 
 func (r *Repo) UpdateStatus(ctx context.Context, id string, status domain.Status) error {
@@ -243,7 +265,13 @@ func (r *Repo) UpdateStatus(ctx context.Context, id string, status domain.Status
 	_, err := Q.Template.WithContext(ctx).
 		Where(Q.Template.ID.Eq(id), Q.Template.DeletedAt.IsNull()).
 		Updates(map[string]any{"status": string(status), "updated_at": time.Now()})
-	return err
+	if err != nil {
+		return err
+	}
+	if status == domain.StatusPublished {
+		return dal.FromContext(ctx, r.db).WithContext(ctx).Model(&model.TemplateVersion{}).Where("template_id = ? AND version = (SELECT version FROM media_workflow.templates WHERE id = ?)", id, id).Update("status", "published").Error
+	}
+	return nil
 }
 
 func (r *Repo) UpdateVisibility(ctx context.Context, id string, visibility domain.Visibility) error {
@@ -273,7 +301,8 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 func toModel(t *domain.Template) *model.Template {
 	invocationJSON, _ := json.Marshal(t.InvocationMapping)
 	return &model.Template{
-		ID: t.ID, Scope: t.Scope, Name: t.Name, Description: t.Description,
+		OrganizationID: t.OrganizationID,
+		ID:             t.ID, Scope: t.Scope, Name: t.Name, Description: t.Description,
 		PromptBody: t.PromptBody, OutputAssetKind: t.OutputAssetKind,
 		Platform: t.Platform, GenWay: t.GenWay, GenType: t.GenType,
 		NeedsConfirm: t.NeedsConfirm, CandidateCount: t.CandidateCount,
@@ -289,7 +318,8 @@ func toDomain(row *model.Template, inputs []*model.TemplateInput) *domain.Templa
 	var invocation domain.InvocationMapping
 	_ = json.Unmarshal(row.InvocationMapping, &invocation)
 	t := &domain.Template{
-		ID: row.ID, Scope: row.Scope, Name: row.Name, Description: row.Description,
+		OrganizationID: row.OrganizationID,
+		ID:             row.ID, Scope: row.Scope, Name: row.Name, Description: row.Description,
 		PromptBody: row.PromptBody, OutputAssetKind: row.OutputAssetKind,
 		Platform: row.Platform, GenWay: row.GenWay, GenType: row.GenType,
 		NeedsConfirm: row.NeedsConfirm, CandidateCount: row.CandidateCount,

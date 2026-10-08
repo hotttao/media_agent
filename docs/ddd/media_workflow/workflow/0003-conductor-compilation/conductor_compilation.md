@@ -7,6 +7,14 @@ domains: [workflow, template, execution_capability]
 
 ## 一句话说明
 
+## 权限与冻结边界
+
+编辑/发布前重新确认当前功能准入：企业级Template检查调用者在所属企业仍有可使用workflow功能的部门，Workflow按所属Workspace的部门有效功能检查。资源owner/editor不能覆盖企业/部门撤销的功能权限；身份事实故障返回503，明确无权限返回403。外部准入检查在本地事务之外，锁内复核本地资源ACL和源版本。读取、归档与撤权等资源管理仍使用既有边界/ACL，不因为不能启动生成任务而失去回收权限。
+
+调用者必须是 Workflow owner、当前企业有效成员并可使用所属 Workspace 的工作流功能。编译前逐个检查引用的 Template 属于同企业、当前可读、引用版本已经发布；查看和编辑草稿不代表可以引用草稿发布。企业/部门管理员不自动成为资源 owner。外部权限事实查询发生在本地事务之外；接受发布事务内锁定并复核源版本与本地 ACL。
+
+Workflow 的授权不复制到 Template。注册后的 Compilation 冻结完整模板、能力和映射；运行使用已授权发布快照，不要求执行者获得每个源 Template 的独立权限。模板撤权、改版或归档不改写已有 Compilation，也不终止已启动 Job；新编辑/引用/发布重新检查权限。执行仍检查 Workflow 当前可读性和目标 Workspace 准入，Job 查看/审批/取消保持自己的归属规则。
+
 Workflow 发布时冻结所有引用版本，先经 Semantic Compiler 生成不可变 Executable Workflow IR，再由 Conductor Backend Compiler 按拓扑波次生成 Definition；经 Outbox 注册成功后才进入可执行的 published 状态。
 
 ## 执行时间线

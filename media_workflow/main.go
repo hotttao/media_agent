@@ -42,8 +42,24 @@ import (
 // templateLookupAdapter 把 template.Service 适配为 workflow.TemplateLookup 端口。
 type templateLookupAdapter struct{ svc *tplsvc.Service }
 
-func (a *templateLookupAdapter) GetVersion(ctx context.Context, id string, version int) (*wfdomain.TemplateSnapshot, error) {
+// Only execution use cases receive this immutable snapshot port. Job-level
+// authorization precedes access; it is never used by definition handlers.
+type executionTemplateLookupAdapter struct{ svc *tplsvc.Service }
+
+func (a *executionTemplateLookupAdapter) GetVersion(ctx context.Context, id string, version int) (*wfdomain.TemplateSnapshot, error) {
 	tv, err := a.svc.GetVersion(ctx, id, version)
+	if err != nil {
+		return nil, err
+	}
+	slots := make([]wfdomain.SlotSnapshot, 0, len(tv.Inputs))
+	for _, in := range tv.Inputs {
+		slots = append(slots, wfdomain.SlotSnapshot{Name: in.Name, AssetKind: in.AssetKind, ResourceType: in.ResourceType, Required: in.Required})
+	}
+	return &wfdomain.TemplateSnapshot{ID: tv.TemplateID, Status: string(tv.Status), PromptBody: tv.PromptBody, OutputAssetKind: tv.OutputAssetKind, Platform: tv.Platform, GenWay: tv.GenWay, GenType: tv.GenType, NeedsConfirm: tv.NeedsConfirm, CandidateCount: tv.CandidateCount, CapabilityKey: tv.CapabilityKey, CapabilityVersion: tv.CapabilityVersion, InvocationMapping: invocationSnapshot(tv.InvocationMapping), Inputs: slots}, nil
+}
+
+func (a *templateLookupAdapter) GetVersion(ctx context.Context, id string, version int) (*wfdomain.TemplateSnapshot, error) {
+	tv, err := a.svc.GetVersionForCaller(ctx, id, version, auth.CallerID(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -52,12 +68,16 @@ func (a *templateLookupAdapter) GetVersion(ctx context.Context, id string, versi
 		slots[i] = wfdomain.SlotSnapshot{Name: in.Name, AssetKind: in.AssetKind, ResourceType: in.ResourceType, Required: in.Required}
 	}
 	// status 需从当前 template 取（version 快照无 status；查当前）
-	t, err := a.svc.Get(ctx, id, auth.CallerID(ctx)) // current baseline visibility contract; ACL expansion is deferred
+	t, err := a.svc.Get(ctx, id, auth.CallerID(ctx))
 	if err != nil {
 		return nil, err
 	}
+	versionStatus := tv.Status
+	if t.Status == templatedomain.StatusArchived {
+		versionStatus = templatedomain.StatusArchived
+	}
 	return &wfdomain.TemplateSnapshot{
-		ID: tv.TemplateID, Scope: t.Scope, Status: string(t.Status),
+		OrganizationID: t.OrganizationID, ID: tv.TemplateID, Scope: t.Scope, Status: string(versionStatus),
 		OutputAssetKind: tv.OutputAssetKind, PromptBody: tv.PromptBody, Platform: tv.Platform,
 		GenWay: tv.GenWay, GenType: tv.GenType,
 		NeedsConfirm: tv.NeedsConfirm, CandidateCount: tv.CandidateCount, Inputs: slots,
@@ -151,10 +171,18 @@ func main() {
 	jobRepo := jobrepo.NewJobRepo(db)
 	stepRunRepo := jobrepo.NewStepRunRepo(db)
 	executionEngine := &conductor.ExecutionEngine{Client: conductorClient}
-	jobSvc := jobsvc.NewService(jobRepo, stepRunRepo, txRunner, wfRepo, tplLookup, materialsClient, cfg.GetJob(), compilationRepo, executionEngine)
+	jobSvc := jobsvc.NewService(jobRepo, stepRunRepo, txRunner, wfRepo, &executionTemplateLookupAdapter{svc: tplSvc}, materialsClient, cfg.GetJob(), compilationRepo, executionEngine)
 	jobSvc.ConfigureHistoryAssets(materialsClient)
 	jobSvc.ConfigureCandidateMedia(materialsClient)
 	controlClient := client.NewControlClient(os.Getenv("MEDIA_CONTROL_URL"), os.Getenv("CONTROL_INTERNAL_TOKEN"))
+	resourceAuthURL := os.Getenv("MEDIA_AUTH_URL")
+	if resourceAuthURL == "" {
+		resourceAuthURL = "http://127.0.0.1:8001"
+	}
+	resourceAuthority := client.NewResourceAuthorityClient(resourceAuthURL, os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN"), controlClient)
+	tplSvc.ConfigureResourceAuthority(resourceAuthority.TemplateAuthority())
+	wfSvc.ConfigureResourceAuthority(resourceAuthority)
+	jobSvc.ConfigureWorkflowAccess(wfSvc.AuthorizeExecution)
 	jobSvc.ConfigureHistoryWorkspaces(controlClient)
 	jobSvc.ConfigureResume(jobRepo, controlClient, conductorClient, os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"))
 	jobSvc.ConfigureReviews(jobRepo)

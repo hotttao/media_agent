@@ -31,6 +31,7 @@ type GeneratedAssetSaver interface {
 
 // Service owns execution commands and read projections; Conductor owns scheduling.
 type Service struct {
+	workflowAccess      func(context.Context, string, string, string, string) error
 	jobRepo             domain.JobRepo
 	stepRunRepo         domain.StepRunRepo
 	tx                  dal.TxRunner
@@ -115,7 +116,14 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 		return nil, fmt.Errorf("workflow %s: %w", cmd.WorkflowID, err)
 	}
 	if wf.CreatedBy != cmd.SubmittedBy && wf.Visibility != wfdomain.VisibilityPublic {
-		return nil, ErrSubmitForbidden
+		if s.workflowAccess == nil {
+			return nil, ErrSubmitForbidden
+		}
+	}
+	if s.workflowAccess != nil {
+		if err := s.workflowAccess(ctx, wf.ID, cmd.OrganizationID, cmd.WorkspaceID, cmd.SubmittedBy); err != nil {
+			return nil, err
+		}
 	}
 	// workflow_version is optional at the HTTP boundary. Zero means "use the
 	// current published version"; a non-zero value remains an optimistic lock.
@@ -150,9 +158,27 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 	}
 	// 为每个 step 创建 step_run，反范式化 template 字段
 	stepRuns := make([]*domain.StepRun, 0, len(wf.Steps))
+	var frozenIR executable.ExecutableWorkflowIR
+	if s.workflowAccess != nil && json.Unmarshal(compilation.IRJSON, &frozenIR) != nil {
+		return nil, errors.New("invalid frozen compilation")
+	}
 	for _, step := range wf.Steps {
 		// 加载 template 快照（反范式化 platform/gen_way/asset_kind 等）
-		tpl, err := s.tplLookup.GetVersion(ctx, step.TemplateID, step.TemplateVersion)
+		var tpl *wfdomain.TemplateSnapshot
+		var err error
+		if s.workflowAccess == nil {
+			tpl, err = s.tplLookup.GetVersion(ctx, step.TemplateID, step.TemplateVersion)
+		} else {
+			for _, frozen := range frozenIR.Steps {
+				if frozen.Key == step.Key && frozen.Template.ID == step.TemplateID && frozen.Template.Version == step.TemplateVersion {
+					tpl = &wfdomain.TemplateSnapshot{ID: frozen.Template.ID, OutputAssetKind: frozen.OutputAssetKind, Platform: frozen.Capability.Provider, GenWay: frozen.Capability.GenerationMethod, GenType: frozen.Capability.GenerationType, NeedsConfirm: frozen.ApprovalRequired, CandidateCount: frozen.CandidateCount}
+					break
+				}
+			}
+			if tpl == nil {
+				err = errors.New("step missing from frozen compilation")
+			}
+		}
 		if err != nil {
 			return nil, fmt.Errorf("template %s v%d: %w", step.TemplateID, step.TemplateVersion, err)
 		}

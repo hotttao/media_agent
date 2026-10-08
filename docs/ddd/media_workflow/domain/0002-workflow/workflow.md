@@ -50,6 +50,12 @@ Workflow 域负责存储「一组有序 Step 通过 SlotBinding 串联而成的 
 
 ## 权限规则
 
+编辑/发布必须在资源ACL通过后检查所属Workspace的实时`use_workflow`准入；企业/部门禁用workflow后，即使owner/editor也不能继续编辑或发布。该检查不改变Conductor执行、已冻结Compilation或正在运行Job。旧未绑定定义保留owner兼容访问，但编辑/发布仍要求当前身份有工作流功能，不自动推断所属企业。
+
+Workflow 绑定不可变 `organization_id/workspace_id`，企业由Control的授权Workspace事实派生并与可信调用上下文一致。默认private/draft；企业与Workspace准入先于资源ACL，public不跨企业或Workspace边界。viewer读/执行已发布版本，editor编辑/归档，owner发布/删除/Grant/Revoke/修改共享；管理员角色不替代owner。部门Grant只能指向同企业有效部门。权限过滤先于分页和总数。
+
+创建/编辑/发布时逐个校验Template可读与同企业；发布只接受已发布模板版本。共享Workflow不共享源Template，执行冻结Compilation不再次要求执行者源Template授权。Job查询/审批/重试/取消继续使用独立归属权限。旧未绑定记录仅owner兼容访问，新共享前必须明确归属，不能借Scope猜企业。
+
 按 [My Permission](../../../resource_access/CONTEXT.md#my-permission有效资源权限) 推导：
 
 | 操作 | 所需 my_permission |
@@ -75,8 +81,9 @@ Workflow 域负责存储「一组有序 Step 通过 SlotBinding 串联而成的 
 
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
-| id | bigserial | 主键 |
-| workspace_id | text not null | 所属 Workspace；跨服务 ID，不建外键 |
+| id | text | 主键 |
+| organization_id | text not null | 不可变企业归属；旧未绑定记录为空字符串 |
+| workspace_id | text not null | 所属 Workspace；旧未绑定记录为空字符串；跨服务 ID，不建外键 |
 | scope | text not null | 业务范围；1:1；不可改 |
 | name | text not null | 工作流名；(scope,name,version) 唯一 |
 | description | text nullable | 描述 |

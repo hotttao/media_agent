@@ -83,6 +83,7 @@ func (s *Service) Authorize(ctx context.Context, userID, teamID, permission stri
 	if team.Status != "active" {
 		return view, nil
 	}
+	view.TeamActive = true
 	organization, err := s.organizations.Get(ctx, team.OrganizationID)
 	if err != nil {
 		return AuthorizationView{}, err
@@ -90,6 +91,7 @@ func (s *Service) Authorize(ctx context.Context, userID, teamID, permission stri
 	if organization.Status != "active" {
 		return view, nil
 	}
+	view.OrganizationActive = true
 	if membership, membershipErr := s.repo.GetMembership(ctx, teamID, userID); membershipErr == nil {
 		view.TeamRole = string(membership.Role)
 	} else if !errors.Is(membershipErr, domainteam.ErrNotMember) {

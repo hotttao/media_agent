@@ -102,6 +102,7 @@ message Template {
   string capability_key = 19;
   int32 capability_version = 20;
   map<string, InvocationExpression> invocation_mapping = 21;
+	string organization_id = 22;
 }
 
 message CreateTemplateReq {
@@ -120,6 +121,7 @@ message CreateTemplateReq {
   string capability_key = 13 [(api.body) = "capability_key"];
   int32 capability_version = 14 [(api.body) = "capability_version"];
   map<string, InvocationExpression> invocation_mapping = 15 [(api.body) = "invocation_mapping"];
+	string organization_id = 16 [(api.body) = "organization_id"];
 }
 message CreateTemplateResp { string id = 1; int32 version = 2; }
 
@@ -157,7 +159,8 @@ message GrantReq {
   string id = 1 [(api.path) = "id"];
   string team_id = 2 [(api.body) = "team_id"];
   string permission = 3 [(api.body) = "permission"];
-  string granted_by = 4 [(api.query) = "granted_by"];
+  // Compatibility only; ignored. Grant issuer is the authenticated caller.
+  string granted_by = 4 [deprecated = true, (api.query) = "granted_by"];
 }
 message RevokeReq {
   string id = 1 [(api.path) = "id"];

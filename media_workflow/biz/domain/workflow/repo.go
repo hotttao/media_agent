@@ -25,29 +25,38 @@ type Repo interface {
 type GrantRepo interface {
 	AddGrant(ctx context.Context, g *Grant) error
 	RemoveGrant(ctx context.Context, workflowID, teamID string) error
+	ListGrants(ctx context.Context, workflowID string) ([]*Grant, error)
 }
 
 // WorkflowSummary 列表项（不含 steps/bindings，按需 Get）。
 type WorkflowSummary struct {
-	ID            string
-	Scope         string
-	Name          string
-	Description   string
-	OutputStepKey string
-	Status        Status
-	Visibility    Visibility
-	Version       int
-	InputSchema   []InputSchemaEntry
-	CreatedBy     string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	OrganizationID string
+	WorkspaceID    string
+	ID             string
+	Scope          string
+	Name           string
+	Description    string
+	OutputStepKey  string
+	Status         Status
+	Visibility     Visibility
+	Version        int
+	InputSchema    []InputSchemaEntry
+	CreatedBy      string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type ListQuery struct {
-	Scope      string
-	Name       string
-	Status     string
-	Visibility string
-	Limit      int
-	Offset     int
+	OrganizationIDs []string
+	WorkspaceIDs    []string
+	EnforceBoundary bool
+	EnforceAccess   bool
+	CallerID        string
+	TeamIDs         []string
+	Scope           string
+	Name            string
+	Status          string
+	Visibility      string
+	Limit           int
+	Offset          int
 }

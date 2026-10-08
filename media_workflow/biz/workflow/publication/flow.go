@@ -105,6 +105,9 @@ func (f *Flow) compile(ctx context.Context, workflow *workflowdomain.Workflow) (
 			return nil, fmt.Errorf("load template %s@%d: %w", step.TemplateID, step.TemplateVersion, err)
 		}
 		invocation := make(templatedomain.InvocationMapping, len(template.InvocationMapping))
+		if workflow.OrganizationID != "" && (template.OrganizationID != workflow.OrganizationID || template.Status != "published") {
+			return nil, workflowdomain.ErrWorkflowForbidden
+		}
 		for name, expression := range template.InvocationMapping {
 			invocation[name] = toTemplateExpression(expression)
 		}

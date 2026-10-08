@@ -32,6 +32,8 @@ type EntitlementsView struct {
 }
 
 type AuthorizationView struct {
+	TeamActive           bool
+	OrganizationActive   bool
 	TeamID               string
 	OrganizationID       string
 	Permission           string

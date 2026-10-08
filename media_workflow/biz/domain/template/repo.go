@@ -30,9 +30,14 @@ type GrantRepo interface {
 }
 
 type ListQuery struct {
-	Scope      string
-	Name       string
-	Visibility string
-	Limit      int
-	Offset     int
+	OrganizationIDs []string
+	EnforceBoundary bool
+	EnforceAccess   bool
+	CallerID        string
+	TeamIDs         []string
+	Scope           string
+	Name            string
+	Visibility      string
+	Limit           int
+	Offset          int
 }

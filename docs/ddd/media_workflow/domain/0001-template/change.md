@@ -60,3 +60,9 @@
 5. `visibility=public` 也受 `scope` 业务线隔离——任何 user 跨 scope 看到 public template 不会被拒（read 不拒），但若把 public template 绑到另一 scope 的 workflow，则 workflow_validation 拒 `SCOPE_MISMATCH`。
 6. **单一 output**：一个 Template 恒定产出**一个** generated_asset，类别由 `output_asset_kind` 决定；不支持多输出。
 7. input slot.kind / output_asset_kind 引用全局 asset_kind 注册表（无 scope）；kind 决定 media_type / resource_type / 落表。
+# 2026-10-07 权限扩展
+
+确认企业级Template、资源owner/viewer/editor与功能准入分离；草稿可共享协作，发布不自动公开；更新新draft版本、发布由owner完成，部门撤权不改变旧Compilation。实现按新专项spec/plan验收，旧记录不猜企业。
+# 2026-10-08 编辑/发布功能准入收口
+
+资源角色不能替代功能授权，编辑/发布前检查当前企业内有效workflow功能；Template不依赖Workspace服务。读与撤权不扩展为执行授权。

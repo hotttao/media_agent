@@ -36,6 +36,8 @@ func newWorkflowStep(db *gorm.DB, opts ...gen.DOOption) workflowStep {
 	_workflowStep.StepOrder = field.NewInt(tableName, "step_order")
 	_workflowStep.TemplateID = field.NewString(tableName, "template_id")
 	_workflowStep.TemplateVersion = field.NewInt(tableName, "template_version")
+	_workflowStep.ApprovalPolicy = field.NewString(tableName, "approval_policy")
+	_workflowStep.ReusePolicy = field.NewString(tableName, "reuse_policy")
 	_workflowStep.CreatedAt = field.NewTime(tableName, "created_at")
 
 	_workflowStep.fillFieldMap()
@@ -55,6 +57,8 @@ type workflowStep struct {
 	StepOrder       field.Int
 	TemplateID      field.String
 	TemplateVersion field.Int
+	ApprovalPolicy  field.String
+	ReusePolicy     field.String
 	CreatedAt       field.Time
 
 	fieldMap map[string]field.Expr
@@ -80,6 +84,8 @@ func (w *workflowStep) updateTableName(table string) *workflowStep {
 	w.StepOrder = field.NewInt(table, "step_order")
 	w.TemplateID = field.NewString(table, "template_id")
 	w.TemplateVersion = field.NewInt(table, "template_version")
+	w.ApprovalPolicy = field.NewString(table, "approval_policy")
+	w.ReusePolicy = field.NewString(table, "reuse_policy")
 	w.CreatedAt = field.NewTime(table, "created_at")
 
 	w.fillFieldMap()
@@ -109,7 +115,7 @@ func (w *workflowStep) GetFieldByName(fieldName string) (field.OrderExpr, bool) 
 }
 
 func (w *workflowStep) fillFieldMap() {
-	w.fieldMap = make(map[string]field.Expr, 9)
+	w.fieldMap = make(map[string]field.Expr, 11)
 	w.fieldMap["id"] = w.ID
 	w.fieldMap["workflow_id"] = w.WorkflowID
 	w.fieldMap["version"] = w.Version
@@ -118,6 +124,8 @@ func (w *workflowStep) fillFieldMap() {
 	w.fieldMap["step_order"] = w.StepOrder
 	w.fieldMap["template_id"] = w.TemplateID
 	w.fieldMap["template_version"] = w.TemplateVersion
+	w.fieldMap["approval_policy"] = w.ApprovalPolicy
+	w.fieldMap["reuse_policy"] = w.ReusePolicy
 	w.fieldMap["created_at"] = w.CreatedAt
 }
 

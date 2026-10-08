@@ -573,6 +573,18 @@ MEDIA_E2E_TALOS_URL="http://${issuance_talos_ip}:4420" \
 
 ## 边界
 
+### Template / Workflow 资源权限
+
+`media-cli/e2e/TestResourceMultiuserGateway` 是显式启用的部署多账号门禁，不能用默认环境的 Skip 当作验收。需配置 `MEDIA_E2E_RESOURCE_MULTIUSER=1`、网关/User API Token/企业，以及 `MEDIA_E2E_PUBLICATION_SOURCE_ID`、绝对路径的 `MEDIA_E2E_CLI_BINARY` 和仅回环可访问的 `MEDIA_E2E_KRATOS_ADMIN`。凭据从既有私有环境文件加载，不输出、不提交。
+
+```bash
+go -C media-cli test ./e2e -run '^TestResourceMultiuserGateway$' -count=1 -v
+```
+
+门禁通过本地 Kratos Admin 创建自己的唯一临时身份，以真实浏览器密码登录取得 Cookie，再经公开 API 为该身份申请临时 User API Token；业务权限请求仅走统一网关，不伪造内部 JWT。原测试管理员只提供企业成员/新部门管理能力，不重置任何已有账号。创建自己的部门、Workspace、模板及单节点 Workflow，验证 viewer/editor/企业管理员边界、功能撤销与恢复、Grant 撤销，以及独立 CLI 读取/拒绝发布/owner 发布至 registered。只注册定义，不提交 Job、不启动模型 Worker。
+
+结束时归档测试定义、停用测试部门、撤销临时 Token、移除临时企业成员并删除测试 Kratos 身份。Workspace 没有公开删除 API，其记录随测试部门停用而不可访问；业务用户映射、已归档定义及凭据审计记录保留，不通过直接 SQL 擦除。异常中断后先只读核对唯一 `acl-multi-<UTC timestamp>` 前缀的本轮夹具，逐项确认 ID 后通过原 API 清理，不能扫除旧用户、旧部门或旧 Token。此门禁不替代注册页面、Job 执行或历史全量迁移验收。
+
 - 不再提供 media-cli `e2e` 编排子命令（用 docker-compose 直管，更灵活）
 - 接口无关测试（migration / 事务 / 纯算法）继续用 `<app>/e2e/` 的 go test + testcontainers
 

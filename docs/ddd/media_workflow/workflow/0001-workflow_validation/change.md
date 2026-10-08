@@ -22,3 +22,6 @@
 - Input Schema 为 material / asset 类型增加 `asset_kind`，使调用方能选择兼容资源而无需猜测 input name。
 - 同名 Workflow Input 绑定到多个不同 material/asset kind 时拒绝 `INPUT_ASSET_KIND_CONFLICT`。
 - product / virtual_ip 仍由每个消费 Slot 自己的 kind 解析，不强制单一 Input Schema asset_kind。
+# 2026-10-07 引用权限
+
+候选图验证加入同企业与Template指定版本可读性；发布进一步检查版本发布状态，执行不重新验证源模板ACL。

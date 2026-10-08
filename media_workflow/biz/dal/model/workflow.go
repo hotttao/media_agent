@@ -4,19 +4,21 @@ import "time"
 
 // Workflow 对应 PG media_workflow.workflows 表。
 type Workflow struct {
-	ID            string     `gorm:"column:id;primaryKey"`
-	Scope         string     `gorm:"column:scope;not null"`
-	Name          string     `gorm:"column:name;not null"`
-	Description   string     `gorm:"column:description"`
-	OutputStepKey string     `gorm:"column:output_step_key;not null"`
-	Status        string     `gorm:"column:status;not null;default:draft"`
-	Visibility    string     `gorm:"column:visibility;not null;default:private"`
-	Version       int        `gorm:"column:version;not null;default:1"`
-	InputSchema   []byte     `gorm:"column:input_schema;type:jsonb;not null;default:[]"`
-	CreatedBy     string     `gorm:"column:created_by;not null"`
-	CreatedAt     time.Time  `gorm:"column:created_at;not null"`
-	UpdatedAt     time.Time  `gorm:"column:updated_at;not null"`
-	DeletedAt     *time.Time `gorm:"column:deleted_at"`
+	OrganizationID string     `gorm:"column:organization_id;not null;default:''"`
+	WorkspaceID    string     `gorm:"column:workspace_id;not null;default:''"`
+	ID             string     `gorm:"column:id;primaryKey"`
+	Scope          string     `gorm:"column:scope;not null"`
+	Name           string     `gorm:"column:name;not null"`
+	Description    string     `gorm:"column:description"`
+	OutputStepKey  string     `gorm:"column:output_step_key;not null"`
+	Status         string     `gorm:"column:status;not null;default:draft"`
+	Visibility     string     `gorm:"column:visibility;not null;default:private"`
+	Version        int        `gorm:"column:version;not null;default:1"`
+	InputSchema    []byte     `gorm:"column:input_schema;type:jsonb;not null;default:[]"`
+	CreatedBy      string     `gorm:"column:created_by;not null"`
+	CreatedAt      time.Time  `gorm:"column:created_at;not null"`
+	UpdatedAt      time.Time  `gorm:"column:updated_at;not null"`
+	DeletedAt      *time.Time `gorm:"column:deleted_at"`
 }
 
 func (Workflow) TableName() string { return "media_workflow.workflows" }

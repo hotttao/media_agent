@@ -4,6 +4,7 @@ import "context"
 
 // TemplateSnapshot workflow 闸1 校验期需要的 template 版本快照（原语类型）。
 type TemplateSnapshot struct {
+	OrganizationID    string
 	ID                string
 	Scope             string
 	Status            string

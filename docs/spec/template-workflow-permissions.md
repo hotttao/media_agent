@@ -1,0 +1,29 @@
+# Template / Workflow 权限扩展
+
+## 范围与规则
+
+仅补齐Template/Workflow企业边界、部门Grant、公开操作与引用授权，不修改UI、Conductor语义、Job共享、Agent或全量历史迁移。Template归企业，Workflow归Workspace。owner非企业/部门管理员。viewer读/使用，editor更新/归档，owner发布/删除/共享。public仅所属企业与资源边界内可读。private忽略Grant；team/public的editor来自有效同企业部门Grant。
+
+## 契约与分层
+
+Create/Update/Publish需要当前workflow功能。Template按企业内有效部门事实确认功能，不查询Control；Workflow按精确Workspace重新检查use_workflow，不以其他Workspace或企业的许可代替。未绑定旧定义只可owner访问，编辑/发布须仍有当前身份的workflow功能；不猜归属。GET/归档/撤权按边界与ACL管理，不把管理操作当执行准入。外部事实在数据库事务前加载，本地锁内重查ACL/版本；事实故障503，明确拒绝403。
+
+IDL请求/响应增加organization_id，Workflow增加workspace_id；Grant granted_by保留deprecated但忽略。handler只从认证上下文取得caller，错误403/权限源不可用503；部门事实必须当前查权威端口，不能用JWT声明或缓存成员列表延长撤权。
+
+policy/resource只计算有效权限。service加载资源/Grant、检查事实、事务内复核本地ACL；shared/client查询media_auth当前企业成员与部门状态，Control检查Workspace。公共GetVersion与内部冻结快照分离。公开List以授权事实形成SQL谓词，先COUNT/过滤再LIMIT/OFFSET，不返回不可见资源总数。写入使用资源行锁/CAS，Grant与可见性变更按同一资源锁序，外部网络查询不放入数据库事务。
+
+## 数据
+
+migration025 templates.organization_id及workflows.organization_id/workspace_id为非NULL字符串，默认空字符串以保留旧未绑定记录；新建必须完整，绑定后不可变。名称/版本唯一索引加入所属企业，Workflow还加入Workspace。旧无归属只允许owner兼容读写，禁止共享/新跨企业引用，不能自动推测或迁移历史Job。template_versions保存版本发布状态；新更新draft，owner发布在同事务内更新当前头与该版本发布事实，旧已发布版本不撤回。已有旧版本只有当前头已发布时能可靠初始化发布事实，其余未知状态保留draft；原Compilation执行不受影响。所有既有Compilation/Job/素材保持不变。
+
+Auth复用内部企业/部门查询和team-authorization/check，补充team_active/organization_active事实字段，不创建新权限服务。每次请求重新查成员与功能；API Token企业上限仍限制事实集合。查询和本地写事务之间的成员撤销没有跨服务原子性，当前请求使用刚查询到的事实快照，后续请求立即重查；本地Grant与Visibility竞争则由资源行锁内重查严格序列化。权限源失败503，不保留上游正文。
+
+公开定义校验使用授权Template端口；Job初次接受从Compilation IR派生Step元数据，重试输入/历史执行内部查询仅用不可变版本端口，并在Job授权之后执行，不向客户端开放。原型的内部快照端口不能装配到定义handler绕过ACL。
+
+## 引用与执行
+
+创建/更新候选Workflow检查指定Template版本可读与企业一致；发布检查版本published。Publication只消费授权时冻结快照，不在后台重新加载用户Template权限。Submit检查当前Workflow可读、企业/Workspace一致与功能准入，但不重新访问Template；去重回执不能跨企业泄露。既有owner旧Workflow执行兼容只能进入本人已授权同企业Workspace，不能对外共享未绑定定义。
+
+## 验收
+
+覆盖owner/viewer/editor/陌生人/管理员非owner、伪造granted_by、跨企业Grant/public、退出部门/停用、权限源故障、历史版本、列表分页/总数、编辑后发布分离、旧记录兼容、源模板撤权不破坏已发布Workflow与运行Job。按Harness进行单测/race/架构、隔离PG事务和真实HTTP/独立CLI，不以桩测试冒充部署验收。

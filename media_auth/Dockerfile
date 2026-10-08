@@ -41,7 +41,7 @@ COPY --from=builder /out/media_auth /app/media_auth
 COPY media_auth/migrations/ /app/migrations/
 # conf 目录（容器内用 local 配置，环境变量覆盖）。
 COPY media_auth/conf/ /app/conf/
-COPY media_auth/.env /app/.env
+# Private configuration is injected at runtime by Compose, never baked in.
 
 EXPOSE 8001
 

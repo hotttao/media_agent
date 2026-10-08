@@ -7,7 +7,7 @@
 ### Workspace 隔离边界
 
 **Workspace（工作空间）**:
-Execution 的业务执行隔离归属。输入和产物必须匹配该 Workspace 所属企业；企业内共享素材可复用于同企业的不同 Workspace，不要求素材归某个 Workspace。Template、Workflow 的 Workspace 资源归属仍是目标模型，不代表当前定义表已实现该隔离。
+Workflow 定义与 Execution 的业务隔离归属，归属于企业内部门。Template 是企业内可复用资源，不从属于某个 Workspace；Scope 仍仅表达业务线。
 _禁用替代词_：Scope（Scope 是业务线分类，不是租户）
 
 ### 范围

@@ -81,19 +81,21 @@ type InputSchemaEntry struct {
 
 // Workflow 工作流（DAG）。input_schema 从 WORKFLOW_INPUT bindings 派生快照。
 type Workflow struct {
-	ID            string
-	Scope         string
-	Name          string
-	Description   string
-	OutputStepKey string
-	Steps         []Step
-	Status        Status
-	Visibility    Visibility
-	Version       int
-	InputSchema   []InputSchemaEntry
-	CreatedBy     string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	OrganizationID string
+	WorkspaceID    string
+	ID             string
+	Scope          string
+	Name           string
+	Description    string
+	OutputStepKey  string
+	Steps          []Step
+	Status         Status
+	Visibility     Visibility
+	Version        int
+	InputSchema    []InputSchemaEntry
+	CreatedBy      string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 	// Read-only projection of the current version's publication receipt.
 	PublicationID     string
 	PublicationStatus string

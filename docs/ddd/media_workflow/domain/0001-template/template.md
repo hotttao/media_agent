@@ -42,8 +42,7 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 | ListTemplates | 按 scope/asset_kind/name/visibility 过滤分页；返回 viewer+ 的集合 | `GET /api/v1/templates?scope=&asset_kind=&name=&visibility=` |
 | ArchiveTemplate | 改为 archived；editor+ | `POST /api/v1/templates/{id}/archive` |
 | PublishTemplate | draft -> published；owner | `POST /api/v1/templates/{id}/publish` |
-| Render | 接收 slot_values，输出渲染后 prompt 与 output_asset_kind；viewer+ | `POST /api/v1/templates/{id}/render` |
-| ParseSlotSpec | 仅解析 prompt_body 占位符并产出一个 draft inputs[]；无需权限 | `POST /api/v1/templates/parse` |
+| Render | 对授权发布快照进行内部纯渲染；不读取资源或ACL | `template.Render`，无独立公开HTTP端点 |
 | GrantTemplate | 写一条 template_grants；owner | `POST /api/v1/templates/{id}/grants` |
 | RevokeTemplate | 删一条 template_grants；owner | `DELETE /api/v1/templates/{id}/grants/{team_id}` |
 | ChangeVisibility | 改 visibility；owner | `POST /api/v1/templates/{id}/visibility` |
@@ -54,7 +53,8 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
-| id | bigserial | 主键 |
+| id | text | 主键 |
+| organization_id | text not null | 不可变企业归属；旧未绑定记录为空字符串 |
 | scope | text not null | 业务范围；1:1；与 `config.SupportedScopes` 一致；不可改 |
 | name | text not null | 模板名；(scope, name, version) 唯一 |
 | description | text nullable | 模板说明 |
@@ -83,7 +83,7 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 | template_id | bigint not null | FK；复合 PK 一段；ON DELETE CASCADE |
 | team_id | text not null | 团队 id（media_auth.teams.id）；复合 PK 二段 |
 | permission | text not null | viewer / editor；CHECK in ('viewer','editor') |
-| granted_by | text not null | 授权者；仅 owner 或 editor 可写 |
+| granted_by | text not null | 实际认证授权者；仅 owner 可写 |
 | granted_at | timestamptz | 时间戳 |
 
 约束：PK `(template_id, team_id)`；INDEX `(team_id)`。
@@ -158,6 +158,12 @@ const (
 
 ## 权限规则
 
+创建、编辑、发布除资源角色外，还要求调用者当前在目标企业有有效工作流功能；企业级模板不要求已有Workspace，也不依赖Control可用性。功能撤销后owner/editor的编辑/发布也拒绝，读取和授权回收保持独立。旧未绑定记录不猜企业，功能准入只能取当前身份实际可使用的企业事实，不能据owner跳过准入。
+
+Template 绑定不可变 `organization_id`，创建必须验证当前企业成员及功能准入，默认 private/draft，owner来自认证上下文。private仅owner；team按同企业有效部门成员与Grant推导；public仅同企业有效成员可读。部门管理员/企业管理员身份不自动授予资源owner。viewer读最新/历史/渲染及引用已发布版本；editor可更新/归档；owner可发布/删除/Grant/Revoke/修改可见性。资源授权不等于企业或部门功能授权。
+
+更新产生新draft版本，旧版本发布事实不可变保存；editor更新不能绕过owner发布。仅已发布的指定版本可编入Workflow。Grant身份由认证调用者产生，目标部门必须active且同企业；退出部门/停用后不再产生有效Grant。读取权限先过滤再分页/计数。未绑定企业的旧记录仅保留owner兼容访问，不允许共享，不推测归属。
+
 按 [My Permission](../../../resource_access/CONTEXT.md#my-permission有效资源权限) 推导，操作权限如下：
 
 | 操作 | 所需 my_permission |
@@ -169,7 +175,7 @@ const (
 | `DeleteTemplate`（软删） | owner |
 | `GrantTemplate` / `RevokeTemplate`（写 grants 表） | owner |
 | `ChangeVisibility` | owner |
-| `RenderTemplate`（按 id 调用 render） | ≥ viewer |
+| 执行期内部 Render | 已授权Job使用冻结模板；不额外要求执行者源Template权限 |
 
 校验时机：每个 service 方法入口先 `LoadMyPermission(userID, resourceID)` → 不足即拒绝（errno 403 / 401）。
 
@@ -182,7 +188,7 @@ const (
 3. `PromptBody` 内出现的所有 `{{.name}}` 必须能在 `Inputs` 的某个 slot 找到对应 name；多余的 `{{.name}}` → reject。
 4. 每个 input slot 的 `Kind` 必填，且必须指向 `asset_kinds` 注册表中已注册、status∈{SYSTEM, ENABLED} 的 kind（调 `media_materials.BatchGetAssetKind` 校验）。
 5. `OutputAssetKind` 必填，且所引 asset_kind 的 `resource_type=ASSET`（产物落 generated_assets 表）；其 `media_type` 即产出的媒体形态。
-6. `(CapabilityKey, CapabilityVersion)` 必须指向 published Capability，且其 output_asset_kind 与 Template 一致；新模板禁止以 legacy route 字段分发。
+6. `(CapabilityKey, CapabilityVersion)` 必须指向 published Capability，且其媒体输出类型与 Template 的产物类别兼容；业务 output_asset_kind 不属于厂商 Capability 身份，新模板禁止以 legacy route 字段分发。
 7. `InvocationMapping` 必须覆盖 Capability input schema 的全部 required 字段；表达式引用的 Slot 必须存在，推导类型必须兼容目标字段。`render_template` 只能生成 string，`asset_ref` 只能接受资源 Slot，`list` 生成有序数组。
 8. `Status` 流转：`draft ↔ published`（`PublishTemplate` / 回退）`-> archived`（`ArchiveTemplate`，终态不可逆）；不允许 archived 恢复到 draft 或 published。
 9. update 时不允许直接改 `Scope`；改 `Scope` 必须新建 Template（避免版本历史跨 scope）。

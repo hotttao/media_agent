@@ -29,6 +29,15 @@ func newJob(db *gorm.DB, opts ...gen.DOOption) job {
 	tableName := _job.jobDo.TableName()
 	_job.ALL = field.NewAsterisk(tableName)
 	_job.ID = field.NewString(tableName, "id")
+	_job.Origin = field.NewString(tableName, "origin")
+	_job.OrganizationID = field.NewString(tableName, "organization_id")
+	_job.WorkspaceID = field.NewString(tableName, "workspace_id")
+	_job.SourceSystem = field.NewString(tableName, "source_system")
+	_job.SourceRecordID = field.NewString(tableName, "source_record_id")
+	_job.SourceDigest = field.NewString(tableName, "source_digest")
+	_job.ImportedAt = field.NewTime(tableName, "imported_at")
+	_job.ResumeGeneration = field.NewInt(tableName, "resume_generation")
+	_job.ResumeIdempotencyKey = field.NewString(tableName, "resume_idempotency_key")
 	_job.Scope = field.NewString(tableName, "scope")
 	_job.WorkflowID = field.NewString(tableName, "workflow_id")
 	_job.WorkflowVersion = field.NewInt(tableName, "workflow_version")
@@ -41,6 +50,8 @@ func newJob(db *gorm.DB, opts ...gen.DOOption) job {
 	_job.StartedAt = field.NewTime(tableName, "started_at")
 	_job.FinishedAt = field.NewTime(tableName, "finished_at")
 	_job.FailureReason = field.NewString(tableName, "failure_reason")
+	_job.ConductorWorkflowID = field.NewString(tableName, "conductor_workflow_id")
+	_job.CompilationHash = field.NewString(tableName, "compilation_hash")
 
 	_job.fillFieldMap()
 
@@ -50,20 +61,31 @@ func newJob(db *gorm.DB, opts ...gen.DOOption) job {
 type job struct {
 	jobDo jobDo
 
-	ALL             field.Asterisk
-	ID              field.String
-	Scope           field.String
-	WorkflowID      field.String
-	WorkflowVersion field.Int
-	Input           field.Field
-	Status          field.String
-	RetryCount      field.Int
-	RetryHistory    field.Field
-	SubmittedBy     field.String
-	SubmittedAt     field.Time
-	StartedAt       field.Time
-	FinishedAt      field.Time
-	FailureReason   field.String
+	ALL                  field.Asterisk
+	ID                   field.String
+	Origin               field.String
+	OrganizationID       field.String
+	WorkspaceID          field.String
+	SourceSystem         field.String
+	SourceRecordID       field.String
+	SourceDigest         field.String
+	ImportedAt           field.Time
+	ResumeGeneration     field.Int
+	ResumeIdempotencyKey field.String
+	Scope                field.String
+	WorkflowID           field.String
+	WorkflowVersion      field.Int
+	Input                field.Field
+	Status               field.String
+	RetryCount           field.Int
+	RetryHistory         field.Field
+	SubmittedBy          field.String
+	SubmittedAt          field.Time
+	StartedAt            field.Time
+	FinishedAt           field.Time
+	FailureReason        field.String
+	ConductorWorkflowID  field.String
+	CompilationHash      field.String
 
 	fieldMap map[string]field.Expr
 }
@@ -81,6 +103,15 @@ func (j job) As(alias string) *job {
 func (j *job) updateTableName(table string) *job {
 	j.ALL = field.NewAsterisk(table)
 	j.ID = field.NewString(table, "id")
+	j.Origin = field.NewString(table, "origin")
+	j.OrganizationID = field.NewString(table, "organization_id")
+	j.WorkspaceID = field.NewString(table, "workspace_id")
+	j.SourceSystem = field.NewString(table, "source_system")
+	j.SourceRecordID = field.NewString(table, "source_record_id")
+	j.SourceDigest = field.NewString(table, "source_digest")
+	j.ImportedAt = field.NewTime(table, "imported_at")
+	j.ResumeGeneration = field.NewInt(table, "resume_generation")
+	j.ResumeIdempotencyKey = field.NewString(table, "resume_idempotency_key")
 	j.Scope = field.NewString(table, "scope")
 	j.WorkflowID = field.NewString(table, "workflow_id")
 	j.WorkflowVersion = field.NewInt(table, "workflow_version")
@@ -93,6 +124,8 @@ func (j *job) updateTableName(table string) *job {
 	j.StartedAt = field.NewTime(table, "started_at")
 	j.FinishedAt = field.NewTime(table, "finished_at")
 	j.FailureReason = field.NewString(table, "failure_reason")
+	j.ConductorWorkflowID = field.NewString(table, "conductor_workflow_id")
+	j.CompilationHash = field.NewString(table, "compilation_hash")
 
 	j.fillFieldMap()
 
@@ -117,8 +150,17 @@ func (j *job) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (j *job) fillFieldMap() {
-	j.fieldMap = make(map[string]field.Expr, 13)
+	j.fieldMap = make(map[string]field.Expr, 24)
 	j.fieldMap["id"] = j.ID
+	j.fieldMap["origin"] = j.Origin
+	j.fieldMap["organization_id"] = j.OrganizationID
+	j.fieldMap["workspace_id"] = j.WorkspaceID
+	j.fieldMap["source_system"] = j.SourceSystem
+	j.fieldMap["source_record_id"] = j.SourceRecordID
+	j.fieldMap["source_digest"] = j.SourceDigest
+	j.fieldMap["imported_at"] = j.ImportedAt
+	j.fieldMap["resume_generation"] = j.ResumeGeneration
+	j.fieldMap["resume_idempotency_key"] = j.ResumeIdempotencyKey
 	j.fieldMap["scope"] = j.Scope
 	j.fieldMap["workflow_id"] = j.WorkflowID
 	j.fieldMap["workflow_version"] = j.WorkflowVersion
@@ -131,6 +173,8 @@ func (j *job) fillFieldMap() {
 	j.fieldMap["started_at"] = j.StartedAt
 	j.fieldMap["finished_at"] = j.FinishedAt
 	j.fieldMap["failure_reason"] = j.FailureReason
+	j.fieldMap["conductor_workflow_id"] = j.ConductorWorkflowID
+	j.fieldMap["compilation_hash"] = j.CompilationHash
 }
 
 func (j job) clone(db *gorm.DB) job {

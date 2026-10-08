@@ -109,6 +109,8 @@ message Workflow {
   int64 updated_at = 13;
   string publication_id = 14; // Opaque current-version receipt, not the frozen contract.
   string publication_status = 15;
+	string organization_id = 16;
+	string workspace_id = 17;
 }
 
 message CreateWorkflowReq {
@@ -118,6 +120,8 @@ message CreateWorkflowReq {
   string output_step_key = 4 [(api.body) = "output_step_key"];
   repeated WorkflowStep steps = 5 [(api.body) = "steps"];
   string created_by = 6 [(api.query) = "created_by"];
+	string organization_id = 7 [(api.body) = "organization_id"];
+	string workspace_id = 8 [(api.body) = "workspace_id"];
 }
 message CreateWorkflowResp { string id = 1; int32 version = 2; }
 
@@ -163,7 +167,8 @@ message GrantReq {
   string id = 1 [(api.path) = "id"];
   string team_id = 2 [(api.body) = "team_id"];
   string permission = 3 [(api.body) = "permission"];
-  string granted_by = 4 [(api.query) = "granted_by"];
+  // Compatibility only; ignored. Grant issuer is the authenticated caller.
+  string granted_by = 4 [deprecated = true, (api.query) = "granted_by"];
 }
 message RevokeReq {
   string id = 1 [(api.path) = "id"];

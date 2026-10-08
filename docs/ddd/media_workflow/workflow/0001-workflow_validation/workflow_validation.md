@@ -9,6 +9,10 @@ dependencies:
 
 ## 一句话职责
 
+## 资源授权边界
+
+创建/编辑候选图时，调用者必须能读取每个引用 Template 的指定版本，且 Template 与 Workflow 属于同企业、Scope一致。Template viewer 不授予 Workflow 编辑权；Workflow editor 不授予源 Template 编辑权。模板内容只通过公开授权读取端口取得，内部冻结快照端口不向用户开放。发布进一步要求引用版本已发布；执行已注册版本使用 Compilation，不在后台重新查询调用者的 Template ACL。
+
 > 边界修正：资产实例可达性由调用方先通过 Materials Reachability 解析；本流程不再次访问资产实例，只校验可信解析结果与 Workflow 输入契约。下文“资产可达性校验”均指该契约校验。
 
 ## 执行时间线

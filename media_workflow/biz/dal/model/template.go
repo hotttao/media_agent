@@ -4,6 +4,7 @@ import "time"
 
 // Template 对应 PG media_workflow.templates 表（当前版本）。
 type Template struct {
+	OrganizationID    string     `gorm:"column:organization_id;not null;default:''"`
 	ID                string     `gorm:"column:id;primaryKey"`
 	Scope             string     `gorm:"column:scope;not null"`
 	Name              string     `gorm:"column:name;not null"`
@@ -46,6 +47,7 @@ func (TemplateInput) TableName() string { return "media_workflow.template_inputs
 
 // TemplateVersion 对应 template_versions 表（历史版本快照）。
 type TemplateVersion struct {
+	Status            string    `gorm:"column:status;not null;default:draft"`
 	ID                string    `gorm:"column:id;primaryKey"`
 	TemplateID        string    `gorm:"column:template_id;not null"`
 	Version           int       `gorm:"column:version;not null"`

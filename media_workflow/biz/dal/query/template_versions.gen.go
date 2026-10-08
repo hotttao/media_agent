@@ -28,6 +28,7 @@ func newTemplateVersion(db *gorm.DB, opts ...gen.DOOption) templateVersion {
 
 	tableName := _templateVersion.templateVersionDo.TableName()
 	_templateVersion.ALL = field.NewAsterisk(tableName)
+	_templateVersion.Status = field.NewString(tableName, "status")
 	_templateVersion.ID = field.NewString(tableName, "id")
 	_templateVersion.TemplateID = field.NewString(tableName, "template_id")
 	_templateVersion.Version = field.NewInt(tableName, "version")
@@ -38,6 +39,9 @@ func newTemplateVersion(db *gorm.DB, opts ...gen.DOOption) templateVersion {
 	_templateVersion.GenType = field.NewString(tableName, "gen_type")
 	_templateVersion.NeedsConfirm = field.NewBool(tableName, "needs_confirm")
 	_templateVersion.CandidateCount = field.NewInt(tableName, "candidate_count")
+	_templateVersion.CapabilityKey = field.NewString(tableName, "capability_key")
+	_templateVersion.CapabilityVersion = field.NewInt(tableName, "capability_version")
+	_templateVersion.InvocationMapping = field.NewBytes(tableName, "invocation_mapping")
 	_templateVersion.InputsSnapshot = field.NewBytes(tableName, "inputs_snapshot")
 	_templateVersion.CreatedBy = field.NewString(tableName, "created_by")
 	_templateVersion.CreatedAt = field.NewTime(tableName, "created_at")
@@ -50,20 +54,24 @@ func newTemplateVersion(db *gorm.DB, opts ...gen.DOOption) templateVersion {
 type templateVersion struct {
 	templateVersionDo templateVersionDo
 
-	ALL             field.Asterisk
-	ID              field.String
-	TemplateID      field.String
-	Version         field.Int
-	PromptBody      field.String
-	OutputAssetKind field.String
-	Platform        field.String
-	GenWay          field.String
-	GenType         field.String
-	NeedsConfirm    field.Bool
-	CandidateCount  field.Int
-	InputsSnapshot  field.Bytes
-	CreatedBy       field.String
-	CreatedAt       field.Time
+	ALL               field.Asterisk
+	Status            field.String
+	ID                field.String
+	TemplateID        field.String
+	Version           field.Int
+	PromptBody        field.String
+	OutputAssetKind   field.String
+	Platform          field.String
+	GenWay            field.String
+	GenType           field.String
+	NeedsConfirm      field.Bool
+	CandidateCount    field.Int
+	CapabilityKey     field.String
+	CapabilityVersion field.Int
+	InvocationMapping field.Bytes
+	InputsSnapshot    field.Bytes
+	CreatedBy         field.String
+	CreatedAt         field.Time
 
 	fieldMap map[string]field.Expr
 }
@@ -80,6 +88,7 @@ func (t templateVersion) As(alias string) *templateVersion {
 
 func (t *templateVersion) updateTableName(table string) *templateVersion {
 	t.ALL = field.NewAsterisk(table)
+	t.Status = field.NewString(table, "status")
 	t.ID = field.NewString(table, "id")
 	t.TemplateID = field.NewString(table, "template_id")
 	t.Version = field.NewInt(table, "version")
@@ -90,6 +99,9 @@ func (t *templateVersion) updateTableName(table string) *templateVersion {
 	t.GenType = field.NewString(table, "gen_type")
 	t.NeedsConfirm = field.NewBool(table, "needs_confirm")
 	t.CandidateCount = field.NewInt(table, "candidate_count")
+	t.CapabilityKey = field.NewString(table, "capability_key")
+	t.CapabilityVersion = field.NewInt(table, "capability_version")
+	t.InvocationMapping = field.NewBytes(table, "invocation_mapping")
 	t.InputsSnapshot = field.NewBytes(table, "inputs_snapshot")
 	t.CreatedBy = field.NewString(table, "created_by")
 	t.CreatedAt = field.NewTime(table, "created_at")
@@ -121,7 +133,8 @@ func (t *templateVersion) GetFieldByName(fieldName string) (field.OrderExpr, boo
 }
 
 func (t *templateVersion) fillFieldMap() {
-	t.fieldMap = make(map[string]field.Expr, 13)
+	t.fieldMap = make(map[string]field.Expr, 17)
+	t.fieldMap["status"] = t.Status
 	t.fieldMap["id"] = t.ID
 	t.fieldMap["template_id"] = t.TemplateID
 	t.fieldMap["version"] = t.Version
@@ -132,6 +145,9 @@ func (t *templateVersion) fillFieldMap() {
 	t.fieldMap["gen_type"] = t.GenType
 	t.fieldMap["needs_confirm"] = t.NeedsConfirm
 	t.fieldMap["candidate_count"] = t.CandidateCount
+	t.fieldMap["capability_key"] = t.CapabilityKey
+	t.fieldMap["capability_version"] = t.CapabilityVersion
+	t.fieldMap["invocation_mapping"] = t.InvocationMapping
 	t.fieldMap["inputs_snapshot"] = t.InputsSnapshot
 	t.fieldMap["created_by"] = t.CreatedBy
 	t.fieldMap["created_at"] = t.CreatedAt

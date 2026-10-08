@@ -28,6 +28,7 @@ func newTemplate(db *gorm.DB, opts ...gen.DOOption) template {
 
 	tableName := _template.templateDo.TableName()
 	_template.ALL = field.NewAsterisk(tableName)
+	_template.OrganizationID = field.NewString(tableName, "organization_id")
 	_template.ID = field.NewString(tableName, "id")
 	_template.Scope = field.NewString(tableName, "scope")
 	_template.Name = field.NewString(tableName, "name")
@@ -39,6 +40,9 @@ func newTemplate(db *gorm.DB, opts ...gen.DOOption) template {
 	_template.GenType = field.NewString(tableName, "gen_type")
 	_template.NeedsConfirm = field.NewBool(tableName, "needs_confirm")
 	_template.CandidateCount = field.NewInt(tableName, "candidate_count")
+	_template.CapabilityKey = field.NewString(tableName, "capability_key")
+	_template.CapabilityVersion = field.NewInt(tableName, "capability_version")
+	_template.InvocationMapping = field.NewBytes(tableName, "invocation_mapping")
 	_template.Status = field.NewString(tableName, "status")
 	_template.Visibility = field.NewString(tableName, "visibility")
 	_template.Version = field.NewInt(tableName, "version")
@@ -55,25 +59,29 @@ func newTemplate(db *gorm.DB, opts ...gen.DOOption) template {
 type template struct {
 	templateDo templateDo
 
-	ALL             field.Asterisk
-	ID              field.String
-	Scope           field.String
-	Name            field.String
-	Description     field.String
-	PromptBody      field.String
-	OutputAssetKind field.String
-	Platform        field.String
-	GenWay          field.String
-	GenType         field.String
-	NeedsConfirm    field.Bool
-	CandidateCount  field.Int
-	Status          field.String
-	Visibility      field.String
-	Version         field.Int
-	CreatedBy       field.String
-	CreatedAt       field.Time
-	UpdatedAt       field.Time
-	DeletedAt       field.Time
+	ALL               field.Asterisk
+	OrganizationID    field.String
+	ID                field.String
+	Scope             field.String
+	Name              field.String
+	Description       field.String
+	PromptBody        field.String
+	OutputAssetKind   field.String
+	Platform          field.String
+	GenWay            field.String
+	GenType           field.String
+	NeedsConfirm      field.Bool
+	CandidateCount    field.Int
+	CapabilityKey     field.String
+	CapabilityVersion field.Int
+	InvocationMapping field.Bytes
+	Status            field.String
+	Visibility        field.String
+	Version           field.Int
+	CreatedBy         field.String
+	CreatedAt         field.Time
+	UpdatedAt         field.Time
+	DeletedAt         field.Time
 
 	fieldMap map[string]field.Expr
 }
@@ -90,6 +98,7 @@ func (t template) As(alias string) *template {
 
 func (t *template) updateTableName(table string) *template {
 	t.ALL = field.NewAsterisk(table)
+	t.OrganizationID = field.NewString(table, "organization_id")
 	t.ID = field.NewString(table, "id")
 	t.Scope = field.NewString(table, "scope")
 	t.Name = field.NewString(table, "name")
@@ -101,6 +110,9 @@ func (t *template) updateTableName(table string) *template {
 	t.GenType = field.NewString(table, "gen_type")
 	t.NeedsConfirm = field.NewBool(table, "needs_confirm")
 	t.CandidateCount = field.NewInt(table, "candidate_count")
+	t.CapabilityKey = field.NewString(table, "capability_key")
+	t.CapabilityVersion = field.NewInt(table, "capability_version")
+	t.InvocationMapping = field.NewBytes(table, "invocation_mapping")
 	t.Status = field.NewString(table, "status")
 	t.Visibility = field.NewString(table, "visibility")
 	t.Version = field.NewInt(table, "version")
@@ -132,7 +144,8 @@ func (t *template) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (t *template) fillFieldMap() {
-	t.fieldMap = make(map[string]field.Expr, 18)
+	t.fieldMap = make(map[string]field.Expr, 22)
+	t.fieldMap["organization_id"] = t.OrganizationID
 	t.fieldMap["id"] = t.ID
 	t.fieldMap["scope"] = t.Scope
 	t.fieldMap["name"] = t.Name
@@ -144,6 +157,9 @@ func (t *template) fillFieldMap() {
 	t.fieldMap["gen_type"] = t.GenType
 	t.fieldMap["needs_confirm"] = t.NeedsConfirm
 	t.fieldMap["candidate_count"] = t.CandidateCount
+	t.fieldMap["capability_key"] = t.CapabilityKey
+	t.fieldMap["capability_version"] = t.CapabilityVersion
+	t.fieldMap["invocation_mapping"] = t.InvocationMapping
 	t.fieldMap["status"] = t.Status
 	t.fieldMap["visibility"] = t.Visibility
 	t.fieldMap["version"] = t.Version
