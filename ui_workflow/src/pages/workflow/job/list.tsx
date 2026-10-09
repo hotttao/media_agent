@@ -1,4 +1,4 @@
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, type Query } from "@tanstack/react-query";
 import { ArrowUpRight, Ban, Play } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -86,7 +86,12 @@ export function JobList({
       .map((job) => ({
         queryKey: ["job", job.id],
         queryFn: () => getJob(job.id),
-        refetchInterval: 3000,
+        staleTime: 10000,
+        refetchInterval: (query: Query<Awaited<ReturnType<typeof getJob>>>) =>
+          query.state.data &&
+          !CANCELABLE_JOB_STATUS.has(query.state.data.job.status)
+            ? false
+            : 10000,
       })),
   });
   const observed = new Map(
@@ -143,16 +148,21 @@ export function JobList({
           <div className="space-y-3">
             {items.map((job) => {
               const snapshot = observed.get(job.id);
-              const position = executionPosition(job.status, snapshot?.data);
+              const currentStatus = snapshot?.data?.job.status || job.status;
+              const position = executionPosition(currentStatus, snapshot?.data);
               const done = snapshot?.data?.step_runs.filter(
                 (step) => step.status === "succeeded",
               ).length;
               return (
-                <article key={job.id} className="media-resource-row">
+                <article
+                  key={job.id}
+                  data-testid={`execution-row-${job.id}`}
+                  className="media-resource-row"
+                >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="mb-2 flex items-center gap-2">
-                        <JobStatusBadge status={job.status} />
+                        <JobStatusBadge status={currentStatus} />
                         <span className="text-xs text-muted-foreground">
                           v{job.workflow_version}
                         </span>
@@ -180,7 +190,7 @@ export function JobList({
                         {formatDetailDate(job.submitted_at)}
                       </p>
                     </div>
-                    {CANCELABLE_JOB_STATUS.has(job.status) ? (
+                    {CANCELABLE_JOB_STATUS.has(currentStatus) ? (
                       <Button
                         variant="ghost"
                         size="icon"

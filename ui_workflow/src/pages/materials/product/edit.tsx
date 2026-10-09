@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { hostShim } from "@/foundation/lib/host-shim";
+import { ListState } from "@/foundation/components/resource-list-layout";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Spinner } from "@/components/ui/spinner";
 import { ProductForm } from "@/domains/products/components/product-form";
@@ -33,38 +35,49 @@ function editableList(
 export function ProductEdit({
   id,
   onDone,
+  instanceId,
 }: {
   id: string;
   onDone: () => void;
+  instanceId: string;
 }) {
   const { t } = useTranslation();
-  const { data: product, isLoading } = useProduct(id);
+  const { data: product, isLoading, isError, error, refetch } = useProduct(id);
   const updateProduct = useUpdateProduct();
-  const [value, setValue] = useState<ProductInput | null>(null);
+  const [value, setValue] = hostShim.useInstanceState<ProductInput | null>(
+    instanceId,
+    "materials_product_draft_" + id,
+    () => null,
+  );
 
   useEffect(() => {
     if (product) {
-      setValue({
-        scope: product.scope,
-        name: product.name,
-        description: product.description,
-        target_audience: product.target_audience,
-        product_details: product.product_details,
-        display_actions: editableList(product.display_actions),
-        tags: editableList(product.tags)?.map(String),
-        external_commerce: editableMetadata(product.external_commerce),
-        metadata: editableMetadata(product.metadata),
-        images: product.images?.map(
-          ({ object_path, is_main = false, sort_order = 0 }) => ({
-            object_path,
-            is_main,
-            sort_order,
-          }),
-        ),
-      });
+      setValue(
+        (current) =>
+          current ?? {
+            scope: product.scope,
+            name: product.name,
+            description: product.description,
+            target_audience: product.target_audience,
+            product_details: product.product_details,
+            display_actions: editableList(product.display_actions),
+            tags: editableList(product.tags)?.map(String),
+            external_commerce: editableMetadata(product.external_commerce),
+            metadata: editableMetadata(product.metadata),
+            images: product.images?.map(
+              ({ object_path, is_main = false, sort_order = 0 }) => ({
+                object_path,
+                is_main,
+                sort_order,
+              }),
+            ),
+          },
+      );
     }
-  }, [product]);
+  }, [product, setValue]);
 
+  if (isError)
+    return <ListState error={error.message} onRetry={() => void refetch()} />;
   if (isLoading || !value) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -75,12 +88,25 @@ export function ProductEdit({
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-auto p-4">
+      {updateProduct.error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {updateProduct.error.message}
+        </p>
+      ) : null}
       <h2 className="text-lg font-semibold">{t("productForm.editTitle")}</h2>
       <ProductForm
         value={value}
         onChange={setValue}
         onSubmit={() =>
-          updateProduct.mutate({ id, patch: value }, { onSuccess: onDone })
+          updateProduct.mutate(
+            { id, patch: value },
+            {
+              onSuccess: () => {
+                setValue(null);
+                onDone();
+              },
+            },
+          )
         }
         submitLabel={t("common.save")}
         isPending={updateProduct.isPending}

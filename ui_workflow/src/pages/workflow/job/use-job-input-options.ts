@@ -8,6 +8,7 @@ import { listProducts } from "@/domains/products/lib/api";
 import type { Product } from "@/domains/products/types";
 import { listVirtualIps } from "@/domains/virtual-ips/lib/api";
 import type { VirtualIp } from "@/domains/virtual-ips/types";
+import { compatibleInputOptions } from "./input-option-filter";
 
 export type JobInputOption = Product | VirtualIp | Material | GeneratedAsset;
 export type JobInputOptions = Record<string, JobInputOption[]>;
@@ -32,7 +33,10 @@ export function useJobInputOptions(
                   page: 1,
                   page_size: 200,
                 });
-                return [entry.name, page.items];
+                return [
+                  entry.name,
+                  compatibleInputOptions(workflow.scope, entry, page.items),
+                ];
               }
               case "VIRTUAL_IP": {
                 const page = await listVirtualIps({
@@ -41,7 +45,10 @@ export function useJobInputOptions(
                   page: 1,
                   page_size: 200,
                 });
-                return [entry.name, page.items];
+                return [
+                  entry.name,
+                  compatibleInputOptions(workflow.scope, entry, page.items),
+                ];
               }
               case "MATERIAL": {
                 const page = await listMaterials({
@@ -50,7 +57,10 @@ export function useJobInputOptions(
                   page: 1,
                   page_size: 200,
                 });
-                return [entry.name, page.items];
+                return [
+                  entry.name,
+                  compatibleInputOptions(workflow.scope, entry, page.items),
+                ];
               }
               case "ASSET": {
                 const page = await listGeneratedAssets({
@@ -59,7 +69,10 @@ export function useJobInputOptions(
                   page: 1,
                   page_size: 200,
                 });
-                return [entry.name, page.items];
+                return [
+                  entry.name,
+                  compatibleInputOptions(workflow.scope, entry, page.items),
+                ];
               }
             }
           },

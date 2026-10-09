@@ -35,12 +35,16 @@ Materials App 为 Organization 成员提供 Material、Virtual IP、Product 的�
 
 - Material 列表顶部提供常驻展开的 Asset Kind 多选表单，不使用下拉菜单；候选项来自 Asset Kind 注册表且固定查询 `resource_type=MATERIAL`、`media_type=IMAGE`（对应枚举值 1/1），“全部类型”清空已选项。选中的多个类型以同一次服务端查询提交，切换类型后保留筛选控件并显示空结果。
 - Product 列表使用服务端总数与页码分页；搜索名称时回到第一页，上一页、下一页及当前页状态与服务端结果一致。
+- Virtual IP 列表使用服务端名称查询与分页，预览依次使用头像、全身照、三视图和九宫格，不因缺头像而隐藏已有图片。
+- Generated Asset 列表使用真实分页；媒体优先解析 object_path，只有旧记录才使用 url。纯文本产物直接显示正文，不产生虚假的媒体加载失败。没有筛选选项的页面不保留空侧栏。
 - 旧动作素材显示为 Material 的“动作素材”类型；文字动作显示 `content`，参考视频使用 Storage Object Path 播放，服装适用范围和通用性使用稳定 metadata 字段；未落地的姿势兼容关系只提示追溯状态，不提供虚假的关联编辑入口。
 
 - 创建和编辑页使用分组表单，不显示 URL 或 Object Path 文本输入。
 - 详情页必须以图片区展示图片，并展示稳定业务字段；Object Path 只可在诊断信息中折叠展示，本期默认不展示。
 - 详情页按工具栏、主视觉与摘要、业务信息卡片、审计或权限、危险操作分层；多图使用主图与缩略图切换，不把全部大图纵向堆叠。
 - Metadata、External Commerce 等扩展对象使用可读键值、标签和嵌套卡片展示，不向业务用户直接输出 JSON 文本。
+- 扩展对象编辑保留嵌套对象、数组、布尔和数字类型；普通文本字段修改不重写整个对象。创建/编辑草稿归属 App instance，查询刷新不覆盖尚未保存的修改。
+- 素材类别注册管理是管理员入口，不混进普通素材主导航；系统类别禁删，类别编辑只修改说明和状态，不能展示会被 API 忽略的名称/资源类型/媒体类型编辑。
 - Virtual IP 表单覆盖 Persona Profile 的基本属性、身体数据、教育职业、人物设定、表达兴趣全部稳定字段。
 - Product 表单覆盖 target audience、product details、display actions、tags、external commerce、metadata 和有序图片。
 - 桌面宽屏允许表单双栏；窄屏自动单栏。上传中、上传失败、空图片和只读状态都有明确视觉反馈。

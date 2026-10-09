@@ -65,6 +65,7 @@ function fromWire(template: Template): Template {
       ["tpl_", "template_status_"],
     ),
     inputs: template.inputs ?? [],
+    invocation_mapping: template.invocation_mapping ?? {},
   };
 }
 
@@ -97,6 +98,15 @@ export async function archiveTemplate(id: string): Promise<Template> {
   return api.request<Template>(`/templates/${encodeURIComponent(id)}/archive`, {
     method: "POST",
   });
+}
+
+export async function publishTemplate(id: string): Promise<Template> {
+  return fromWire(
+    await api.request<Template>(
+      `/templates/${encodeURIComponent(id)}/publish`,
+      { method: "POST" },
+    ),
+  );
 }
 
 export async function grantTemplate(

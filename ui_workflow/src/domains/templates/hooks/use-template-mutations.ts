@@ -6,6 +6,7 @@ import {
   grantTemplate,
   revokeTemplate,
   updateTemplate,
+  publishTemplate,
 } from "@/domains/templates/lib/api";
 import type {
   ChangeVisibilityInput,
@@ -26,8 +27,13 @@ export function useCreateTemplate() {
 export function useUpdateTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<TemplateInput> }) =>
-      updateTemplate(id, patch),
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: Partial<TemplateInput>;
+    }) => updateTemplate(id, patch),
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: ["templates"] });
       qc.invalidateQueries({ queryKey: ["template", id] });
@@ -42,6 +48,18 @@ export function useArchiveTemplate() {
     onSuccess: (template) => {
       qc.invalidateQueries({ queryKey: ["templates"] });
       qc.invalidateQueries({ queryKey: ["template", template.id] });
+    },
+  });
+}
+
+export function usePublishTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: publishTemplate,
+    onSuccess: (_template, id) => {
+      qc.invalidateQueries({ queryKey: ["templates"] });
+      qc.invalidateQueries({ queryKey: ["template", id] });
+      qc.invalidateQueries({ queryKey: ["template-version", id] });
     },
   });
 }

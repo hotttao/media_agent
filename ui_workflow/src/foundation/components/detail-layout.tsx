@@ -1,5 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import i18next from "i18next";
 import {
   Card,
   CardContent,
@@ -74,6 +76,7 @@ export function DetailField({
   children?: ReactNode;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const empty = children === undefined || children === null || children === "";
   return (
     <div
@@ -84,7 +87,9 @@ export function DetailField({
       </dt>
       <dd className="mt-1.5 break-words text-sm leading-6 text-foreground">
         {empty ? (
-          <span className="text-muted-foreground/70">未填写</span>
+          <span className="text-muted-foreground/70">
+            {t("detailCommon.notFilled")}
+          </span>
         ) : (
           children
         )}
@@ -114,17 +119,26 @@ export function humanizeDetailKey(key: string): string {
 }
 
 function DetailValue({ value }: { value: unknown }) {
+  const { t } = useTranslation();
   if (value === null || value === undefined || value === "")
-    return <span className="text-muted-foreground/70">未填写</span>;
+    return (
+      <span className="text-muted-foreground/70">
+        {t("detailCommon.notFilled")}
+      </span>
+    );
   if (typeof value === "boolean")
     return (
       <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-        {value ? "是" : "否"}
+        {t(value ? "detailCommon.yes" : "detailCommon.no")}
       </span>
     );
   if (Array.isArray(value)) {
     if (!value.length)
-      return <span className="text-muted-foreground/70">暂无</span>;
+      return (
+        <span className="text-muted-foreground/70">
+          {t("detailCommon.empty")}
+        </span>
+      );
     if (value.every((item) => typeof item !== "object" || item === null))
       return (
         <div className="flex flex-wrap gap-1.5">
@@ -167,6 +181,7 @@ export function StructuredDetails({
   labels?: Record<string, string>;
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   const entries = Object.entries(value).filter(
     ([, item]) =>
       item !== null &&
@@ -175,7 +190,11 @@ export function StructuredDetails({
       (!Array.isArray(item) || item.length > 0),
   );
   if (!entries.length)
-    return <p className="text-sm text-muted-foreground">暂无扩展信息</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        {t("detailCommon.noMetadata")}
+      </p>
+    );
   return (
     <dl
       className={cn("grid gap-3", compact ? "grid-cols-1" : "sm:grid-cols-2")}
@@ -200,21 +219,24 @@ export function StructuredDetails({
   );
 }
 
-export function formatDetailDate(value: string | number | undefined): string {
+export function formatDetailDate(
+  value: string | number | undefined,
+  locale = i18next.language || "zh-CN",
+): string {
   if (value === undefined || value === "") return "-";
   try {
     const raw = BigInt(String(value));
     const milliseconds = raw > 9_999_999_999_999n ? raw / 1_000_000n : raw;
     const date = new Date(Number(milliseconds));
     if (!Number.isNaN(date.getTime()))
-      return new Intl.DateTimeFormat("zh-CN", {
+      return new Intl.DateTimeFormat(locale, {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(date);
   } catch {
     const date = new Date(value);
     if (!Number.isNaN(date.getTime()))
-      return new Intl.DateTimeFormat("zh-CN", {
+      return new Intl.DateTimeFormat(locale, {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(date);

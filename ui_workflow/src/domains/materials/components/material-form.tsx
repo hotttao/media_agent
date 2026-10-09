@@ -1,3 +1,4 @@
+import { AppStudioHeader } from "@/foundation/components/app-studio-header";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -15,12 +16,7 @@ import { useAssetKinds } from "@/domains/materials/hooks/use-asset-kinds";
 import type { MaterialInput, Visibility } from "@/domains/materials/types";
 import { LibraryObjectField } from "@/foundation/components/library-object-field";
 import { hostShim } from "@/foundation/lib/host-shim";
-
-function jsonText(value?: Record<string, unknown>) {
-  return value && Object.keys(value).length
-    ? JSON.stringify(value, null, 2)
-    : "";
-}
+import { StructuredObjectEditor } from "@/foundation/components/structured-object-editor";
 
 export function MaterialForm({
   value,
@@ -43,33 +39,34 @@ export function MaterialForm({
   const { organization } = hostShim.useShellContext();
   const { data: kinds } = useAssetKinds("MATERIAL");
   const [uploading, setUploading] = useState(false);
-  const [metadataText, setMetadataText] = useState(() =>
-    jsonText(value.metadata),
-  );
-  const [metadataError, setMetadataError] = useState<string>();
   const isMovement = value.asset_kind === "movement";
   const metadata = value.metadata ?? {};
 
-  function changeMetadata(text: string) {
-    setMetadataText(text);
-    if (!text.trim()) {
-      setMetadataError(undefined);
-      onChange({ ...value, metadata: undefined });
-      return;
-    }
-    try {
-      const parsed = JSON.parse(text) as Record<string, unknown>;
-      setMetadataError(undefined);
-      onChange({ ...value, metadata: parsed });
-    } catch (error) {
-      setMetadataError(
-        error instanceof Error ? error.message : t("materialForm.jsonError"),
-      );
-    }
-  }
-
   return (
     <div className="flex flex-col gap-6">
+      <AppStudioHeader>
+        <h1 className="truncate text-base font-semibold">
+          {value.name || submitLabel}
+        </h1>{" "}
+        <div className="flex gap-2">
+          <Button
+            onClick={onSubmit}
+            disabled={
+              isPending ||
+              uploading ||
+              !value.name.trim() ||
+              !value.scope.trim() ||
+              !value.asset_kind ||
+              (!value.object_path && !value.content?.trim())
+            }
+          >
+            {uploading ? t("materialForm.uploading") : submitLabel}
+          </Button>
+          <Button variant="ghost" onClick={onCancel}>
+            {t("common.cancel")}
+          </Button>
+        </div>
+      </AppStudioHeader>
       <section className="grid gap-4 rounded-xl border p-4">
         <div>
           <h3 className="font-medium">{t("materialForm.basic")}</h3>
@@ -79,8 +76,9 @@ export function MaterialForm({
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
-            <Label>Scope</Label>
+            <Label>{t("v12.scope")}</Label>
             <Input
+              aria-label={t("v12.scope")}
               value={value.scope}
               disabled={isEdit}
               onChange={(e) => onChange({ ...value, scope: e.target.value })}
@@ -95,7 +93,7 @@ export function MaterialForm({
                 onChange({ ...value, asset_kind, object_path: "" })
               }
             >
-              <SelectTrigger>
+              <SelectTrigger aria-label={t("materialForm.kind")}>
                 <SelectValue placeholder={t("materialForm.chooseKind")} />
               </SelectTrigger>
               <SelectContent>
@@ -113,6 +111,7 @@ export function MaterialForm({
         <div className="grid gap-2">
           <Label>{t("materialForm.name")}</Label>
           <Input
+            aria-label={t("materialForm.name")}
             value={value.name}
             onChange={(e) => onChange({ ...value, name: e.target.value })}
           />
@@ -120,6 +119,7 @@ export function MaterialForm({
         <div className="grid gap-2">
           <Label>{t("materialForm.description")}</Label>
           <Textarea
+            aria-label={t("materialForm.description")}
             value={value.description ?? ""}
             onChange={(e) =>
               onChange({ ...value, description: e.target.value })
@@ -129,6 +129,7 @@ export function MaterialForm({
         <div className="grid gap-2">
           <Label>{t("materialForm.prompt")}</Label>
           <Textarea
+            aria-label={t("materialForm.prompt")}
             value={value.prompt ?? ""}
             onChange={(e) => onChange({ ...value, prompt: e.target.value })}
             placeholder={t("materialForm.promptHint")}
@@ -162,6 +163,11 @@ export function MaterialForm({
             )}
           </Label>
           <Textarea
+            aria-label={t(
+              isMovement
+                ? "materialForm.movementContent"
+                : "materialForm.textContent",
+            )}
             rows={6}
             value={value.content ?? ""}
             onChange={(e) => onChange({ ...value, content: e.target.value })}
@@ -256,37 +262,14 @@ export function MaterialForm({
         </div>
         {!isMovement && (
           <div className="grid gap-2">
-            <Label>Metadata (JSON)</Label>
-            <Textarea
-              className="font-mono text-xs"
-              rows={6}
-              value={metadataText}
-              onChange={(e) => changeMetadata(e.target.value)}
-              placeholder="{}"
+            <Label>{t("materialDetail.metadata")}</Label>
+            <StructuredObjectEditor
+              value={value.metadata}
+              onChange={(metadata) => onChange({ ...value, metadata })}
             />
-            {metadataError ? (
-              <p className="text-xs text-destructive">{metadataError}</p>
-            ) : null}
           </div>
         )}
       </section>
-      <div className="flex gap-2">
-        <Button
-          onClick={onSubmit}
-          disabled={
-            isPending ||
-            uploading ||
-            Boolean(metadataError) ||
-            !value.name.trim() ||
-            (!value.object_path && !value.content?.trim())
-          }
-        >
-          {uploading ? t("materialForm.uploading") : submitLabel}
-        </Button>
-        <Button variant="ghost" onClick={onCancel}>
-          {t("common.cancel")}
-        </Button>
-      </div>
     </div>
   );
 }

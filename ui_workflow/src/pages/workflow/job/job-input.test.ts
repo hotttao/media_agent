@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WorkflowOption } from "@/domains/jobs/types";
-import { buildJobInput, missingRequiredInputs } from "./job-input";
+import {
+  buildJobInput,
+  missingRequiredInputs,
+  isWorkflowReady,
+  selectedInputPreview,
+} from "./job-input";
 
 const workflow: WorkflowOption = {
   id: "wf-1",
@@ -23,6 +28,53 @@ const workflow: WorkflowOption = {
 };
 
 describe("job input form mapping", () => {
+  it("does not invent media for a text-only input or choose an unrelated resource", () => {
+    expect(selectedInputPreview("MATERIAL")).toBeUndefined();
+    expect(
+      selectedInputPreview("MATERIAL", {
+        id: "text",
+        name: "Movement",
+        scope: "ai_clothing",
+        asset_kind: "movement",
+        content: "Turn slowly",
+        owner_user_id: "owner",
+        visibility: "private",
+        created_at: "",
+        updated_at: "",
+      }),
+    ).toEqual({ paths: [], content: "Turn slowly" });
+  });
+  it("previews the selected character full-body reference before its avatar", () => {
+    expect(
+      selectedInputPreview("VIRTUAL_IP", {
+        id: "character",
+        name: "Character",
+        scope: "ai_clothing",
+        status: "active",
+        visibility: "private",
+        owner_user_id: "owner",
+        avatar_object_path: "avatar.png",
+        full_body_object_path: "body.png",
+        created_at: "",
+        updated_at: "",
+      })?.paths,
+    ).toEqual(["body.png"]);
+  });
+  it("requires the selected detail receipt, not an incomplete index row, for execution", () => {
+    expect(isWorkflowReady(workflow)).toBe(false);
+    expect(
+      isWorkflowReady({ status: "published", publication_status: "pending" }),
+    ).toBe(false);
+    expect(
+      isWorkflowReady({ status: "draft", publication_status: "registered" }),
+    ).toBe(false);
+    expect(
+      isWorkflowReady({
+        status: "published",
+        publication_status: "registered",
+      }),
+    ).toBe(true);
+  });
   it("reports required inputs from the workflow contract", () => {
     expect(missingRequiredInputs(workflow, { product: "p-1" })).toEqual([
       "movement",

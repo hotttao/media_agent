@@ -62,6 +62,7 @@ export interface InvocationExpression {
 // ── Template ────────────────────────────────────────────────────────────
 
 export interface Template {
+  organization_id?: string;
   id: string;
   scope: string;
   name: string;
@@ -88,9 +89,8 @@ export interface Template {
 /** Create/update payload. scope is required on create and immutable on update
  * (enforced server-side). status / version are mutated via dedicated
  * endpoints, not the update body. visibility is accepted by the form for UX
- * continuity but the proto's Create/UpdateTemplateReq do not carry it - the
- * create flow calls changeTemplateVisibility after create if non-default, and
- * the show page owns the dedicated visibility switch. */
+ * compatibility but draft forms display it read-only: Create/Update do not
+ * carry it. The show page owns the separate owner-only visibility command. */
 export interface TemplateInput {
   organization_id?: string;
   scope: string;

@@ -1,3 +1,4 @@
+import { ConfirmActionButton } from "@/foundation/components/confirm-action-button";
 import { PackageOpen, Search, ShoppingBag, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -82,6 +83,7 @@ export function ProductList({ onSelect }: { onSelect: (id: string) => void }) {
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            aria-label={t("productsList.search")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t("productsList.search")}
@@ -97,7 +99,7 @@ export function ProductList({ onSelect }: { onSelect: (id: string) => void }) {
             {name ? t("productsList.noMatch") : t("productsList.empty")}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+          <div className="media-library-grid p-5">
             {items.map((item) => {
               const metadata = recordOf(item.metadata);
               const categories = Array.isArray(metadata.categories)
@@ -110,6 +112,7 @@ export function ProductList({ onSelect }: { onSelect: (id: string) => void }) {
               return (
                 <article
                   key={item.id}
+                  data-testid={`product-card-${item.id}`}
                   className="group relative overflow-hidden rounded-2xl border border-border/70 bg-card/80 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-xl"
                 >
                   <button
@@ -117,7 +120,7 @@ export function ProductList({ onSelect }: { onSelect: (id: string) => void }) {
                     className="block w-full text-left"
                     onClick={() => onSelect(item.id)}
                   >
-                    <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-rose-500/10">
+                    <div className="relative aspect-square overflow-hidden bg-muted/40">
                       <LibraryImage
                         organizationId={item.organization_id}
                         objectPath={mainImage?.object_path}
@@ -144,16 +147,16 @@ export function ProductList({ onSelect }: { onSelect: (id: string) => void }) {
                       </p>
                     </div>
                   </button>
-                  <Button
+                  <ConfirmActionButton
                     variant="ghost"
                     size="icon"
                     aria-label={t("productsList.delete", { name: item.name })}
                     className="absolute bottom-2 right-2 h-8 w-8 opacity-0 transition group-hover:opacity-100 focus:opacity-100"
                     disabled={deleteProduct.isPending}
-                    onClick={() => deleteProduct.mutate(item.id)}
+                    onConfirm={() => deleteProduct.mutateAsync(item.id)}
                   >
                     <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </ConfirmActionButton>
                 </article>
               );
             })}

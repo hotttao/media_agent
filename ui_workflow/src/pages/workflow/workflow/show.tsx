@@ -1,4 +1,4 @@
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, type Query } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Boxes,
@@ -38,12 +38,14 @@ import {
 import type { WorkflowStep } from "@/domains/workflows/types";
 import { cn } from "@/foundation/lib/utils";
 import { AppStudioHeader } from "@/foundation/components/app-studio-header";
-
-const visibilityLabel = {
-  private: "仅自己",
-  team: "部门",
-  public: "组织内公开",
-} as const;
+import { ListState } from "@/foundation/components/resource-list-layout";
+import { ResourceSharing } from "@/foundation/components/resource-sharing";
+import { hostShim } from "@/foundation/lib/host-shim";
+import {
+  changeWorkflowVisibility,
+  grantWorkflow,
+  revokeWorkflow,
+} from "@/domains/workflows/lib/api";
 
 export function WorkflowShow({
   id,
@@ -59,12 +61,25 @@ export function WorkflowShow({
   onRun: () => void;
 }) {
   const { t } = useTranslation();
-  const { data: workflow, isLoading } = useWorkflow(id);
+  const { user } = hostShim.useCurrentUser();
+  const shell = hostShim.useShellContext();
+  const {
+    data: workflow,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useWorkflow(id);
+  const [executionsOpen, setExecutionsOpen] = useState(false);
   const { data: templates } = useTemplatesList({
     scope: workflow?.scope,
     page_size: 200,
   });
-  const { data: jobsPage } = useJobsList({ workflow_id: id, page_size: 100 });
+  const executions = useJobsList(
+    { workflow_id: id, page_size: 100 },
+    executionsOpen,
+  );
+  const jobsPage = executions.data;
   const activeJobs = (jobsPage?.items ?? []).filter((job) =>
     CANCELABLE_JOB_STATUS.has(job.status),
   );
@@ -72,16 +87,23 @@ export function WorkflowShow({
     queries: activeJobs.map((job) => ({
       queryKey: ["job", job.id],
       queryFn: () => getJob(job.id),
-      refetchInterval: 2000,
+      enabled: executionsOpen,
+      staleTime: 10000,
+      refetchInterval: (query: Query<Awaited<ReturnType<typeof getJob>>>) =>
+        query.state.data &&
+        !CANCELABLE_JOB_STATUS.has(query.state.data.job.status)
+          ? false
+          : 10000,
     })),
   });
   const archiveWorkflow = useArchiveWorkflow();
   const publishWorkflow = usePublishWorkflow();
   const [selectedStepKey, setSelectedStepKey] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [executionsOpen, setExecutionsOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
 
+  if (isError)
+    return <ListState error={error.message} onRetry={() => void refetch()} />;
   if (isLoading)
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -91,7 +113,7 @@ export function WorkflowShow({
   if (!workflow)
     return (
       <div className="p-8 text-sm text-muted-foreground">
-        没有找到这个工作流。
+        {t("workflowView.notFound")}
       </div>
     );
 
@@ -104,7 +126,7 @@ export function WorkflowShow({
               variant="outline"
               size="icon"
               onClick={onBack}
-              aria-label="返回"
+              aria-label={t("workflowView.back")}
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -145,26 +167,27 @@ export function WorkflowShow({
               size="sm"
               onClick={() => setExecutionsOpen(true)}
             >
-              {t("studio.activeExecutions", { count: activeJobs.length })}
+              {t("studio.viewExecutions")}
             </Button>
-            {workflow.status === "published" ? (
+            {workflow.status === "published" &&
+            workflow.publication_status === "registered" ? (
               <Button onClick={onRun}>
                 <Play className="mr-2 h-4 w-4" />
-                运行工作流
+                {t("workflowView.run")}
               </Button>
             ) : null}
-            {workflow.status === "draft" ? (
+            {workflow.status === "draft" && workflow.created_by === user?.id ? (
               <Button
                 onClick={() => publishWorkflow.mutate(id)}
                 disabled={publishWorkflow.isPending}
               >
                 <Send className="mr-2 h-4 w-4" />
-                发布
+                {t("workflowView.publish")}
               </Button>
             ) : null}
             <Button variant="outline" onClick={onEdit}>
               <Pencil className="mr-2 h-4 w-4" />
-              编辑
+              {t("workflowView.edit")}
             </Button>
           </div>
         </AppStudioHeader>
@@ -180,25 +203,38 @@ export function WorkflowShow({
             <section className="grid gap-3 sm:grid-cols-2">
               <InfoCard
                 icon={GitBranch}
-                label="生成节点"
-                value={`${workflow.steps.length} 个`}
+                label={t("workflowView.steps")}
+                value={t("v12.nodes", { count: workflow.steps.length })}
               />
               <InfoCard
                 icon={Boxes}
-                label="最终输出"
+                label={t("workflowView.output")}
                 value={workflow.output_step_key}
               />
               <InfoCard
                 icon={Eye}
-                label="可见范围"
-                value={visibilityLabel[workflow.visibility]}
+                label={t("workflowView.visibility")}
+                value={t(`common.visibility.${workflow.visibility}`)}
               />
               <InfoCard
                 icon={CalendarClock}
-                label="业务范围"
+                label={t("workflowView.scope")}
                 value={workflow.scope}
               />
             </section>
+            <ResourceSharing
+              organizationId={workflow.organization_id || shell.organization.id}
+              owner={Boolean(user?.id && user.id === workflow.created_by)}
+              visibility={workflow.visibility}
+              onVisibility={async (value) => {
+                await changeWorkflowVisibility(id, value);
+                await refetch();
+              }}
+              onGrant={(team, permission) =>
+                grantWorkflow(id, team, permission)
+              }
+              onRevoke={(team) => revokeWorkflow(id, team)}
+            />
             {workflow.status !== "archived" ? (
               <Button
                 variant="destructive"
@@ -223,13 +259,20 @@ export function WorkflowShow({
               </DialogTitle>
               <DialogDescription>{t("studio.executionHint")}</DialogDescription>
             </DialogHeader>
-            {activeJobs.length > 0 ? (
+            {executions.isLoading ? (
+              <ListState loading />
+            ) : executions.isError ? (
+              <ListState
+                error={executions.error.message}
+                onRetry={() => void executions.refetch()}
+              />
+            ) : activeJobs.length > 0 ? (
               <section className="rounded-2xl border border-border/70 bg-card p-5">
                 <h2 className="font-semibold">
-                  正在执行 · {activeJobs.length}
+                  {t("studio.activeExecutions", { count: activeJobs.length })}
                 </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  打开执行记录，查看每个节点的位置、结果和待确认事项。
+                  {t("workflowView.executionHint")}
                 </p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   {activeJobs.map((job, index) => {
@@ -253,8 +296,8 @@ export function WorkflowShow({
                         <JobStatusBadge status={job.status} />
                         <span className="mt-2 block text-sm font-medium">
                           {focus
-                            ? `${focus.step_key} · ${focus.status === "need_confirm" ? "待确认" : focus.status === "pending" ? "等待执行" : "执行中"}`
-                            : "正在获取节点状态…"}
+                            ? `${focus.step_key} · ${focus.status === "need_confirm" ? t("workflowView.approval") : focus.status === "pending" ? t("workflowView.pending") : t("workflowView.running")}`
+                            : t("workflowView.loadingSteps")}
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">
                           {
@@ -262,7 +305,7 @@ export function WorkflowShow({
                               (step) => step.status === "succeeded",
                             ).length
                           }
-                          /{stepRuns.length} 个节点已完成
+                          /{stepRuns.length} {t("workflowView.stepsCompleted")}
                         </span>
                       </button>
                     );
@@ -388,14 +431,15 @@ function StepDetails({
   isOutput: boolean;
   templateName?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <aside className="border-t bg-background/70 p-5 xl:border-l xl:border-t-0">
       {!step ? (
         <div className="flex h-full min-h-[180px] flex-col items-center justify-center text-center">
           <Layers3 className="h-7 w-7 text-muted-foreground/50" />
-          <h3 className="mt-3 font-semibold">选择一个节点</h3>
+          <h3 className="mt-3 font-semibold">{t("workflowView.choose")}</h3>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            点击画布中的节点，在这里查看它的 Template、输入绑定和审批策略。
+            {t("workflowView.chooseHint")}
           </p>
         </div>
       ) : (
@@ -409,7 +453,7 @@ function StepDetails({
             </div>
             {isOutput ? (
               <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
-                最终输出
+                {t("workflowView.output")}
               </span>
             ) : null}
           </div>
@@ -422,18 +466,24 @@ function StepDetails({
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">审批策略</dt>
+              <dt className="text-xs text-muted-foreground">
+                {t("workflowView.approvalPolicy")}
+              </dt>
               <dd className="mt-1 font-medium">
                 {step.approval_policy === "always"
-                  ? "始终审批"
-                  : "多候选时审批"}
+                  ? t("workflowView.always")
+                  : t("workflowView.multiple")}
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">输入绑定</dt>
+              <dt className="text-xs text-muted-foreground">
+                {t("workflowView.bindings")}
+              </dt>
               <dd className="mt-2 space-y-2">
                 {step.slot_bindings.length === 0 ? (
-                  <span className="text-muted-foreground">暂无绑定</span>
+                  <span className="text-muted-foreground">
+                    {t("workflowView.emptyBindings")}
+                  </span>
                 ) : (
                   step.slot_bindings.map((binding) => (
                     <div
@@ -444,7 +494,9 @@ function StepDetails({
                       <span className="mx-1.5 text-muted-foreground">←</span>
                       <span className="text-muted-foreground">
                         {binding.source === "const"
-                          ? String(binding.const_value ?? "固定值")
+                          ? String(
+                              binding.const_value ?? t("workflowView.constant"),
+                            )
                           : binding.ref}
                       </span>
                     </div>

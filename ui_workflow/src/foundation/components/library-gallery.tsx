@@ -1,5 +1,6 @@
 import { Images } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/foundation/lib/utils";
 import { LibraryImage } from "./library-image";
 
@@ -22,6 +23,7 @@ export function LibraryGallery({
   className?: string;
   showEmptyItems?: boolean;
 }) {
+  const { t } = useTranslation();
   const available = items.filter((item) => item.objectPath);
   const displayItems = showEmptyItems
     ? items
@@ -37,13 +39,15 @@ export function LibraryGallery({
         <LibraryImage
           organizationId={organizationId}
           objectPath={active?.objectPath}
-          alt={`${alt} ${active?.label ?? "图片"}`}
+          alt={`${alt} ${active?.label ?? t("detailCommon.image")}`}
           className="object-contain p-2 transition duration-500 group-hover:scale-[1.015]"
           fallbackClassName="bg-transparent"
         />
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/60 to-transparent px-4 pb-3 pt-10 text-white">
           <div>
-            <p className="text-sm font-medium">{active?.label ?? "暂无图片"}</p>
+            <p className="text-sm font-medium">
+              {active?.label ?? t("detailCommon.noImage")}
+            </p>
             {active?.badge ? (
               <p className="mt-0.5 text-xs text-white/70">{active.badge}</p>
             ) : null}

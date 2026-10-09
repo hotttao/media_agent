@@ -34,10 +34,10 @@ function toWire(input: Partial<WorkflowInput>): Record<string, unknown> {
                 {
                   source:
                     binding.source === "workflow_input"
-                      ? "WORKFLOW_INPUT"
+                      ? 1
                       : binding.source === "step_output"
-                        ? "STEP_OUTPUT"
-                        : "CONST",
+                        ? 2
+                        : 3,
                   ref: binding.ref ?? "",
                   const_value: binding.const_value ?? "",
                 },
@@ -200,10 +200,11 @@ export async function publishWorkflow(id: string): Promise<Workflow> {
 export async function grantWorkflow(
   id: string,
   teamId: string,
+  permission: "viewer" | "editor" = "viewer",
 ): Promise<Workflow> {
   return api.request<Workflow>(`/workflows/${encodeURIComponent(id)}/grants`, {
     method: "POST",
-    body: JSON.stringify({ team_id: teamId }),
+    body: JSON.stringify({ team_id: teamId, permission }),
   });
 }
 

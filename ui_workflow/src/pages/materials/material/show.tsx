@@ -1,3 +1,5 @@
+import { ConfirmActionButton } from "@/foundation/components/confirm-action-button";
+import { ListState } from "@/foundation/components/resource-list-layout";
 import {
   ArrowLeft,
   Braces,
@@ -50,9 +52,17 @@ export function MaterialsShow({
   onEdit: () => void;
 }) {
   const { t } = useTranslation();
-  const { data: material, isLoading } = useMaterial(id);
+  const {
+    data: material,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useMaterial(id);
   const remove = useDeleteMaterial();
   const { organization } = hostShim.useShellContext();
+  if (isError)
+    return <ListState error={error.message} onRetry={() => void refetch()} />;
   if (isLoading)
     return (
       <div className="flex h-full items-center justify-center">
@@ -78,7 +88,7 @@ export function MaterialsShow({
           {t("materialDetail.edit")}
         </Button>
       </div>
-      <section className="grid gap-6 lg:grid-cols-[minmax(300px,460px)_1fr] lg:items-start">
+      <section className="media-detail-grid items-start">
         {material.asset_kind === "movement" && material.object_path ? (
           <div className="aspect-video overflow-hidden rounded-xl border bg-black">
             <LibraryVideo
@@ -173,15 +183,15 @@ export function MaterialsShow({
         icon={FileImage}
         className="border-destructive/20"
       >
-        <Button
+        <ConfirmActionButton
           variant="destructive"
           size="sm"
           disabled={remove.isPending}
-          onClick={() => remove.mutate(id, { onSuccess: onBack })}
+          onConfirm={() => remove.mutateAsync(id, { onSuccess: onBack })}
         >
           <Trash2 className="mr-1.5 h-4 w-4" />
           {t("materialDetail.delete")}
-        </Button>
+        </ConfirmActionButton>
       </DetailSection>
     </DetailPage>
   );

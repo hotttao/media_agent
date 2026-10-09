@@ -6,7 +6,8 @@
  * via instance state (NOT react-router) - see docs/plan/ui_workflow.md §3.1.
  */
 
-import { Plus } from "lucide-react";
+import { Plus, Settings2 } from "lucide-react";
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -48,6 +49,9 @@ const RESOURCES: { id: Resource; labelKey: string; readonly?: boolean }[] = [
 
 export function MaterialsApp({ instanceId }: { instanceId: string }) {
   const { t } = useTranslation();
+  const { user } = hostShim.useCurrentUser();
+  const registryVisible =
+    user?.role === "admin" || user?.role === "platform_admin";
   const {
     useAppHeaderSlot,
     AppHeaderButton,
@@ -80,6 +84,14 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
     setView("list");
   }
 
+  useEffect(() => {
+    if (user && !registryVisible && resource === "asset_kind") {
+      setResource("material");
+      setSelectedId(null);
+      setView("list");
+    }
+  }, [user, registryVisible, resource, setResource, setSelectedId, setView]);
+
   function select(id: string) {
     setSelectedId(id);
     setView("show");
@@ -89,6 +101,7 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
     <>
       {headerSlot &&
         canCreate &&
+        view === "list" &&
         createPortal(
           <span className="media-workflow-ui">
             <span className="media-header-actions">
@@ -101,6 +114,13 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
                   setView("create");
                 }}
               />
+              {registryVisible ? (
+                <AppHeaderButton
+                  icon={Settings2}
+                  label={t("nav.assetKinds")}
+                  onClick={() => changeResource("asset_kind")}
+                />
+              ) : null}
             </span>
           </span>,
           headerSlot,
@@ -112,7 +132,7 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
             onValueChange={(v) => changeResource(v as Resource)}
           >
             <TabsList>
-              {RESOURCES.map((r) => (
+              {RESOURCES.filter((r) => r.id !== "asset_kind").map((r) => (
                 <TabsTrigger key={r.id} value={r.id}>
                   {t(r.labelKey)}
                 </TabsTrigger>
@@ -132,10 +152,18 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
             />
           )}
           {resource === "material" && view === "create" && (
-            <MaterialsCreate onDone={() => setView("list")} />
+            <MaterialsCreate
+              instanceId={instanceId}
+              onDone={() => setView("list")}
+            />
           )}
           {resource === "material" && view === "edit" && selectedId && (
-            <MaterialsEdit id={selectedId} onDone={() => setView("show")} />
+            <MaterialsEdit
+              key={selectedId}
+              instanceId={instanceId}
+              id={selectedId}
+              onDone={() => setView("show")}
+            />
           )}
 
           {resource === "virtual_ip" && view === "list" && (
@@ -149,10 +177,18 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
             />
           )}
           {resource === "virtual_ip" && view === "create" && (
-            <VirtualIpCreate onDone={() => setView("list")} />
+            <VirtualIpCreate
+              instanceId={instanceId}
+              onDone={() => setView("list")}
+            />
           )}
           {resource === "virtual_ip" && view === "edit" && selectedId && (
-            <VirtualIpEdit id={selectedId} onDone={() => setView("show")} />
+            <VirtualIpEdit
+              key={selectedId}
+              instanceId={instanceId}
+              id={selectedId}
+              onDone={() => setView("show")}
+            />
           )}
 
           {resource === "product" && view === "list" && (
@@ -166,28 +202,52 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
             />
           )}
           {resource === "product" && view === "create" && (
-            <ProductCreate onDone={() => setView("list")} />
-          )}
-          {resource === "product" && view === "edit" && selectedId && (
-            <ProductEdit id={selectedId} onDone={() => setView("show")} />
-          )}
-
-          {resource === "asset_kind" && view === "list" && (
-            <AssetKindList onSelect={select} />
-          )}
-          {resource === "asset_kind" && view === "show" && selectedId && (
-            <AssetKindShow
-              name={selectedId}
-              onBack={() => setView("list")}
-              onEdit={() => setView("edit")}
+            <ProductCreate
+              instanceId={instanceId}
+              onDone={() => setView("list")}
             />
           )}
-          {resource === "asset_kind" && view === "create" && (
-            <AssetKindCreate onDone={() => setView("list")} />
+          {resource === "product" && view === "edit" && selectedId && (
+            <ProductEdit
+              key={selectedId}
+              instanceId={instanceId}
+              id={selectedId}
+              onDone={() => setView("show")}
+            />
           )}
-          {resource === "asset_kind" && view === "edit" && selectedId && (
-            <AssetKindEdit name={selectedId} onDone={() => setView("show")} />
+
+          {registryVisible && resource === "asset_kind" && view === "list" && (
+            <AssetKindList onSelect={select} />
           )}
+          {registryVisible &&
+            resource === "asset_kind" &&
+            view === "show" &&
+            selectedId && (
+              <AssetKindShow
+                name={selectedId}
+                onBack={() => setView("list")}
+                onEdit={() => setView("edit")}
+              />
+            )}
+          {registryVisible &&
+            resource === "asset_kind" &&
+            view === "create" && (
+              <AssetKindCreate
+                instanceId={instanceId}
+                onDone={() => setView("list")}
+              />
+            )}
+          {registryVisible &&
+            resource === "asset_kind" &&
+            view === "edit" &&
+            selectedId && (
+              <AssetKindEdit
+                key={selectedId}
+                instanceId={instanceId}
+                name={selectedId}
+                onDone={() => setView("show")}
+              />
+            )}
 
           {resource === "generated_asset" && view === "list" && (
             <GeneratedAssetList onSelect={select} />

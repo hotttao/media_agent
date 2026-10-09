@@ -1,3 +1,6 @@
+import { useTranslation } from "react-i18next";
+import { ConfirmActionButton } from "@/foundation/components/confirm-action-button";
+import { ListState } from "@/foundation/components/resource-list-layout";
 import { ArrowLeft, Database, Edit3, Layers3, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -20,7 +23,14 @@ export function AssetKindShow({
   onBack: () => void;
   onEdit: () => void;
 }) {
-  const { data: assetKind, isLoading } = useAssetKind(name);
+  const { t } = useTranslation();
+  const {
+    data: assetKind,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useAssetKind(name);
   const remove = useDeleteAssetKind();
   if (isLoading)
     return (
@@ -28,10 +38,12 @@ export function AssetKindShow({
         <Spinner className="h-5 w-5" />
       </div>
     );
+  if (isError)
+    return <ListState error={error.message} onRetry={() => void refetch()} />;
   if (!assetKind)
     return (
       <div className="p-6 text-sm text-muted-foreground">
-        没有找到这个素材类别。
+        {t("library.empty")}
       </div>
     );
   return (
@@ -39,11 +51,11 @@ export function AssetKindShow({
       <div className="sticky top-0 z-10 -mx-1 flex items-center justify-between rounded-xl border border-border/60 bg-background/90 p-2 shadow-sm backdrop-blur-xl">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft className="mr-1.5 h-4 w-4" />
-          返回类别列表
+          {t("registry.back")}
         </Button>
         <Button size="sm" onClick={onEdit}>
           <Edit3 className="mr-1.5 h-4 w-4" />
-          编辑类别
+          {t("registry.edit")}
         </Button>
       </div>
       <section className="rounded-2xl border border-border/70 bg-gradient-to-br from-primary/10 via-card to-card p-6 shadow-sm sm:p-8">
@@ -67,50 +79,56 @@ export function AssetKindShow({
               {assetKind.name}
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground sm:text-base">
-              {assetKind.description || "这个素材类别还没有填写说明。"}
+              {assetKind.description || "—"}
             </p>
           </div>
         </div>
       </section>
       <DetailSection
-        title="类别定义"
-        description="该类别决定资源落表位置和媒体处理方式"
+        title={t("registry.definition")}
+        description={t("registry.hint")}
         icon={Database}
       >
         <DetailFieldGrid>
-          <DetailField label="资源类型">{assetKind.resource_type}</DetailField>
-          <DetailField label="媒体类型">{assetKind.media_type}</DetailField>
-          <DetailField label="来源表">
-            {assetKind.source_table || "无独立数据表"}
+          <DetailField label={t("registry.resourceType")}>
+            {assetKind.resource_type}
           </DetailField>
-          <DetailField label="状态">{assetKind.status}</DetailField>
-          <DetailField label="创建时间">
+          <DetailField label={t("registry.mediaType")}>
+            {assetKind.media_type}
+          </DetailField>
+          <DetailField label={t("registry.source")}>
+            {assetKind.source_table || "—"}
+          </DetailField>
+          <DetailField label={t("registry.status")}>
+            {assetKind.status}
+          </DetailField>
+          <DetailField label={t("library.fields.created")}>
             {formatDetailDate(assetKind.created_at)}
           </DetailField>
-          <DetailField label="最近更新">
+          <DetailField label={t("registry.updated")}>
             {formatDetailDate(assetKind.updated_at)}
           </DetailField>
         </DetailFieldGrid>
       </DetailSection>
       <DetailSection
-        title="类别管理"
+        title={t("library.management")}
         description={
           assetKind.status === "SYSTEM"
-            ? "系统类别由平台维护，不能删除。"
-            : "使用中的类别可能会被服务端拒绝删除。"
+            ? t("registry.systemHint")
+            : t("registry.deleteHint")
         }
         icon={Layers3}
         className="border-destructive/20"
       >
-        <Button
+        <ConfirmActionButton
           variant="destructive"
           size="sm"
           disabled={remove.isPending || assetKind.status === "SYSTEM"}
-          onClick={() => remove.mutate(name, { onSuccess: onBack })}
+          onConfirm={() => remove.mutateAsync(name, { onSuccess: onBack })}
         >
           <Trash2 className="mr-1.5 h-4 w-4" />
-          删除类别
-        </Button>
+          {t("common.delete")}
+        </ConfirmActionButton>
       </DetailSection>
     </DetailPage>
   );

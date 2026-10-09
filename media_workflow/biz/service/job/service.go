@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -534,18 +535,50 @@ func (s *Service) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, 
 	if err != nil {
 		return nil, 0, err
 	}
-	for index, job := range items {
-		if job.ConductorWorkflowID == "" || s.engine == nil {
-			continue
-		}
-		if err := s.reconcileConductor(ctx, job); err != nil && !errors.Is(err, errExecutionSnapshotStale) {
-			continue
-		}
-		if updated, err := s.jobRepo.Get(ctx, job.ID); err == nil {
-			items[index] = updated
+	s.refreshListedExecutions(ctx, items)
+	return items, total, nil
+}
+
+// Each Job owns its projection transaction. Independent reads can overlap,
+// but a page must not fan out one goroutine per row or reorder its results.
+func (s *Service) refreshListedExecutions(ctx context.Context, items []*domain.Job) {
+	if s.engine == nil || len(items) == 0 {
+		return
+	}
+	const concurrency = 4
+	indices := make(chan int)
+	var workers sync.WaitGroup
+	for range min(concurrency, len(items)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for index := range indices {
+				if ctx.Err() != nil {
+					continue
+				}
+				job := items[index]
+				if job.ConductorWorkflowID == "" {
+					continue
+				}
+				if err := s.reconcileConductor(ctx, job); err != nil && !errors.Is(err, errExecutionSnapshotStale) {
+					continue
+				}
+				if updated, err := s.jobRepo.Get(ctx, job.ID); err == nil {
+					items[index] = updated
+				}
+			}
+		}()
+	}
+dispatch:
+	for index := range items {
+		select {
+		case <-ctx.Done():
+			break dispatch
+		case indices <- index:
 		}
 	}
-	return items, total, nil
+	close(indices)
+	workers.Wait()
 }
 
 func conductorInputs(input domain.JobInput) map[string]any {

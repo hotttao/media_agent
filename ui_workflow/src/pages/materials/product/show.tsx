@@ -1,3 +1,6 @@
+import { ConfirmActionButton } from "@/foundation/components/confirm-action-button";
+import { ListState } from "@/foundation/components/resource-list-layout";
+import { ProductWorkflowLaunch } from "./workflow-launch";
 import {
   Archive,
   ArrowLeft,
@@ -50,10 +53,12 @@ export function ProductShow({
   onEdit: () => void;
 }) {
   const { t } = useTranslation();
-  const { data: product, isLoading } = useProduct(id);
+  const { data: product, isLoading, isError, error, refetch } = useProduct(id);
   const remove = useDeleteProduct();
   const archive = useArchiveProduct();
   const { organization } = hostShim.useShellContext();
+  if (isError)
+    return <ListState error={error.message} onRetry={() => void refetch()} />;
   if (isLoading)
     return (
       <div className="flex h-full items-center justify-center">
@@ -86,16 +91,20 @@ export function ProductShow({
           {t("productDetail.back")}
         </Button>
         <div className="flex gap-2">
+          <ProductWorkflowLaunch
+            product={product}
+            organizationId={product.organization_id || organization.id}
+          />
           {product.status !== "archived" ? (
-            <Button
+            <ConfirmActionButton
               variant="outline"
               size="sm"
               disabled={archive.isPending}
-              onClick={() => archive.mutate(id)}
+              onConfirm={() => archive.mutateAsync(id)}
             >
               <Archive className="mr-1.5 h-4 w-4" />
               {t("productDetail.archive")}
-            </Button>
+            </ConfirmActionButton>
           ) : null}
           <Button size="sm" onClick={onEdit}>
             <Edit3 className="mr-1.5 h-4 w-4" />
@@ -103,7 +112,7 @@ export function ProductShow({
           </Button>
         </div>
       </div>
-      <section className="grid gap-6 lg:grid-cols-[minmax(320px,500px)_1fr] lg:items-start">
+      <section className="media-detail-grid items-start">
         <LibraryGallery
           organizationId={product.organization_id ?? organization.id}
           items={images.map((image, index) => ({
@@ -242,15 +251,15 @@ export function ProductShow({
         icon={ShoppingBag}
         className="border-destructive/20"
       >
-        <Button
+        <ConfirmActionButton
           variant="destructive"
           size="sm"
           disabled={remove.isPending}
-          onClick={() => remove.mutate(id, { onSuccess: onBack })}
+          onConfirm={() => remove.mutateAsync(id, { onSuccess: onBack })}
         >
           <Trash2 className="mr-1.5 h-4 w-4" />
           {t("productDetail.delete")}
-        </Button>
+        </ConfirmActionButton>
       </DetailSection>
     </DetailPage>
   );

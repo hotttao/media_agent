@@ -1,5 +1,11 @@
 # 扩展模型
 
+## Materials → Workflow 启动意图
+
+App 只消费 L1 Navigation Port，不直接调用 SlotProvider、Router 或全局事件。`openWorkflowRun` 传递工作流 ID、商品 ID、企业 ID 和唯一界面请求 ID，不携带商品正文、凭证或执行命令。standalone adapter 使用现有 Slot `ensureInstance/activate` 并向目标 instance 写入内存启动意图；Workflow App 消费一次，创建独立运行草稿，避免覆盖该实例的旧编辑/提交草稿。
+
+plugin 的 `window.tos.navigation.openWorkflowRun` 是可选宿主扩展契约，不假定旧宿主已经实现。不支持时仍可查看兼容定义，但不提供可点击的跨 App 启动，提示用户从 Workflow 手动运行；不嵌入第二个 Shell。目标页重新读取企业、注册回执、输入 Schema 与候选资源，预填商品只作用于该工作流的 PRODUCT 入口，用户换定义/清空选择后不自动重新填入。提交仍须明确合法 Workspace；导航不代表授权或执行成功。
+
 内置 App 与未来 plugin 最终都转换为 `AppDefinition`，再交给同一个 Registry/Slot Provider。布局和 Slot Container 不导入具体 App。
 
 当前静态 Catalog 包含 Sessions、Chat、Workspace Settings，并新增 Materials、Workflow。Materials/Workflow 通过同一 App Definition 在 standalone 与 Agent Platform plugin adapter 中注册。暂不实现任意第三方远程代码加载、权限声明、版本协商和故障隔离。

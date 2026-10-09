@@ -1,4 +1,5 @@
 import { ApiClientError, api } from "@/foundation/lib/api-client";
+import { requestKey } from "@/foundation/lib/request-key";
 
 export type LibraryObjectPurpose =
   | "material"
@@ -20,14 +21,20 @@ export async function resolveLibraryObject(
   objectPath?: string,
 ): Promise<string> {
   if (!objectPath) return "";
+  return (await resolveLibraryMedia(organizationId, objectPath)).url;
+}
+
+export async function resolveLibraryMedia(
+  organizationId: string,
+  objectPath: string,
+): Promise<{ url: string; content_type?: string }> {
   const query = new URLSearchParams({
     organization_id: organizationId,
     object_path: objectPath,
   });
-  const result = await api.request<{ url: string }>(
+  return api.request<{ url: string; content_type?: string }>(
     `/library-objects:resolve?${query.toString()}`,
   );
-  return result.url;
 }
 
 export async function uploadLibraryObject(input: {
@@ -48,7 +55,7 @@ export async function uploadLibraryObject(input: {
     method: "POST",
     credentials: "include",
     headers: {
-      "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
+      "Idempotency-Key": input.idempotencyKey ?? requestKey(),
     },
     body: form,
   });

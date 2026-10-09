@@ -12,6 +12,9 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "zh-CN" },
   }),
 }));
+vi.mock("@/foundation/lib/i18n", () => ({
+  default: { t: (key: string) => key },
+}));
 vi.mock("@/domains/materials/hooks/use-materials-list", () => ({
   useMaterialsList: vi.fn(),
 }));

@@ -77,6 +77,7 @@ export type JobStatus =
   | "unknown";
 
 export type StepRunStatus =
+  | "unknown"
   | "pending"
   | "running"
   | "succeeded"
@@ -108,6 +109,9 @@ export interface RetryHistoryEntry {
 // ── Job ─────────────────────────────────────────────────────────────────
 
 export interface Job {
+  origin?: string;
+  organization_id?: string;
+  workspace_id?: string;
   id: string;
   scope: string;
   workflow_id: string;
@@ -126,6 +130,9 @@ export interface Job {
 // ── StepRun ─────────────────────────────────────────────────────────────
 
 export interface StepRun {
+  last_review_id?: string;
+  last_review_status?: "pending" | "applied" | "failed";
+  origin?: string;
   id: string;
   job_id: string;
   step_key: string;
@@ -172,6 +179,9 @@ export interface JobsPage {
 /** POST /jobs body (SubmitJob). workflow_version is optional (server picks
  * latest when omitted). submitted_by is inferred server-side from auth. */
 export interface SubmitJobInput {
+  organization_id?: string;
+  workspace_id?: string;
+  idempotency_key?: string;
   workflow_id: string;
   workflow_version?: number;
   input: JobInput;
@@ -203,6 +213,7 @@ export interface WorkflowOption {
   scope: string;
   version: number;
   status: number | string;
+  publication_status?: string;
   input_schema?: { entries?: WorkflowInputSchemaEntry[] };
 }
 

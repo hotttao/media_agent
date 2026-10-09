@@ -1,7 +1,12 @@
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Spinner } from "@/components/ui/spinner";
+import { ConfirmActionButton } from "@/foundation/components/confirm-action-button";
+import {
+  ListPagination,
+  ListState,
+  ResourceListLayout,
+} from "@/foundation/components/resource-list-layout";
 import { useDeleteAssetKind } from "@/domains/asset-kinds/hooks/use-asset-kind-mutations";
 import { useAssetKindsList } from "@/domains/asset-kinds/hooks/use-asset-kinds-list";
 
@@ -10,75 +15,78 @@ export function AssetKindList({
 }: {
   onSelect: (name: string) => void;
 }) {
-  const { data, isLoading } = useAssetKindsList();
-  const deleteAssetKind = useDeleteAssetKind();
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <Spinner className="h-5 w-5" />
-      </div>
-    );
-  }
-
-  const items = data?.items ?? [];
-  if (items.length === 0) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        No asset kinds yet.
-      </div>
-    );
-  }
-
+  const { t } = useTranslation();
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const query = useAssetKindsList({ page, page_size: 20 });
+  const remove = useDeleteAssetKind();
+  const items = (query.data?.items || []).filter((item) =>
+    item.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+  );
   return (
-    <ScrollArea className="flex-1">
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-card">
-          <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-            <th className="px-3 py-2">Name</th>
-            <th className="px-3 py-2">Resource Type</th>
-            <th className="px-3 py-2">Media Type</th>
-            <th className="px-3 py-2">Status</th>
-            <th className="px-3 py-2">Updated</th>
-            <th className="px-3 py-2" aria-label="actions" />
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((k) => (
-            <tr key={k.name} className="border-b hover:bg-foreground/[0.04]">
-              <td className="px-3 py-2">
-                <button
-                  type="button"
-                  className="text-left hover:underline"
-                  onClick={() => onSelect(k.name)}
-                >
-                  {k.name}
-                </button>
-              </td>
-              <td className="px-3 py-2 text-muted-foreground">
-                {k.resource_type}
-              </td>
-              <td className="px-3 py-2 text-muted-foreground">
-                {k.media_type}
-              </td>
-              <td className="px-3 py-2 text-muted-foreground">{k.status}</td>
-              <td className="px-3 py-2 text-muted-foreground">
-                {k.updated_at}
-              </td>
-              <td className="px-3 py-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="delete"
-                  onClick={() => deleteAssetKind.mutate(k.name)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </td>
-            </tr>
+    <ResourceListLayout
+      title={t("nav.assetKinds")}
+      description={t("registry.hint")}
+      filters={null}
+      filterLabel={t("v12.pageOnly")}
+      search={search}
+      onSearch={setSearch}
+    >
+      {query.isLoading ? (
+        <ListState loading />
+      ) : query.isError ? (
+        <ListState
+          error={query.error.message}
+          onRetry={() => void query.refetch()}
+        />
+      ) : !items.length ? (
+        <ListState empty={t("library.empty")} />
+      ) : (
+        <div className="media-library-grid">
+          {items.map((kind) => (
+            <article
+              key={kind.name}
+              className="space-y-3 rounded-2xl bg-background p-4"
+            >
+              <button
+                type="button"
+                onClick={() => onSelect(kind.name)}
+                className="block w-full text-left"
+              >
+                <h2 className="break-words text-base font-semibold">
+                  {kind.name}
+                </h2>
+                <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">
+                  {kind.description}
+                </p>
+              </button>
+              <dl className="grid grid-cols-2 gap-2 text-xs">
+                <dt>{t("registry.resourceType")}</dt>
+                <dd>{kind.resource_type}</dd>
+                <dt>{t("registry.mediaType")}</dt>
+                <dd>{kind.media_type}</dd>
+                <dt>{t("registry.status")}</dt>
+                <dd>{kind.status}</dd>
+              </dl>
+              <ConfirmActionButton
+                variant="ghost"
+                size="sm"
+                disabled={remove.isPending || kind.status === "SYSTEM"}
+                onConfirm={() => remove.mutateAsync(kind.name)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {t("common.delete")}
+              </ConfirmActionButton>
+            </article>
           ))}
-        </tbody>
-      </table>
-    </ScrollArea>
+        </div>
+      )}
+      <ListPagination
+        page={page}
+        pageSize={20}
+        total={query.data?.total || 0}
+        onPage={setPage}
+      />
+    </ResourceListLayout>
   );
 }

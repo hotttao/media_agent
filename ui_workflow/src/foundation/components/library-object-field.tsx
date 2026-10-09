@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/foundation/lib/utils";
+import { requestKey } from "@/foundation/lib/request-key";
 import {
   type LibraryObjectPurpose,
   uploadLibraryObject,
@@ -99,7 +100,7 @@ export function LibraryObjectField({
     }
     if (preview) URL.revokeObjectURL(preview);
     const nextPreview = URL.createObjectURL(nextFile);
-    const nextKey = crypto.randomUUID();
+    const nextKey = requestKey();
     setPreview(nextPreview);
     setFile(nextFile);
     setKey(nextKey);

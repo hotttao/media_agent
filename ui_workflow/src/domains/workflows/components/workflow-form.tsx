@@ -76,6 +76,7 @@ function StepBindingEditor({
   onChange: (binding: SlotBinding) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   const previousSteps = steps.slice(0, stepIndex).filter((step) => step.key);
   return (
     <div className="grid gap-2 rounded-xl border border-border/70 bg-background/70 p-3">
@@ -85,7 +86,7 @@ function StepBindingEditor({
             htmlFor={`binding-slot-${stepIndex}-${bindingIndex}`}
             className="text-[11px] text-muted-foreground"
           >
-            模板需要的输入
+            {t("editorUI.neededInput")}
           </Label>
           {declaredSlot ? (
             <div
@@ -101,7 +102,7 @@ function StepBindingEditor({
             <Input
               id={`binding-slot-${stepIndex}-${bindingIndex}`}
               value={binding.to_input}
-              placeholder="例如 first_frame"
+              placeholder={t("editorUI.bindingExample")}
               onChange={(event) =>
                 onChange({ ...binding, to_input: event.target.value })
               }
@@ -114,7 +115,7 @@ function StepBindingEditor({
             variant="ghost"
             size="icon"
             className="self-end text-muted-foreground hover:text-destructive"
-            aria-label="删除绑定"
+            aria-label={t("editorUI.removeBinding")}
             onClick={onRemove}
           >
             <Trash2 className="h-4 w-4" />
@@ -123,7 +124,9 @@ function StepBindingEditor({
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="grid gap-1.5">
-          <Label className="text-[11px] text-muted-foreground">数据来源</Label>
+          <Label className="text-[11px] text-muted-foreground">
+            {t("editorUI.source")}
+          </Label>
           <Select
             value={binding.source}
             onValueChange={(source) =>
@@ -140,19 +143,23 @@ function StepBindingEditor({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="workflow_input">工作流输入</SelectItem>
-              <SelectItem value="step_output">上游节点输出</SelectItem>
-              <SelectItem value="const">固定值</SelectItem>
+              <SelectItem value="workflow_input">
+                {t("editorUI.workflowInput")}
+              </SelectItem>
+              <SelectItem value="step_output">
+                {t("editorUI.upstreamOutput")}
+              </SelectItem>
+              <SelectItem value="const">{t("editorUI.constant")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="grid gap-1.5">
           <Label className="text-[11px] text-muted-foreground">
             {binding.source === "const"
-              ? "固定值"
+              ? t("editorUI.constant")
               : binding.source === "step_output"
-                ? "上游节点"
-                : "工作流输入名称"}
+                ? t("editorUI.upstream")
+                : t("editorUI.inputName")}
           </Label>
           {binding.source === "step_output" && previousSteps.length > 0 ? (
             <Select
@@ -160,7 +167,7 @@ function StepBindingEditor({
               onValueChange={(ref) => onChange({ ...binding, ref })}
             >
               <SelectTrigger>
-                <SelectValue placeholder="选择上游节点" />
+                <SelectValue placeholder={t("editorUI.chooseUpstream")} />
               </SelectTrigger>
               <SelectContent>
                 {previousSteps.map((step) => (
@@ -172,13 +179,16 @@ function StepBindingEditor({
             </Select>
           ) : (
             <Input
+              aria-label={`${binding.source === "const" ? t("editorBinding.constant") : t("editorBinding.inputName")} ${binding.to_input}`}
               value={
                 binding.source === "const"
                   ? String(binding.const_value ?? "")
                   : (binding.ref ?? "")
               }
               placeholder={
-                binding.source === "const" ? "输入固定值" : "例如 product"
+                binding.source === "const"
+                  ? t("editorUI.constantHint")
+                  : t("editorUI.inputExample")
               }
               onChange={(event) =>
                 onChange(
@@ -319,10 +329,10 @@ export function WorkflowForm({
       <AppStudioHeader>
         <div className="min-w-0">
           <p className="truncate text-base font-semibold">
-            {value.name || "未命名工作流"}
+            {value.name || t("editorUI.untitled")}
           </p>
           <p className="text-xs text-muted-foreground">
-            {value.steps.length} 个节点 · 选择节点后编辑执行方式
+            {t("editorUI.stepCount", { count: value.steps.length })}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -344,7 +354,7 @@ export function WorkflowForm({
             aria-expanded={settingsOpen}
           >
             <Settings2 className="mr-1.5 h-4 w-4" />
-            工作流设置
+            {t("editorUI.settings")}
             <ChevronDown
               className={cn(
                 "ml-1 h-3.5 w-3.5 transition-transform",
@@ -360,7 +370,7 @@ export function WorkflowForm({
               onClick={onValidate}
               disabled={isPending}
             >
-              校验
+              {t("editorUI.validate")}
             </Button>
           ) : null}
           <Button
@@ -380,7 +390,7 @@ export function WorkflowForm({
             {submitLabel}
           </Button>
           <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-            退出
+            {t("editorUI.exit")}
           </Button>
         </div>
       </AppStudioHeader>
@@ -391,43 +401,45 @@ export function WorkflowForm({
             <DialogDescription>{t("studio.settingsHint")}</DialogDescription>
           </DialogHeader>
           <section
-            aria-label="工作流设置"
+            aria-label={t("editorUI.settings")}
             className="grid gap-4 sm:grid-cols-2"
           >
             {settingsExtra}
             <div className="grid gap-2">
-              <Label htmlFor="workflow-name">名称</Label>
+              <Label htmlFor="workflow-name">{t("editorUI.name")}</Label>
               <Input
                 id="workflow-name"
                 value={value.name}
-                placeholder="例如：商品短视频生成"
+                placeholder={t("editorUI.nameHint")}
                 onChange={(e) => onChange({ ...value, name: e.target.value })}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="workflow-scope">业务范围</Label>
+              <Label htmlFor="workflow-scope">{t("editorUI.scope")}</Label>
               <Input
                 id="workflow-scope"
                 value={value.scope}
                 disabled={metadataLocked}
-                placeholder="例如：media-production"
+                placeholder={t("editorUI.scopeHint")}
                 onChange={(e) => onChange({ ...value, scope: e.target.value })}
               />
             </div>
             <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="workflow-description">说明</Label>
+              <Label htmlFor="workflow-description">
+                {t("editorUI.description")}
+              </Label>
               <Textarea
                 id="workflow-description"
                 rows={2}
                 value={value.description ?? ""}
-                placeholder="说明这个流程解决什么业务问题"
+                placeholder={t("editorUI.descriptionHint")}
                 onChange={(e) =>
                   onChange({ ...value, description: e.target.value })
                 }
               />
             </div>
             <div className="grid gap-2">
-              <Label>最终输出节点</Label>
+              <Label>{t("editorUI.output")}</Label>
               <Select
                 value={value.output_step_key}
                 onValueChange={(output_step_key) =>
@@ -435,7 +447,7 @@ export function WorkflowForm({
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="选择最终节点" />
+                  <SelectValue placeholder={t("editorUI.chooseOutput")} />
                 </SelectTrigger>
                 <SelectContent>
                   {value.steps
@@ -449,7 +461,9 @@ export function WorkflowForm({
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="workflow-visibility">可见范围</Label>
+              <Label htmlFor="workflow-visibility">
+                {t("editorUI.visibility")}
+              </Label>
               <Select
                 disabled
                 value={value.visibility ?? "private"}
@@ -461,9 +475,11 @@ export function WorkflowForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="private">仅自己</SelectItem>
-                  <SelectItem value="team">部门</SelectItem>
-                  <SelectItem value="public">组织内公开</SelectItem>
+                  <SelectItem value="private">
+                    {t("editorUI.private")}
+                  </SelectItem>
+                  <SelectItem value="team">{t("editorUI.team")}</SelectItem>
+                  <SelectItem value="public">{t("editorUI.public")}</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
@@ -549,13 +565,13 @@ export function WorkflowForm({
               <div className="rounded-2xl bg-primary/10 p-4 text-primary">
                 <ArrowRight className="h-6 w-6" />
               </div>
-              <h3 className="mt-4 font-semibold">从第一个生成节点开始</h3>
+              <h3 className="mt-4 font-semibold">{t("editorUI.begin")}</h3>
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                添加节点、选择 Template，并将输入绑定到工作流参数或上游输出。
+                {t("editorUI.beginHint")}
               </p>
               <Button type="button" className="mt-5" onClick={addStep}>
                 <Plus className="mr-2 h-4 w-4" />
-                添加节点
+                {t("editorUI.add")}
               </Button>
             </div>
           )}
@@ -570,9 +586,9 @@ export function WorkflowForm({
           <aside className="workflow-workbench-panel">
             <div className="flex items-center justify-between border-b px-4 py-3">
               <div>
-                <h3 className="font-semibold">节点配置</h3>
+                <h3 className="font-semibold">{t("editorUI.configuration")}</h3>
                 <p className="text-xs text-muted-foreground">
-                  选择模板、连接输入、设置确认方式
+                  {t("editorUI.configurationHint")}
                 </p>
               </div>
               {activeStep ? (
@@ -591,10 +607,10 @@ export function WorkflowForm({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-xs font-medium text-primary">
-                      节点 {selectedStep + 1}
+                      {t("editorUI.stepNumber", { number: selectedStep + 1 })}
                     </div>
                     <h4 className="mt-1 font-semibold">
-                      {activeStep.key || "未命名节点"}
+                      {activeStep.key || t("editorUI.untitledStep")}
                     </h4>
                   </div>
                   <Button
@@ -602,14 +618,14 @@ export function WorkflowForm({
                     size="icon"
                     variant="ghost"
                     className="text-muted-foreground hover:text-destructive"
-                    aria-label="删除当前节点"
+                    aria-label={t("editorUI.removeStep")}
                     onClick={() => setRemoveIndex(selectedStep)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="workflow-step-key">节点标识</Label>
+                  <Label htmlFor="workflow-step-key">{t("editorUI.key")}</Label>
                   <Input
                     id="workflow-step-key"
                     value={activeStep.key}
@@ -619,7 +635,7 @@ export function WorkflowForm({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label>使用哪个模板执行</Label>
+                  <Label>{t("editorUI.template")}</Label>
                   {templateOptions.length > 0 ? (
                     <Select
                       disabled={templatePending}
@@ -681,7 +697,9 @@ export function WorkflowForm({
                       }}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="选择 Template" />
+                        <SelectValue
+                          placeholder={t("editorUI.chooseTemplate")}
+                        />
                       </SelectTrigger>
                       <SelectContent>
                         {templateOptions
@@ -730,9 +748,9 @@ export function WorkflowForm({
                   </summary>
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label>输入绑定</Label>
+                      <Label>{t("editorUI.bindings")}</Label>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        连接工作流输入、上游输出或固定值
+                        {t("editorUI.bindingsHint")}
                       </p>
                     </div>
                     <Button
@@ -749,7 +767,7 @@ export function WorkflowForm({
                       }
                     >
                       <Plus className="mr-1 h-3.5 w-3.5" />
-                      绑定
+                      {t("editorUI.bind")}
                     </Button>
                   </div>
                   {activeStep.slot_bindings.map((binding, bindingIndex) => (
@@ -787,14 +805,16 @@ export function WorkflowForm({
                   ))}
                   {activeStep.slot_bindings.length === 0 ? (
                     <div className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
-                      该节点还没有输入绑定
+                      {t("editorUI.noBindings")}
                     </div>
                   ) : null}
                 </details>
                 <div className="grid gap-4 border-t pt-4">
-                  <p className="text-sm font-semibold">结果如何处理</p>
+                  <p className="text-sm font-semibold">
+                    {t("editorUI.results")}
+                  </p>
                   <div className="grid gap-2">
-                    <Label>用户确认</Label>
+                    <Label>{t("editorUI.approval")}</Label>
                     <div
                       role="radiogroup"
                       aria-label={t("studio.approval")}
@@ -823,11 +843,11 @@ export function WorkflowForm({
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      生成多张结果时始终需要用户选择；“每次都确认”也包含单张结果。
+                      {t("editorUI.approvalHint")}
                     </p>
                   </div>
                   <div className="grid gap-2">
-                    <Label>再次执行时</Label>
+                    <Label>{t("editorUI.reuse")}</Label>
                     <div
                       role="radiogroup"
                       aria-label={t("studio.reuse")}
@@ -888,13 +908,13 @@ export function WorkflowForm({
           {validationResult.errors.length === 0 ? (
             <span className="inline-flex items-center gap-2">
               <ShieldCheck className="h-4 w-4" />
-              结构校验通过，可以保存或发布。
+              {t("editorUI.valid")}
             </span>
           ) : (
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 font-medium">
                 <AlertCircle className="h-4 w-4" />
-                请修正以下问题
+                {t("editorUI.issues")}
               </div>
               <ul className="list-disc space-y-1 pl-5">
                 {validationResult.errors.map((error, index) => (
@@ -967,7 +987,11 @@ export function WorkflowForm({
                 .includes(templateSearch.toLowerCase()),
           ) ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              {t("studio.noTemplates")}
+              {t(
+                templateSearch
+                  ? "studio.noTemplates"
+                  : "studio.publishTemplateFirst",
+              )}
             </p>
           ) : null}
           {templatePending ? (

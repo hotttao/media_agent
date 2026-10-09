@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { AppStudioHeader } from "@/foundation/components/app-studio-header";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +55,7 @@ export function VirtualIpForm({
   onCancel: () => void;
   isEdit?: boolean;
 }) {
+  const { t } = useTranslation();
   const { organization } = hostShim.useShellContext();
   const [uploads, setUploads] = useState<Record<string, boolean>>({});
   const profile = value.persona_profile ?? {};
@@ -87,16 +90,37 @@ export function VirtualIpForm({
   ] as const;
   return (
     <div className="flex flex-col gap-6">
+      <AppStudioHeader>
+        <h1 className="truncate text-base font-semibold">
+          {value.name || submitLabel}
+        </h1>{" "}
+        <div className="flex gap-2">
+          <Button
+            onClick={onSubmit}
+            disabled={
+              isPending ||
+              uploadBusy ||
+              !value.name.trim() ||
+              !value.scope.trim()
+            }
+          >
+            {uploadBusy ? t("materialForm.uploading") : submitLabel}
+          </Button>
+          <Button variant="ghost" onClick={onCancel}>
+            {t("common.cancel")}
+          </Button>
+        </div>
+      </AppStudioHeader>
       <section className="grid gap-4 rounded-xl border p-4">
         <div>
-          <h3 className="font-medium">基础信息</h3>
+          <h3 className="font-medium">{t("materialForm.basic")}</h3>
           <p className="text-xs text-muted-foreground">
-            Virtual IP 的识别信息和组织内共享范围。
+            {t("library.virtualHint")}
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
-            <Label>Scope</Label>
+            <Label>{t("v12.scope")}</Label>
             <Input
               disabled={isEdit}
               value={value.scope}
@@ -104,15 +128,16 @@ export function VirtualIpForm({
             />
           </div>
           <div className="grid gap-2">
-            <Label>名称</Label>
+            <Label>{t("materialForm.name")}</Label>
             <Input
+              aria-label={t("materialForm.name")}
               value={value.name}
               onChange={(e) => onChange({ ...value, name: e.target.value })}
             />
           </div>
         </div>
         <div className="grid gap-2">
-          <Label>描述</Label>
+          <Label>{t("materialForm.description")}</Label>
           <Textarea
             value={value.description ?? ""}
             onChange={(e) =>
@@ -122,7 +147,7 @@ export function VirtualIpForm({
         </div>
         {!isEdit ? (
           <div className="grid gap-2">
-            <Label>可见范围</Label>
+            <Label>{t("materialForm.visibility")}</Label>
             <Select
               value={value.visibility ?? "private"}
               onValueChange={(visibility) =>
@@ -133,9 +158,15 @@ export function VirtualIpForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="private">仅自己</SelectItem>
-                <SelectItem value="team">部门</SelectItem>
-                <SelectItem value="public">组织内公开</SelectItem>
+                <SelectItem value="private">
+                  {t("common.visibility.private")}
+                </SelectItem>
+                <SelectItem value="team">
+                  {t("common.visibility.team")}
+                </SelectItem>
+                <SelectItem value="public">
+                  {t("common.visibility.public")}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -143,9 +174,9 @@ export function VirtualIpForm({
       </section>
       <section className="grid gap-4 rounded-xl border p-4">
         <div>
-          <h3 className="font-medium">形象图片</h3>
+          <h3 className="font-medium">{t("virtualProfile.images")}</h3>
           <p className="text-xs text-muted-foreground">
-            图片会上传到素材存储，业务数据只保存对象路径。
+            {t("virtualProfile.storageHint")}
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -155,8 +186,8 @@ export function VirtualIpForm({
               organizationId={organization.id}
               scope={value.scope}
               purpose={purpose}
-              label={label}
-              hint={hint}
+              label={t(`virtualProfile.${field}`, { defaultValue: label })}
+              hint={t(`virtualProfile.${field}Hint`, { defaultValue: hint })}
               value={value[field]}
               onChange={(objectPath) =>
                 onChange({ ...value, [field]: objectPath })
@@ -170,14 +201,14 @@ export function VirtualIpForm({
       </section>
       <section className="grid gap-4 rounded-xl border p-4">
         <div>
-          <h3 className="font-medium">人物画像</h3>
+          <h3 className="font-medium">{t("virtualProfile.profile")}</h3>
           <p className="text-xs text-muted-foreground">
-            稳定字段单独录入，供工作流准确读取。
+            {t("virtualProfile.profileHint")}
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="grid gap-2">
-            <Label>性别</Label>
+            <Label>{t("virtualProfile.gender")}</Label>
             <Select
               value={profile.gender}
               onValueChange={(gender) =>
@@ -185,19 +216,24 @@ export function VirtualIpForm({
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="选择" />
+                <SelectValue placeholder={t("virtualProfile.choose")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="FEMALE">女</SelectItem>
-                <SelectItem value="MALE">男</SelectItem>
-                <SelectItem value="OTHER">其他</SelectItem>
+                <SelectItem value="FEMALE">
+                  {t("virtualProfile.FEMALE")}
+                </SelectItem>
+                <SelectItem value="MALE">{t("virtualProfile.MALE")}</SelectItem>
+                <SelectItem value="OTHER">
+                  {t("virtualProfile.OTHER")}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
           {numberFields.map(([field, label, unit]) => (
             <div key={field} className="grid gap-2">
               <Label>
-                {label} ({unit})
+                {t(`virtualProfile.${field}`, { defaultValue: label })} (
+                {unit === "岁" ? t("virtualProfile.years") : unit})
               </Label>
               <Input
                 type="number"
@@ -219,7 +255,9 @@ export function VirtualIpForm({
         <div className="grid gap-4 md:grid-cols-2">
           {textFields.map(([field, label]) => (
             <div key={field} className="grid gap-2">
-              <Label>{label}</Label>
+              <Label>
+                {t(`virtualProfile.${field}`, { defaultValue: label })}
+              </Label>
               <Textarea
                 rows={
                   field === "basic_setting" ||
@@ -235,17 +273,6 @@ export function VirtualIpForm({
           ))}
         </div>
       </section>
-      <div className="flex gap-2">
-        <Button
-          onClick={onSubmit}
-          disabled={isPending || uploadBusy || !value.name.trim()}
-        >
-          {uploadBusy ? "图片上传中…" : submitLabel}
-        </Button>
-        <Button variant="ghost" onClick={onCancel}>
-          取消
-        </Button>
-      </div>
     </div>
   );
 }

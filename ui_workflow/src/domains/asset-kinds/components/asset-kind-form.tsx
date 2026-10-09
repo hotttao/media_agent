@@ -1,4 +1,6 @@
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
+import { AppStudioHeader } from "@/foundation/components/app-studio-header";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -45,11 +47,26 @@ export function AssetKindForm({
   onCancel: () => void;
   nameDisabled?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-4">
+      <AppStudioHeader>
+        <h1 className="text-base font-semibold">
+          {value.name || t("nav.assetKinds")}
+        </h1>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={onCancel} disabled={isPending}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={onSubmit} disabled={isPending || !value.name.trim()}>
+            {submitLabel}
+          </Button>
+        </div>
+      </AppStudioHeader>
       <div className="grid gap-2">
-        <Label>Name</Label>
+        <Label>{t("materialForm.name")}</Label>
         <Input
+          aria-label={t("materialForm.name")}
           value={value.name}
           disabled={nameDisabled}
           onChange={(e) => onChange({ ...value, name: e.target.value })}
@@ -57,7 +74,7 @@ export function AssetKindForm({
       </div>
       {nameDisabled ? (
         <div className="grid gap-2">
-          <Label>Status</Label>
+          <Label>{t("registry.status")}</Label>
           <Select
             value={value.status ?? "ENABLED"}
             onValueChange={(status) =>
@@ -76,15 +93,16 @@ export function AssetKindForm({
         </div>
       ) : null}
       <div className="grid gap-2">
-        <Label>Resource Type</Label>
+        <Label>{t("registry.resourceType")}</Label>
         <Select
+          disabled={nameDisabled}
           value={value.resource_type}
           onValueChange={(v) =>
             onChange({ ...value, resource_type: v as AssetKindResourceType })
           }
         >
           <SelectTrigger>
-            <SelectValue placeholder="Select resource type" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {RESOURCE_TYPES.map((rt) => (
@@ -96,15 +114,16 @@ export function AssetKindForm({
         </Select>
       </div>
       <div className="grid gap-2">
-        <Label>Media Type</Label>
+        <Label>{t("registry.mediaType")}</Label>
         <Select
+          disabled={nameDisabled}
           value={value.media_type}
           onValueChange={(v) =>
             onChange({ ...value, media_type: v as AssetKindMediaType })
           }
         >
           <SelectTrigger>
-            <SelectValue placeholder="Select media type" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {MEDIA_TYPES.map((mt) => (
@@ -116,19 +135,11 @@ export function AssetKindForm({
         </Select>
       </div>
       <div className="grid gap-2">
-        <Label>Description</Label>
+        <Label>{t("materialForm.description")}</Label>
         <Textarea
           value={value.description ?? ""}
           onChange={(e) => onChange({ ...value, description: e.target.value })}
         />
-      </div>
-      <div className="flex gap-2">
-        <Button onClick={onSubmit} disabled={isPending}>
-          {submitLabel}
-        </Button>
-        <Button variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
       </div>
     </div>
   );

@@ -72,3 +72,73 @@ export function defaultImageInvocation(
     },
   };
 }
+
+export function moveInvocationItem(
+  expression: InvocationExpression,
+  index: number,
+  direction: -1 | 1,
+): InvocationExpression {
+  const items = [...(expression.items ?? [])];
+  const target = index + direction;
+  if (
+    index < 0 ||
+    index >= items.length ||
+    target < 0 ||
+    target >= items.length
+  )
+    return expression;
+  [items[index], items[target]] = [items[target], items[index]];
+  return { ...expression, items };
+}
+
+export type TemplateInputIssue = {
+  code:
+    | "emptyName"
+    | "duplicateName"
+    | "missingKind"
+    | "missingReference"
+    | "textReference";
+  subject: string;
+};
+
+/** Local structural checks only; the backend owns provider schema/type validation. */
+export function checkTemplateInputs(
+  value: Pick<TemplateInput, "inputs" | "invocation_mapping">,
+): TemplateInputIssue[] {
+  const issues: TemplateInputIssue[] = [];
+  const slots = new Map<string, TemplateSlotInput>();
+  value.inputs.forEach((slot, index) => {
+    if (!slot.name.trim())
+      issues.push({ code: "emptyName", subject: String(index + 1) });
+    if (slots.has(slot.name))
+      issues.push({ code: "duplicateName", subject: slot.name });
+    slots.set(slot.name, slot);
+    if (!slot.asset_kind)
+      issues.push({
+        code: "missingKind",
+        subject: slot.name || String(index + 1),
+      });
+  });
+  function check(expression: InvocationExpression, path: string) {
+    if (expression.op === "asset_ref") {
+      const slot = slots.get(expression.slot ?? "");
+      if (!slot || !expression.slot)
+        issues.push({
+          code: "missingReference",
+          subject: `${path} → ${expression.slot || "?"}`,
+        });
+      else if (slot.resource_type === "TEXT")
+        issues.push({
+          code: "textReference",
+          subject: `${path} → ${slot.name}`,
+        });
+    }
+    expression.items?.forEach((item, index) =>
+      check(item, `${path}[${index}]`),
+    );
+  }
+  Object.entries(value.invocation_mapping).forEach(([name, expression]) =>
+    check(expression, name),
+  );
+  return issues;
+}

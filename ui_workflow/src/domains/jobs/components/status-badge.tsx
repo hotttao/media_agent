@@ -21,6 +21,7 @@ const JOB_STATUS_STYLE: Record<JobStatus, string> = {
 };
 
 const STEP_RUN_STATUS_STYLE: Record<StepRunStatus, string> = {
+  unknown: "bg-muted text-muted-foreground",
   pending: "bg-muted/40 text-muted-foreground",
   blocked: "bg-muted text-muted-foreground",
   running: "bg-info/15 text-info",
@@ -44,6 +45,7 @@ const JOB_STATUS_LABEL: Record<JobStatus, string> = {
 };
 
 const STEP_RUN_STATUS_LABEL: Record<StepRunStatus, string> = {
+  unknown: "状态未知",
   pending: "等待执行",
   blocked: "等待前序",
   running: "执行中",
@@ -64,11 +66,14 @@ export function JobStatusBadge({ status }: { status: JobStatus }) {
 }
 
 export function StepRunStatusBadge({ status }: { status: StepRunStatus }) {
+  const { t } = useTranslation();
   return (
     <Badge
       className={cn("font-medium capitalize", STEP_RUN_STATUS_STYLE[status])}
     >
-      {STEP_RUN_STATUS_LABEL[status]}
+      {t(`execution.stepStatus.${status}`, {
+        defaultValue: STEP_RUN_STATUS_LABEL[status],
+      })}
     </Badge>
   );
 }

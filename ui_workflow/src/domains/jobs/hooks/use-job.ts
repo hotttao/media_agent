@@ -20,7 +20,10 @@ export function useJob(id: string | null | undefined) {
     enabled: !!id,
     refetchInterval: (query) => {
       const status = query.state.data?.job.status;
-      return status === "running" ? 2000 : false;
+      return status &&
+        ["pending", "running", "need_confirm", "paused"].includes(status)
+        ? 2000
+        : false;
     },
   });
 }

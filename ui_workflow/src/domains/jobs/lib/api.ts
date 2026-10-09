@@ -49,7 +49,7 @@ const JOB_STATUSES: JobStatus[] = [
   "paused",
 ];
 const STEP_STATUSES: StepRunStatus[] = [
-  "blocked",
+  "unknown",
   "blocked",
   "pending",
   "claimed",
@@ -89,9 +89,12 @@ function normalizeStepRun(stepRun: WireStepRun): StepRun {
   return {
     ...stepRun,
     status:
-      typeof stepRun.status === "number"
-        ? (STEP_STATUSES[stepRun.status] ?? "blocked")
-        : stepRun.status,
+      stepRun.status === "running"
+        ? "running"
+        : wireStatus(stepRun.status, STEP_STATUSES, [
+            "sr_",
+            "step_run_status_",
+          ]),
     resolved_inputs: parseJSON(stepRun.resolved_inputs, {}),
     selected_index: stepRun.selected_index ?? 0,
     candidates: (stepRun.candidates ?? []).map((candidate, index) => ({
@@ -163,26 +166,53 @@ export async function retryJob(
   return normalizeJob(result);
 }
 
+export async function resumeJob(
+  id: string,
+  inputPatch: Job["input"],
+  idempotencyKey: string,
+): Promise<Job> {
+  return normalizeJob(
+    await api.request<WireJob>(`/jobs/${encodeURIComponent(id)}/resume`, {
+      method: "POST",
+      body: JSON.stringify({
+        input_patch: inputPatch,
+        idempotency_key: idempotencyKey,
+      }),
+    }),
+  );
+}
+
 // ── StepRun (user-facing) ───────────────────────────────────────────────
 
 export async function confirmStepRun(
   stepRunId: string,
   selectedIndex: number,
+  idempotencyKey?: string,
 ): Promise<StepRun> {
   const result = await api.request<WireStepRun>(
     `/step-runs/${encodeURIComponent(stepRunId)}/confirm`,
     {
       method: "POST",
-      body: JSON.stringify({ selected_index: selectedIndex }),
+      body: JSON.stringify({
+        selected_index: selectedIndex,
+        idempotency_key: idempotencyKey,
+      }),
     },
   );
   return normalizeStepRun(result);
 }
 
-export async function regenerateStepRun(stepRunId: string): Promise<StepRun> {
+export async function regenerateStepRun(
+  stepRunId: string,
+  feedback = "",
+  idempotencyKey?: string,
+): Promise<StepRun> {
   const result = await api.request<WireStepRun>(
     `/step-runs/${encodeURIComponent(stepRunId)}/regenerate`,
-    { method: "POST" },
+    {
+      method: "POST",
+      body: JSON.stringify({ feedback, idempotency_key: idempotencyKey }),
+    },
   );
   return normalizeStepRun(result);
 }
@@ -196,6 +226,6 @@ export async function listWorkflows(): Promise<WorkflowOption[]> {
   return page.items.filter(
     (workflow) =>
       workflow.status === 2 ||
-      String(workflow.status).toLowerCase().includes("published"),
+      String(workflow.status).toLowerCase() === "published",
   );
 }

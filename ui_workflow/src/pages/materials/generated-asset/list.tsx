@@ -1,87 +1,95 @@
-import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Spinner } from "@/components/ui/spinner";
-import { useDeleteGeneratedAsset } from "@/domains/generated-assets/hooks/use-generated-asset-mutations";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useGeneratedAssetsList } from "@/domains/generated-assets/hooks/use-generated-assets-list";
-import { VisibilityBadge } from "@/domains/materials/components/visibility-badge";
+import { useDeleteGeneratedAsset } from "@/domains/generated-assets/hooks/use-generated-asset-mutations";
+import {
+  ListPagination,
+  ListState,
+  ResourceListLayout,
+} from "@/foundation/components/resource-list-layout";
+import { LibraryMedia } from "@/foundation/components/library-media";
+import { ConfirmActionButton } from "@/foundation/components/confirm-action-button";
+import { hostShim } from "@/foundation/lib/host-shim";
 
-// GeneratedAsset is read-only (created by workflow execution); UI only lists /
-// inspects / deletes. No create/edit affordance.
 export function GeneratedAssetList({
   onSelect,
 }: {
   onSelect: (id: string) => void;
 }) {
-  const { data, isLoading } = useGeneratedAssetsList();
-  const deleteGeneratedAsset = useDeleteGeneratedAsset();
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <Spinner className="h-5 w-5" />
-      </div>
-    );
-  }
-
-  const items = data?.items ?? [];
-  if (items.length === 0) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        No generated assets yet.
-      </div>
-    );
-  }
-
+  const { t } = useTranslation();
+  const shell = hostShim.useShellContext();
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const query = useGeneratedAssetsList({ page, page_size: 20 });
+  const remove = useDeleteGeneratedAsset();
+  const items = (query.data?.items ?? []).filter((item) =>
+    item.name?.toLowerCase().includes(search.toLowerCase()),
+  );
   return (
-    <ScrollArea className="flex-1">
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-card">
-          <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-            <th className="px-3 py-2">Name</th>
-            <th className="px-3 py-2">Kind</th>
-            <th className="px-3 py-2">Visibility</th>
-            <th className="px-3 py-2">Job</th>
-            <th className="px-3 py-2">Created</th>
-            <th className="px-3 py-2" aria-label="actions" />
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((a) => (
-            <tr key={a.id} className="border-b hover:bg-foreground/[0.04]">
-              <td className="px-3 py-2">
-                <button
-                  type="button"
-                  className="text-left hover:underline"
-                  onClick={() => onSelect(a.id)}
-                >
-                  {a.name}
-                </button>
-              </td>
-              <td className="px-3 py-2 text-muted-foreground">
-                {a.asset_kind}
-              </td>
-              <td className="px-3 py-2">
-                <VisibilityBadge visibility={a.visibility} />
-              </td>
-              <td className="px-3 py-2 text-muted-foreground">{a.job_id}</td>
-              <td className="px-3 py-2 text-muted-foreground">
-                {a.created_at}
-              </td>
-              <td className="px-3 py-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="delete"
-                  onClick={() => deleteGeneratedAsset.mutate(a.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </td>
-            </tr>
+    <ResourceListLayout
+      title={t("nav.generated")}
+      description={t("library.generatedHint")}
+      search={search}
+      onSearch={setSearch}
+      filterLabel={t("v12.pageOnly")}
+      filters={null}
+    >
+      {query.isLoading ? (
+        <ListState loading />
+      ) : query.isError ? (
+        <ListState
+          error={query.error.message}
+          onRetry={() => void query.refetch()}
+        />
+      ) : !items.length ? (
+        <ListState empty={t("library.empty")} />
+      ) : (
+        <div className="media-library-grid">
+          {items.map((item) => (
+            <article
+              key={item.id}
+              className="overflow-hidden rounded-2xl bg-background p-3"
+            >
+              {item.object_path || item.url ? (
+                <LibraryMedia
+                  organizationId={shell.organization.id}
+                  objectPath={item.object_path || item.url}
+                  alt={item.name}
+                  video={item.asset_kind === "video"}
+                />
+              ) : (
+                <p className="line-clamp-6 min-h-36 whitespace-pre-wrap rounded-xl bg-muted/40 p-4 text-sm">
+                  {item.content || "—"}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => onSelect(item.id)}
+                className="mt-3 text-left"
+              >
+                <h2 className="text-sm font-semibold">{item.name}</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {item.asset_kind}
+                </p>
+              </button>
+              <ConfirmActionButton
+                className="float-right mt-2"
+                size="sm"
+                variant="ghost"
+                onConfirm={() => remove.mutateAsync(item.id)}
+              >
+                {t("common.delete")}
+              </ConfirmActionButton>
+            </article>
           ))}
-        </tbody>
-      </table>
-    </ScrollArea>
+        </div>
+      )}
+      <ListPagination
+        page={page}
+        total={query.data?.total ?? 0}
+        pageSize={20}
+        onPage={setPage}
+      />
+    </ResourceListLayout>
   );
 }

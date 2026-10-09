@@ -51,6 +51,12 @@ Workflow App 使用 FlowGram 展示业务 Workflow 的节点与依赖，并用�
 
 ## 验证
 
+### Template 调用映射编辑
+
+模板工作台按槽位、提示词、生成能力与调用参数分组。每个参数使用结构化表达式编辑，不要求用户写 JSON：渲染结果、资源引用、列表三种操作。列表顺序是调用语义，移动必须显式操作；修改任一参数保留其余参数和嵌套结构。重建默认映射先确认，不能通过更新普通字段自动触发。
+
+删除槽位后保留失效表达式，供本地检查提示并显式修复；重命名沿用已有嵌套引用维护规则。检查不渲染提示词、不查询能力 Schema，也不承诺发布成功。编辑草稿继续按 App instance 隔离，不因切换 App 或查询刷新丢失。
+
 - 单元测试验证 Slot Binding 到 FlowGram edges 的确定性投影，以及 protobuf 数字枚举归一化。
 - Playwright 验证真实已发布 Workflow 显示 FlowGram 节点、没有 JSON `<pre>`，并能进入结构化编辑器。
 - Job 创建 E2E 继续验证 UI 改造没有破坏 Workflow Input Schema 到资源选择器的链路。

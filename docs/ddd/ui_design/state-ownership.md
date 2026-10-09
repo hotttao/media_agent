@@ -9,6 +9,7 @@
 | Runtime Session、Message、Turn、Universal Event、Chat Status | `media_agents` | Agent PostgreSQL；UI 经 Gateway 授权代理读取和提交命令 |
 | 当前 Organization/Team/Workspace ID | Shell Router | URL path `/o/:organizationId/t/:teamId/w/:workspaceId`，服务端层级和成员关系校验 |
 | Shell Context 与 Navigation Port | Host Adapter | 内存注入；不得复制为 App 全局 store |
+| 商品到 Workflow 的启动意图 | Host Navigation Port → 目标 App Instance | 仅实例内存，携带 requestId/Organization/Workflow/Product ID；不含 Token、输入快照或自动提交指令，用户清空后不重新填入 |
 | 当前 Session ID | Workspace Page | URL query `?session=`，服务端列表校验 |
 | Layout、Slot 打开实例和活动实例 | Slot Provider | Workspace 级 localStorage Profile |
 | 移动端当前可见 App | Layout/Dock | 内存；从活动 Slot 推导 |

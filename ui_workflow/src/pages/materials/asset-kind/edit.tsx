@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { hostShim } from "@/foundation/lib/host-shim";
+import { ListState } from "@/foundation/components/resource-list-layout";
 import { Spinner } from "@/components/ui/spinner";
 import { AssetKindForm } from "@/domains/asset-kinds/components/asset-kind-form";
 import { useAssetKind } from "@/domains/asset-kinds/hooks/use-asset-kind";
@@ -8,25 +11,44 @@ import type { AssetKindInput } from "@/domains/asset-kinds/types";
 export function AssetKindEdit({
   name,
   onDone,
+  instanceId,
 }: {
   name: string;
   onDone: () => void;
+  instanceId: string;
 }) {
-  const { data: assetKind, isLoading } = useAssetKind(name);
+  const { t } = useTranslation();
+  const {
+    data: assetKind,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useAssetKind(name);
   const updateAssetKind = useUpdateAssetKind();
-  const [value, setValue] = useState<AssetKindInput | null>(null);
+  const [value, setValue] = hostShim.useInstanceState<AssetKindInput | null>(
+    instanceId,
+    `materials_kind_edit_${name}`,
+    () => null,
+  );
 
   useEffect(() => {
     if (assetKind) {
-      setValue({
-        name: assetKind.name,
-        resource_type: assetKind.resource_type,
-        media_type: assetKind.media_type,
-        description: assetKind.description,
-        status: assetKind.status,
-      });
+      setValue(
+        (current) =>
+          current ?? {
+            name: assetKind.name,
+            resource_type: assetKind.resource_type,
+            media_type: assetKind.media_type,
+            description: assetKind.description,
+            status: assetKind.status,
+          },
+      );
     }
-  }, [assetKind]);
+  }, [assetKind, setValue]);
+
+  if (isError)
+    return <ListState error={error.message} onRetry={() => void refetch()} />;
 
   if (isLoading || !value) {
     return (
@@ -37,8 +59,12 @@ export function AssetKindEdit({
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h2 className="text-lg font-semibold">Edit Asset Kind</h2>
+    <div className="flex h-full flex-col gap-4 overflow-auto p-4">
+      {updateAssetKind.error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {updateAssetKind.error.message}
+        </p>
+      ) : null}
       <AssetKindForm
         value={value}
         onChange={setValue}
@@ -51,10 +77,15 @@ export function AssetKindEdit({
                 status: value.status ?? "ENABLED",
               },
             },
-            { onSuccess: onDone },
+            {
+              onSuccess: () => {
+                setValue(null);
+                onDone();
+              },
+            },
           )
         }
-        submitLabel="Save"
+        submitLabel={t("common.save")}
         isPending={updateAssetKind.isPending}
         onCancel={onDone}
         nameDisabled

@@ -21,6 +21,7 @@ export interface GeneratedAsset {
   asset_kind: string;
   name: string;
   url: string;
+  object_path?: string;
   content?: string;
   owner_user_id: string;
   visibility: Visibility;

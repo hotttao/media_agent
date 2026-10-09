@@ -19,6 +19,7 @@ import { cn } from "@/foundation/lib/utils";
 type GraphNodeData = {
   title: string;
   subtitle: string;
+  hasTemplate: boolean;
   bindingCount: number;
   approvalPolicy?: WorkflowStep["approval_policy"];
   output?: boolean;
@@ -108,10 +109,9 @@ export function workflowToFlowDocument({
           : { x: 64 + (level - 1) * 320, y: 56 + row * 184 },
       },
       data: {
-        title: step.key || "未命名节点",
-        subtitle:
-          templateNameByID?.[step.template_id] ??
-          (step.template_id ? "生成节点" : "未选择模板"),
+        title: step.key,
+        subtitle: templateNameByID?.[step.template_id] ?? "",
+        hasTemplate: Boolean(step.template_id),
         bindingCount: step.slot_bindings.length,
         approvalPolicy: step.approval_policy,
         output: step.key === outputStepKey,
@@ -148,6 +148,8 @@ const nodeRegistries: FreeLayoutProps["nodeRegistries"] = [
 ];
 
 function WorkflowNodeCard({ data }: { data: GraphNodeData }) {
+  const { t } = useTranslation();
+  const title = data.title || t("graphUI.unnamed");
   const { onNodeSelect, selectedNodeId, executionStatus } =
     useContext(WorkflowGraphContext);
   const renderedNodeId = useContext(WorkflowNodeIdContext);
@@ -165,44 +167,35 @@ function WorkflowNodeCard({ data }: { data: GraphNodeData }) {
         selectedNodeId === renderedNodeId && "is-selected",
       )}
       onClick={() => renderedNodeId && onNodeSelect?.(renderedNodeId)}
-      aria-label={`选择节点 ${data.title}`}
+      aria-label={t("graphUI.select", { name: title })}
     >
       <div className="workflow-node-icon">
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <strong className="truncate text-[13px]">{data.title}</strong>
+          <strong className="truncate text-[13px]">{title}</strong>
           {data.output ? (
-            <span className="workflow-node-pill">输出</span>
+            <span className="workflow-node-pill">{t("graphUI.output")}</span>
           ) : null}
           {status ? (
             <span className="workflow-node-pill">
-              {(
-                {
-                  blocked: "等待前序",
-                  pending: "等待执行",
-                  claimed: "执行中",
-                  running: "执行中",
-                  need_confirm: "待确认",
-                  succeeded: "已完成",
-                  failed: "失败",
-                  skipped: "已跳过",
-                } as Record<string, string>
-              )[status] ?? status}
+              {t(`execution.stepStatus.${status}`, { defaultValue: status })}
             </span>
           ) : null}
         </div>
         <p className="mt-1 truncate text-[11px] text-slate-500">
-          {data.subtitle}
+          {data.subtitle ||
+            t(data.hasTemplate ? "graphUI.generation" : "graphUI.noTemplate")}
         </p>
         <div className="mt-3 flex items-center gap-3 text-[10px] text-slate-500">
           <span className="inline-flex items-center gap-1">
-            <GitBranch className="h-3 w-3" /> {data.bindingCount} 个绑定
+            <GitBranch className="h-3 w-3" />{" "}
+            {t("graphUI.bindings", { count: data.bindingCount })}
           </span>
           {data.approvalPolicy === "always" ? (
             <span className="inline-flex items-center gap-1 text-amber-700">
-              <ShieldCheck className="h-3 w-3" /> 始终审批
+              <ShieldCheck className="h-3 w-3" /> {t("graphUI.alwaysReview")}
             </span>
           ) : null}
         </div>

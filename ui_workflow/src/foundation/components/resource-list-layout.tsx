@@ -25,18 +25,27 @@ export function ResourceListLayout({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="media-list-layout">
-      <aside className="media-filter-panel" aria-label={filterLabel}>
-        <h2 className="mb-3 px-3 text-xs font-medium text-white/80">
-          {filterLabel}
-        </h2>
-        <div className="media-filter-options">{filters}</div>
-      </aside>
+    <div
+      className={`media-list-layout${filters ? "" : " media-list-layout-unfiltered"}`}
+    >
+      {filters ? (
+        <aside className="media-filter-panel" aria-label={filterLabel}>
+          <h2 className="mb-3 px-3 text-xs font-medium text-white/80">
+            {filterLabel}
+          </h2>
+          <div className="media-filter-options">{filters}</div>
+        </aside>
+      ) : null}
       <main className="media-list-content">
         <header className="media-list-heading">
           <div>
             <h1>{title}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+            {!filters ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {filterLabel}
+              </p>
+            ) : null}
           </div>
           {actions}
         </header>

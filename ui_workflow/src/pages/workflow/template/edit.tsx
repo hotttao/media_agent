@@ -1,21 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useTemplate } from "@/domains/templates/hooks/use-template";
-import {
-  useChangeTemplateVisibility,
-  useUpdateTemplate,
-} from "@/domains/templates/hooks/use-template-mutations";
+import { useUpdateTemplate } from "@/domains/templates/hooks/use-template-mutations";
 import { TemplateForm } from "@/domains/templates/components/template-form";
 import { Spinner } from "@/components/ui/spinner";
 import { ListState } from "@/foundation/components/resource-list-layout";
 import type { TemplateInput } from "@/domains/templates/types";
+import { hostShim } from "@/foundation/lib/host-shim";
 
 export function TemplateEdit({
   id,
   onDone,
+  instanceId,
 }: {
   id: string;
   onDone: () => void;
+  instanceId: string;
 }) {
   const {
     data: template,
@@ -26,8 +26,11 @@ export function TemplateEdit({
   } = useTemplate(id);
   const { t } = useTranslation();
   const updateTemplate = useUpdateTemplate();
-  const changeVisibility = useChangeTemplateVisibility();
-  const [value, setValue] = useState<TemplateInput | null>(null);
+  const [value, setValue] = hostShim.useInstanceState<TemplateInput | null>(
+    instanceId,
+    `workflow_template_draft_${id}`,
+    () => null,
+  );
 
   useEffect(() => {
     if (template) {
@@ -58,7 +61,7 @@ export function TemplateEdit({
           },
       );
     }
-  }, [template]);
+  }, [template, setValue]);
 
   if (isError)
     return (
@@ -77,19 +80,11 @@ export function TemplateEdit({
 
   function handleSubmit() {
     if (!value) return;
-    const originalVisibility = template?.visibility;
     updateTemplate.mutate(
       { id, patch: value },
       {
         onSuccess: () => {
-          // proto's UpdateTemplateReq does not carry visibility; if the user
-          // changed it, apply via the dedicated endpoint.
-          if (value.visibility && value.visibility !== originalVisibility) {
-            changeVisibility.mutate({
-              id,
-              input: { visibility: value.visibility },
-            });
-          }
+          setValue(null);
           onDone();
         },
       },
@@ -97,15 +92,12 @@ export function TemplateEdit({
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
-      {updateTemplate.isError || changeVisibility.isError ? (
+    <div className="flex h-full min-h-0 flex-col">
+      {updateTemplate.isError ? (
         <p role="alert" className="text-sm text-destructive">
-          {updateTemplate.error?.message || changeVisibility.error?.message}
+          {updateTemplate.error?.message}
         </p>
       ) : null}
-      <h2 className="text-lg font-semibold">
-        {t("nav.templates")} · {t("editor.savedDraft")}
-      </h2>
       <TemplateForm
         value={value}
         onChange={setValue}

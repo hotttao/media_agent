@@ -1,26 +1,18 @@
+import { useTranslation } from "react-i18next";
+import { ResourceSharing } from "@/foundation/components/resource-sharing";
+import { ListState } from "@/foundation/components/resource-list-layout";
+import { ConfirmActionButton } from "@/foundation/components/confirm-action-button";
 import {
   Archive,
   ArrowLeft,
   BriefcaseBusiness,
   Edit3,
   Heart,
-  KeyRound,
   Ruler,
-  ShieldCheck,
   Trash2,
   UserRound,
 } from "lucide-react";
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { VisibilityBadge } from "@/domains/materials/components/visibility-badge";
 import { useVirtualIp } from "@/domains/virtual-ips/hooks/use-virtual-ip";
@@ -31,7 +23,7 @@ import {
   useGrantVirtualIp,
   useRevokeVirtualIp,
 } from "@/domains/virtual-ips/hooks/use-virtual-ip-mutations";
-import type { PersonaProfile, Visibility } from "@/domains/virtual-ips/types";
+import type { PersonaProfile } from "@/domains/virtual-ips/types";
 import {
   DetailField,
   DetailFieldGrid,
@@ -51,16 +43,6 @@ function profileOf(value: PersonaProfile | string | undefined): PersonaProfile {
     return {};
   }
 }
-function genderLabel(value?: PersonaProfile["gender"]) {
-  return value === "FEMALE"
-    ? "女"
-    : value === "MALE"
-      ? "男"
-      : value === "OTHER"
-        ? "其他"
-        : undefined;
-}
-
 export function VirtualIpShow({
   id,
   onBack,
@@ -70,25 +52,33 @@ export function VirtualIpShow({
   onBack: () => void;
   onEdit: () => void;
 }) {
-  const { data: virtualIp, isLoading } = useVirtualIp(id);
+  const { t } = useTranslation();
+  const { user } = hostShim.useCurrentUser();
+  const {
+    data: virtualIp,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useVirtualIp(id);
   const remove = useDeleteVirtualIp();
   const archive = useArchiveVirtualIp();
   const changeVisibility = useChangeVirtualIpVisibility();
   const grant = useGrantVirtualIp();
   const revoke = useRevokeVirtualIp();
   const { organization } = hostShim.useShellContext();
-  const [teamId, setTeamId] = useState("");
-  const [grantedTeams, setGrantedTeams] = useState<string[]>([]);
   if (isLoading)
     return (
       <div className="flex h-full items-center justify-center">
         <Spinner className="h-5 w-5" />
       </div>
     );
+  if (isError)
+    return <ListState error={error.message} onRetry={() => void refetch()} />;
   if (!virtualIp)
     return (
       <div className="p-6 text-sm text-muted-foreground">
-        没有找到这个 Virtual IP。
+        {t("library.virtualEmpty")}
       </div>
     );
   const profile = profileOf(virtualIp.persona_profile);
@@ -97,38 +87,44 @@ export function VirtualIpShow({
       <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/90 p-2 shadow-sm backdrop-blur-xl">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft className="mr-1.5 h-4 w-4" />
-          返回 Virtual IP 列表
+          {t("library.virtualBack")}
         </Button>
         <Button size="sm" onClick={onEdit}>
           <Edit3 className="mr-1.5 h-4 w-4" />
-          编辑形象
+          {t("library.editVirtual")}
         </Button>
       </div>
-      <section className="grid gap-6 lg:grid-cols-[minmax(320px,500px)_1fr] lg:items-start">
+      <section className="media-detail-grid items-start">
         <LibraryGallery
           organizationId={virtualIp.organization_id ?? organization.id}
           items={[
             {
               objectPath: virtualIp.avatar_object_path,
-              label: "头像",
-              badge: virtualIp.avatar_object_path ? "Avatar" : "尚未上传",
+              label: t("virtualProfile.avatar_object_path"),
+              badge: virtualIp.avatar_object_path
+                ? t("virtualProfile.avatar_object_path")
+                : t("library.noMedia"),
             },
             {
               objectPath: virtualIp.full_body_object_path,
-              label: "全身照",
-              badge: virtualIp.full_body_object_path ? "Full body" : "尚未上传",
+              label: t("virtualProfile.full_body_object_path"),
+              badge: virtualIp.full_body_object_path
+                ? t("virtualProfile.full_body_object_path")
+                : t("library.noMedia"),
             },
             {
               objectPath: virtualIp.three_view_object_path,
-              label: "三视图",
+              label: t("virtualProfile.three_view_object_path"),
               badge: virtualIp.three_view_object_path
-                ? "Three view"
-                : "尚未上传",
+                ? t("virtualProfile.three_view_object_path")
+                : t("library.noMedia"),
             },
             {
               objectPath: virtualIp.nine_view_object_path,
-              label: "九宫格",
-              badge: virtualIp.nine_view_object_path ? "Nine view" : "尚未上传",
+              label: t("virtualProfile.nine_view_object_path"),
+              badge: virtualIp.nine_view_object_path
+                ? t("virtualProfile.nine_view_object_path")
+                : t("library.noMedia"),
             },
           ]}
           alt={virtualIp.name}
@@ -137,30 +133,32 @@ export function VirtualIpShow({
         <div className="flex min-w-0 flex-col gap-5 lg:pt-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium capitalize text-primary">
-              {virtualIp.status}
+              {t(`common.status.${virtualIp.status}`)}
             </span>
             <VisibilityBadge visibility={virtualIp.visibility} />
           </div>
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Virtual IP
+              {t("library.virtualTitle")}
             </p>
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
               {virtualIp.name}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
-              {virtualIp.description ||
-                profile.basic_setting ||
-                "这个形象还没有填写简介。"}
+              {virtualIp.description || profile.basic_setting || "—"}
             </p>
           </div>
           <DetailFieldGrid className="xl:grid-cols-2">
-            <DetailField label="业务范围">{virtualIp.scope}</DetailField>
-            <DetailField label="所有者">{virtualIp.owner_user_id}</DetailField>
-            <DetailField label="创建时间">
+            <DetailField label={t("library.fields.scope")}>
+              {virtualIp.scope}
+            </DetailField>
+            <DetailField label={t("library.fields.owner")}>
+              {virtualIp.owner_user_id}
+            </DetailField>
+            <DetailField label={t("library.fields.created")}>
               {formatDetailDate(virtualIp.created_at)}
             </DetailField>
-            <DetailField label="最近更新">
+            <DetailField label={t("registry.updated")}>
               {formatDetailDate(virtualIp.updated_at)}
             </DetailField>
           </DetailFieldGrid>
@@ -168,193 +166,136 @@ export function VirtualIpShow({
       </section>
       <div className="grid gap-5 xl:grid-cols-2">
         <DetailSection
-          title="基本档案"
-          description="人物的基础身份与所在地信息"
+          title={t("virtualDetail.basic")}
+          description={t("virtualProfile.profileHint")}
           icon={UserRound}
         >
           <DetailFieldGrid>
-            <DetailField label="性别">
-              {genderLabel(profile.gender)}
+            <DetailField label={t("virtualProfile.gender")}>
+              {profile.gender
+                ? t(`virtualProfile.${profile.gender}`)
+                : undefined}
             </DetailField>
-            <DetailField label="年龄">
-              {profile.age === undefined ? undefined : `${profile.age} 岁`}
+            <DetailField label={t("virtualProfile.age")}>
+              {profile.age === undefined
+                ? undefined
+                : `${profile.age} ${t("virtualProfile.years")}`}
             </DetailField>
-            <DetailField label="城市">{profile.city}</DetailField>
-            <DetailField label="职业">{profile.occupation}</DetailField>
-            <DetailField label="学历">{profile.education}</DetailField>
-            <DetailField label="专业">{profile.major}</DetailField>
+            <DetailField label={t("virtualProfile.city")}>
+              {profile.city}
+            </DetailField>
+            <DetailField label={t("virtualProfile.occupation")}>
+              {profile.occupation}
+            </DetailField>
+            <DetailField label={t("virtualProfile.education")}>
+              {profile.education}
+            </DetailField>
+            <DetailField label={t("virtualProfile.major")}>
+              {profile.major}
+            </DetailField>
           </DetailFieldGrid>
         </DetailSection>
         <DetailSection
-          title="外形参数"
-          description="形象生成和服装适配可参考的数据"
+          title={t("virtualDetail.body")}
+          description={t("virtualDetail.bodyHint")}
           icon={Ruler}
         >
           <DetailFieldGrid>
-            <DetailField label="身高">
+            <DetailField label={t("virtualProfile.height")}>
               {profile.height === undefined
                 ? undefined
                 : `${profile.height} cm`}
             </DetailField>
-            <DetailField label="体重">
+            <DetailField label={t("virtualProfile.weight")}>
               {profile.weight === undefined
                 ? undefined
                 : `${profile.weight} kg`}
             </DetailField>
-            <DetailField label="胸围">
+            <DetailField label={t("virtualProfile.bust")}>
               {profile.bust === undefined ? undefined : `${profile.bust} cm`}
             </DetailField>
-            <DetailField label="腰围">
+            <DetailField label={t("virtualProfile.waist")}>
               {profile.waist === undefined ? undefined : `${profile.waist} cm`}
             </DetailField>
-            <DetailField label="臀围">
+            <DetailField label={t("virtualProfile.hip")}>
               {profile.hip === undefined ? undefined : `${profile.hip} cm`}
             </DetailField>
           </DetailFieldGrid>
         </DetailSection>
         <DetailSection
-          title="背景设定"
-          description="人物经历、家庭与社会背景"
+          title={t("virtualDetail.background")}
+          description={t("virtualProfile.profileHint")}
           icon={BriefcaseBusiness}
         >
           <DetailFieldGrid className="sm:grid-cols-1">
-            <DetailField label="基础设定">{profile.basic_setting}</DetailField>
-            <DetailField label="家庭背景">
+            <DetailField label={t("virtualProfile.basic_setting")}>
+              {profile.basic_setting}
+            </DetailField>
+            <DetailField label={t("virtualProfile.family_background")}>
               {profile.family_background}
             </DetailField>
-            <DetailField label="收入水平">{profile.income_level}</DetailField>
+            <DetailField label={t("virtualProfile.income_level")}>
+              {profile.income_level}
+            </DetailField>
           </DetailFieldGrid>
         </DetailSection>
         <DetailSection
-          title="性格与表达"
-          description="用于保持角色表达和内容风格一致"
+          title={t("virtualDetail.expression")}
+          description={t("virtualProfile.profileHint")}
           icon={Heart}
         >
           <DetailFieldGrid className="sm:grid-cols-1">
-            <DetailField label="性格">{profile.personality}</DetailField>
-            <DetailField label="口头禅">{profile.catchphrase}</DetailField>
-            <DetailField label="小习惯">{profile.small_habit}</DetailField>
-            <DetailField label="兴趣爱好">{profile.hobbies}</DetailField>
+            <DetailField label={t("virtualProfile.personality")}>
+              {profile.personality}
+            </DetailField>
+            <DetailField label={t("virtualProfile.catchphrase")}>
+              {profile.catchphrase}
+            </DetailField>
+            <DetailField label={t("virtualProfile.small_habit")}>
+              {profile.small_habit}
+            </DetailField>
+            <DetailField label={t("virtualProfile.hobbies")}>
+              {profile.hobbies}
+            </DetailField>
           </DetailFieldGrid>
         </DetailSection>
       </div>
+      <ResourceSharing
+        organizationId={virtualIp.organization_id || organization.id}
+        visibility={virtualIp.visibility}
+        owner={Boolean(user?.id && user.id === virtualIp.owner_user_id)}
+        permissions={["viewer"]}
+        onVisibility={(visibility) =>
+          changeVisibility.mutateAsync({ id, input: { visibility } })
+        }
+        onGrant={(team) => grant.mutateAsync({ id, grant: { team_id: team } })}
+        onRevoke={(teamId) => revoke.mutateAsync({ id, teamId })}
+      />
       <DetailSection
-        title="权限与共享"
-        description="控制该形象在企业和部门内的可见范围"
-        icon={ShieldCheck}
-      >
-        <div className="grid gap-5 lg:grid-cols-2">
-          <div className="grid content-start gap-2">
-            <Label>可见范围</Label>
-            <Select
-              value={virtualIp.visibility}
-              onValueChange={(visibility) =>
-                changeVisibility.mutate({
-                  id,
-                  input: { visibility: visibility as Visibility },
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="private">仅自己</SelectItem>
-                <SelectItem value="team">部门</SelectItem>
-                <SelectItem value="public">组织内公开</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">修改后立即生效。</p>
-          </div>
-          <div className="grid gap-2">
-            <Label>添加部门授权</Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="输入部门 ID"
-                value={teamId}
-                onChange={(event) => setTeamId(event.target.value)}
-              />
-              <Button
-                disabled={!teamId || grant.isPending}
-                onClick={() =>
-                  grant.mutate(
-                    { id, grant: { team_id: teamId } },
-                    {
-                      onSuccess: () => {
-                        setGrantedTeams((old) =>
-                          old.includes(teamId) ? old : [...old, teamId],
-                        );
-                        setTeamId("");
-                      },
-                    },
-                  )
-                }
-              >
-                <KeyRound className="mr-1.5 h-4 w-4" />
-                授权
-              </Button>
-            </div>
-            {grantedTeams.length ? (
-              <div className="mt-2 grid gap-2">
-                {grantedTeams.map((team) => (
-                  <div
-                    key={team}
-                    className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/25 px-3 py-2"
-                  >
-                    <span className="truncate text-sm">{team}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() =>
-                        revoke.mutate(
-                          { id, teamId: team },
-                          {
-                            onSuccess: () =>
-                              setGrantedTeams((old) =>
-                                old.filter((item) => item !== team),
-                              ),
-                          },
-                        )
-                      }
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                当前页面还没有新增部门授权。
-              </p>
-            )}
-          </div>
-        </div>
-      </DetailSection>
-      <DetailSection
-        title="生命周期管理"
-        description="归档会停止继续使用；删除会移除这条形象记录"
+        title={t("library.management")}
+        description={t("virtualDetail.managementHint")}
         icon={Archive}
         className="border-destructive/20"
       >
         <div className="flex flex-wrap gap-2">
           {virtualIp.status !== "archived" ? (
-            <Button
+            <ConfirmActionButton
               variant="outline"
               disabled={archive.isPending}
-              onClick={() => archive.mutate(id)}
+              onConfirm={() => archive.mutateAsync(id)}
             >
               <Archive className="mr-1.5 h-4 w-4" />
-              归档 Virtual IP
-            </Button>
+              {t("productDetail.archive")}
+            </ConfirmActionButton>
           ) : null}
-          <Button
+          <ConfirmActionButton
             variant="destructive"
             disabled={remove.isPending}
-            onClick={() => remove.mutate(id, { onSuccess: onBack })}
+            onConfirm={() => remove.mutateAsync(id, { onSuccess: onBack })}
           >
             <Trash2 className="mr-1.5 h-4 w-4" />
-            删除 Virtual IP
-          </Button>
+            {t("common.delete")}
+          </ConfirmActionButton>
         </div>
       </DetailSection>
     </DetailPage>

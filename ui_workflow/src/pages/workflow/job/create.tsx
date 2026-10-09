@@ -1,185 +1,484 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { WorkflowLaunchIntent } from "@/foundation/types/app-navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
-import { useSubmitJob } from "@/domains/jobs/hooks/use-job-mutations";
-import { useWorkflowsList } from "@/domains/jobs/hooks/use-workflows-list";
-import type { WorkflowInputSchemaEntry } from "@/domains/jobs/types";
+import { AppStudioHeader } from "@/foundation/components/app-studio-header";
+import { ListState } from "@/foundation/components/resource-list-layout";
+import { LibraryMedia } from "@/foundation/components/library-media";
 import { hostShim } from "@/foundation/lib/host-shim";
+import { api } from "@/foundation/lib/api-client";
+import { requestKey } from "@/foundation/lib/request-key";
 import { resolveLibraryObject } from "@/foundation/lib/library-object";
-import { buildJobInput, missingRequiredInputs } from "./job-input";
+import { useWorkflowsList } from "@/domains/jobs/hooks/use-workflows-list";
+import { useWorkflow } from "@/domains/workflows/hooks/use-workflow";
+import { submitJob, resumeJob, retryJob } from "@/domains/jobs/lib/api";
+import type { Job, SubmitJobInput, WorkflowOption } from "@/domains/jobs/types";
+import {
+  buildJobInput,
+  missingRequiredInputs,
+  isWorkflowReady,
+  selectedInputPreview,
+} from "./job-input";
 import { useJobInputOptions } from "./use-job-input-options";
-
-const RESOURCE_LABELS: Record<string, string> = {
-  PRODUCT: "商品",
-  VIRTUAL_IP: "虚拟 IP",
-  MATERIAL: "素材",
-  ASSET: "生成资产",
-};
-
-function inputLabel(entry: WorkflowInputSchemaEntry) {
-  const resource = RESOURCE_LABELS[entry.resource_type] ?? entry.resource_type;
-  return `${entry.name} · ${entry.asset_kind || resource}`;
-}
 
 export function JobCreate({
   onDone,
   onSubmitted,
   preferredWorkflowId,
+  instanceId,
+  sourceJob,
+  mode = "submit",
+  launchIntent,
 }: {
   onDone: () => void;
-  onSubmitted: (jobId: string) => void;
+  onSubmitted: (id: string) => void;
   preferredWorkflowId?: string;
+  instanceId: string;
+  sourceJob?: Job;
+  mode?: "submit" | "resume" | "rerun";
+  launchIntent?: WorkflowLaunchIntent;
 }) {
+  const { t } = useTranslation();
   const shell = hostShim.useShellContext();
-  const submitJob = useSubmitJob();
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflowsList();
-  const [workflowId, setWorkflowId] = useState(preferredWorkflowId ?? "");
-  const [selectedIds, setSelectedIds] = useState<Record<string, string>>({});
-  const selectedWorkflow = workflows?.find((item) => item.id === workflowId);
-  const optionsQuery = useJobInputOptions(
-    selectedWorkflow,
-    !shell.isLoading && Boolean(shell.organization.id),
+  const qc = useQueryClient();
+  const workflows = useWorkflowsList();
+  const [draft, setDraft] = hostShim.useInstanceState(
+    instanceId,
+    `workflow_run_draft_${mode}_${launchIntent?.requestId || sourceJob?.id || preferredWorkflowId || "new"}`,
+    () => ({
+      workflowId: sourceJob?.workflow_id || preferredWorkflowId || "",
+      workspaceId: sourceJob?.workspace_id || "",
+      selected: {} as Record<string, string>,
+    }),
   );
-  const missing = missingRequiredInputs(selectedWorkflow, selectedIds);
-
-  async function handleSubmit() {
-    if (!selectedWorkflow || missing.length > 0) return;
-    const input = await buildJobInput(
-      selectedWorkflow,
-      selectedIds,
-      optionsQuery.data ?? {},
-      (path) => resolveLibraryObject(shell.organization.id, path),
-    );
-    submitJob.mutate(
-      {
-        workflow_id: selectedWorkflow.id,
-        workflow_version: selectedWorkflow.version,
-        input,
-      },
-      { onSuccess: (job) => onSubmitted(job.id) },
-    );
+  const [intent, setIntent] = hostShim.useInstanceState<{
+    fingerprint: string;
+    request: SubmitJobInput;
+  } | null>(
+    instanceId,
+    `workflow_run_intent_${mode}_${launchIntent?.requestId || sourceJob?.id || preferredWorkflowId || "new"}`,
+    () => null,
+  );
+  const [preparing, setPreparing] = useState(false);
+  const definition = useWorkflow(sourceJob?.workflow_id || draft.workflowId);
+  const [seeded, setSeeded] = hostShim.useInstanceState(
+    instanceId,
+    `workflow_product_seed_${launchIntent?.requestId || "none"}`,
+    () => false,
+  );
+  const wrongCompany = Boolean(
+    launchIntent &&
+      shell.organization.id &&
+      launchIntent.organizationId !== shell.organization.id,
+  );
+  useEffect(() => {
+    if (!launchIntent || seeded || !definition.data || shell.isLoading) return;
+    setSeeded(true);
+    if (wrongCompany || draft.workflowId !== launchIntent.workflowId) return;
+    const entries = definition.data.input_schema?.entries as
+      | { name: string; resource_type: string }[]
+      | undefined;
+    const entry = entries?.find((item) => item.resource_type === "PRODUCT");
+    if (entry)
+      setDraft((current) => ({
+        ...current,
+        selected: { ...current.selected, [entry.name]: launchIntent.productId },
+      }));
+  }, [
+    launchIntent,
+    seeded,
+    definition.data,
+    shell.isLoading,
+    wrongCompany,
+    draft.workflowId,
+    setSeeded,
+    setDraft,
+  ]);
+  const [error, setError] = useState("");
+  const workspaces = useQuery({
+    queryKey: ["available-workspaces", shell.organization.id],
+    enabled: Boolean(shell.organization.id) && !sourceJob,
+    queryFn: () =>
+      api.request<{
+        workspaces?: { id: string; name: string; organization_id: string }[];
+      }>("/workspaces"),
+  });
+  const selectedWorkflow: WorkflowOption | undefined = definition.data
+    ? {
+        ...definition.data,
+        input_schema: definition.data
+          .input_schema as WorkflowOption["input_schema"],
+      }
+    : undefined;
+  const ready = mode !== "submit" || isWorkflowReady(selectedWorkflow);
+  const versionMismatch = Boolean(
+    sourceJob &&
+      selectedWorkflow &&
+      selectedWorkflow.version !== sourceJob.workflow_version,
+  );
+  const effectiveWorkflow: WorkflowOption | undefined =
+    selectedWorkflow && mode === "resume" && sourceJob
+      ? {
+          ...selectedWorkflow,
+          input_schema: {
+            entries: (selectedWorkflow.input_schema?.entries ?? []).filter(
+              (entry) =>
+                entry.resource_type === "PRODUCT"
+                  ? !sourceJob.input.product
+                  : entry.resource_type === "VIRTUAL_IP"
+                    ? !sourceJob.input.virtual_ip
+                    : !(
+                        entry.resource_type === "ASSET"
+                          ? sourceJob.input.asset
+                          : sourceJob.input.material
+                      )?.some((item) => item.name === entry.name),
+            ),
+          },
+        }
+      : selectedWorkflow;
+  const options = useJobInputOptions(
+    effectiveWorkflow,
+    Boolean(shell.organization.id) && !versionMismatch && ready,
+  );
+  const missing = missingRequiredInputs(effectiveWorkflow, draft.selected);
+  const fingerprint = JSON.stringify([
+    shell.organization.id,
+    draft,
+    selectedWorkflow?.version,
+    mode,
+  ]);
+  const currentIntent = intent?.fingerprint === fingerprint ? intent : null;
+  const mutation = useMutation({
+    mutationFn: async (request: SubmitJobInput) => {
+      if (mode === "resume" && sourceJob)
+        return {
+          id: (
+            await resumeJob(
+              sourceJob.id,
+              request.input,
+              request.idempotency_key!,
+            )
+          ).id,
+        };
+      if (mode === "rerun" && sourceJob)
+        return {
+          id: (await retryJob(sourceJob.id, { input_override: request.input }))
+            .id,
+        };
+      return submitJob(request);
+    },
+    onSuccess: (receipt) => {
+      setIntent(null);
+      setDraft({
+        workflowId: preferredWorkflowId || "",
+        workspaceId: "",
+        selected: {},
+      });
+      qc.invalidateQueries({ queryKey: ["jobs"] });
+      qc.invalidateQueries({ queryKey: ["job", receipt.id] });
+      onSubmitted(receipt.id);
+    },
+  });
+  const busy = preparing || mutation.isPending;
+  const choices = (workspaces.data?.workspaces ?? []).filter(
+    (workspace) => workspace.organization_id === shell.organization.id,
+  );
+  const validWorkspace = Boolean(
+    shell.organization.id &&
+      draft.workspaceId &&
+      (sourceJob
+        ? sourceJob.workspace_id === draft.workspaceId &&
+          sourceJob.organization_id === shell.organization.id
+        : choices.some((workspace) => workspace.id === draft.workspaceId)),
+  );
+  const validSelections = Object.entries(draft.selected).every(
+    ([name, id]) => !id || options.data?.[name]?.some((item) => item.id === id),
+  );
+  async function submit() {
+    if (
+      !effectiveWorkflow ||
+      !validWorkspace ||
+      !validSelections ||
+      wrongCompany ||
+      !ready ||
+      missing.length ||
+      versionMismatch ||
+      busy
+    )
+      return;
+    setPreparing(true);
+    setError("");
+    try {
+      const request = currentIntent?.request ?? {
+        workflow_id: effectiveWorkflow.id,
+        workflow_version:
+          sourceJob?.workflow_version ?? effectiveWorkflow.version,
+        workspace_id: draft.workspaceId,
+        organization_id: sourceJob?.organization_id || shell.organization.id,
+        idempotency_key: requestKey(),
+        input: await buildJobInput(
+          effectiveWorkflow,
+          draft.selected,
+          options.data ?? {},
+          (path) => resolveLibraryObject(shell.organization.id, path),
+        ),
+      };
+      setIntent({ fingerprint, request });
+      await mutation.mutateAsync(request);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("runForm.failed"));
+    } finally {
+      setPreparing(false);
+    }
   }
-
   return (
-    <div className="flex flex-col gap-5 p-4">
-      <div>
-        <h2 className="text-lg font-semibold">创建生成任务</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          选择工作流后，系统会按它的输入契约加载可用素材。
-        </p>
-      </div>
-      <div className="grid gap-2">
-        <Label>工作流</Label>
-        {workflowsLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="h-4 w-4" /> 正在加载工作流…
-          </div>
-        ) : (
-          <Select
-            value={workflowId}
-            onValueChange={(value) => {
-              setWorkflowId(value);
-              setSelectedIds({});
-            }}
+    <div className="flex h-full min-h-0 flex-col">
+      <AppStudioHeader>
+        <h1 className="truncate text-base font-semibold">
+          {t(`runForm.${mode}`)}
+        </h1>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="ghost" size="sm" disabled={busy} onClick={onDone}>
+            {t("common.cancel")}
+          </Button>
+          <Button
+            size="sm"
+            disabled={
+              busy ||
+              options.isLoading ||
+              options.isError ||
+              !selectedWorkflow ||
+              !validWorkspace ||
+              !validSelections ||
+              wrongCompany ||
+              !ready ||
+              missing.length > 0 ||
+              versionMismatch ||
+              Boolean(currentIntent && mode === "rerun")
+            }
+            onClick={() => void submit()}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="选择已发布的工作流" />
-            </SelectTrigger>
-            <SelectContent>
-              {(workflows ?? []).map((workflow) => (
-                <SelectItem key={workflow.id} value={workflow.id}>
-                  {workflow.name}（v{workflow.version}）
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-
-      {selectedWorkflow ? (
-        <div className="grid gap-4 rounded-lg border bg-muted/20 p-4 md:grid-cols-2">
-          {optionsQuery.isLoading || shell.isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground md:col-span-2">
-              <Spinner className="h-4 w-4" /> 正在加载商品与素材…
-            </div>
-          ) : null}
-          {optionsQuery.isError ? (
-            <p className="text-sm text-destructive md:col-span-2">
-              无法加载工作流所需素材：{optionsQuery.error.message}
+            {t(
+              busy
+                ? "runForm.submitting"
+                : currentIntent
+                  ? "runForm.replay"
+                  : "runForm.submit",
+            )}
+          </Button>
+        </div>
+      </AppStudioHeader>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="mx-auto max-w-4xl space-y-6">
+          <p className="text-sm leading-6 text-muted-foreground">
+            {t(`runForm.${mode}Hint`)}
+          </p>
+          {wrongCompany ? (
+            <p role="alert" className="text-sm text-destructive">
+              {t("productWorkflow.wrongCompany")}
             </p>
           ) : null}
-          {!optionsQuery.isLoading &&
-            !optionsQuery.isError &&
-            (selectedWorkflow.input_schema?.entries ?? []).map((entry) => {
-              const options = optionsQuery.data?.[entry.name] ?? [];
-              return (
-                <div className="grid gap-2" key={entry.name}>
-                  <Label>
-                    {inputLabel(entry)}
-                    {entry.required ? (
-                      <span className="ml-1 text-destructive">*</span>
-                    ) : null}
-                  </Label>
-                  <Select
-                    value={selectedIds[entry.name] ?? ""}
-                    onValueChange={(value) =>
-                      setSelectedIds((current) => ({
-                        ...current,
-                        [entry.name]: value,
-                      }))
-                    }
+          {!validSelections && options.isSuccess ? (
+            <p role="alert" className="text-sm text-destructive">
+              {t("productWorkflow.staleSelection")}
+            </p>
+          ) : null}
+          {definition.isLoading ? (
+            <ListState loading />
+          ) : definition.isError ? (
+            <ListState
+              error={definition.error.message}
+              onRetry={() => void definition.refetch()}
+            />
+          ) : selectedWorkflow && !ready ? (
+            <p role="alert" className="text-sm text-destructive">
+              {t("runForm.notRegistered")}
+            </p>
+          ) : null}
+          {workflows.isLoading ? (
+            <ListState loading />
+          ) : workflows.isError ? (
+            <ListState
+              error={workflows.error.message}
+              onRetry={() => void workflows.refetch()}
+            />
+          ) : (
+            <div className="grid gap-4 rounded-2xl bg-background p-5 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <label htmlFor="run-workflow">{t("nav.workflows")}</label>
+                <select
+                  id="run-workflow"
+                  disabled={Boolean(sourceJob) || busy}
+                  className="h-10 rounded-lg border bg-background px-3"
+                  value={draft.workflowId}
+                  onChange={(event) => {
+                    setDraft({
+                      ...draft,
+                      workflowId: event.target.value,
+                      selected: {},
+                    });
+                    setIntent(null);
+                  }}
+                >
+                  <option value="">{t("runForm.chooseWorkflow")}</option>
+                  {workflows.data?.map((workflow) => (
+                    <option key={workflow.id} value={workflow.id}>
+                      {workflow.name} · v{workflow.version}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <label htmlFor="run-workspace">
+                  {t("editorContext.workspace")}
+                </label>
+                <select
+                  id="run-workspace"
+                  className="h-10 rounded-lg border bg-background px-3"
+                  disabled={Boolean(sourceJob) || workspaces.isLoading || busy}
+                  value={draft.workspaceId}
+                  onChange={(event) => {
+                    setDraft({ ...draft, workspaceId: event.target.value });
+                    setIntent(null);
+                  }}
+                >
+                  <option value="">{t("editorContext.chooseWorkspace")}</option>
+                  {sourceJob ? (
+                    <option value={sourceJob.workspace_id}>
+                      {sourceJob.workspace_id}
+                    </option>
+                  ) : (
+                    choices.map((workspace) => (
+                      <option key={workspace.id} value={workspace.id}>
+                        {workspace.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+            </div>
+          )}
+          {workspaces.isError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {workspaces.error.message}
+            </p>
+          ) : null}
+          {versionMismatch ||
+          (sourceJob && !selectedWorkflow && !workflows.isLoading) ? (
+            <p role="alert" className="rounded-xl bg-warning/10 p-4 text-sm">
+              {t("runForm.frozenUnavailable")}
+            </p>
+          ) : options.isLoading ? (
+            <ListState loading />
+          ) : options.isError ? (
+            <ListState
+              error={options.error.message}
+              onRetry={() => void options.refetch()}
+            />
+          ) : selectedWorkflow ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {(effectiveWorkflow?.input_schema?.entries ?? []).map((entry) => {
+                const resource = options.data?.[entry.name]?.find(
+                  (item) => item.id === draft.selected[entry.name],
+                );
+                const preview = selectedInputPreview(
+                  entry.resource_type,
+                  resource,
+                );
+                const labelKey = (
+                  {
+                    product: "product",
+                    virtual_ip: "character",
+                    movement: "movement",
+                    pose: "pose",
+                    scene: "scene",
+                  } as Record<string, string>
+                )[entry.name];
+                return (
+                  <section
+                    key={entry.name}
+                    className="space-y-3 rounded-2xl bg-background p-5"
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder={`选择${inputLabel(entry)}`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {options.map((option) => (
-                        <SelectItem key={option.id} value={option.id}>
-                          {option.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {options.length === 0 ? (
+                    <label
+                      htmlFor={`run-input-${entry.name}`}
+                      className="font-semibold"
+                    >
+                      {labelKey ? t(`runForm.fields.${labelKey}`) : entry.name}
+                      {entry.required ? " *" : ""}
+                    </label>
                     <p className="text-xs text-muted-foreground">
-                      当前组织内没有可用的{inputLabel(entry)}。
+                      {entry.name} · {entry.asset_kind || entry.resource_type}
                     </p>
-                  ) : null}
-                </div>
-              );
-            })}
+                    <select
+                      id={`run-input-${entry.name}`}
+                      data-testid={`run-input-${entry.name}`}
+                      disabled={busy}
+                      className="h-10 w-full rounded-lg border bg-background px-3"
+                      value={draft.selected[entry.name] || ""}
+                      onChange={(event) => {
+                        setDraft({
+                          ...draft,
+                          selected: {
+                            ...draft.selected,
+                            [entry.name]: event.target.value,
+                          },
+                        });
+                        setIntent(null);
+                      }}
+                    >
+                      <option value="">{t("runForm.chooseResource")}</option>
+                      {(options.data?.[entry.name] ?? []).map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name || item.id}
+                        </option>
+                      ))}
+                    </select>
+                    {preview ? (
+                      <div className="space-y-2 [&_img]:max-h-48 [&_video]:max-h-48">
+                        {preview.paths.map((path) => (
+                          <LibraryMedia
+                            key={path}
+                            organizationId={shell.organization.id}
+                            objectPath={path}
+                            alt={resource?.name || entry.name}
+                          />
+                        ))}
+                        {preview.content ? (
+                          <p className="line-clamp-4 whitespace-pre-wrap text-xs leading-6 text-muted-foreground">
+                            {preview.content}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {!options.data?.[entry.name]?.length ? (
+                      <p className="text-xs text-muted-foreground">
+                        {t("runForm.noCompatible")}
+                      </p>
+                    ) : null}
+                  </section>
+                );
+              })}
+            </div>
+          ) : null}
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          ) : null}
+          {currentIntent ? (
+            <p className="rounded-xl bg-warning/10 p-4 text-sm">
+              {t(
+                mode === "rerun"
+                  ? "runForm.rerunUnknown"
+                  : "runForm.intentRetained",
+              )}
+            </p>
+          ) : null}
         </div>
-      ) : null}
-
-      {submitJob.isError ? (
-        <p className="text-sm text-destructive">
-          提交失败：{submitJob.error.message}
-        </p>
-      ) : null}
-      <div className="flex gap-2">
-        <Button
-          onClick={() => void handleSubmit()}
-          disabled={
-            submitJob.isPending ||
-            optionsQuery.isLoading ||
-            optionsQuery.isError ||
-            !selectedWorkflow ||
-            missing.length > 0
-          }
-        >
-          {submitJob.isPending ? <Spinner className="h-4 w-4" /> : null}提交任务
-        </Button>
-        <Button variant="ghost" onClick={onDone}>
-          取消
-        </Button>
       </div>
     </div>
   );

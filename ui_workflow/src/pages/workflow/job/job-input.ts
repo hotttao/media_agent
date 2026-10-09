@@ -9,6 +9,16 @@ import type { Product } from "@/domains/products/types";
 import type { VirtualIp } from "@/domains/virtual-ips/types";
 import type { JobInputOption, JobInputOptions } from "./use-job-input-options";
 
+export function isWorkflowReady(
+  workflow?: Pick<WorkflowOption, "status" | "publication_status">,
+): boolean {
+  return Boolean(
+    workflow &&
+      (workflow.status === "published" || workflow.status === 2) &&
+      workflow.publication_status === "registered",
+  );
+}
+
 export function missingRequiredInputs(
   workflow: WorkflowOption | undefined,
   selectedIds: Record<string, string>,
@@ -33,6 +43,42 @@ function asString(value: unknown): string {
   return value === undefined ? "" : JSON.stringify(value);
 }
 
+export function selectedInputPreview(
+  type: WorkflowInputSchemaEntry["resource_type"],
+  selected?: JobInputOption,
+): { paths: string[]; content?: string } | undefined {
+  if (!selected) return undefined;
+  if (type === "PRODUCT") {
+    const product = selected as Product;
+    const image =
+      product.images?.find((item) => item.is_main) || product.images?.[0];
+    return {
+      paths: image?.object_path ? [image.object_path] : [],
+      content: product.product_details || product.description,
+    };
+  }
+  if (type === "VIRTUAL_IP") {
+    const character = selected as VirtualIp;
+    const path =
+      character.full_body_object_path ||
+      character.avatar_object_path ||
+      character.three_view_object_path ||
+      character.nine_view_object_path;
+    return { paths: path ? [path] : [], content: character.description };
+  }
+  const resource = selected as Material & GeneratedAsset;
+  const path =
+    resource.object_path || (type === "ASSET" ? resource.url : undefined);
+  return {
+    paths: path ? [path] : [],
+    content:
+      resource.content ||
+      (type === "MATERIAL"
+        ? resource.description || resource.prompt
+        : undefined),
+  };
+}
+
 export async function buildJobInput(
   workflow: WorkflowOption,
   selectedIds: Record<string, string>,
@@ -46,7 +92,8 @@ export async function buildJobInput(
     switch (entry.resource_type) {
       case "PRODUCT": {
         const product = selected as Product;
-        const image = product.images?.find((item) => item.is_main) ?? product.images?.[0];
+        const image =
+          product.images?.find((item) => item.is_main) ?? product.images?.[0];
         input.product = {
           id: product.id,
           name: product.name,
@@ -85,7 +132,7 @@ export async function buildJobInput(
         input.asset?.push({
           name: entry.name,
           asset_kind: entry.asset_kind,
-          url: asset.url,
+          url: await resolveObject(asset.object_path || asset.url),
           content: asset.content ?? "",
         });
         break;

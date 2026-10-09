@@ -5,6 +5,11 @@
  */
 
 import { Plus } from "lucide-react";
+import { useEffect } from "react";
+import {
+  WORKFLOW_LAUNCH_KEY,
+  type WorkflowLaunchIntent,
+} from "@/foundation/types/app-navigation";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,6 +17,8 @@ import { hostShim } from "@/foundation/lib/host-shim";
 import { JobCreate } from "./job/create";
 import { JobList } from "./job/list";
 import { JobShow } from "./job/show";
+import { useJob } from "@/domains/jobs/hooks/use-job";
+import { ListState } from "@/foundation/components/resource-list-layout";
 import { TemplateCreate } from "./template/create";
 import { TemplateEdit } from "./template/edit";
 import { TemplateList } from "./template/list";
@@ -39,6 +46,27 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
     useInstanceState,
   } = hostShim;
   const headerSlot = useAppHeaderSlot();
+  const [incoming, consumeIntent] =
+    useInstanceState<WorkflowLaunchIntent | null>(
+      instanceId,
+      WORKFLOW_LAUNCH_KEY,
+      () => null,
+    );
+  const [productLaunch, setProductLaunch] =
+    useInstanceState<WorkflowLaunchIntent | null>(
+      instanceId,
+      "workflow_product_launch",
+      () => null,
+    );
+  const [launchJobID, setLaunchJobID] = useInstanceState<string | null>(
+    instanceId,
+    "workflow_launchJobID",
+    () => null,
+  );
+  const [launchMode, setLaunchMode] = useInstanceState<
+    "submit" | "resume" | "rerun"
+  >(instanceId, "workflow_launchMode", () => "submit");
+  const launchJob = useJob(launchJobID);
   const [resource, setResource] = useInstancePersistentState<Resource>(
     instanceId,
     "workflow_resource",
@@ -59,12 +87,16 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
   >(instanceId, "workflow_launchId", () => undefined);
 
   function create() {
+    setProductLaunch(null);
+    setLaunchJobID(null);
     setLaunchWorkflowID(undefined);
     setSelectedId(null);
     setView("create");
   }
 
   function changeResource(r: Resource) {
+    setProductLaunch(null);
+    setLaunchJobID(null);
     setLaunchWorkflowID(undefined);
     setResource(r);
     setSelectedId(null);
@@ -75,6 +107,26 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
     setSelectedId(id);
     setView("show");
   }
+
+  useEffect(() => {
+    if (!incoming || incoming.kind !== "workflow_run") return;
+    setProductLaunch(incoming);
+    setLaunchJobID(null);
+    setLaunchWorkflowID(incoming.workflowId);
+    setResource("job");
+    setSelectedId(null);
+    setView("create");
+    consumeIntent(null);
+  }, [
+    incoming,
+    setProductLaunch,
+    setLaunchJobID,
+    setLaunchWorkflowID,
+    setResource,
+    setSelectedId,
+    setView,
+    consumeIntent,
+  ]);
 
   return (
     <>
@@ -94,7 +146,10 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
           headerSlot,
         )}
       <div className="media-app media-surface flex h-full min-h-0 flex-col">
-        {!(resource === "workflow" && view !== "list") && (
+        {!(
+          (resource === "workflow" || resource === "template") &&
+          view !== "list"
+        ) && (
           <div className="media-subnav">
             <Tabs
               value={resource}
@@ -126,10 +181,23 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
             />
           )}
           {resource === "template" && view === "create" && (
-            <TemplateCreate onDone={() => setView("list")} />
+            <TemplateCreate
+              instanceId={instanceId}
+              onDone={(id) => {
+                if (id) {
+                  setSelectedId(id);
+                  setView("show");
+                } else setView("list");
+              }}
+            />
           )}
           {resource === "template" && view === "edit" && selectedId && (
-            <TemplateEdit id={selectedId} onDone={() => setView("show")} />
+            <TemplateEdit
+              key={selectedId}
+              instanceId={instanceId}
+              id={selectedId}
+              onDone={() => setView("show")}
+            />
           )}
 
           {resource === "workflow" && view === "list" && (
@@ -150,6 +218,8 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
                 setView("show");
               }}
               onRun={() => {
+                setProductLaunch(null);
+                setLaunchJobID(null);
                 setLaunchWorkflowID(selectedId);
                 setResource("job");
                 setSelectedId(null);
@@ -185,18 +255,60 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
             />
           )}
           {resource === "job" && view === "show" && selectedId && (
-            <JobShow id={selectedId} onBack={() => setView("list")} />
-          )}
-          {resource === "job" && view === "create" && (
-            <JobCreate
-              preferredWorkflowId={launchWorkflowID}
-              onDone={() => setView("list")}
-              onSubmitted={(jobId) => {
-                setSelectedId(jobId);
-                setView("show");
+            <JobShow
+              onResume={() => {
+                setLaunchJobID(selectedId);
+                setLaunchMode("resume");
+                setView("create");
               }}
+              onRerun={() => {
+                setLaunchJobID(selectedId);
+                setLaunchMode("rerun");
+                setView("create");
+              }}
+              key={selectedId}
+              instanceId={instanceId}
+              id={selectedId}
+              onBack={() => setView("list")}
             />
           )}
+          {resource === "job" &&
+            view === "create" &&
+            launchJobID &&
+            !launchJob.data?.job && (
+              <ListState
+                loading={launchJob.isLoading}
+                error={launchJob.error?.message}
+                onRetry={() => void launchJob.refetch()}
+              />
+            )}
+          {resource === "job" &&
+            view === "create" &&
+            (!launchJobID || launchJob.data?.job) && (
+              <JobCreate
+                key={
+                  productLaunch?.requestId ||
+                  launchJobID ||
+                  launchWorkflowID ||
+                  "new"
+                }
+                launchIntent={productLaunch || undefined}
+                instanceId={instanceId}
+                mode={launchJobID ? launchMode : "submit"}
+                sourceJob={launchJobID ? launchJob.data?.job : undefined}
+                preferredWorkflowId={launchWorkflowID}
+                onDone={() => {
+                  if (launchJobID) {
+                    setSelectedId(launchJobID);
+                    setView("show");
+                  } else setView("list");
+                }}
+                onSubmitted={(jobId) => {
+                  setSelectedId(jobId);
+                  setView("show");
+                }}
+              />
+            )}
         </div>
       </div>
     </>

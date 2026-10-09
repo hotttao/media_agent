@@ -10,6 +10,7 @@
  * docs/plan/ui_workflow.md §4.3 方案 C.
  */
 import type * as React from "react";
+import type { AppNavigationPort } from "@/foundation/types/app-navigation";
 
 export interface PluginPanelProps {
   workspaceId: string;
@@ -40,6 +41,8 @@ export interface InstanceStateSetter<T> {
 }
 
 export interface NapHost {
+  /** Optional media workflow navigation extension; older hosts may omit it. */
+  navigation?: AppNavigationPort;
   version: string;
   React: typeof React;
   ReactDOM: typeof import("react-dom");

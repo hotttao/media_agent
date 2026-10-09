@@ -1,7 +1,58 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getWorkflow, validateWorkflow, updateWorkflow } from "./api";
+import {
+  getWorkflow,
+  validateWorkflow,
+  updateWorkflow,
+  createWorkflow,
+} from "./api";
 
 describe("workflow wire normalization", () => {
+  it("serializes binding enums as numeric HTTP values for validate, create and update", async () => {
+    const fetch = vi
+      .fn()
+      .mockImplementation((_url: string, _options?: RequestInit) =>
+        Promise.resolve(
+          new Response(JSON.stringify({ valid: true, id: "wf", version: 1 })),
+        ),
+      );
+    vi.stubGlobal("fetch", fetch);
+    const input = {
+      name: "Probe",
+      scope: "media",
+      output_step_key: "video",
+      steps: [
+        {
+          key: "video",
+          template_id: "template",
+          template_version: 1,
+          slot_bindings: [
+            {
+              to_input: "product",
+              source: "workflow_input" as const,
+              ref: "product",
+            },
+            { to_input: "image", source: "step_output" as const, ref: "image" },
+            {
+              to_input: "note",
+              source: "const" as const,
+              const_value: "literal",
+            },
+          ],
+        },
+      ],
+    };
+    await validateWorkflow(input);
+    await createWorkflow(input);
+    await updateWorkflow("wf", input);
+    for (const call of fetch.mock.calls) {
+      const body = JSON.parse(String(call[1]?.body));
+      expect(body.steps[0].slot_bindings).toEqual({
+        product: { source: 1, ref: "product", const_value: "" },
+        image: { source: 2, ref: "image", const_value: "" },
+        note: { source: 3, ref: "", const_value: "literal" },
+      });
+    }
+  });
   it("does not treat explicit rejection with an empty reasons array as valid", async () => {
     vi.stubGlobal(
       "fetch",

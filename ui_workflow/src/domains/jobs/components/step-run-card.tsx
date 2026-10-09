@@ -1,218 +1,356 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 import { StepRunStatusBadge } from "@/domains/jobs/components/status-badge";
 import {
   useConfirmStepRun,
   useRegenerateStepRun,
 } from "@/domains/jobs/hooks/use-job-mutations";
+import {
+  candidateFingerprint,
+  feedbackBytes,
+  validCandidatePosition,
+  type ReviewIntent,
+} from "@/domains/jobs/lib/review-intent";
 import type { StepRun } from "@/domains/jobs/types";
+import { hostShim } from "@/foundation/lib/host-shim";
 import { cn } from "@/foundation/lib/utils";
+import { requestKey } from "@/foundation/lib/request-key";
 
-function isVideoURL(url: string) {
-  return /\.(mp4|webm|mov|m4v)(?:$|[?#])/i.test(url);
-}
-
-function CandidatePreview({ url, index }: { url: string; index: number }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
+export function CandidatePreview({
+  url,
+  label,
+}: {
+  url: string;
+  label: string;
+}) {
+  const { t } = useTranslation();
+  const [failedURL, setFailedURL] = useState<string>();
+  if (failedURL === url)
     return (
       <p
-        className="rounded-lg bg-muted p-4 text-sm text-muted-foreground"
         role="status"
+        className="rounded-xl bg-muted p-6 text-xs text-muted-foreground"
       >
-        媒体暂时无法预览，请检查资源地址。
+        {t("execution.mediaError")}
       </p>
     );
-  }
-  if (isVideoURL(url)) {
+  if (/\.(mp4|webm|mov|m4v)(?:$|[?#])/i.test(url))
     return (
-      // biome-ignore lint/a11y/useMediaCaption: generated videos do not provide caption tracks.
+      // biome-ignore lint/a11y/useMediaCaption: generated videos have no caption tracks.
       <video
         src={url}
         controls
         preload="metadata"
-        onError={() => setFailed(true)}
-        className="aspect-video max-h-80 w-full rounded-lg bg-muted object-contain"
-        aria-label={`候选视频 ${index + 1}`}
+        aria-label={label}
+        onError={() => setFailedURL(url)}
+        className="aspect-video max-h-80 w-full rounded-xl bg-muted object-contain"
       />
     );
-  }
   return (
     <img
       src={url}
-      alt={`候选图片 ${index + 1}`}
-      onError={() => setFailed(true)}
-      className="aspect-video max-h-80 w-full rounded-lg bg-muted object-contain"
+      alt={label}
       loading="lazy"
+      onError={() => setFailedURL(url)}
+      className="aspect-[4/3] max-h-80 w-full rounded-xl bg-muted object-contain"
     />
   );
 }
 
-/**
- * One StepRun rendered as a card. When status === need_confirm, shows the
- * candidates list and lets the user pick one (selected_index) then Confirm;
- * Regenerate is always available for non-terminal steps. Local state holds the
- * in-progress selection so the radio does not jump back to selected_index
- * while the mutation is in flight.
- */
 export function StepRunCard({
   jobId,
   stepRun,
+  instanceId,
+  reviewAllowed = true,
 }: {
   jobId: string;
   stepRun: StepRun;
+  instanceId: string;
+  reviewAllowed?: boolean;
 }) {
+  const { t } = useTranslation();
   const confirm = useConfirmStepRun();
   const regenerate = useRegenerateStepRun();
-  const [picked, setPicked] = useState<number | null>(
-    stepRun.selected_index ?? null,
+  const fingerprint = candidateFingerprint(stepRun);
+  const [selection, setSelection] = hostShim.useInstanceState<{
+    fingerprint: string;
+    position: number;
+  } | null>(instanceId, `workflow_review_selection_${stepRun.id}`, () => null);
+  const [intent, setIntent] = hostShim.useInstanceState<ReviewIntent | null>(
+    instanceId,
+    `workflow_review_intent_${stepRun.id}`,
+    () => null,
   );
+  const [feedback, setFeedback] = hostShim.useInstanceState(
+    instanceId,
+    `workflow_review_feedback_${stepRun.id}`,
+    () => "",
+  );
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const needsConfirm = reviewAllowed && stepRun.status === "need_confirm";
+  const picked =
+    selection?.fingerprint === fingerprint ? selection.position : null;
+  const currentIntent = intent?.fingerprint === fingerprint ? intent : null;
+  const pendingReceipt = stepRun.last_review_status === "pending";
+  const locked =
+    confirm.isPending ||
+    regenerate.isPending ||
+    pendingReceipt ||
+    Boolean(currentIntent);
+  useEffect(() => {
+    if (!needsConfirm) {
+      setSelection(null);
+      if (intent?.accepted) {
+        setIntent(null);
+        setFeedback("");
+      }
+    } else if (
+      intent?.accepted &&
+      intent.decision === "regenerate" &&
+      intent.receiptID &&
+      stepRun.last_review_id === intent.receiptID &&
+      stepRun.last_review_status === "applied"
+    ) {
+      // An applied regeneration may return the same immutable media in a mock.
+      // The parent has returned to review, and this exact receipt is applied.
+      setIntent(null);
+      setSelection(null);
+      setFeedback("");
+    }
+  }, [
+    needsConfirm,
+    intent?.accepted,
+    intent?.decision,
+    intent?.receiptID,
+    stepRun.last_review_id,
+    stepRun.last_review_status,
+    setSelection,
+    setIntent,
+    setFeedback,
+  ]);
 
-  const needsConfirm = stepRun.status === "need_confirm";
-  const canRegenerate = stepRun.status === "need_confirm";
-
+  function submit(command: ReviewIntent) {
+    setIntent(command);
+    const onSuccess = (receipt: StepRun) => {
+      setIntent({
+        ...command,
+        accepted: true,
+        receiptID: receipt?.last_review_id,
+      });
+      setFeedbackOpen(false);
+    };
+    if (command.decision === "accept")
+      confirm.mutate(
+        {
+          jobId,
+          stepRunId: stepRun.id,
+          selectedIndex: command.position!,
+          idempotencyKey: command.key,
+        },
+        { onSuccess },
+      );
+    else
+      regenerate.mutate(
+        {
+          jobId,
+          stepRunId: stepRun.id,
+          feedback: command.feedback,
+          idempotencyKey: command.key,
+        },
+        { onSuccess },
+      );
+  }
+  const error = confirm.error || regenerate.error;
   return (
-    <article className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-card/80 p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h3 className="font-semibold">
-            {stepRun.step_key.replaceAll("_", " ")}
-          </h3>
-          <span className="text-xs text-muted-foreground">
-            #{stepRun.step_order}
-          </span>
-          <StepRunStatusBadge status={stepRun.status} />
-          {stepRun.retry_count > 0 ? (
-            <span className="text-xs text-muted-foreground">
-              retry {stepRun.retry_count}
-            </span>
-          ) : null}
-        </div>
-        <div className="flex gap-2">
-          {needsConfirm ? (
-            <Button
-              size="sm"
-              disabled={confirm.isPending || picked === null}
-              onClick={() =>
-                confirm.mutate({
-                  jobId,
-                  stepRunId: stepRun.id,
-                  selectedIndex: picked ?? 0,
-                })
-              }
-            >
-              {confirm.isPending ? <Spinner className="h-4 w-4" /> : null}
-              确认使用
-            </Button>
-          ) : null}
-          {canRegenerate ? (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={regenerate.isPending}
-              onClick={() =>
-                regenerate.mutate({ jobId, stepRunId: stepRun.id })
-              }
-            >
-              {regenerate.isPending ? <Spinner className="h-4 w-4" /> : null}
-              重新生成
-            </Button>
-          ) : null}
-        </div>
+    <article
+      aria-label={t("execution.nodeResults")}
+      className="flex min-w-0 flex-col gap-4 p-4"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">{stepRun.step_key}</h2>
+        <StepRunStatusBadge status={stepRun.status} />
       </div>
-
-      <dl className="grid gap-x-3 gap-y-1 text-xs sm:grid-cols-[8rem_1fr]">
-        <dt className="text-muted-foreground">模板版本</dt>
-        <dd>v{stepRun.template_version}</dd>
-        {stepRun.output_asset_id ? (
-          <>
-            <dt className="text-muted-foreground">产物编号</dt>
-            <dd className="break-all">{stepRun.output_asset_id}</dd>
-          </>
-        ) : null}
-        {stepRun.failure_reason ? (
-          <>
-            <dt className="text-muted-foreground">失败原因</dt>
-            <dd className="break-words text-destructive">
-              {stepRun.failure_reason}
-            </dd>
-          </>
-        ) : null}
-      </dl>
-
+      <p className="text-xs text-muted-foreground">
+        {t("execution.templateVersion", { version: stepRun.template_version })}
+      </p>
+      {stepRun.failure_reason ? (
+        <p
+          role="alert"
+          className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          {stepRun.failure_reason}
+        </p>
+      ) : null}
+      {needsConfirm ? (
+        <p className="rounded-xl bg-warning/10 p-3 text-sm">
+          {t("execution.chooseResult")}
+        </p>
+      ) : null}
+      {pendingReceipt || currentIntent?.accepted ? (
+        <p role="status" className="rounded-xl bg-primary/10 p-3 text-sm">
+          {t("execution.decisionPending")}
+        </p>
+      ) : null}
+      {error ? (
+        <div role="alert" className="space-y-2 text-sm text-destructive">
+          <p>{error.message}</p>
+          {currentIntent && !currentIntent.accepted ? (
+            <>
+              <p className="text-xs">{t("execution.unknownDecision")}</p>
+              <Button
+                variant="outline"
+                disabled={confirm.isPending || regenerate.isPending}
+                onClick={() => submit(currentIntent)}
+              >
+                {t("execution.replayDecision")}
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+      {stepRun.last_review_status === "failed" ? (
+        <p className="text-xs text-destructive">
+          {t("execution.receiptFailed")}
+        </p>
+      ) : null}
+      <div className="grid gap-3">
+        {stepRun.candidates.map((candidate, position) => {
+          const selected = needsConfirm
+            ? picked === position
+            : stepRun.status === "succeeded" &&
+              stepRun.selected_index === position;
+          return (
+            <div
+              key={`${fingerprint}-${position}`}
+              className={cn(
+                "space-y-3 rounded-xl border p-3",
+                selected
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-background",
+              )}
+            >
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="radio"
+                  name={`candidate-${stepRun.id}`}
+                  aria-label={t("execution.candidate", {
+                    number: position + 1,
+                  })}
+                  checked={selected}
+                  disabled={!needsConfirm || locked}
+                  onChange={() => setSelection({ fingerprint, position })}
+                />
+                {t("execution.candidate", { number: position + 1 })}
+                {selected && !needsConfirm ? (
+                  <span className="ml-auto text-xs text-success">
+                    {t("execution.accepted")}
+                  </span>
+                ) : null}
+              </label>
+              {candidate.url ? (
+                <>
+                  <CandidatePreview
+                    url={candidate.url}
+                    label={t("execution.candidate", { number: position + 1 })}
+                  />
+                  <a
+                    href={candidate.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-primary underline"
+                  >
+                    {t("execution.openMedia")}
+                  </a>
+                </>
+              ) : null}
+              {candidate.content ? (
+                <p className="max-h-40 overflow-auto whitespace-pre-wrap text-sm leading-6">
+                  {candidate.content}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      {needsConfirm ? (
+        <div className="space-y-3">
+          <Button
+            className="w-full"
+            disabled={locked || !validCandidatePosition(stepRun, picked)}
+            onClick={() =>
+              submit({
+                key: requestKey(),
+                fingerprint,
+                decision: "accept",
+                position: picked!,
+              })
+            }
+          >
+            {t("execution.confirm")}
+          </Button>
+          <Button
+            className="w-full"
+            variant="outline"
+            disabled={locked}
+            onClick={() => setFeedbackOpen((open) => !open)}
+          >
+            {t("execution.regenerate")}
+          </Button>
+          {feedbackOpen ? (
+            <div className="space-y-2">
+              <Textarea
+                aria-label={t("execution.feedback")}
+                placeholder={t("execution.feedbackHint")}
+                value={feedback}
+                onChange={(event) => setFeedback(event.target.value)}
+                disabled={locked}
+              />
+              <p className="text-xs text-muted-foreground">
+                {feedbackBytes(feedback)} / 8192 bytes
+              </p>
+              <Button
+                disabled={locked || feedbackBytes(feedback) > 8192}
+                onClick={() =>
+                  submit({
+                    key: requestKey(),
+                    fingerprint,
+                    decision: "regenerate",
+                    feedback,
+                  })
+                }
+              >
+                {t("execution.sendFeedback")}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {stepRun.output_asset_id ? (
+        <details className="text-xs">
+          <summary className="cursor-pointer">
+            {t("execution.assetReference")}
+          </summary>
+          <p className="mt-2 break-all text-muted-foreground">
+            {stepRun.output_asset_id}
+          </p>
+        </details>
+      ) : null}
       {stepRun.rendered_prompt ? (
         <details className="text-sm">
           <summary className="cursor-pointer font-medium">
-            查看生成提示词
+            {t("execution.prompt")}
           </summary>
-          <p className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/60 p-3 leading-6">
+          <p className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded-xl bg-muted/50 p-3 text-xs leading-6">
             {stepRun.rendered_prompt}
           </p>
         </details>
       ) : null}
-
-      {stepRun.candidates.length > 0 ? (
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium">
-            {needsConfirm ? "请选择要使用的结果" : "生成结果"}
-          </p>
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {stepRun.candidates.map((c) => {
-              const isPicked = picked === c.index;
-              const isSelected = stepRun.selected_index === c.index;
-              return (
-                <li
-                  key={c.index}
-                  className={cn(
-                    "flex min-w-0 items-start gap-2 rounded-xl border p-3 text-xs",
-                    isPicked
-                      ? "border-info bg-info/10"
-                      : "border-border bg-card",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name={`step-run-${stepRun.id}-candidate`}
-                    checked={isPicked}
-                    disabled={!needsConfirm}
-                    onChange={() => setPicked(c.index)}
-                    className="mt-0.5"
-                  />
-                  <div className="flex flex-1 flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">#{c.index}</span>
-                      {c.is_primary ? (
-                        <span className="text-muted-foreground">primary</span>
-                      ) : null}
-                      {isSelected && !needsConfirm ? (
-                        <span className="text-success">selected</span>
-                      ) : null}
-                    </div>
-                    {c.url ? (
-                      <>
-                        <CandidatePreview url={c.url} index={c.index} />
-                        <a
-                          href={c.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-info hover:underline"
-                        >
-                          打开媒体
-                        </a>
-                      </>
-                    ) : null}
-                    {c.content ? (
-                      <p className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 text-xs">
-                        {c.content}
-                      </p>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+      {!stepRun.candidates.length ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          {t("execution.noResults")}
+        </p>
       ) : null}
     </article>
   );

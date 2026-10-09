@@ -132,7 +132,9 @@ export function WorkflowCreate({
             ? validationResult.result
             : null
         }
-        templateOptions={templates?.items}
+        templateOptions={templates?.items.filter(
+          (template) => template.organization_id === shell.organization.id,
+        )}
         submitDisabled={
           !value.workspace_id ||
           !choices.some((workspace) => workspace.id === value.workspace_id)

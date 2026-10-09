@@ -1,5 +1,7 @@
+import { AppStudioHeader } from "@/foundation/components/app-studio-header";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { StructuredObjectEditor } from "@/foundation/components/structured-object-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,11 +10,6 @@ import { hostShim } from "@/foundation/lib/host-shim";
 import type { ProductInput } from "../types";
 import { ProductImagesField } from "./product-images-field";
 
-function jsonText(value?: Record<string, unknown>) {
-  return value && Object.keys(value).length
-    ? JSON.stringify(value, null, 2)
-    : "";
-}
 function listText(value?: unknown[]) {
   return value?.map(String).join("\n") ?? "";
 }
@@ -37,34 +34,29 @@ export function ProductForm({
   const { t } = useTranslation();
   const { organization } = hostShim.useShellContext();
   const [uploading, setUploading] = useState(false);
-  const [externalText, setExternalText] = useState(() =>
-    jsonText(value.external_commerce),
-  );
-  const [metadataText, setMetadataText] = useState(() =>
-    jsonText(value.metadata),
-  );
-  const [jsonError, setJsonError] = useState<Record<string, string>>({});
-  function changeJSON(key: "external_commerce" | "metadata", text: string) {
-    key === "metadata" ? setMetadataText(text) : setExternalText(text);
-    if (!text.trim()) {
-      setJsonError((old) => ({ ...old, [key]: "" }));
-      onChange({ ...value, [key]: undefined });
-      return;
-    }
-    try {
-      const parsed = JSON.parse(text) as Record<string, unknown>;
-      setJsonError((old) => ({ ...old, [key]: "" }));
-      onChange({ ...value, [key]: parsed });
-    } catch (error) {
-      setJsonError((old) => ({
-        ...old,
-        [key]:
-          error instanceof Error ? error.message : t("materialForm.jsonError"),
-      }));
-    }
-  }
   return (
     <div className="flex flex-col gap-6">
+      <AppStudioHeader>
+        <h1 className="truncate text-base font-semibold">
+          {value.name || submitLabel}
+        </h1>{" "}
+        <div className="flex gap-2">
+          <Button
+            onClick={onSubmit}
+            disabled={
+              isPending ||
+              uploading ||
+              !value.name.trim() ||
+              !value.scope.trim()
+            }
+          >
+            {uploading ? t("materialForm.uploading") : submitLabel}
+          </Button>
+          <Button variant="ghost" onClick={onCancel}>
+            {t("common.cancel")}
+          </Button>
+        </div>
+      </AppStudioHeader>
       <section className="grid gap-4 rounded-xl border p-4">
         <div>
           <h3 className="font-medium">{t("productForm.productInfo")}</h3>
@@ -74,7 +66,7 @@ export function ProductForm({
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
-            <Label>Scope</Label>
+            <Label>{t("v12.scope")}</Label>
             <Input
               disabled={isEdit}
               value={value.scope}
@@ -84,6 +76,7 @@ export function ProductForm({
           <div className="grid gap-2">
             <Label>{t("materialForm.name")}</Label>
             <Input
+              aria-label={t("materialForm.name")}
               value={value.name}
               onChange={(e) => onChange({ ...value, name: e.target.value })}
             />
@@ -166,49 +159,21 @@ export function ProductForm({
         <h3 className="font-medium">{t("productForm.extended")}</h3>
         <div className="grid gap-2">
           <Label>{t("productForm.externalCommerce")}</Label>
-          <Textarea
-            className="font-mono text-xs"
-            rows={5}
-            value={externalText}
-            onChange={(e) => changeJSON("external_commerce", e.target.value)}
-            placeholder="{}"
+          <StructuredObjectEditor
+            value={value.external_commerce}
+            onChange={(external_commerce) =>
+              onChange({ ...value, external_commerce })
+            }
           />
-          {jsonError.external_commerce ? (
-            <p className="text-xs text-destructive">
-              {jsonError.external_commerce}
-            </p>
-          ) : null}
         </div>
         <div className="grid gap-2">
-          <Label>Metadata (JSON)</Label>
-          <Textarea
-            className="font-mono text-xs"
-            rows={5}
-            value={metadataText}
-            onChange={(e) => changeJSON("metadata", e.target.value)}
-            placeholder="{}"
+          <Label>{t("materialDetail.metadata")}</Label>
+          <StructuredObjectEditor
+            value={value.metadata}
+            onChange={(metadata) => onChange({ ...value, metadata })}
           />
-          {jsonError.metadata ? (
-            <p className="text-xs text-destructive">{jsonError.metadata}</p>
-          ) : null}
         </div>
       </section>
-      <div className="flex gap-2">
-        <Button
-          onClick={onSubmit}
-          disabled={
-            isPending ||
-            uploading ||
-            Object.values(jsonError).some(Boolean) ||
-            !value.name.trim()
-          }
-        >
-          {uploading ? t("materialForm.uploading") : submitLabel}
-        </Button>
-        <Button variant="ghost" onClick={onCancel}>
-          {t("common.cancel")}
-        </Button>
-      </div>
     </div>
   );
 }

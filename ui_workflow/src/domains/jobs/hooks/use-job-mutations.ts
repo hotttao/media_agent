@@ -38,13 +38,8 @@ export function useCancelJob() {
 export function useRetryJob() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      jobId,
-      body,
-    }: {
-      jobId: string;
-      body?: RetryJobInput;
-    }) => retryJob(jobId, body ?? {}),
+    mutationFn: ({ jobId, body }: { jobId: string; body?: RetryJobInput }) =>
+      retryJob(jobId, body ?? {}),
     onSuccess: (_job, { jobId }) => invalidateAll(qc, jobId),
   });
 }
@@ -55,11 +50,13 @@ export function useConfirmStepRun() {
     mutationFn: ({
       stepRunId,
       selectedIndex,
+      idempotencyKey,
     }: {
       jobId: string;
       stepRunId: string;
       selectedIndex: number;
-    }) => confirmStepRun(stepRunId, selectedIndex),
+      idempotencyKey?: string;
+    }) => confirmStepRun(stepRunId, selectedIndex, idempotencyKey),
     onSuccess: (_stepRun, { jobId }) => invalidateAll(qc, jobId),
   });
 }
@@ -67,8 +64,16 @@ export function useConfirmStepRun() {
 export function useRegenerateStepRun() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ stepRunId }: { jobId: string; stepRunId: string }) =>
-      regenerateStepRun(stepRunId),
+    mutationFn: ({
+      stepRunId,
+      feedback,
+      idempotencyKey,
+    }: {
+      jobId: string;
+      stepRunId: string;
+      feedback?: string;
+      idempotencyKey?: string;
+    }) => regenerateStepRun(stepRunId, feedback, idempotencyKey),
     onSuccess: (_stepRun, { jobId }) => invalidateAll(qc, jobId),
   });
 }

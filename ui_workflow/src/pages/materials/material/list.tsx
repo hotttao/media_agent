@@ -1,7 +1,7 @@
+import { ConfirmActionButton } from "@/foundation/components/confirm-action-button";
 import { Box, Clock3, ImageIcon, Search, Trash2, Video } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,13 +13,9 @@ import { useDeleteMaterial } from "@/domains/materials/hooks/use-material-mutati
 import { useMaterialsList } from "@/domains/materials/hooks/use-materials-list";
 import type { Material } from "@/domains/materials/types";
 import { LibraryImage } from "@/foundation/components/library-image";
+import { ListPagination } from "@/foundation/components/resource-list-layout";
 
-const KIND_STYLES = [
-  "from-emerald-500/25 via-teal-500/10 to-cyan-500/20",
-  "from-violet-500/25 via-fuchsia-500/10 to-pink-500/20",
-  "from-amber-500/25 via-orange-500/10 to-rose-500/20",
-  "from-sky-500/25 via-blue-500/10 to-indigo-500/20",
-];
+const KIND_STYLES = ["from-muted/60 via-muted/40 to-background"];
 
 function kindStyle(kind: string): string {
   let hash = 0;
@@ -63,10 +59,12 @@ export function MaterialsList({
 }) {
   const { t, i18n } = useTranslation();
   const [selectedKinds, setSelectedKinds] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
   const { data, isLoading, isError, error } = useMaterialsList({
     asset_kind: selectedKinds.length > 0 ? selectedKinds.join(",") : undefined,
     only_mine: false,
-    page_size: 200,
+    page,
+    page_size: 24,
   });
   const { data: kinds } = useAssetKindsList({
     resource_type: "MATERIAL",
@@ -76,6 +74,7 @@ export function MaterialsList({
   const deleteMaterial = useDeleteMaterial();
   const [search, setSearch] = useState("");
   const toggleKind = (kind: string, checked: boolean) => {
+    setPage(1);
     setSelectedKinds((current) =>
       checked
         ? [...current, kind]
@@ -173,10 +172,12 @@ export function MaterialsList({
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              aria-label={t("materialsList.search")}
               placeholder={t("materialsList.search")}
               className="bg-background/70 pl-9"
             />
           </div>
+          <p className="text-xs text-muted-foreground">{t("v12.pageOnly")}</p>
         </div>
       </div>
 
@@ -194,7 +195,7 @@ export function MaterialsList({
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+          <div className="media-library-grid p-5">
             {visibleItems.map((material) => {
               const metadata = metadataOf(material);
               const source =
@@ -270,7 +271,7 @@ export function MaterialsList({
                     </div>
                   </button>
 
-                  <Button
+                  <ConfirmActionButton
                     variant="ghost"
                     size="icon"
                     aria-label={t("materialsList.delete", {
@@ -278,16 +279,25 @@ export function MaterialsList({
                     })}
                     className="absolute bottom-2 right-2 h-8 w-8 opacity-0 transition group-hover:opacity-100 focus:opacity-100"
                     disabled={deleteMaterial.isPending}
-                    onClick={() => deleteMaterial.mutate(material.id)}
+                    onConfirm={() => deleteMaterial.mutateAsync(material.id)}
                   >
                     <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </ConfirmActionButton>
                 </article>
               );
             })}
           </div>
         )}
       </ScrollArea>
+      <ListPagination
+        page={page}
+        total={data?.total ?? 0}
+        pageSize={24}
+        onPage={(next) => {
+          setPage(next);
+          setSearch("");
+        }}
+      />
     </div>
   );
 }

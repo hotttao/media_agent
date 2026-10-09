@@ -7,12 +7,59 @@
  */
 import { api } from "@/foundation/lib/api-client";
 import type {
+  AssetKindResourceType,
+  AssetKindMediaType,
+  AssetKindStatus,
   AssetKind,
   AssetKindInput,
   AssetKindsPage,
   AssetKindUpdateInput,
   ListAssetKindsParams,
 } from "../types";
+
+const resourceTypes: Record<AssetKindResourceType, number> = {
+  MATERIAL: 1,
+  ASSET: 2,
+  PRODUCT: 3,
+  VIRTUAL_IP: 4,
+  TEXT: 5,
+};
+const mediaTypes: Record<AssetKindMediaType, number> = {
+  IMAGE: 1,
+  TEXT: 2,
+  VIDEO: 3,
+};
+const statuses: Record<AssetKindStatus, number> = {
+  SYSTEM: 1,
+  ENABLED: 2,
+  DISABLED: 3,
+};
+type WireAssetKind = Omit<
+  AssetKind,
+  "resource_type" | "media_type" | "status"
+> & {
+  resource_type: string | number;
+  media_type: string | number;
+  status: string | number;
+};
+function enumName<T extends string>(
+  values: Record<T, number>,
+  value: string | number,
+): T {
+  const entry = Object.entries(values).find(
+    ([name, number]) => name === value || String(number) === String(value),
+  );
+  if (!entry) throw new Error(`Unsupported asset kind enum: ${String(value)}`);
+  return entry[0] as T;
+}
+function fromWire(item: WireAssetKind): AssetKind {
+  return {
+    ...item,
+    resource_type: enumName(resourceTypes, item.resource_type),
+    media_type: enumName(mediaTypes, item.media_type),
+    status: enumName(statuses, item.status),
+  };
+}
 
 function buildQuery(params: object): string {
   const qs = new URLSearchParams();
@@ -26,30 +73,48 @@ function buildQuery(params: object): string {
 export async function listAssetKinds(
   params: ListAssetKindsParams = {},
 ): Promise<AssetKindsPage> {
-  return api.request<AssetKindsPage>(`/asset-kinds${buildQuery(params)}`);
+  const page = await api.request<{ items?: WireAssetKind[]; total?: number }>(
+    `/asset-kinds${buildQuery(params)}`,
+  );
+  return { items: (page.items || []).map(fromWire), total: page.total || 0 };
 }
 
 export async function getAssetKind(name: string): Promise<AssetKind> {
-  return api.request<AssetKind>(`/asset-kinds/${encodeURIComponent(name)}`);
+  return fromWire(
+    await api.request<WireAssetKind>(
+      `/asset-kinds/${encodeURIComponent(name)}`,
+    ),
+  );
 }
 
 export async function createAssetKind(
   input: AssetKindInput,
 ): Promise<AssetKind> {
-  return api.request<AssetKind>("/asset-kinds", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return fromWire(
+    await api.request<WireAssetKind>("/asset-kinds", {
+      method: "POST",
+      body: JSON.stringify({
+        ...input,
+        resource_type: resourceTypes[input.resource_type],
+        media_type: mediaTypes[input.media_type],
+      }),
+    }),
+  );
 }
 
 export async function updateAssetKind(
   name: string,
   patch: AssetKindUpdateInput,
 ): Promise<AssetKind> {
-  return api.request<AssetKind>(`/asset-kinds/${encodeURIComponent(name)}`, {
-    method: "PUT",
-    body: JSON.stringify(patch),
-  });
+  return fromWire(
+    await api.request<WireAssetKind>(
+      `/asset-kinds/${encodeURIComponent(name)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      },
+    ),
+  );
 }
 
 export async function deleteAssetKind(name: string): Promise<void> {

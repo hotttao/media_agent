@@ -47,6 +47,7 @@ function PluginAppHeaderButton(props: Record<string, unknown>) {
 }
 
 export const pluginShim: HostShim = {
+  useNavigationPort: () => getTos().navigation,
   useAppHeaderSlot: () => getTos().windows.useAppHeaderSlot(),
   AppHeaderButton: PluginAppHeaderButton,
   useInstancePersistentState: (instanceId, key, defaultFn) =>

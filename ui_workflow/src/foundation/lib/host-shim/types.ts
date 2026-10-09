@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { User } from "@/foundation/types/auth";
+import type { AppNavigationPort } from "@/foundation/types/app-navigation";
 
 export interface CurrentUser {
   user: User | null;
@@ -25,6 +26,7 @@ export interface ShellContext {
  * and ./plugin), build-time selected via VITE_TARGET.
  */
 export interface HostShim {
+  useNavigationPort: () => AppNavigationPort | undefined;
   useAppHeaderSlot: () => HTMLDivElement | null;
   AppHeaderButton: ComponentType<Record<string, unknown>>;
   useInstancePersistentState: <T>(

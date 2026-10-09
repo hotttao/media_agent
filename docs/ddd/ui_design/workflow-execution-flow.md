@@ -19,6 +19,7 @@ Workflow App 根据已发布 Workflow 的 Input Schema 生成 Job 输入表单�
 2. `PRODUCT`、`VIRTUAL_IP` 分别显示当前 Organization 与 Workflow Scope 下的资源选择器。
 3. `MATERIAL`、`ASSET` 使用 Input Schema 冻结的 `asset_kind` 查询兼容资源；同一 Workflow 可以出现两个相同 kind 的独立输入，例如 `movement_a`、`movement_b`。
 4. required 输入未选择时禁用提交，并在对应字段显示原因；可选输入允许留空。
+   选择后显示实际参考媒体或文字摘要，纯文本不伪造图片；Product 使用主图、Virtual IP 优先全身参考。无扩展名对象的播放类型使用 Storage 解析响应的 content_type，不从业务分类猜测媒体。
 5. UI 把选中对象映射为自包含 JobInput bundle；Product 输入包含业务 ID 与主图（无主图则首图）的可访问 URL。携带 Workflow 当前版本提交，成功后打开 Job 详情。
 6. Workflow 切换会清空旧选择并加载新候选，不能把前一个 Workflow 的资源静默带入。
 7. Job 详情以执行进度、输入对象摘要和按顺序排列的 Step Run 展示服务端状态；图片与视频 Candidate 直接预览。提示词按需展开，内部输入 JSON 和临时签名 URL 不作为页面正文展示。
@@ -27,7 +28,17 @@ Workflow App 根据已发布 Workflow 的 Input Schema 生成 Job 输入表单�
 
 ## 状态与失败
 
+- 执行工具栏注入宿主 Header Portal，选中节点结果在 App 内右侧面板；窄 Slot 可覆盖并关闭。输入/提交时间放按需弹窗，图中只标真实 StepRun 状态。
+- 父 Job 进入取消/失败/成功等终态后，即使旧 StepRun 保留 need_confirm，候选仅供查看，不再显示审批命令。可运行定义必须有 registered 发布回执，published 字样或缺失注册信息不能当作已就绪。
+- 任务列表只针对当前可见的活动记录核对快照，终态停止轮询；定义详情的执行列表按需加载，不在关闭面板时持续读取每个 Job。前端轮询不能承担服务端调度或状态权威职责。
+- 用户选中的是当前候选数组位置，Candidate.index 只作来源信息。多候选必须显式选择；审批回执 pending 禁止再发另一决定，applied 不表示步骤已经完成。
+- 未确认的网络结果保留原意图键及内容，重试发送完全相同命令。面板/应用切换不丢失该内存意图；媒体签名更新不代表新生成轮。页面仅维护选择状态，不推导引擎轮次或权限。
+- 公开接口没有 expected-generation 前置条件，UI不能承诺跨窗口并发的原子轮次锁定；以服务端当前 HUMAN 与回执冲突为权威。不能用 retry_count 充当生成轮次。
+
 - Workflow、公司上下文或 Input Schema 加载中显示加载态，不渲染可提交的空表单。
+- Workflow 索引只作选择目录，不含发布回执时仍可显示已发布候选。选择后读取该定义详情，以真实 registered 回执、版本与 Input Schema 判定可提交状态；不能用缺少字段的索引把所有选项过滤为空，也不对整个目录批量读取详情。
+- 恢复/输入覆盖重跑等待原 Job 读取成功后再初始化表单，取消回到原执行。提交要求 Workspace 属于实际公司候选，选择对象仍在相应输入候选内；失效的实例内选择不能绕过提交禁用。
+- 执行信息弹窗展示结构化输入快照及参考媒体，窄 Slot 不依赖被隐藏的右侧摘要，也不退回 JSON 查看器。
 - 没有兼容资源时显示空态和资源类别，不使用任意类型资源兜底。
 - 候选查询失败保留 Workflow 选择，显示可重试错误；不降级为 JSON 编辑器。
 - 服务端返回版本冲突时重新加载 Workflow，要求用户复核输入后再提交。
