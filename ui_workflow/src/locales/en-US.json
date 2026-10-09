@@ -252,6 +252,9 @@
 		"intentRetained": "Original submission intent is retained. Replay uses the same key and inputs, not a second job."
 	},
 	"execution": {
+		"inspectApproval": "Review pending result",
+		"closeResults": "Close step results",
+		"readOnlyResult": "This execution cannot be reviewed in its current state. These are the last candidates for this step, shown read-only.",
 		"title": "Workflow execution",
 		"back": "Back to executions",
 		"details": "Execution details",

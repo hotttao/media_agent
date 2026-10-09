@@ -1,10 +1,15 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { candidateFingerprint } from "../lib/review-intent";
 import type { StepRun } from "../types";
 import { StepRunCard } from "./step-run-card";
 
-const actions = vi.hoisted(() => ({ confirm: vi.fn(), regenerate: vi.fn() }));
+const actions = vi.hoisted(() => ({
+  confirm: vi.fn(),
+  regenerate: vi.fn(),
+  intent: vi.fn(),
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, args?: { number?: number }) =>
@@ -13,8 +18,8 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("@/foundation/lib/host-shim", () => ({
   hostShim: {
-    useInstanceState: (_id: string, _key: string, initial: () => unknown) =>
-      useState(initial),
+    useInstanceState: (_id: string, key: string, initial: () => unknown) =>
+      useState(() => (key.includes("_intent_") ? actions.intent() : initial())),
   },
 }));
 vi.mock("@/domains/jobs/hooks/use-job-mutations", () => ({
@@ -38,12 +43,51 @@ const step = {
     },
   ],
 } as StepRun;
+beforeEach(() => actions.intent.mockReturnValue(null));
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
 
 describe("candidate approval", () => {
+  it("can replay a persisted undecided request even when the previous hook error is gone", () => {
+    actions.intent.mockReturnValue({
+      key: "prior-intent",
+      fingerprint: candidateFingerprint(step),
+      decision: "accept",
+      position: 0,
+    });
+    render(<StepRunCard jobId="job" instanceId="window" stepRun={step} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "execution.replayDecision" }),
+    );
+    expect(actions.confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedIndex: 0,
+        idempotencyKey: "prior-intent",
+      }),
+      expect.any(Object),
+    );
+  });
+  it("does not expose persisted request replay once the parent cannot be reviewed", () => {
+    actions.intent.mockReturnValue({
+      key: "prior-intent",
+      fingerprint: candidateFingerprint(step),
+      decision: "accept",
+      position: 0,
+    });
+    render(
+      <StepRunCard
+        jobId="job"
+        instanceId="window"
+        stepRun={step}
+        reviewAllowed={false}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "execution.replayDecision" }),
+    ).toBeNull();
+  });
   it("unlocks an identical regenerated result only for this applied receipt", () => {
     actions.regenerate.mockImplementation((_input, callbacks) =>
       callbacks.onSuccess({ ...step, last_review_id: "new-review" }),
@@ -135,6 +179,7 @@ describe("candidate approval", () => {
       screen.queryByRole("button", { name: "execution.regenerate" }),
     ).toBeNull();
     expect((screen.getByRole("radio") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText("execution.readOnlyResult")).toBeTruthy();
   });
   it("requires explicit selection and sends array position, then waits for the receipt", () => {
     actions.confirm.mockImplementation((_input, callbacks) =>

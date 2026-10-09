@@ -59,7 +59,12 @@ const STEP_RUN_STATUS_LABEL: Record<StepRunStatus, string> = {
 export function JobStatusBadge({ status }: { status: JobStatus }) {
   const { t } = useTranslation();
   return (
-    <Badge className={cn("font-medium capitalize", JOB_STATUS_STYLE[status])}>
+    <Badge
+      className={cn(
+        "shrink-0 whitespace-nowrap font-medium capitalize",
+        JOB_STATUS_STYLE[status],
+      )}
+    >
       {t(`v12.jobStatus.${status}`, { defaultValue: JOB_STATUS_LABEL[status] })}
     </Badge>
   );

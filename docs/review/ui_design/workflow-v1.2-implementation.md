@@ -111,3 +111,30 @@
 源码冻结后的门禁：28 文件/93 项单元与组件测试通过，无类型错误；typecheck、依赖检查（201 模块/669 依赖）、中英 key 与 diff whitespace 检查通过。独立版构建 1m54s、插件版 1m57s 成功，保留大块提示。新增英文详情空值/布尔/扩展空态与日期测试包含在本次 93 项中。使用 ui-design 保留实例内草稿和 Navigation Port/Slot/Header Portal 边界、按容器宽度降级及真实查询不足时的只读说明，没有另造运行语义。
 
 最终浏览器复核：四类素材详情同次执行 4/4 通过（Material 54.7s、Virtual IP 50.3s、Product 46.0s、Generated Asset 58.8s），覆盖真实媒体自然尺寸与 480px 无横向溢出，不写借用数据。最新插件包宿主 fixture 35.5s 通过，宿主主题/字体不变、窄 Slot 与 scoped portal 正常。测试仍使用 Vite 5173，首页返回 200；未切 nginx、未启动观测、未提交代码，用户 DESIGN.md 未改。剩余复杂查询见统一清单；完整新 Job 提交/审批/恢复写入、真实 media_platform 接入和性能验收仍未完成，不能将本次页面及 fixture 验证当作整个功能 goal 完成。
+
+## 第七批：执行画布与可恢复 Inspector
+
+先提交已有已验证改动 `a6104f1`，用户 DESIGN.md 不包含在提交内。继续只开发 UI，不恢复性能优化或修改原生引擎语义。
+
+执行拓扑从额外弹窗移到详情主区域；点击节点才打开右侧 Inspector，窄容器使用可关闭覆盖面板。输入快照及审计按需打开，不在右侧常驻。面板开闭和选择按 Job/instance 保留，轮询不重新打开或抢焦点。Escape 返回原选择按钮或画布；已知同版本定义用于画图，版本不匹配仅显示真实 StepRun 列表。
+
+未开始节点没有 StepRun 时明确显示尚未开始，不能回退显示另一个节点的 Candidate。待确认执行提供显式定位审批入口；父执行终态保留结果查看但不提供审批或决定重放。审批意图来自实例状态，即使 Inspector 卸载导致 Mutation error 丢失，重新打开仍可显式同键/同内容重放，pending 回执和请求中禁止重放。
+
+真实 E2E 首次画布/面板检查通过，但输入快照预览发现 403：`object_path:<path>` 冻结引用被直接作为存储路径提交。展示适配只拆除确切前缀，企业命名空间仍由原服务校验，外部 URL 和其他企业路径不被重写。修复后加入真实图片 naturalWidth 和解析 403 计数检查，完整只读执行页 1.6m 通过；该测试没有取消、确认、重新生成或重跑借用数据。
+
+组件首轮因 i18n 初始化依赖未完整 mock 无法收集，补齐外部初始化 mock 后 4 项 Inspector 回归通过；随后 typecheck 发现 Testing Library 不支持 Playwright 的 exact 参数，移除错误选项后通过。定向三文件 13 项通过；原有 multipart 上传及存储错误测试继续保留，并增加冻结引用解析测试。局部 lint 修正画布 region 可访问名称，未将此前两处 non-null assertion 警告伪装成零警告。
+
+最终源码门禁及最新包宿主结果在取得退出状态后追加；仍不把只读 UI 和组件审批测试当成真实新 Job 的完整执行写入验收。
+
+| 设计声明 | 实现位置 | 本批证据 | 状态 |
+| --- | --- | --- | --- |
+| 执行图为主体、按需 Inspector | JobShow / execution-workbench | 页面状态 4 项、真实图高度/选择/Escape/480px 回归 | aligned |
+| 冻结版本不匹配不画新图、无记录节点不显示他人结果 | JobShow | 两个组件场景 | aligned |
+| 父终态候选只读且明确原因 | StepRunCard / JobShow | 终态组件回归、最新真实取消执行截图 | aligned |
+| 未确认意图跨面板恢复后可同键重放 | StepRunCard | seed 实例意图且无 Hook error 的回归；终态无重放 | aligned |
+| 冻结引用展示解析不绕过命名空间 | library-object | 原 multipart/错误测试保留，新增精确前缀/其他企业/URL 不改写测试；浏览器图片尺寸与零 403 | aligned |
+| 完整新执行、再生成与恢复业务写入 | 既有命令/表单 | 本批只读借用执行，未消费 Worker 队列 | partial |
+
+全量 29 文件/101 项通过；最后只读提示与状态标签修正后，三文件 15 项定向回归通过，typecheck 与中英 key 检查成功。最新只读执行页再测 1.4m 通过；未更改借用任务或历史数据。初次 a11y lint 的画布 region 及测试定位问题已修正；局部 lint 成功退出，保留原 StepRunCard 两处 non-null assertion 警告。最新双构建/插件结果以收尾追加为准。
+
+收尾：最后源码改动后独立构建 1m30s、插件构建 1m20s 成功；最新插件宿主 fixture 24.8s 通过，主题/字体、窄 Slot 与 scoped portal 保持隔离。新 UI 改动未再次提交；服务保持 Vite 5173、首页 200，用户 DESIGN.md 未改动。包体积警告仍在，留给统一优化阶段；实际 media_platform 接入和新 Job 提交/审批/恢复业务写入验收不由本次 fixture 代替。

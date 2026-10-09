@@ -188,6 +188,14 @@ export function StepRunCard({
           {t("execution.chooseResult")}
         </p>
       ) : null}
+      {!reviewAllowed && stepRun.status === "need_confirm" ? (
+        <p
+          role="status"
+          className="rounded-xl bg-muted p-3 text-xs text-muted-foreground"
+        >
+          {t("execution.readOnlyResult")}
+        </p>
+      ) : null}
       {pendingReceipt || currentIntent?.accepted ? (
         <p role="status" className="rounded-xl bg-primary/10 p-3 text-sm">
           {t("execution.decisionPending")}
@@ -196,18 +204,23 @@ export function StepRunCard({
       {error ? (
         <div role="alert" className="space-y-2 text-sm text-destructive">
           <p>{error.message}</p>
-          {currentIntent && !currentIntent.accepted ? (
-            <>
-              <p className="text-xs">{t("execution.unknownDecision")}</p>
-              <Button
-                variant="outline"
-                disabled={confirm.isPending || regenerate.isPending}
-                onClick={() => submit(currentIntent)}
-              >
-                {t("execution.replayDecision")}
-              </Button>
-            </>
-          ) : null}
+        </div>
+      ) : null}
+      {needsConfirm &&
+      currentIntent &&
+      !currentIntent.accepted &&
+      !pendingReceipt &&
+      !confirm.isPending &&
+      !regenerate.isPending ? (
+        <div role="status" className="space-y-2 rounded-lg border p-3 text-sm">
+          <p className="text-xs">{t("execution.unknownDecision")}</p>
+          <Button
+            variant="outline"
+            disabled={confirm.isPending || regenerate.isPending}
+            onClick={() => submit(currentIntent)}
+          >
+            {t("execution.replayDecision")}
+          </Button>
         </div>
       ) : null}
       {stepRun.last_review_status === "failed" ? (

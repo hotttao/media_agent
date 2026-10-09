@@ -167,6 +167,7 @@ function WorkflowNodeCard({ data }: { data: GraphNodeData }) {
         selectedNodeId === renderedNodeId && "is-selected",
       )}
       onClick={() => renderedNodeId && onNodeSelect?.(renderedNodeId)}
+      aria-pressed={selectedNodeId === renderedNodeId}
       aria-label={t("graphUI.select", { name: title })}
     >
       <div className="workflow-node-icon">

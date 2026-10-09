@@ -30,7 +30,9 @@ export async function resolveLibraryMedia(
 ): Promise<{ url: string; content_type?: string }> {
   const query = new URLSearchParams({
     organization_id: organizationId,
-    object_path: objectPath,
+    object_path: objectPath.startsWith("object_path:")
+      ? objectPath.slice("object_path:".length)
+      : objectPath,
   });
   return api.request<{ url: string; content_type?: string }>(
     `/library-objects:resolve?${query.toString()}`,

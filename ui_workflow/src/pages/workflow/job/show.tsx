@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Info, Network, RefreshCw } from "lucide-react";
+import { ArrowLeft, Info, RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,7 +53,14 @@ export function JobShow({
   const [selectedKey, setSelectedKey] = hostShim.useInstanceState<
     string | null
   >(instanceId, `workflow_job_selected_${id}`, () => null);
-  const [graphOpen, setGraphOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = hostShim.useInstanceState<boolean>(
+    instanceId,
+    `workflow_job_panel_open_${id}`,
+    () => false,
+  );
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const canvas = useRef<HTMLDivElement>(null);
+  const selectionTrigger = useRef<HTMLElement | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [action, setAction] = useState<"cancel" | "retry" | null>(null);
   const cancel = useCancelJob();
@@ -61,17 +68,27 @@ export function JobShow({
   const steps = [...(query.data?.step_runs ?? [])].sort(
     (a, b) => a.step_order - b.step_order,
   );
-  const focused =
-    steps.find((step) => step.step_key === selectedKey) ??
-    steps.find((step) => step.status === "need_confirm") ??
-    steps.find((step) =>
-      ["running", "claimed", "failed", "pending"].includes(step.status),
-    ) ??
-    steps.at(-1);
+  const focused = steps.find((step) => step.step_key === selectedKey);
   const asset = useGeneratedAsset(focused?.output_asset_id);
   const shell = hostShim.useShellContext();
   const organizationId =
     query.data?.job.organization_id || shell.organization.id;
+  useEffect(() => {
+    if (panelOpen && selectedKey) closeButton.current?.focus();
+  }, [panelOpen, selectedKey]);
+  function selectStep(key: string) {
+    selectionTrigger.current =
+      document.activeElement instanceof HTMLButtonElement
+        ? document.activeElement
+        : null;
+    setSelectedKey(key);
+    setPanelOpen(true);
+  }
+  function closePanel() {
+    setPanelOpen(false);
+    if (selectionTrigger.current?.isConnected) selectionTrigger.current.focus();
+    else canvas.current?.focus();
+  }
   if (query.isLoading) return <ListState loading />;
   if (query.isError)
     return (
@@ -88,6 +105,10 @@ export function JobShow({
     workflow && workflow.version === job.workflow_version,
   );
   const operationPending = cancel.isPending || retry.isPending;
+  const reviewStep =
+    job.status === "need_confirm"
+      ? steps.find((step) => step.status === "need_confirm")
+      : undefined;
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden">
       <AppStudioHeader>
@@ -156,9 +177,21 @@ export function JobShow({
       </AppStudioHeader>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3 text-xs">
         <p className="font-medium">{t(position.key, position.values)}</p>
+        {reviewStep ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => selectStep(reviewStep.step_key)}
+          >
+            {t("execution.inspectApproval")}
+          </Button>
+        ) : null}
         <span className="text-muted-foreground">
           v{job.workflow_version} ·{" "}
-          {t("execution.progress", { completed, total: steps.length })}
+          {t("execution.progress", {
+            completed,
+            total: hasGraph && workflow ? workflow.steps.length : steps.length,
+          })}
         </span>
       </div>
       {query.isRefetchError ? (
@@ -166,148 +199,135 @@ export function JobShow({
           {t("execution.refreshError")}
         </p>
       ) : null}
-      <div className="execution-studio">
-        <nav aria-label={t("execution.nodes")} className="execution-steps">
-          {steps.map((step) => (
-            <button
-              type="button"
-              key={step.id}
-              aria-current={focused?.id === step.id ? "step" : undefined}
-              className="execution-step"
-              onClick={() => setSelectedKey(step.step_key)}
-            >
-              <span className="block text-sm font-semibold">
-                {step.step_key}
-              </span>
-              <span className="mt-2 block">
-                <StepRunStatusBadge status={step.status} />
-              </span>
-              {step.output_asset_id ? (
-                <span className="mt-2 block text-xs text-muted-foreground">
-                  {t("execution.resultReady")}
-                </span>
-              ) : null}
-            </button>
-          ))}
-          {!steps.length ? (
-            <p className="p-4 text-xs text-muted-foreground">
-              {t("execution.notStarted")}
-            </p>
-          ) : null}
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-4"
-            onClick={() => setGraphOpen(true)}
-          >
-            <Network className="mr-1 h-4 w-4" />
-            {t("execution.graph")}
-          </Button>
-        </nav>
-        <div className="min-w-0 overflow-y-auto px-2 py-3">
-          {job.failure_reason ? (
-            <p
-              role="alert"
-              className="m-4 rounded-xl bg-destructive/10 p-4 text-sm text-destructive"
-            >
-              {job.failure_reason}
-            </p>
-          ) : null}
-          {focused ? (
-            <>
-              {(asset.data?.object_path || asset.data?.url) &&
-              !focused.candidates.length ? (
-                <div className="p-4">
-                  <LibraryMedia
-                    organizationId={organizationId}
-                    objectPath={asset.data?.object_path || asset.data?.url}
-                    alt={t("execution.accepted")}
-                  />
-                </div>
-              ) : null}
-              <StepRunCard
-                key={focused.id}
-                jobId={id}
-                stepRun={focused}
-                instanceId={instanceId}
-                reviewAllowed={job.status === "need_confirm"}
-              />
-            </>
+      {job.failure_reason ? (
+        <p
+          role="alert"
+          className="border-b bg-destructive/5 px-4 py-2 text-sm text-destructive"
+        >
+          {job.failure_reason}
+        </p>
+      ) : null}
+      <div
+        className={`execution-workbench${panelOpen ? " has-inspector" : ""}`}
+      >
+        <div
+          ref={canvas}
+          role="region"
+          tabIndex={-1}
+          className="execution-main"
+          aria-label={t("execution.graph")}
+        >
+          {hasGraph && workflow ? (
+            <WorkflowGraph
+              model={{
+                steps: workflow.steps,
+                outputStepKey: workflow.output_step_key,
+                layout: "studio",
+              }}
+              className="absolute inset-0"
+              selectedNodeId={selectedKey || undefined}
+              onNodeSelect={selectStep}
+              executionStatus={Object.fromEntries(
+                steps.map((step) => [step.step_key, step.status]),
+              )}
+            />
           ) : (
-            <ListState empty={t("execution.notStarted")} />
+            <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-4">
+              <p
+                role="status"
+                className="text-xs leading-5 text-muted-foreground"
+              >
+                {t("execution.graphFallback")}
+              </p>
+              <nav
+                aria-label={t("execution.nodes")}
+                className="execution-steps"
+              >
+                {steps.map((step) => (
+                  <button
+                    type="button"
+                    key={step.id}
+                    aria-current={
+                      selectedKey === step.step_key ? "step" : undefined
+                    }
+                    className="execution-step"
+                    onClick={() => selectStep(step.step_key)}
+                  >
+                    <span className="block text-sm font-semibold">
+                      {step.step_key}
+                    </span>
+                    <span className="mt-2 block">
+                      <StepRunStatusBadge status={step.status} />
+                    </span>
+                    {step.output_asset_id ? (
+                      <span className="mt-2 block text-xs text-muted-foreground">
+                        {t("execution.resultReady")}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+                {!steps.length ? (
+                  <p className="p-4 text-xs text-muted-foreground">
+                    {t("execution.notStarted")}
+                  </p>
+                ) : null}
+              </nav>
+            </div>
           )}
         </div>
-        <aside className="execution-context">
-          <h2 className="text-sm font-semibold">{t("execution.inputs")}</h2>
-          {[
-            job.input.product?.name,
-            job.input.virtual_ip?.name,
-            ...(job.input.material ?? []).map(
-              (item) => item.name || item.content,
-            ),
-            ...(job.input.asset ?? []).map((item) => item.name),
-          ]
-            .filter(Boolean)
-            .map((name, index) => (
-              <p
-                key={index}
-                className="rounded-xl bg-background/70 p-3 text-xs leading-5"
+        {panelOpen ? (
+          <aside
+            className="execution-inspector"
+            aria-label={t("execution.nodeResults")}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.stopPropagation();
+                closePanel();
+              }
+            }}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b p-3">
+              <h2 className="truncate text-sm font-semibold">
+                {selectedKey || t("execution.nodeResults")}
+              </h2>
+              <Button
+                ref={closeButton}
+                size="icon"
+                variant="ghost"
+                aria-label={t("execution.closeResults")}
+                onClick={closePanel}
               >
-                {name}
-              </p>
-            ))}
-          <h2 className="pt-4 text-sm font-semibold">
-            {t("execution.submitted")}
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            {formatDetailDate(job.submitted_at)}
-          </p>
-          {job.origin === "legacy_import" ? (
-            <p className="text-xs leading-5 text-muted-foreground">
-              {t("execution.imported")}
-            </p>
-          ) : null}
-          <p className="pt-4 text-xs leading-6 text-muted-foreground">
-            {t("execution.stateAuthority")}
-          </p>
-        </aside>
-      </div>
-      <Dialog open={graphOpen} onOpenChange={setGraphOpen}>
-        <DialogContent className="flex h-[80vh] max-w-5xl flex-col">
-          <DialogHeader>
-            <DialogTitle>{t("execution.graph")}</DialogTitle>
-            <DialogDescription>
-              {hasGraph
-                ? t("execution.graphHint")
-                : t("execution.graphUnavailable")}
-            </DialogDescription>
-          </DialogHeader>
-          {hasGraph && workflow ? (
-            <div className="workflow-workbench-canvas flex-1">
-              <WorkflowGraph
-                model={{
-                  steps: workflow.steps,
-                  outputStepKey: workflow.output_step_key,
-                  layout: "studio",
-                }}
-                className="absolute inset-0"
-                selectedNodeId={focused?.step_key}
-                onNodeSelect={(key) => {
-                  setSelectedKey(key);
-                  setGraphOpen(false);
-                }}
-                executionStatus={Object.fromEntries(
-                  steps.map((step) => [step.step_key, step.status]),
-                )}
-              />
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {t("execution.graphFallback")}
-            </p>
-          )}
-        </DialogContent>
-      </Dialog>
+            <div className="min-h-0 overflow-y-auto px-2 py-3">
+              {focused ? (
+                <>
+                  {(asset.data?.object_path || asset.data?.url) &&
+                  !focused.candidates.length ? (
+                    <div className="p-4">
+                      <LibraryMedia
+                        organizationId={organizationId}
+                        objectPath={asset.data?.object_path || asset.data?.url}
+                        alt={t("execution.accepted")}
+                      />
+                    </div>
+                  ) : null}
+                  <StepRunCard
+                    key={focused.id}
+                    jobId={id}
+                    stepRun={focused}
+                    instanceId={instanceId}
+                    reviewAllowed={job.status === "need_confirm"}
+                  />
+                </>
+              ) : (
+                <ListState empty={t("execution.notStarted")} />
+              )}
+            </div>
+          </aside>
+        ) : null}
+      </div>
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -316,6 +336,14 @@ export function JobShow({
               {t("execution.inputSnapshot")}
             </DialogDescription>
           </DialogHeader>
+          {job.origin === "legacy_import" ? (
+            <p className="text-xs text-muted-foreground">
+              {t("execution.imported")}
+            </p>
+          ) : null}
+          <p className="text-xs text-muted-foreground">
+            {t("execution.stateAuthority")}
+          </p>
           <dl className="grid gap-3 text-sm">
             <dt>{t("execution.submitted")}</dt>
             <dd>{formatDetailDate(job.submitted_at)}</dd>

@@ -249,6 +249,9 @@
 		"intentRetained": "已保留原提交意图；核对结果将复用同一个键及输入，不创建另一条任务。"
 	},
 	"execution": {
+		"inspectApproval": "处理待确认节点",
+		"closeResults": "关闭节点结果",
+		"readOnlyResult": "当前执行状态不接受审批。这里保留的是该节点最后的候选结果，仅供查看。",
 		"title": "工作流执行",
 		"back": "返回执行列表",
 		"details": "执行信息",

@@ -3,6 +3,14 @@ import { expect, test } from "../fixtures/base";
 test("execution details show actual steps, preview results and explain frozen topology", async ({
   page,
 }) => {
+  let deniedMedia = 0;
+  page.on("response", (response) => {
+    if (
+      response.url().includes("/library-objects:resolve") &&
+      response.status() === 403
+    )
+      deniedMedia++;
+  });
   await page.goto("/");
   await page.setViewportSize({ width: 1440, height: 900 });
   const response = await page.request.get("/api/v1/jobs?page=1&page_size=20", {
@@ -33,28 +41,84 @@ test("execution details show actual steps, preview results and explain frozen to
     .getByRole("button")
     .filter({ has: page.getByRole("heading", { level: 2 }) })
     .click();
+  const definition = await page.request.get(
+    `/api/v1/workflows/${detail.job.workflow_id}`,
+  );
+  const head = definition.ok() ? await definition.json() : undefined;
+  const hasGraph = head?.version === detail.job.workflow_version;
+  const step = detail.step_runs[0];
   const nodes = page.getByRole("navigation", {
     name: /^执行节点$|^Execution steps$/,
   });
-  await expect(nodes).toBeVisible();
-  const step = detail.step_runs[0];
-  await nodes.getByRole("button").filter({ hasText: step.step_key }).click();
+  const selectedNode = hasGraph
+    ? page.getByRole("button", {
+        name: `选择节点 ${step.step_key}`,
+        exact: true,
+      })
+    : nodes.getByRole("button").filter({ hasText: step.step_key });
+  if (hasGraph) {
+    await expect(page.getByTestId("workflow-canvas")).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          (await page.getByTestId("workflow-canvas").boundingBox())?.height ??
+          0,
+      )
+      .toBeGreaterThan(500);
+  } else await expect(nodes).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: /^节点结果$|^Step results$/ }),
+  ).toHaveCount(0);
+  await selectedNode.click();
   await expect(
     page.getByRole("article", { name: /^节点结果$|^Step results$/ }),
   ).toContainText(step.step_key);
   await page.screenshot({ path: "/tmp/media-agent-v12-execution-live.png" });
-  await page
-    .getByRole("button", { name: /^查看执行图$|^View execution graph$/ })
-    .click();
-  await expect(
-    page.getByRole("dialog", { name: /^查看执行图$|^View execution graph$/ }),
-  ).toBeVisible();
+  const close = page.getByRole("button", {
+    name: /^关闭节点结果$|^Close step results$/,
+  });
+  await expect(close).toBeFocused();
   await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("complementary", { name: /^节点结果$|^Step results$/ }),
+  ).toHaveCount(0);
   await page.setViewportSize({ width: 480, height: 900 });
-  await expect(nodes).toBeVisible();
+  await selectedNode.click();
+  const inspector = page.getByRole("complementary", {
+    name: /^节点结果$|^Step results$/,
+  });
+  await expect(inspector).toBeVisible();
+  await expect
+    .poll(() =>
+      inspector.evaluate((node) => node.scrollWidth <= node.clientWidth + 2),
+    )
+    .toBeTruthy();
   await page.screenshot({
     path: "/tmp/media-agent-v12-execution-narrow-live.png",
   });
+  await close.click();
+  await page
+    .getByRole("button", { name: /^执行信息$|^Execution details$/ })
+    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  const snapshotImage = page.getByRole("dialog").locator("img").first();
+  if (
+    detail.job.input.product?.image_url ||
+    detail.job.input.virtual_ip?.avatar_url
+  ) {
+    await expect(snapshotImage).toBeVisible({ timeout: 60000 });
+    await expect
+      .poll(
+        () =>
+          snapshotImage.evaluate(
+            (image: HTMLImageElement) => image.naturalWidth,
+          ),
+        { timeout: 60000 },
+      )
+      .toBeGreaterThan(0);
+  }
+  expect(deniedMedia).toBe(0);
+  await page.keyboard.press("Escape");
   // Read-only verification: no cancel, retry, confirm or regenerate commands.
 });
 
