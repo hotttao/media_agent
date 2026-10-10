@@ -458,7 +458,7 @@ func (s *Service) GetStepRun(ctx context.Context, stepRunID string) (*domain.Ste
 }
 
 func (s *Service) Get(ctx context.Context, id string) (*domain.Job, []*domain.StepRun, error) {
-	job, _, err := s.jobRepo.GetWithStepRuns(ctx, id)
+	job, err := s.jobRepo.Get(ctx, id)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -649,6 +649,13 @@ func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error
 		if stepRun == nil {
 			continue
 		}
+		// withActiveStepProjection already preserves these completed outputs.
+		// Avoid repeating its lock/read transactions for render/invoke phases
+		// that cannot change the projection. The engine is still read on every
+		// request and execution/review/finalize guards remain unchanged.
+		if (phase == "render" || phase == "invoke") && stepRun.Status == domain.SRSucceeded && stepRun.OutputAssetID != "" {
+			continue
+		}
 		switch phase {
 		case "render":
 			if prompt, ok := task.Output["prompt"].(string); ok && prompt != "" {
@@ -774,6 +781,9 @@ func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error
 				if step.Status != domain.SRSucceeded || strings.TrimSpace(step.OutputAssetID) == "" {
 					return errors.New("completed execution has unpersisted step outputs")
 				}
+			}
+			if current.Status == domain.JobSucceeded && current.FailureReason == "" {
+				return nil
 			}
 			return s.jobRepo.UpdateStatus(txCtx, job.ID, domain.JobSucceeded, "")
 		})

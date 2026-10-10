@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 
 	domain "media_agent/media_materials/biz/domain/generated_asset"
@@ -318,10 +319,18 @@ func (s *Service) List(ctx context.Context, q ListQuery) ([]*domain.GeneratedAss
 	if err != nil {
 		return nil, 0, err
 	}
+	group, readCtx := errgroup.WithContext(ctx)
+	group.SetLimit(8)
 	for _, item := range items {
-		if err := s.resolveReadURL(ctx, item); err != nil {
-			return nil, 0, err
-		}
+		group.Go(func() error {
+			if err := readCtx.Err(); err != nil {
+				return err
+			}
+			return s.resolveReadURL(readCtx, item)
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return nil, 0, err
 	}
 	return items, total, nil
 }
@@ -361,6 +370,16 @@ func (s *Service) resolveReadURL(ctx context.Context, a *domain.GeneratedAsset) 
 		return errors.New("generated asset storage is unavailable")
 	}
 	if a.Origin == "legacy_import" {
+		if storage, ok := s.historyStorage.(interface {
+			PresignVerifiedGet(context.Context, string, string) (objectstorage.ResolvedObject, error)
+		}); ok {
+			resolved, err := storage.PresignVerifiedGet(ctx, a.ObjectPath, a.SourceSHA256)
+			if err != nil || resolved.URL == "" || resolved.ExpiresAt <= time.Now().Unix() {
+				return errors.New("historical generated asset object is unavailable or its digest changed")
+			}
+			a.URL = resolved.URL
+			return nil
+		}
 		info, err := s.historyStorage.Stat(ctx, a.ObjectPath)
 		if err != nil || info.Checksum != a.SourceSHA256 {
 			return errors.New("historical generated asset digest no longer matches")

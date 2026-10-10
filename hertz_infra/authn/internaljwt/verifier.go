@@ -59,6 +59,12 @@ func NewVerifier(url, issuer, audience string, client *http.Client) *Verifier {
 func (v *Verifier) Verify(ctx context.Context, raw string) (*Claims, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(raw, claims, func(token *jwt.Token) (any, error) {
+		// This is rejection-only routing, not authentication. Another issuer's
+		// token must not trigger our JWKS endpoint; signature and all registered
+		// claims are still validated below before any identity is returned.
+		if v.issuer != "" && claims.Issuer != v.issuer {
+			return nil, errors.New("unexpected JWT issuer")
+		}
 		kid, _ := token.Header["kid"].(string)
 		if kid == "" {
 			return nil, errors.New("JWT header is missing kid")

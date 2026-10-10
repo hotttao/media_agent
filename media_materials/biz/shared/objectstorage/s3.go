@@ -158,6 +158,23 @@ func (c *Client) PresignGet(ctx context.Context, objectPath string) (ResolvedObj
 	if err != nil {
 		return ResolvedObject{}, err
 	}
+	return c.presignGet(ctx, objectPath, info)
+}
+
+// PresignVerifiedGet checks immutable imported metadata and signs from the
+// same HEAD response, rather than checking the object a second time.
+func (c *Client) PresignVerifiedGet(ctx context.Context, objectPath, checksum string) (ResolvedObject, error) {
+	info, err := c.Stat(ctx, objectPath)
+	if err != nil {
+		return ResolvedObject{}, err
+	}
+	if checksum == "" || info.Checksum != checksum || info.SizeBytes <= 0 {
+		return ResolvedObject{}, ErrConflict
+	}
+	return c.presignGet(ctx, objectPath, info)
+}
+
+func (c *Client) presignGet(ctx context.Context, objectPath string, info ObjectInfo) (ResolvedObject, error) {
 	result, err := c.presigner.PresignGetObject(ctx,
 		&s3.GetObjectInput{Bucket: aws.String(c.bucket), Key: aws.String(objectPath)},
 		s3.WithPresignExpires(c.ttl),

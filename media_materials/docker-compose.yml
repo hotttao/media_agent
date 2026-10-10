@@ -15,6 +15,7 @@ services:
       # Empty by default: historical import is disabled unless an operator supplies a secret.
       MEDIA_MATERIALS_MIGRATION_TOKEN: ${MEDIA_MATERIALS_MIGRATION_TOKEN:-}
       INTERNAL_JWKS_URL: http://host.docker.internal:18080/.well-known/jwks.json
+      INTERNAL_JWT_ISSUER: http://oathkeeper:4456/
       AGENT_JWKS_URL: http://host.docker.internal:8006/internal/.well-known/agent-jwks.json
       AGENT_JWT_ISSUER: ${AGENT_JWT_ISSUER:-urn:media:agent-gateway}
       ORY_KRATOS_PUBLIC_URL: http://host.docker.internal:18080

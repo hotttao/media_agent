@@ -144,6 +144,12 @@ func TestExecutionProjectionAtomicPersistence(t *testing.T) {
 			}); err != nil {
 				t.Fatal("regeneration review persistence failed")
 			}
+			// AcceptReview persists intent only. Until Conductor advances the
+			// HUMAN/loop, the stored step and candidates must remain unchanged.
+			waiting, err := steps.Get(ctx, regenerateStep.ID)
+			if err != nil || waiting.Status != domain.SRNeedConfirm || len(waiting.Candidates) != 1 || waiting.Candidates[0].Content != "old result" || waiting.OutputAssetID != "" {
+				t.Fatal("review acceptance advanced the native execution projection")
+			}
 		}
 		assetPort := &projectionAssets{}
 		if boundary == "before_query" {
@@ -161,8 +167,8 @@ func TestExecutionProjectionAtomicPersistence(t *testing.T) {
 		current, _, err = regenerateSvc.Get(ctx, regenerating.ID)
 		persisted, stepErr = steps.Get(ctx, regenerateStep.ID)
 		wantCalls := 0
-		if err != nil || stepErr != nil || current.Status != domain.JobRunning || current.RetryCount != 0 || persisted.Status != domain.SRClaimed || persisted.OutputAssetID != "" || assetPort.calls != wantCalls {
-			t.Fatal("persisted regeneration boundary allowed old result reattachment")
+		if err != nil || stepErr != nil || current.Status != domain.JobRunning || current.RetryCount != 0 || persisted.Status != domain.SRNeedConfirm || len(persisted.Candidates) != 1 || persisted.Candidates[0].Content != "old result" || persisted.OutputAssetID != "" || assetPort.calls != wantCalls {
+			t.Fatalf("regeneration boundary %s changed the native projection or reattached an old result (query_error=%t step_error=%t)", boundary, err != nil, stepErr != nil)
 		}
 	}
 
@@ -279,8 +285,14 @@ func TestExecutionProjectionAtomicPersistence(t *testing.T) {
 			svc.ConfigureReviews(jobs)
 			current, _, err := svc.Get(ctx, j.ID)
 			persisted, stepErr := steps.Get(ctx, sr.ID)
-			if err != nil || stepErr != nil || current.Status != domain.JobRunning || current.RetryCount != 0 || persisted.Status != domain.SRClaimed || persisted.RenderedPrompt != "preserved prompt" || len(persisted.Candidates) != 1 || persisted.Candidates[0].Content != "preserved candidate" || persisted.OutputAssetID != "" || assets.calls != 0 {
-				t.Fatal("persisted review did not fence late phase/job snapshot")
+			// Both decisions are pending native delivery. Neither acceptance
+			// nor a stale engine read may advance status/selection locally.
+			if err != nil || stepErr != nil || current.Status != domain.JobRunning || current.RetryCount != 0 || persisted.Status != domain.SRNeedConfirm || persisted.SelectedIndex != nil || persisted.RenderedPrompt != "preserved prompt" || len(persisted.Candidates) != 1 || persisted.Candidates[0].Content != "preserved candidate" || persisted.OutputAssetID != "" || assets.calls != 0 {
+				t.Fatalf("pending %s review did not fence late %s snapshot (query_error=%t step_error=%t)", decision, phase, err != nil, stepErr != nil)
+			}
+			review, err := jobs.GetReviewByKey(ctx, sr.ID, "boundary")
+			if err != nil || review == nil || review.Status != "pending" || review.Decision != decision {
+				t.Fatal("stale read changed the persisted decision receipt")
 			}
 		}
 	}

@@ -622,6 +622,19 @@ GOWORK=off go test -tags=e2e ./e2e -run '^TestGenerationRegistration(HTTPReplayP
 
 设置 `MEDIA_E2E_EXISTING_TASK_DEFINITIONS=1` 并运行 `TestConductorPublishedTaskDefinitionsCompatibility`，对当前四节点样本的6个TaskDefinition作只读兼容预检；测试代理禁止任何非GET请求，存在冲突时不能修复线上定义。该门禁只适用于文档样本契约，不是其他用户Capability的通用政策。
 
+## 接口性能只读与隔离数据库门禁
+
+`TestAPIPerformanceReadGateway` 使用预置 User API Token/统一网关/企业，只读验证四类素材 20/200 条分页、图片顺序、存储归属及读取边界，不创建业务数据。Workflow 原生投影门禁 `TestExecutionProjectionAtomicPersistence` 与商品查询预算 `TestProductPageImageBatchQueries` 默认仍用 Testcontainers。
+
+Docker 新容器启动不可用时，可显式提供私有 `MEDIA_E2E_POSTGRES_ADMIN_DSN`，使用仓库已有 PostgreSQL 16 服务：每次 fixture 调用都会创建新的随机 `e2e_workflow_<32hex>` 或 `e2e_materials_<32hex>` 数据库，仅在新库迁移/执行，关闭连接后删除确切新库。不会迁移、清空或删除 DSN 中原数据库；拒绝 dbname/database/service/servicefile 的 URL 覆盖参数，错误不输出 DSN。未设置变量时保持默认 Docker 行为，不能以此绕过公开网关/独立 CLI 或真实 Conductor 门禁。
+
+```bash
+# Admin DSN 仅经私有环境注入，不写入命令参数或 Git。
+go -C media_workflow test -tags=e2e ./e2e -run '^TestExecutionProjectionAtomicPersistence$' -race -count=1 -v -timeout=3m
+go -C media_materials test -tags=e2e ./e2e -run '^TestProductPageImageBatchQueries$' -race -count=1 -v -timeout=3m
+go -C media-cli test ./e2e -run '^TestAPIPerformanceReadGateway$' -count=1 -v
+```
+
 ## UI 查询支持门禁（2026-10-09）
 
 `go -C media_workflow test -tags=e2e ./e2e -run '^TestWorkflow(BusinessVersionPersistence|CompiledVersionEvidence)$' -count=1 -v -timeout=3m` 使用 testcontainers 隔离 PostgreSQL：migration 026 的当前定义回填、快照与更新共同回滚、不可覆盖/降级保护，以及由已注册 schema v3 IR + 指定模板版本恢复旧拓扑与入口契约。缺少历史证据明确缺失，读取不改编译、不注册/启动 Conductor，不替代真实网关验收。

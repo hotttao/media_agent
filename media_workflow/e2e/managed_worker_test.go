@@ -25,6 +25,7 @@ import (
 	"gorm.io/gorm/logger"
 
 	configpb "media_agent/hertz_gen/config"
+	"media_agent/hertz_infra/testpostgres"
 	"media_agent/media_workflow/biz/dal"
 	"media_agent/media_workflow/biz/dal/model"
 	capabilityrepo "media_agent/media_workflow/biz/dal/repo/capability"
@@ -38,6 +39,9 @@ import (
 
 func newDatabase(t *testing.T) *gorm.DB {
 	t.Helper()
+	if adminDSN := os.Getenv("MEDIA_E2E_POSTGRES_ADMIN_DSN"); adminDSN != "" {
+		return dedicatedDatabase(t, adminDSN)
+	}
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 	ctx := context.Background()
 	container, err := postgres.Run(ctx, "postgres:16-alpine",
@@ -63,6 +67,41 @@ func newDatabase(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { conn, _ := db.DB(); _ = conn.Close() })
+	return db
+}
+
+func dedicatedDatabase(t *testing.T, adminDSN string) *gorm.DB {
+	t.Helper()
+	admin, err := gorm.Open(pgdriver.Open(adminDSN), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal("isolated PostgreSQL admin connection failed")
+	}
+	adminSQL, err := admin.DB()
+	if err != nil {
+		t.Fatal("isolated PostgreSQL admin pool failed")
+	}
+	t.Cleanup(func() { _ = adminSQL.Close() })
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	dsn, cleanup, err := testpostgres.Create(ctx, adminSQL, adminDSN, "workflow")
+	if err != nil {
+		t.Fatal("isolated database creation failed")
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if cleanup(ctx) != nil {
+			t.Error("isolated database cleanup failed")
+		}
+	})
+	if dal.Migrate("../migrations", &configpb.DatabaseConfig{Dsn: dsn, MigrateOnStart: true}) != nil {
+		t.Fatal("isolated migration failed")
+	}
+	db, err := gorm.Open(pgdriver.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal("isolated test database connection failed")
+	}
+	t.Cleanup(func() { connection, _ := db.DB(); _ = connection.Close() })
 	return db
 }
 

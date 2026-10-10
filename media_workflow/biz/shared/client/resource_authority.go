@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // ResourceAuthorityClient deliberately has no membership cache. Failure is not
@@ -92,7 +94,18 @@ func (c *ResourceAuthorityClient) identityFacts(ctx context.Context, user string
 	var orgs struct {
 		IDs []string `json:"organization_ids"`
 	}
-	if err := c.read(ctx, "/internal/organizations:byUser", map[string]string{"user_id": user}, &orgs); err != nil {
+	var teams struct {
+		IDs []string `json:"team_ids"`
+	}
+	// Independent live facts may overlap; no fact is cached across requests.
+	group, readCtx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		return c.read(readCtx, "/internal/organizations:byUser", map[string]string{"user_id": user}, &orgs)
+	})
+	group.Go(func() error {
+		return c.read(readCtx, "/internal/teams:byUser", map[string]string{"user_id": user}, &teams)
+	})
+	if err := group.Wait(); err != nil {
 		return f, err
 	}
 	f.OrganizationIDs = orgs.IDs
@@ -108,17 +121,24 @@ func (c *ResourceAuthorityClient) identityFacts(ctx context.Context, user string
 			f.OrganizationIDs = []string{caller.OrganizationID}
 		}
 	}
-	var teams struct {
-		IDs []string `json:"team_ids"`
+	teamFacts := make([]resourceTeamFacts, len(teams.IDs))
+	group, readCtx = errgroup.WithContext(ctx)
+	group.SetLimit(4)
+	for index, id := range teams.IDs {
+		group.Go(func() error {
+			if err := readCtx.Err(); err != nil {
+				return shared.ErrResourceAuthorityUnavailable
+			}
+			facts, err := c.team(readCtx, user, id, "use_workflow")
+			teamFacts[index] = facts
+			return err
+		})
 	}
-	if err := c.read(ctx, "/internal/teams:byUser", map[string]string{"user_id": user}, &teams); err != nil {
+	if err := group.Wait(); err != nil {
 		return f, err
 	}
-	for _, id := range teams.IDs {
-		t, err := c.team(ctx, user, id, "use_workflow")
-		if err != nil {
-			return f, err
-		}
+	for index, id := range teams.IDs {
+		t := teamFacts[index]
 		if !t.TeamActive || !t.OrganizationActive || t.TeamRole == "" || t.OrganizationRole == "" || !shared.HasResourceID(f.OrganizationIDs, t.OrganizationID) {
 			continue
 		}
@@ -132,16 +152,33 @@ func (c *ResourceAuthorityClient) identityFacts(ctx context.Context, user string
 }
 
 func (c *ResourceAuthorityClient) Facts(ctx context.Context, user string) (shared.ResourceFacts, error) {
-	f, err := c.identityFacts(ctx, user)
-	if err != nil {
-		return f, err
+	var f shared.ResourceFacts
+	if user == "" {
+		return f, shared.ErrResourceAccessDenied
+	}
+	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok && p.UserID != user {
+		return f, shared.ErrResourceAccessDenied
 	}
 	if c.control == nil {
 		return f, shared.ErrResourceAuthorityUnavailable
 	}
-	workspaces, err := c.control.ListResourceWorkspaces(ctx, user)
-	if err != nil {
-		return f, shared.ErrResourceAuthorityUnavailable
+	var workspaces []WorkspaceContext
+	group, readCtx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		var err error
+		f, err = c.identityFacts(readCtx, user)
+		return err
+	})
+	group.Go(func() error {
+		var err error
+		workspaces, err = c.control.ListResourceWorkspaces(readCtx, user)
+		if err != nil {
+			return shared.ErrResourceAuthorityUnavailable
+		}
+		return nil
+	})
+	if err := group.Wait(); err != nil {
+		return shared.ResourceFacts{}, err
 	}
 	for _, w := range workspaces {
 		if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok && (p.WorkspaceID != w.ID || p.OrganizationID != w.OrganizationID) {

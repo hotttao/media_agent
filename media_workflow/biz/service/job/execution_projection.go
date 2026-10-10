@@ -65,6 +65,9 @@ func (s *Service) projectExecutionStatus(ctx context.Context, jobID string, stat
 		if current.Status == domain.JobCancelled {
 			return nil
 		}
+		if current.Status == status && current.FailureReason == reason {
+			return nil
+		}
 		return s.jobRepo.UpdateStatus(txCtx, jobID, status, reason)
 	})
 }

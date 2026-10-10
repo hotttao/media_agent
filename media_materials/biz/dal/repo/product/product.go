@@ -75,9 +75,9 @@ func (r *Repo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Product,
 	out := make([]*domain.Product, len(rows))
 	for i := range rows {
 		out[i] = toDomain(&rows[i])
-		if err := loadImages(dal.FromContext(ctx, r.db).WithContext(ctx), out[i]); err != nil {
-			return nil, 0, err
-		}
+	}
+	if err := loadPageImages(dal.FromContext(ctx, r.db).WithContext(ctx), out); err != nil {
+		return nil, 0, err
 	}
 	return out, int(total), nil
 }
@@ -153,14 +153,32 @@ func replaceImages(tx *gorm.DB, p *domain.Product) error {
 }
 
 func loadImages(db *gorm.DB, p *domain.Product) error {
+	return loadPageImages(db, []*domain.Product{p})
+}
+
+// Only image rows belonging to the authorized product page are attached.
+// List remains three queries regardless of page size, with image order intact.
+func loadPageImages(db *gorm.DB, products []*domain.Product) error {
+	if len(products) == 0 {
+		return nil
+	}
+	ids := make([]string, len(products))
+	byID := make(map[string]*domain.Product, len(products))
+	for i, p := range products {
+		ids[i], byID[p.ID] = p.ID, p
+		p.Images = make([]domain.Image, 0)
+	}
 	var rows []model.ProductImage
-	if err := db.Where("product_id = ?", p.ID).Order("sort_order ASC").Find(&rows).Error; err != nil {
+	if err := db.Where("product_id IN ?", ids).Order("sort_order ASC").Find(&rows).Error; err != nil {
 		return err
 	}
-	p.Images = make([]domain.Image, len(rows))
-	for i, row := range rows {
-		p.Images[i] = domain.Image{ID: row.ID, OrganizationID: row.OrganizationID, ProductID: row.ProductID,
-			ObjectPath: row.ObjectPath, IsMain: row.IsMain, SortOrder: row.SortOrder, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
+	for _, row := range rows {
+		p := byID[row.ProductID]
+		if p == nil || p.OrganizationID != row.OrganizationID {
+			continue
+		}
+		p.Images = append(p.Images, domain.Image{ID: row.ID, OrganizationID: row.OrganizationID, ProductID: row.ProductID,
+			ObjectPath: row.ObjectPath, IsMain: row.IsMain, SortOrder: row.SortOrder, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
 	}
 	return nil
 }
