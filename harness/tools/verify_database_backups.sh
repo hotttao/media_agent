@@ -4,6 +4,9 @@ umask 077
 backup_dir=${1:?Usage: verify_database_backups.sh /absolute/snapshot/directory}
 [[ "$backup_dir" = /* && -f "$backup_dir/SHA256SUMS" ]] || exit 1
 (cd "$backup_dir" && sha256sum --check --quiet SHA256SUMS)
+if [[ -f "$backup_dir/TALOS_SHA256SUMS" ]]; then
+  (cd "$backup_dir" && sha256sum --check --quiet TALOS_SHA256SUMS)
+fi
 for entry in 'docker-compose-postgres-1/media_workflow' 'docker-compose-postgres-1/media-materials' 'media-agent-auth-auth-postgres-1/kratos'; do
   container=${entry%/*}
   database=${entry#*/}

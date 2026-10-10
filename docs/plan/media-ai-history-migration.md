@@ -1,5 +1,7 @@
 # media_ai 历史生成链导入与继续执行 Plan
 
+2026-10-10 数据集重建：按用户新要求提交全部代码、备份目标 PostgreSQL/Conductor/Talos 后，清理测试业务记录与原历史导入副本，使用当前 Provider 四节点 Workflow 重新导入。现在是 125 个原本已完成的 Video Job、121 个原本未完成的图片 Job（均 awaiting_resume）、52 个历史发布记录、484 个历史 Generated Asset。原 fixture 续跑结果不保留为历史事实；此前样本 ID 是当时验收记录，不再代表当前数据集。当前来源仍有 50 条断链排除及 1 条发布成片 404 隔离。操作、备份位置与门禁见 [重导记录](../wiki/historical-data-refresh.md)。
+
 依据 [Spec](../spec/media-ai-history-migration.md)。本计划跨 `media_workflow`、`media_materials` 与对象存储；一条真实历史执行已导入并恢复成功，不能据此宣称全量迁移完成。按当前约定，UI 相关项目等待用户的新设计，本轮不实现。
 
 ## P1 · 源事实与排除清单

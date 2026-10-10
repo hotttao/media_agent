@@ -5,7 +5,7 @@ umask 077
 backup_parent=${1:?Usage: backup_databases.sh /absolute/private/backup/directory}
 [[ "$backup_parent" = /* ]] || { echo 'Use an absolute backup directory' >&2; exit 1; }
 mkdir -p "$backup_parent"
-chmod 700 "$backup_parent"
+# mktemp creates the snapshot 0700; do not chmod an existing parent directory.
 backup_dir=$(mktemp -d "$backup_parent/snapshot-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")
 for container in docker-compose-postgres-1 media-agent-auth-auth-postgres-1; do
   mkdir "$backup_dir/$container"
@@ -21,14 +21,7 @@ for container in docker-compose-postgres-1 media-agent-auth-auth-postgres-1; do
   done
 done
 # SQLite's online backup API includes committed WAL data, unlike copying .db.
-python3 - "$backup_dir/conductor.db" <<'PY'
-import sqlite3, sys
-with sqlite3.connect('file:/data/conductor/conductor.db?mode=ro', uri=True, timeout=30) as source:
-    with sqlite3.connect(sys.argv[1]) as destination:
-        source.backup(destination)
-        if destination.execute('PRAGMA integrity_check').fetchall() != [('ok',)]:
-            raise SystemExit('Conductor backup integrity check failed')
-PY
+python3 "$(dirname "$0")/backup_sqlite.py" "$backup_dir"
 find "$backup_dir" -type f -exec chmod 600 {} +
 (cd "$backup_dir" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
 printf 'BACKUP_DIRECTORY=%s\n' "$backup_dir"

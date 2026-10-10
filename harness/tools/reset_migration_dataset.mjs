@@ -44,6 +44,14 @@ const legacyTemplates = new Set([
   "tpl_30d8ce90-56a3-4c31-a206-b8497ea83568", "tpl_dea9d422-82bc-4b27-ae52-e4ba9f3f4b7a",
   "tpl_9e03e522-41f0-4fe1-b2dd-d61a9f4f36eb",
 ]);
+// These seven Provider workflow executions were explicitly inventoried as fixtures.
+// A later genuine execution of the same retained workflow is NOT a test by inference.
+const retainedWorkflowFixtureJobs = new Set([
+  "job_63630368-245c-45f3-ace8-7a6c2437835a", "job_1e3cd6a1-42be-4946-a577-6b6a2c8d9054",
+  "job_d47d2b73-bd6a-4aaa-9f4f-1ebaf5ab232d", "job_d6a47436-ed95-4c77-b5be-79e50d960a99",
+  "job_eb6c7f61-740b-49b0-9267-df1aabcc090c", "job_79ba8969-bc99-48af-b8aa-bf9bc781e090",
+  "job_7c51a130-2743-412f-b8cc-c29a69c5ac99",
+]);
 const workflows = rows("media_workflow", "media_workflow.workflows", "id,name,status");
 const kept = workflows.find(w => w.id === keep);
 if (!kept || kept.status !== "published") throw new Error("Retained published workflow missing");
@@ -52,8 +60,11 @@ const workflowIDs = new Set(removedWorkflows.map(w => w.id));
 const jobs = rows("media_workflow", "media_workflow.jobs", "id,workflow_id,origin,source_system,organization_id,conductor_workflow_id");
 const removedJobs = jobs.filter(j =>
   (j.origin === "legacy_import" && j.source_system === "media_ai" && j.organization_id === org) ||
-  (j.origin === "native" && (workflowIDs.has(j.workflow_id) || j.workflow_id === keep)));
+  (j.origin === "native" && (workflowIDs.has(j.workflow_id) ||
+    (j.workflow_id === keep && retainedWorkflowFixtureJobs.has(j.id)))));
 const jobIDs = new Set(removedJobs.map(j => j.id));
+if (jobs.some(j => j.organization_id === org && !jobIDs.has(j.id)))
+  throw new Error("Unclassified business executions exist; manual scope review required before reset");
 const templates = rows("media_workflow", "media_workflow.templates", "id,name");
 const steps = rows("media_workflow", "media_workflow.workflow_steps", "id,workflow_id,template_id");
 const retainedTemplates = new Set(steps.filter(s => !workflowIDs.has(s.workflow_id)).map(s => s.template_id));
@@ -85,6 +96,9 @@ try {
   const tuples = removedJobs.map(j => `('${j.id}','${j.workflow_id}')`).join(",");
   if (tuples && Number(sql("media_workflow", `SELECT count(*) FROM media_workflow.jobs WHERE (id,workflow_id) IN (${tuples});`).trim()) !== removedJobs.length)
     throw new Error("Inventory changed before maintenance");
+  if (Number(sql("media_workflow", `SELECT count(*) FROM media_workflow.jobs WHERE
+    (organization_id='${org}' OR workflow_id IN (${ids(removedWorkflows)})) AND id NOT IN (${ids(removedJobs)});`).trim()))
+    throw new Error("New business executions appeared after inventory; reset cancelled");
   const visited = new Set();
   async function removeEngine(id) {
     if (!id || visited.has(id)) return;

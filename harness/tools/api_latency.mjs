@@ -34,6 +34,7 @@ const workspace = workspaces.data?.workspaces?.[0];
 if (!workspace?.organization_id) throw new Error("Owned Workspace required");
 const org = workspace.organization_id;
 const root = `/api/v1`;
+const completedJobID = process.env.PERF_COMPLETED_JOB_ID || process.env.E2E_SAMPLE_JOB_ID || "job_e8a850ec-20dd-445f-b7cd-e89fe1b35592";
 const cases = [
   ["auth.me", "/api/auth/me"],
   ["control.workspaces", `${root}/workspaces`],
@@ -49,7 +50,7 @@ const cases = [
   ["capabilities.page200", `${root}/capabilities?page_size=200`],
   ["jobs.page20", `${root}/jobs?page_size=20`],
   ["jobs.page200", `${root}/jobs?page_size=200`],
-  ["jobs.completed", `${root}/jobs/job_e8a850ec-20dd-445f-b7cd-e89fe1b35592`],
+  ["jobs.completed", `${root}/jobs/${encodeURIComponent(completedJobID)}`],
   ["workflow.detail", `${root}/workflows/wf_2c1231e5-7379-4207-a0de-a9bb5d93b278`],
 ];
 const selected = process.env.PERF_CASES?.split(",");
