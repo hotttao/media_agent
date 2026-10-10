@@ -168,6 +168,13 @@
 		"nine_view_object_pathHint": "Expressions and poses"
 	},
 	"sharing": {
+		"directoryScope": "The directory contains departments you may query; all grants for this resource are listed below.",
+		"grants": "Department grants",
+		"privateGrants": "This resource is private, so department grants are inactive. Existing grants can still be revoked.",
+		"loadingGrants": "Loading grants…",
+		"noGrants": "No department grants yet.",
+		"unknownDepartment": "Department outside directory · {{id}}",
+		"readOnly": "Editing is not permitted. Your draft is retained but cannot be saved.",
 		"title": "Sharing and access",
 		"ownerOnly": "Only the resource owner can publish, change visibility or grant access.",
 		"queryGap": "Only readable departments in this company are listed. The API does not expose all grants; these commands manage the selected department and do not represent a full grant list.",
@@ -181,6 +188,19 @@
 		"grant": "Save department grant",
 		"revoke": "Revoke department access",
 		"saved": "Access command saved. The server still determines actual access."
+	},
+	"capability": {
+		"method": {"t2i":"Text to image","i2i":"Image to image","t2v":"Text to video","i2v":"Image to video"},
+		"type": {"first_frame_prompt":"First frame and prompt","multi_image_prompt":"Multiple images and prompt","text_prompt":"Text prompt"},
+		"media": {"IMAGE":"Image","VIDEO":"Video","TEXT":"Text"},
+		"input": {"string":"Text","resource_ref":"Media reference","resource_ref_list":"Media list"},
+		"choose": "Choose a published capability and version",
+		"empty": "No published generation capabilities.",
+		"executionTarget": "Execution target",
+		"personal_worker": "Personal client Worker",
+		"managed_worker": "Server managed Worker",
+		"output": "Output media type",
+		"readOnlyHint": "The contract and execution target are fixed by this version. Changing capability does not overwrite slots or invocation mappings."
 	},
 	"library": {
 		"virtualBack": "Back to virtual IPs",
@@ -234,7 +254,7 @@
 			"pose": "Pose reference",
 			"scene": "Scene reference"
 		},
-		"notRegistered": "This version is not registered for execution. Check its publication result before submitting.",
+		"notRegistered": "This workflow cannot run. Check its publication and registration result, and your workspace execution permission.",
 		"submit": "Submit execution",
 		"resume": "Resume with missing inputs",
 		"rerun": "Rerun with changed inputs",
@@ -247,7 +267,7 @@
 		"failed": "Submission failed. Check inputs and access.",
 		"submitting": "Submitting…",
 		"replay": "Check original submission",
-		"frozenUnavailable": "Frozen input schema is unavailable. The latest definition cannot substitute for it. Submission is disabled; the query gap will be listed for review.",
+		"frozenUnavailable": "Frozen input or historical step evidence is unavailable. Retry the query; submission stays disabled until it recovers. The latest definition cannot substitute for it.",
 		"rerunUnknown": "Rerun outcome is unconfirmed. Return to the execution and refresh instead of submitting another rerun.",
 		"intentRetained": "Original submission intent is retained. Replay uses the same key and inputs, not a second job."
 	},

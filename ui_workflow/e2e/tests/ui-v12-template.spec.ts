@@ -1,14 +1,15 @@
-import { expect, test } from "../fixtures/base";
+import { expect, openStandaloneApp, test } from "../fixtures/base";
+import type { Template } from "../../src/domains/templates/types";
 
 test("template mapping editing keeps slot references and unsaved draft across apps", async ({
   page,
 }) => {
-  await page.goto("/");
+  await openStandaloneApp(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   const response = await page.request.get("/api/v1/templates?page_size=100");
   expect(response.ok()).toBeTruthy();
   const { items } = await response.json();
-  let template;
+  let template: Template | undefined;
   for (const item of items) {
     const detail = await page.request.get(
       `/api/v1/templates/${encodeURIComponent(item.id)}`,
@@ -16,7 +17,7 @@ test("template mapping editing keeps slot references and unsaved draft across ap
     if (!detail.ok()) continue;
     const candidate = await detail.json();
     if (
-      !["ARCHIVED", "TPL_ARCHIVED", "3"].includes(String(candidate.status)) &&
+      candidate.allowed_actions?.includes("update") &&
       candidate.inputs?.length >= 2 &&
       candidate.invocation_mapping?.images?.items?.length >= 2
     ) {
@@ -26,8 +27,13 @@ test("template mapping editing keeps slot references and unsaved draft across ap
   }
   expect(
     template,
-    "requires a readable template with multiple image references",
+    "requires an editable template with multiple image references",
   ).toBeTruthy();
+  if (!template)
+    throw new Error("No editable multi-reference template fixture");
+  const secondSlot = template.invocation_mapping.images.items?.[1]?.slot;
+  if (!secondSlot)
+    throw new Error("Template fixture lacks a second image slot");
   await page.getByRole("button", { name: /^工作流$|^Workflow$/ }).click();
   await page.getByRole("tab", { name: /^模板$|^Templates$/ }).click();
   await page
@@ -62,9 +68,7 @@ test("template mapping editing keeps slot references and unsaved draft across ap
   const firstReference = page.getByRole("combobox", {
     name: /^images\[0\] 的资源槽位$|^Resource slot for images\[0\]$/,
   });
-  await expect(firstReference).toHaveValue(
-    template.invocation_mapping.images.items[1].slot,
-  );
+  await expect(firstReference).toHaveValue(secondSlot);
   await page.getByRole("button", { name: /^检查槽位$|^Check slots$/ }).click();
   await expect(
     page.getByRole("region", { name: /^槽位检查结果$|^Slot check results$/ }),
@@ -77,18 +81,14 @@ test("template mapping editing keeps slot references and unsaved draft across ap
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText(/覆盖|overwritten/);
   await dialog.getByRole("button", { name: /^取消$|^Cancel$/ }).click();
-  await expect(firstReference).toHaveValue(
-    template.invocation_mapping.images.items[1].slot,
-  );
+  await expect(firstReference).toHaveValue(secondSlot);
   await page.screenshot({
     path: "/tmp/media-agent-v12-template-editor-live.png",
   });
   await page.getByRole("button", { name: /^素材$|^Materials$/ }).click();
   await page.getByRole("button", { name: /^工作流$|^Workflow$/ }).click();
   await expect(prompt).toHaveValue(changed);
-  await expect(firstReference).toHaveValue(
-    template.invocation_mapping.images.items[1].slot,
-  );
+  await expect(firstReference).toHaveValue(secondSlot);
   await page.setViewportSize({ width: 480, height: 900 });
   await firstReference.scrollIntoViewIfNeeded();
   await expect(firstReference).toBeVisible();

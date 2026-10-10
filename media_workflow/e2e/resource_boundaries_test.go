@@ -120,6 +120,24 @@ func TestBoundResourcePaginationPublicationAndRevokePersistence(t *testing.T) {
 	templateSvc.ConfigureResourceAuthority(a)
 	workflowSvc := wfsvc.NewService(wfrepo.NewRepo(db), wfrepo.NewGrantRepo(db), tx, nil, nil)
 	workflowSvc.ConfigureResourceAuthority(a)
+	_, access, err := templateSvc.GetWithAccess(ctx, "shared", "member")
+	if err != nil || access.MyPermission != "editor" {
+		t.Fatal("persistent editor projection", err)
+	}
+	if _, err := templateSvc.ListGrants(ctx, "shared", "member"); !errors.Is(err, tpldomain.ErrTemplateForbidden) {
+		t.Fatal("editor read full template grants", err)
+	}
+	if _, err := workflowSvc.ListGrants(ctx, "shared", "member"); !errors.Is(err, wfdomain.ErrWorkflowForbidden) {
+		t.Fatal("editor read full workflow grants", err)
+	}
+	grantRows, err := templateSvc.ListGrants(ctx, "shared", "owner")
+	if err != nil || len(grantRows) != 1 || grantRows[0].TeamID != "dept" {
+		t.Fatal("owner persistent template grants", err)
+	}
+	workflowRows, err := workflowSvc.ListGrants(ctx, "shared", "owner")
+	if err != nil || len(workflowRows) != 1 || workflowRows[0].TeamID != "dept" {
+		t.Fatal("owner persistent workflow grants", err)
+	}
 	ts, total, err := templateSvc.List(ctx, tpldomain.ListQuery{Limit: 1, Offset: 1}, "member")
 	if err != nil || total != 4 || len(ts) != 1 {
 		t.Fatal("template boundary/count not applied before pagination", err, total)
@@ -135,6 +153,13 @@ func TestBoundResourcePaginationPublicationAndRevokePersistence(t *testing.T) {
 	a.targetOrg = "org"
 	if _, err := templateSvc.Revoke(ctx, "shared", "dept", "owner"); err != nil {
 		t.Fatal(err)
+	}
+	if _, _, err := templateSvc.GetWithAccess(ctx, "shared", "member"); !errors.Is(err, tpldomain.ErrTemplateForbidden) {
+		t.Fatal("revoked persistent permission projection", err)
+	}
+	grantRows, err = templateSvc.ListGrants(ctx, "shared", "owner")
+	if err != nil || len(grantRows) != 0 {
+		t.Fatal("revoked grant retained in owner query", err)
 	}
 	if _, err := templateSvc.Archive(ctx, "shared", "member", "dept"); !errors.Is(err, tpldomain.ErrTemplateForbidden) {
 		t.Fatal("revoked grant archived resource", err)

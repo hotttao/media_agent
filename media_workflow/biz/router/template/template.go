@@ -30,6 +30,7 @@ func Register(r *server.Hertz) {
 				{
 					_id := _templates.Group("/:id", _idMw()...)
 					_id.POST("/archive", append(_archivetemplateMw(), template.ArchiveTemplate)...)
+					_id.GET("/grants", append(_listtemplategrantsMw(), template.ListTemplateGrants)...)
 					_id.POST("/grants", append(_granttemplateMw(), template.GrantTemplate)...)
 					_id.POST("/publish", append(_publishtemplateMw(), template.PublishTemplate)...)
 					_id.POST("/visibility", append(_changetemplatevisibilityMw(), template.ChangeTemplateVisibility)...)

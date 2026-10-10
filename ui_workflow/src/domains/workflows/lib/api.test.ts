@@ -1,12 +1,54 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getWorkflow,
+  getWorkflowVersion,
   validateWorkflow,
   updateWorkflow,
   createWorkflow,
 } from "./api";
 
 describe("workflow wire normalization", () => {
+  it("reads a frozen version without consulting the current head", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: "wf",
+            version: 1,
+            status: 2,
+            definition_source: "snapshot",
+            my_permission: "editor",
+            allowed_actions: ["read"],
+            steps: [
+              {
+                key: "old",
+                slot_bindings: { source: { source: 1, ref: "old_input" } },
+              },
+            ],
+            input_schema: {
+              entries: [
+                { name: "old_input", resource_type: "TEXT", required: true },
+              ],
+            },
+          }),
+        ),
+      );
+    vi.stubGlobal("fetch", fetch);
+    const frozen = await getWorkflowVersion("wf", 1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toContain("/workflows/wf/versions/1");
+    expect(frozen.steps[0].slot_bindings[0]).toMatchObject({
+      source: "workflow_input",
+      ref: "old_input",
+    });
+    expect(frozen.allowed_actions).toEqual(["read"]);
+    expect(frozen.input_schema?.entries).toEqual([
+      { name: "old_input", resource_type: "TEXT", required: true },
+    ]);
+    await expect(getWorkflowVersion("wf", 0)).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
   it("serializes binding enums as numeric HTTP values for validate, create and update", async () => {
     const fetch = vi
       .fn()

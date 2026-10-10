@@ -134,6 +134,7 @@ const standaloneConfig: UserConfig = {
         changeOrigin: true,
       },
       "/api/v1/jobs": { target: gatewayTarget, changeOrigin: true },
+      "/api/v1/capabilities": { target: gatewayTarget, changeOrigin: true },
       "/api/v1/step-runs": {
         target: gatewayTarget,
         changeOrigin: true,

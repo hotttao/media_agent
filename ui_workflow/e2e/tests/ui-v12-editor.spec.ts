@@ -1,26 +1,31 @@
-import { expect, test } from "../fixtures/base";
+import { expect, openStandaloneApp, test } from "../fixtures/base";
+import type { Workflow } from "../../src/domains/workflows/types";
 
 test("workflow editor keeps draft dependencies and confirms deletion without saving borrowed data", async ({
   page,
 }) => {
-  await page.goto("/");
+  await openStandaloneApp(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   const response = await page.request.get("/api/v1/workflows?page_size=100");
   expect(response.ok()).toBeTruthy();
   const { items } = await response.json();
-  let workflow;
+  let workflow: Workflow | undefined;
   for (const item of items) {
     const detail = await page.request.get(
       `/api/v1/workflows/${encodeURIComponent(item.id)}`,
     );
     if (!detail.ok()) continue;
     const candidate = await detail.json();
-    if ((candidate.steps?.length ?? 0) >= 2) {
+    if (
+      candidate.allowed_actions?.includes("update") &&
+      (candidate.steps?.length ?? 0) >= 2
+    ) {
       workflow = candidate;
       break;
     }
   }
-  expect(workflow, "requires an existing multi-node workflow").toBeTruthy();
+  expect(workflow, "requires an editable multi-node workflow").toBeTruthy();
+  if (!workflow) throw new Error("No editable multi-node workflow fixture");
   await page.getByRole("button", { name: /^工作流$|^Workflow$/ }).click();
   await page.getByRole("tab", { name: /^工作流$|^Workflows$/ }).click();
   await page

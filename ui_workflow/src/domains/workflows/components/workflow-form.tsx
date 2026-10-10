@@ -212,6 +212,7 @@ export function WorkflowForm({
   onSubmit,
   submitLabel,
   isPending,
+  editable = true,
   onCancel,
   onValidate,
   validationResult,
@@ -227,6 +228,7 @@ export function WorkflowForm({
   onSubmit: () => void;
   submitLabel: string;
   isPending: boolean;
+  editable?: boolean;
   onCancel: () => void;
   onValidate?: () => void;
   validationResult?: ValidationResult | null;
@@ -378,6 +380,7 @@ export function WorkflowForm({
             size="sm"
             onClick={onSubmit}
             disabled={
+              !editable ||
               isPending ||
               templatePending ||
               submitDisabled ||

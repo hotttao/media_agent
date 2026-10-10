@@ -31,12 +31,17 @@ func Register(r *server.Hertz) {
 				{
 					_id := _workflows.Group("/:id", _idMw()...)
 					_id.POST("/archive", append(_archiveworkflowMw(), workflow.ArchiveWorkflow)...)
+					_id.GET("/grants", append(_listworkflowgrantsMw(), workflow.ListWorkflowGrants)...)
 					_id.POST("/grants", append(_grantworkflowMw(), workflow.GrantWorkflow)...)
 					_id.POST("/publish", append(_publishworkflowMw(), workflow.PublishWorkflow)...)
 					_id.POST("/visibility", append(_changeworkflowvisibilityMw(), workflow.ChangeWorkflowVisibility)...)
 					{
 						_grants := _id.Group("/grants", _grantsMw()...)
 						_grants.DELETE("/:team_id", append(_revokeworkflowMw(), workflow.RevokeWorkflow)...)
+					}
+					{
+						_versions := _id.Group("/versions", _versionsMw()...)
+						_versions.GET("/:version", append(_getworkflowversionMw(), workflow.GetWorkflowVersion)...)
 					}
 				}
 			}

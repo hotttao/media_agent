@@ -13,12 +13,18 @@ import { resolveLibraryObject } from "@/foundation/lib/library-object";
 import { useWorkflowsList } from "@/domains/jobs/hooks/use-workflows-list";
 import { useWorkflow } from "@/domains/workflows/hooks/use-workflow";
 import { submitJob, resumeJob, retryJob } from "@/domains/jobs/lib/api";
-import type { Job, SubmitJobInput, WorkflowOption } from "@/domains/jobs/types";
+import type {
+  Job,
+  StepRun,
+  SubmitJobInput,
+  WorkflowOption,
+} from "@/domains/jobs/types";
 import {
   buildJobInput,
   missingRequiredInputs,
   isWorkflowReady,
   selectedInputPreview,
+  resumeInputContract,
 } from "./job-input";
 import { useJobInputOptions } from "./use-job-input-options";
 
@@ -28,6 +34,7 @@ export function JobCreate({
   preferredWorkflowId,
   instanceId,
   sourceJob,
+  sourceStepRuns,
   mode = "submit",
   launchIntent,
 }: {
@@ -36,6 +43,7 @@ export function JobCreate({
   preferredWorkflowId?: string;
   instanceId: string;
   sourceJob?: Job;
+  sourceStepRuns?: StepRun[];
   mode?: "submit" | "resume" | "rerun";
   launchIntent?: WorkflowLaunchIntent;
 }) {
@@ -61,7 +69,10 @@ export function JobCreate({
     () => null,
   );
   const [preparing, setPreparing] = useState(false);
-  const definition = useWorkflow(sourceJob?.workflow_id || draft.workflowId);
+  const definition = useWorkflow(
+    sourceJob?.workflow_id || draft.workflowId,
+    sourceJob?.workflow_version,
+  );
   const [seeded, setSeeded] = hostShim.useInstanceState(
     instanceId,
     `workflow_product_seed_${launchIntent?.requestId || "none"}`,
@@ -107,6 +118,9 @@ export function JobCreate({
   const selectedWorkflow: WorkflowOption | undefined = definition.data
     ? {
         ...definition.data,
+        // Historical IR did not retain Scope metadata; the Job did. Never use
+        // a newer definition's Scope or input contract to fill the gap.
+        scope: sourceJob?.scope || definition.data.scope,
         input_schema: definition.data
           .input_schema as WorkflowOption["input_schema"],
       }
@@ -119,27 +133,17 @@ export function JobCreate({
   );
   const effectiveWorkflow: WorkflowOption | undefined =
     selectedWorkflow && mode === "resume" && sourceJob
-      ? {
-          ...selectedWorkflow,
-          input_schema: {
-            entries: (selectedWorkflow.input_schema?.entries ?? []).filter(
-              (entry) =>
-                entry.resource_type === "PRODUCT"
-                  ? !sourceJob.input.product
-                  : entry.resource_type === "VIRTUAL_IP"
-                    ? !sourceJob.input.virtual_ip
-                    : !(
-                        entry.resource_type === "ASSET"
-                          ? sourceJob.input.asset
-                          : sourceJob.input.material
-                      )?.some((item) => item.name === entry.name),
-            ),
-          },
-        }
+      ? resumeInputContract(
+          selectedWorkflow,
+          definition.data?.steps,
+          sourceStepRuns,
+          sourceJob,
+        )
       : selectedWorkflow;
   const options = useJobInputOptions(
     effectiveWorkflow,
     Boolean(shell.organization.id) && !versionMismatch && ready,
+    shell.organization.id,
   );
   const missing = missingRequiredInputs(effectiveWorkflow, draft.selected);
   const fingerprint = JSON.stringify([
@@ -151,16 +155,18 @@ export function JobCreate({
   const currentIntent = intent?.fingerprint === fingerprint ? intent : null;
   const mutation = useMutation({
     mutationFn: async (request: SubmitJobInput) => {
-      if (mode === "resume" && sourceJob)
+      if (mode === "resume" && sourceJob) {
+        if (!request.idempotency_key) throw new Error(t("runForm.failed"));
         return {
           id: (
             await resumeJob(
               sourceJob.id,
               request.input,
-              request.idempotency_key!,
+              request.idempotency_key,
             )
           ).id,
         };
+      }
       if (mode === "rerun" && sourceJob)
         return {
           id: (await retryJob(sourceJob.id, { input_override: request.input }))
@@ -249,6 +255,7 @@ export function JobCreate({
               options.isLoading ||
               options.isError ||
               !selectedWorkflow ||
+              !effectiveWorkflow ||
               !validWorkspace ||
               !validSelections ||
               wrongCompany ||
@@ -364,7 +371,8 @@ export function JobCreate({
               {workspaces.error.message}
             </p>
           ) : null}
-          {versionMismatch ||
+          {(mode === "resume" && selectedWorkflow && !effectiveWorkflow) ||
+          versionMismatch ||
           (sourceJob && !selectedWorkflow && !workflows.isLoading) ? (
             <p role="alert" className="rounded-xl bg-warning/10 p-4 text-sm">
               {t("runForm.frozenUnavailable")}

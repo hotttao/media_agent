@@ -1,9 +1,9 @@
-import { expect, test } from "../fixtures/base";
+import { expect, openStandaloneApp, test } from "../fixtures/base";
 
 test("workflow graph labels follow language changes without changing the definition", async ({
   page,
 }) => {
-  await page.goto("/");
+  await openStandaloneApp(page);
   await page.getByRole("button", { name: /^工作流$|^Workflow$/ }).click();
   await page.getByRole("tab", { name: /^工作流$|^Workflows$/ }).click();
   const response = await page.request.get(

@@ -4,6 +4,11 @@ test("execution details show actual steps, preview results and explain frozen to
   page,
 }) => {
   let deniedMedia = 0;
+  const versionQueries: string[] = [];
+  page.on("request", (request) => {
+    if (/\/api\/v1\/workflows\/[^/]+\/versions\/\d+/.test(request.url()))
+      versionQueries.push(request.url());
+  });
   page.on("response", (response) => {
     if (
       response.url().includes("/library-objects:resolve") &&
@@ -42,10 +47,19 @@ test("execution details show actual steps, preview results and explain frozen to
     .filter({ has: page.getByRole("heading", { level: 2 }) })
     .click();
   const definition = await page.request.get(
-    `/api/v1/workflows/${detail.job.workflow_id}`,
+    `/api/v1/workflows/${detail.job.workflow_id}/versions/${detail.job.workflow_version}`,
   );
   const head = definition.ok() ? await definition.json() : undefined;
   const hasGraph = head?.version === detail.job.workflow_version;
+  await expect
+    .poll(() =>
+      versionQueries.some((url) =>
+        url.includes(
+          `/workflows/${detail.job.workflow_id}/versions/${detail.job.workflow_version}`,
+        ),
+      ),
+    )
+    .toBeTruthy();
   const step = detail.step_runs[0];
   const nodes = page.getByRole("navigation", {
     name: /^执行节点$|^Execution steps$/,

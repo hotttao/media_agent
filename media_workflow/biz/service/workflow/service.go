@@ -22,7 +22,10 @@ type Service struct {
 	templateLookup domain.TemplateLookup
 	publisher      domain.Publisher
 	publications   domain.PublicationRepo
+	versions       domain.VersionRepo
 }
+
+func (s *Service) ConfigureVersions(repo domain.VersionRepo) { s.versions = repo }
 
 func (s *Service) ConfigureResourceAuthority(a shared.ResourceAuthority) { s.authority = a }
 

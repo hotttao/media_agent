@@ -48,7 +48,7 @@ http:
       middlewares: [oathkeeper-forward-auth]
       service: materials
     workflow:
-      rule: "PathPrefix(`/api/v1/workflows`) || PathPrefix(`/api/v1/templates`) || PathPrefix(`/api/v1/jobs`) || PathPrefix(`/api/v1/step-runs`) || PathPrefix(`/api/v1/historical-video-pushes`)"
+      rule: "PathPrefix(`/api/v1/workflows`) || PathPrefix(`/api/v1/templates`) || PathPrefix(`/api/v1/jobs`) || PathPrefix(`/api/v1/step-runs`) || PathPrefix(`/api/v1/historical-video-pushes`) || PathPrefix(`/api/v1/capabilities`)"
       priority: 50
       middlewares: [oathkeeper-forward-auth]
       service: workflow

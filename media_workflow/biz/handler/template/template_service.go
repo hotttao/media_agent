@@ -79,7 +79,7 @@ func GetTemplate(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	t, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
+	t, access, err := Svc.GetWithAccess(ctx, req.GetId(), auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
 	if err != nil {
 		if resourceError(c, err) {
 			return
@@ -87,7 +87,9 @@ func GetTemplate(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusNotFound, err.Error())
 		return
 	}
-	c.JSON(consts.StatusOK, toView(t))
+	view := toView(t)
+	view.MyPermission, view.AllowedActions = access.MyPermission, access.AllowedActions
+	c.JSON(consts.StatusOK, view)
 }
 
 func GetTemplateVersion(ctx context.Context, c *app.RequestContext) {
@@ -327,4 +329,28 @@ func PublishTemplate(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	c.JSON(consts.StatusOK, toView(t))
+}
+
+// ListTemplateGrants .
+// @router /api/v1/templates/:id/grants [GET]
+func ListTemplateGrants(ctx context.Context, c *app.RequestContext) {
+	var req pb.GetTemplateReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rows, err := Svc.ListGrants(ctx, req.GetId(), auth.CallerID(ctx))
+	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
+		c.String(consts.StatusServiceUnavailable, "resource grants unavailable")
+		return
+	}
+	items := make([]*pb.ResourceGrant, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, &pb.ResourceGrant{TeamId: row.TeamID, Permission: string(row.Permission), GrantedBy: row.GrantedBy, GrantedAt: row.GrantedAt.UnixNano()})
+	}
+	c.JSON(consts.StatusOK, &pb.GrantList{Items: items})
 }

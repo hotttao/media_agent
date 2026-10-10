@@ -1,4 +1,4 @@
-import { expect, test } from "../fixtures/base";
+import { expect, openStandaloneApp, test } from "../fixtures/base";
 
 const resources = [
   { key: "material", name: /^素材$|^Materials$/ },
@@ -10,7 +10,7 @@ for (const resource of resources) {
   test(`${resource.key} details fit a narrow app without writes`, async ({
     page,
   }) => {
-    await page.goto("/");
+    await openStandaloneApp(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByRole("button", { name: /^素材$|^Materials$/ }).click();
     await page.getByRole("tab", { name: resource.name }).click();

@@ -12,6 +12,7 @@ import {
   getTemplateVersion,
   grantTemplate,
   revokeTemplate,
+  listTemplateGrants,
 } from "@/domains/templates/lib/api";
 import { InvocationMappingView } from "@/domains/templates/components/invocation-mapping-view";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import { ListState } from "@/foundation/components/resource-list-layout";
 import { AppStudioHeader } from "@/foundation/components/app-studio-header";
 import { hostShim } from "@/foundation/lib/host-shim";
 import { ResourceSharing } from "@/foundation/components/resource-sharing";
+import { allows } from "@/foundation/types/resource-access";
 
 export function TemplateShow({
   id,
@@ -39,7 +41,6 @@ export function TemplateShow({
 }) {
   const { t } = useTranslation();
   const query = useTemplate(id);
-  const { user } = hostShim.useCurrentUser();
   const shell = hostShim.useShellContext();
   const archive = useArchiveTemplate();
   const visibility = useChangeTemplateVisibility();
@@ -62,7 +63,7 @@ export function TemplateShow({
       />
     );
   if (!template) return <ListState empty={t("templateView.notFound")} />;
-  const owner = Boolean(user?.id && user.id === template.created_by);
+  const owner = template.my_permission === "owner";
   const displayed = version === null ? template : historical.data;
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -90,7 +91,9 @@ export function TemplateShow({
             <Settings2 className="mr-1 h-4 w-4" />
             {t("mapping.settings")}
           </Button>
-          {owner && version === null && template.status === "draft" ? (
+          {allows(template, "publish") &&
+          version === null &&
+          template.status === "draft" ? (
             <Button
               size="sm"
               disabled={publish.isPending}
@@ -100,7 +103,7 @@ export function TemplateShow({
               {t("templateView.publish")}
             </Button>
           ) : null}
-          {version === null && template.status !== "archived" ? (
+          {version === null && allows(template, "update") ? (
             <Button variant="outline" size="sm" onClick={onEdit}>
               <Pencil className="mr-1 h-4 w-4" />
               {t("templateView.edit")}
@@ -216,9 +219,18 @@ export function TemplateShow({
             {template.name} · {template.scope}
           </p>
           <ResourceSharing
-            organizationId={shell.organization.id}
+            key={id}
+            organizationId={template.organization_id || shell.organization.id}
             visibility={template.visibility}
             owner={owner}
+            allowedActions={template.allowed_actions ?? []}
+            resourceKey={[
+              "template-grants",
+              id,
+              template.organization_id ?? "",
+            ]}
+            loadGrants={() => listTemplateGrants(id)}
+            onRefresh={() => query.refetch({ throwOnError: true })}
             onVisibility={(value) =>
               visibility.mutateAsync({ id, input: { visibility: value } })
             }
@@ -227,7 +239,7 @@ export function TemplateShow({
             }
             onRevoke={(team) => revokeTemplate(id, team)}
           />
-          {template.status !== "archived" ? (
+          {allows(template, "archive") ? (
             <Button
               variant="destructive"
               onClick={() => {

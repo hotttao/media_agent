@@ -2,8 +2,11 @@ package capability
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+var ErrCapabilityNotFound = errors.New("capability not found")
 
 type InputType string
 

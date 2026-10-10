@@ -32,7 +32,7 @@ setup("authenticate", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: /Media (Agent|Workflow)/ }),
   ).toBeVisible({
-    timeout: 15_000,
+    timeout: Number(process.env.E2E_APP_READY_TIMEOUT_MS || 15_000),
   });
 
   // Save signed-in state

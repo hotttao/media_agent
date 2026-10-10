@@ -13,6 +13,12 @@ related_workflow:
 
 Execution Capability拥有Provider操作的稳定版本化契约，例如Doubao生图、Doubao生视频、即梦生图；声明固定输入、技术输出媒体类型、Provider模式、Conductor Task Definition、Execution Target与运行策略，不拥有模特图等业务用途，也不保存Provider密钥或执行实例。
 
+## 查询能力
+
+已认证用户可读取已发布的 Provider Capability 目录与指定 Key/Version；目录只包含具有明确生成方式、生成类型与技术输出媒体类型的契约，不将旧业务分类能力作为新能力选项。查询支持 Provider/生成方式/生成类型/Execution Target 筛选，按 Key/Version 稳定排序并分页。指定契约不存在或未发布返回未找到。
+
+公开投影包含 Key、版本、Provider、生成方式/类型、Execution Target、输入名称/类型/必填/媒体及数量约束、技术输出媒体类型、重试与超时策略。不包含 Conductor Task Definition、Managed Pool、Provider 凭据或 Worker 身份。目录不授予资源编辑、Workspace 准入或运行权限；保存/发布仍执行既有契约校验。此为纯查询，不新增聚合、状态机或 Application Workflow。
+
 ## 聚合与不变量
 
 - 主键为 `(capability_key, version)`；published 版本不可修改，只能发布新版本或归档。

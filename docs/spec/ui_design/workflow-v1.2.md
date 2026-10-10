@@ -51,3 +51,8 @@
 - 单测：状态枚举、过滤分页、图变更、防丢引用、实例恢复。组件测试：列表异常、导航切换、密码及 portal。
 - Playwright：真实认证后的素材查看、模板/工作流保存发布、提交、审批/原生失败继续/历史继续；隔离测试数据并清理。设计/host fixture 浏览器检查与真实 API E2E 分开记录，不相互替代。
 - 门禁：typecheck、unit、dep-check、i18n keys、standalone/plugin build；浏览器核对桌面、窄 Slot、截图及宿主 CSS 隔离。
+## 2026-10-09 查询接入补充
+
+Standalone 使用真实 Capability 目录/版本、有效权限动作与 owner 授权列表；协议见 `docs/spec/media_workflow/ui-query-support.md`。执行详情、Resume 与 Rerun 使用指定 Workflow 冻结版本查询，React Query 键区分版本；加载/失败不得复用最新头记录。实例内草稿、Slot/Header Portal 及 plugin 可选端口保持不变，不接实际 media_platform。
+
+共享组件由页面注入 owner-only Grants 查询端口，L1 不依赖业务 Domain；查询键按资源种类/ID/企业隔离。owner 来自 my_permission，动作来自 allowed_actions，编辑页也禁止无 update 的提交。授权成功后刷新列表和当前权限；刷新失败不能显示“已同步”，旧列表显示错误并禁止新增，回收必须针对明确保留的记录。可见性 private 解释 Grants 暂不生效；目录查询范围有限时不隐藏无法查到部门名的已有授权，不把选择目录当作完整授权列表。

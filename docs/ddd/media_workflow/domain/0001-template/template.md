@@ -38,6 +38,7 @@ _不属于_：调度 workflow（归 [execution](../0003-execution/execution.md) 
 | CreateTemplate | 新建模板，初版 version=1, status=draft, visibility=private；创建者 = owner | `POST /api/v1/templates` |
 | UpdateTemplate | 修改 inputs/output_asset_kind/prompt_body/capability，自增 version；需 editor+ | `PUT /api/v1/templates/{id}` |
 | GetTemplate | 取最新 version 的 Template；viewer+ | `GET /api/v1/templates/{id}` |
+| ListTemplateGrants | 查看完整显式授权记录；owner | `GET /api/v1/templates/{id}/grants` |
 | GetTemplateVersion | 取指定 (id, version) 快照；viewer+ | `GET /api/v1/templates/{id}/versions/{version}` |
 | ListTemplates | 按 scope/asset_kind/name/visibility 过滤分页；返回 viewer+ 的集合 | `GET /api/v1/templates?scope=&asset_kind=&name=&visibility=` |
 | ArchiveTemplate | 改为 archived；editor+ | `POST /api/v1/templates/{id}/archive` |
@@ -157,6 +158,8 @@ const (
 `Visibility` 与 [共享资源访问语言](../../../resource_access/CONTEXT.md) 一致。
 
 ## 权限规则
+
+最新详情返回当前用户的 `my_permission` 与 `allowed_actions` 只读投影，复用当前企业/部门/功能事实及资源ACL。editor 可编辑/归档而不能发布或授权；owner 可查看和管理完整 Grants。编辑/发布在功能撤销后不出现在可用动作中，但读取、归档、共享回收按各自原规则保留。历史模板仍按当前资源ACL读取且不展示修改历史版本的入口；实际命令重新校验，不信任UI投影。新增读取为纯查询，不创建 Application Workflow。
 
 创建、编辑、发布除资源角色外，还要求调用者当前在目标企业有有效工作流功能；企业级模板不要求已有Workspace，也不依赖Control可用性。功能撤销后owner/editor的编辑/发布也拒绝，读取和授权回收保持独立。旧未绑定记录不猜企业，功能准入只能取当前身份实际可使用的企业事实，不能据owner跳过准入。
 

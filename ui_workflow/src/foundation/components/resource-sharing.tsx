@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import type { ResourceGrant } from "@/foundation/types/resource-access";
 
 /** Command UI; never pretends session-local grants are a persisted grant list. */
 export function ResourceSharing({
@@ -12,6 +13,10 @@ export function ResourceSharing({
   onGrant,
   onRevoke,
   permissions = ["viewer", "editor"],
+  allowedActions,
+  resourceKey,
+  loadGrants,
+  onRefresh,
 }: {
   organizationId?: string;
   visibility: string;
@@ -20,6 +25,10 @@ export function ResourceSharing({
   onGrant: (team: string, permission: "viewer" | "editor") => Promise<unknown>;
   onRevoke: (team: string) => Promise<unknown>;
   permissions?: readonly ("viewer" | "editor")[];
+  allowedActions?: readonly string[];
+  resourceKey?: readonly string[];
+  loadGrants?: () => Promise<ResourceGrant[]>;
+  onRefresh?: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const [team, setTeam] = useState("");
@@ -27,6 +36,13 @@ export function ResourceSharing({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const can = (action: string) =>
+    owner && (allowedActions === undefined || allowedActions.includes(action));
+  const grants = useQuery({
+    queryKey: resourceKey ?? ["sharing-grants-unconfigured"],
+    enabled: owner && Boolean(loadGrants && resourceKey),
+    queryFn: () => loadGrants!(),
+  });
   const teams = useQuery({
     queryKey: ["sharing-departments", organizationId],
     enabled: owner && Boolean(organizationId),
@@ -55,6 +71,11 @@ export function ResourceSharing({
     setSaved(false);
     try {
       await action();
+      if (loadGrants) {
+        const refreshed = await grants.refetch();
+        if (refreshed.isError) throw refreshed.error;
+      }
+      await onRefresh?.();
       setSaved(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("sharing.failed"));
@@ -67,7 +88,7 @@ export function ResourceSharing({
       <h2 className="font-semibold">{t("sharing.title")}</h2>
       <select
         aria-label={t("templateFields.visibility")}
-        disabled={!owner || pending}
+        disabled={!can("change_visibility") || pending}
         value={visibility}
         className="h-9 w-full rounded-lg border bg-background px-3"
         onChange={(event) =>
@@ -89,7 +110,7 @@ export function ResourceSharing({
       ) : (
         <>
           <p className="text-xs leading-5 text-muted-foreground">
-            {t("sharing.queryGap")}
+            {t(loadGrants ? "sharing.directoryScope" : "sharing.queryGap")}
           </p>
           {teams.isError ? (
             <div role="alert" className="space-y-2 text-xs text-destructive">
@@ -106,7 +127,7 @@ export function ResourceSharing({
           <select
             aria-label={t("sharing.department")}
             className="h-9 w-full rounded-lg border bg-background px-3"
-            disabled={pending || teams.isLoading}
+            disabled={!can("grant") || pending || teams.isLoading}
             value={team}
             onChange={(event) => setTeam(event.target.value)}
           >
@@ -120,7 +141,7 @@ export function ResourceSharing({
           <select
             aria-label={t("sharing.permission")}
             className="h-9 w-full rounded-lg border bg-background px-3"
-            disabled={pending}
+            disabled={!can("grant") || pending}
             value={permission}
             onChange={(event) =>
               setPermission(event.target.value as "viewer" | "editor")
@@ -137,6 +158,8 @@ export function ResourceSharing({
               size="sm"
               disabled={
                 pending ||
+                !can("grant") ||
+                Boolean(loadGrants && (grants.isLoading || grants.isError)) ||
                 !choices.some((item) => item.id === team) ||
                 !permissions.includes(permission)
               }
@@ -144,15 +167,78 @@ export function ResourceSharing({
             >
               {t("sharing.grant")}
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={pending || !choices.some((item) => item.id === team)}
-              onClick={() => void execute(() => onRevoke(team))}
-            >
-              {t("sharing.revoke")}
-            </Button>
+            {!loadGrants ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={
+                  !can("revoke") ||
+                  pending ||
+                  !choices.some((item) => item.id === team)
+                }
+                onClick={() => void execute(() => onRevoke(team))}
+              >
+                {t("sharing.revoke")}
+              </Button>
+            ) : null}
           </div>
+          {loadGrants ? (
+            <section aria-label={t("sharing.grants")} className="space-y-3">
+              <h3 className="text-sm font-medium">{t("sharing.grants")}</h3>
+              {visibility === "private" ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("sharing.privateGrants")}
+                </p>
+              ) : null}
+              {grants.isLoading ? (
+                <p role="status" className="text-xs">
+                  {t("sharing.loadingGrants")}
+                </p>
+              ) : null}
+              {grants.isError ? (
+                <div role="alert" className="text-xs text-destructive">
+                  <p>{grants.error.message}</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void grants.refetch()}
+                  >
+                    {t("v12.retry")}
+                  </Button>
+                </div>
+              ) : null}
+              {grants.isSuccess && !grants.data.length ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("sharing.noGrants")}
+                </p>
+              ) : null}
+              {(grants.data ?? []).map((row) => (
+                <div
+                  key={row.team_id}
+                  className="flex items-center justify-between gap-3 border-t pt-3 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="break-all">
+                      {choices.find((choice) => choice.id === row.team_id)
+                        ?.name ??
+                        t("sharing.unknownDepartment", { id: row.team_id })}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t(`sharing.${row.permission}`)}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!can("revoke") || pending}
+                    onClick={() => void execute(() => onRevoke(row.team_id))}
+                  >
+                    {t("sharing.revoke")}
+                  </Button>
+                </div>
+              ))}
+            </section>
+          ) : null}
         </>
       )}
       {error ? (

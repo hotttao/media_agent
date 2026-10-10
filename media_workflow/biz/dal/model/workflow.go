@@ -23,6 +23,15 @@ type Workflow struct {
 
 func (Workflow) TableName() string { return "media_workflow.workflows" }
 
+type WorkflowVersion struct {
+	WorkflowID         string    `gorm:"column:workflow_id;primaryKey"`
+	Version            int       `gorm:"column:version;primaryKey"`
+	DefinitionSnapshot []byte    `gorm:"column:definition_snapshot;type:jsonb;not null"`
+	CreatedAt          time.Time `gorm:"column:created_at;not null"`
+}
+
+func (WorkflowVersion) TableName() string { return "media_workflow.workflow_versions" }
+
 // WorkflowStep 对应 workflow_steps 表。
 type WorkflowStep struct {
 	ID              string    `gorm:"column:id;primaryKey"`

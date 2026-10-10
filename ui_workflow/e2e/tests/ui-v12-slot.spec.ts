@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
-import { expect, test } from "../fixtures/base";
+import { expect, openStandaloneApp, test } from "../fixtures/base";
 
 test("v1.2 keeps application view when switching standalone slots", async ({
   page,
 }) => {
-  await page.goto("/");
+  await openStandaloneApp(page);
   await page.getByRole("button", { name: /^工作流$|^Workflow$/ }).click();
   await page.getByRole("tab", { name: /^任务$|^Jobs$/ }).click();
   await expect(

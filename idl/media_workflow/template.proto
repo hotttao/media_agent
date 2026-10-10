@@ -44,6 +44,10 @@ service TemplateService {
     option (google.api.http) = { post: "/api/v1/templates/{id}/grants" body: "*" };
     option (api.post) = "/api/v1/templates/:id/grants";
   }
+  rpc ListTemplateGrants(GetTemplateReq) returns (GrantList) {
+    option (google.api.http) = { get: "/api/v1/templates/{id}/grants" };
+    option (api.get) = "/api/v1/templates/:id/grants";
+  }
   rpc RevokeTemplate(RevokeReq) returns (Template) {
     option (google.api.http) = { delete: "/api/v1/templates/{id}/grants/{team_id}" };
     option (api.delete) = "/api/v1/templates/:id/grants/:team_id";
@@ -103,7 +107,17 @@ message Template {
   int32 capability_version = 20;
   map<string, InvocationExpression> invocation_mapping = 21;
 	string organization_id = 22;
+  string my_permission = 23;
+  repeated string allowed_actions = 24;
 }
+
+message ResourceGrant {
+  string team_id = 1;
+  string permission = 2;
+  string granted_by = 3;
+  int64 granted_at = 4;
+}
+message GrantList { repeated ResourceGrant items = 1; }
 
 message CreateTemplateReq {
   string scope = 1 [(api.query) = "scope"];

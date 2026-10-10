@@ -54,6 +54,9 @@ export interface Workflow {
   organization_id?: string;
   workspace_id?: string;
   publication_status?: string;
+  definition_source?: "snapshot" | "compiled";
+  my_permission?: "owner" | "editor" | "viewer";
+  allowed_actions?: string[];
 }
 
 export interface WorkflowListParams {

@@ -62,6 +62,8 @@ export interface InvocationExpression {
 // ── Template ────────────────────────────────────────────────────────────
 
 export interface Template {
+  my_permission?: "owner" | "editor" | "viewer";
+  allowed_actions?: string[];
   organization_id?: string;
   id: string;
   scope: string;

@@ -33,6 +33,8 @@ type Client interface {
 
 	GrantTemplate(context context.Context, req *template.GrantReq, reqOpt ...config.RequestOption) (resp *template.Template, rawResponse *protocol.Response, err error)
 
+	ListTemplateGrants(context context.Context, req *template.GetTemplateReq, reqOpt ...config.RequestOption) (resp *template.GrantList, rawResponse *protocol.Response, err error)
+
 	RevokeTemplate(context context.Context, req *template.RevokeReq, reqOpt ...config.RequestOption) (resp *template.Template, rawResponse *protocol.Response, err error)
 
 	ChangeTemplateVisibility(context context.Context, req *template.ChangeVisibilityReq, reqOpt ...config.RequestOption) (resp *template.Template, rawResponse *protocol.Response, err error)
@@ -253,6 +255,30 @@ func (s *TemplateServiceClient) GrantTemplate(context context.Context, req *temp
 	return resp, rawResponse, nil
 }
 
+func (s *TemplateServiceClient) ListTemplateGrants(context context.Context, req *template.GetTemplateReq, reqOpt ...config.RequestOption) (resp *template.GrantList, rawResponse *protocol.Response, err error) {
+	httpResp := &template.GrantList{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"id": req.GetId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/v1/templates/:id/grants")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
 func (s *TemplateServiceClient) RevokeTemplate(context context.Context, req *template.RevokeReq, reqOpt ...config.RequestOption) (resp *template.Template, rawResponse *protocol.Response, err error) {
 	httpResp := &template.Template{}
 	ret, err := s.client.r().
@@ -339,6 +365,10 @@ func PublishTemplate(context context.Context, req *template.GetTemplateReq, reqO
 
 func GrantTemplate(context context.Context, req *template.GrantReq, reqOpt ...config.RequestOption) (resp *template.Template, rawResponse *protocol.Response, err error) {
 	return defaultClient.GrantTemplate(context, req, reqOpt...)
+}
+
+func ListTemplateGrants(context context.Context, req *template.GetTemplateReq, reqOpt ...config.RequestOption) (resp *template.GrantList, rawResponse *protocol.Response, err error) {
+	return defaultClient.ListTemplateGrants(context, req, reqOpt...)
 }
 
 func RevokeTemplate(context context.Context, req *template.RevokeReq, reqOpt ...config.RequestOption) (resp *template.Template, rawResponse *protocol.Response, err error) {

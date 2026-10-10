@@ -80,6 +80,81 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/v1/capabilities:
+        get:
+            tags:
+                - CapabilityService
+            operationId: CapabilityService_ListCapabilities
+            parameters:
+                - name: provider
+                  in: query
+                  schema:
+                    type: string
+                - name: generation_method
+                  in: query
+                  schema:
+                    type: string
+                - name: generation_type
+                  in: query
+                  schema:
+                    type: string
+                - name: execution_target
+                  in: query
+                  schema:
+                    type: string
+                - name: page
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: page_size
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListCapabilitiesResp'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/capabilities/{key}/versions/{version}:
+        get:
+            tags:
+                - CapabilityService
+            operationId: CapabilityService_GetCapabilityVersion
+            parameters:
+                - name: key
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Capability'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/v1/historical-video-pushes:
         get:
             tags:
@@ -655,6 +730,29 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Status'
     /api/v1/templates/{id}/grants:
+        get:
+            tags:
+                - TemplateService
+            operationId: TemplateService_ListTemplateGrants
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GrantList'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
         post:
             tags:
                 - TemplateService
@@ -967,6 +1065,29 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Status'
     /api/v1/workflows/{id}/grants:
+        get:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_ListWorkflowGrants
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GrantList'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
         post:
             tags:
                 - WorkflowService
@@ -1036,6 +1157,36 @@ paths:
                   required: true
                   schema:
                     type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Workflow'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workflows/{id}/versions/{version}:
+        get:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_GetWorkflowVersion
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: integer
+                    format: int32
             responses:
                 "200":
                     description: OK
@@ -1290,6 +1441,62 @@ components:
                     type: string
                 is_primary:
                     type: boolean
+        Capability:
+            type: object
+            properties:
+                key:
+                    type: string
+                version:
+                    type: integer
+                    format: int32
+                provider:
+                    type: string
+                generation_method:
+                    type: string
+                generation_type:
+                    type: string
+                execution_target:
+                    type: string
+                inputs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CapabilityInput'
+                output_media_type:
+                    type: string
+                retry_count:
+                    type: integer
+                    format: int32
+                retry_logic:
+                    type: string
+                retry_delay_seconds:
+                    type: integer
+                    format: int32
+                timeout_seconds:
+                    type: integer
+                    format: int32
+                status:
+                    type: string
+                created_at:
+                    type: string
+                published_at:
+                    type: string
+        CapabilityInput:
+            type: object
+            properties:
+                name:
+                    type: string
+                type:
+                    type: string
+                required:
+                    type: boolean
+                media_type:
+                    type: string
+                min_items:
+                    type: integer
+                    format: int32
+                max_items:
+                    type: integer
+                    format: int32
         CapabilityVersion:
             type: object
             properties:
@@ -1517,6 +1724,13 @@ components:
                     description: The type of the serialized message.
             additionalProperties: true
             description: Contains an arbitrary serialized message along with a @type that describes the type of the serialized message.
+        GrantList:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResourceGrant'
         GrantReq:
             type: object
             properties:
@@ -1787,6 +2001,22 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/MaterialData'
+        ListCapabilitiesResp:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Capability'
+                total:
+                    type: integer
+                    format: int32
+                page:
+                    type: integer
+                    format: int32
+                page_size:
+                    type: integer
+                    format: int32
         ListHistoricalVideoPushesResp:
             type: object
             properties:
@@ -1928,6 +2158,17 @@ components:
                 message:
                     type: string
                 subject:
+                    type: string
+        ResourceGrant:
+            type: object
+            properties:
+                team_id:
+                    type: string
+                permission:
+                    type: string
+                granted_by:
+                    type: string
+                granted_at:
                     type: string
         ResumeJobReq:
             type: object
@@ -2114,6 +2355,12 @@ components:
                         $ref: '#/components/schemas/InvocationExpression'
                 organization_id:
                     type: string
+                my_permission:
+                    type: string
+                allowed_actions:
+                    type: array
+                    items:
+                        type: string
         TemplateInputSlot:
             type: object
             properties:
@@ -2312,6 +2559,14 @@ components:
                     type: string
                 workspace_id:
                     type: string
+                my_permission:
+                    type: string
+                allowed_actions:
+                    type: array
+                    items:
+                        type: string
+                definition_source:
+                    type: string
         WorkflowInputSchema:
             type: object
             properties:
@@ -2354,6 +2609,7 @@ components:
                 reuse_policy:
                     type: string
 tags:
+    - name: CapabilityService
     - name: HealthService
     - name: HistoricalPublicationService
     - name: JobService

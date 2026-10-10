@@ -49,7 +49,11 @@ export function JobShow({
 }) {
   const { t } = useTranslation();
   const query = useJob(id);
-  const { data: workflow } = useWorkflow(query.data?.job.workflow_id);
+  const definition = useWorkflow(
+    query.data?.job.workflow_id,
+    query.data?.job.workflow_version,
+  );
+  const { data: workflow } = definition;
   const [selectedKey, setSelectedKey] = hostShim.useInstanceState<
     string | null
   >(instanceId, `workflow_job_selected_${id}`, () => null);
@@ -167,7 +171,7 @@ export function JobShow({
               {t("runForm.resume")}
             </Button>
           ) : null}
-          {["failed", "cancelled", "succeeded"].includes(job.status) &&
+          {job.status === "failed" &&
           job.origin !== "legacy_import" ? (
             <Button size="sm" variant="outline" onClick={onRerun}>
               {t("runForm.rerun")}
@@ -217,6 +221,13 @@ export function JobShow({
           className="execution-main"
           aria-label={t("execution.graph")}
         >
+          {definition.isLoading ? <ListState loading /> : null}
+          {definition.isError ? (
+            <ListState
+              error={definition.error.message}
+              onRetry={() => void definition.refetch()}
+            />
+          ) : null}
           {hasGraph && workflow ? (
             <WorkflowGraph
               model={{

@@ -4,6 +4,7 @@ import { getTemplateVersion } from "@/domains/templates/lib/api";
 import { useTranslation } from "react-i18next";
 import { ListState } from "@/foundation/components/resource-list-layout";
 import { hostShim } from "@/foundation/lib/host-shim";
+import { allows } from "@/foundation/types/resource-access";
 import { Spinner } from "@/components/ui/spinner";
 import { useTemplatesList } from "@/domains/templates/hooks/use-templates-list";
 import { WorkflowForm } from "@/domains/workflows/components/workflow-form";
@@ -106,14 +107,22 @@ export function WorkflowEdit({
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      {!allows(workflow, "update") ? (
+        <p role="alert" className="p-4 text-sm text-muted-foreground">
+          {t("sharing.readOnly")}
+        </p>
+      ) : null}
       <WorkflowForm
         value={value}
         resolveTemplate={async (option) => ({
           ...(await getTemplateVersion(option.id, option.version)),
           name: option.name,
         })}
-        onChange={setValue}
+        onChange={(next) => {
+          if (allows(workflow, "update")) setValue(next);
+        }}
         onSubmit={() =>
+          allows(workflow, "update") &&
           updateWorkflow.mutate(
             { id, patch: value },
             {
@@ -126,6 +135,7 @@ export function WorkflowEdit({
         }
         submitLabel={t("editor.savedDraft")}
         isPending={updateWorkflow.isPending}
+        editable={allows(workflow, "update")}
         onCancel={onDone}
         onValidate={() =>
           validate.mutate(value, {

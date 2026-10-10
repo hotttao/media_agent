@@ -85,3 +85,18 @@ func _publishworkflowMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _listworkflowgrantsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _versionsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getworkflowversionMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

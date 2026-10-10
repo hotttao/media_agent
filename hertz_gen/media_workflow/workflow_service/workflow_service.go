@@ -23,6 +23,8 @@ type Client interface {
 
 	GetWorkflow(context context.Context, req *workflow.GetWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error)
 
+	GetWorkflowVersion(context context.Context, req *workflow.GetWorkflowVersionReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error)
+
 	ListWorkflows(context context.Context, req *workflow.ListWorkflowsReq, reqOpt ...config.RequestOption) (resp *workflow.ListWorkflowsResp, rawResponse *protocol.Response, err error)
 
 	ArchiveWorkflow(context context.Context, req *workflow.GetWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error)
@@ -32,6 +34,8 @@ type Client interface {
 	ValidateWorkflow(context context.Context, req *workflow.ValidateWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.ValidationResult, rawResponse *protocol.Response, err error)
 
 	GrantWorkflow(context context.Context, req *workflow.GrantReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error)
+
+	ListWorkflowGrants(context context.Context, req *workflow.GetWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.GrantList, rawResponse *protocol.Response, err error)
 
 	RevokeWorkflow(context context.Context, req *workflow.RevokeReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error)
 
@@ -117,6 +121,31 @@ func (s *WorkflowServiceClient) GetWorkflow(context context.Context, req *workfl
 		setRequestOption(reqOpt...).
 		setResult(httpResp).
 		execute("GET", "/api/v1/workflows/:id")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *WorkflowServiceClient) GetWorkflowVersion(context context.Context, req *workflow.GetWorkflowVersionReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error) {
+	httpResp := &workflow.Workflow{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"id":      req.GetId(),
+			"version": fmt.Sprint(req.GetVersion()),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/v1/workflows/:id/versions/:version")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -251,6 +280,30 @@ func (s *WorkflowServiceClient) GrantWorkflow(context context.Context, req *work
 	return resp, rawResponse, nil
 }
 
+func (s *WorkflowServiceClient) ListWorkflowGrants(context context.Context, req *workflow.GetWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.GrantList, rawResponse *protocol.Response, err error) {
+	httpResp := &workflow.GrantList{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"id": req.GetId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/v1/workflows/:id/grants")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
 func (s *WorkflowServiceClient) RevokeWorkflow(context context.Context, req *workflow.RevokeReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error) {
 	httpResp := &workflow.Workflow{}
 	ret, err := s.client.r().
@@ -319,6 +372,10 @@ func GetWorkflow(context context.Context, req *workflow.GetWorkflowReq, reqOpt .
 	return defaultClient.GetWorkflow(context, req, reqOpt...)
 }
 
+func GetWorkflowVersion(context context.Context, req *workflow.GetWorkflowVersionReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error) {
+	return defaultClient.GetWorkflowVersion(context, req, reqOpt...)
+}
+
 func ListWorkflows(context context.Context, req *workflow.ListWorkflowsReq, reqOpt ...config.RequestOption) (resp *workflow.ListWorkflowsResp, rawResponse *protocol.Response, err error) {
 	return defaultClient.ListWorkflows(context, req, reqOpt...)
 }
@@ -337,6 +394,10 @@ func ValidateWorkflow(context context.Context, req *workflow.ValidateWorkflowReq
 
 func GrantWorkflow(context context.Context, req *workflow.GrantReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error) {
 	return defaultClient.GrantWorkflow(context, req, reqOpt...)
+}
+
+func ListWorkflowGrants(context context.Context, req *workflow.GetWorkflowReq, reqOpt ...config.RequestOption) (resp *workflow.GrantList, rawResponse *protocol.Response, err error) {
+	return defaultClient.ListWorkflowGrants(context, req, reqOpt...)
 }
 
 func RevokeWorkflow(context context.Context, req *workflow.RevokeReq, reqOpt ...config.RequestOption) (resp *workflow.Workflow, rawResponse *protocol.Response, err error) {

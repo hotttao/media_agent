@@ -68,7 +68,7 @@ func GetWorkflow(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, err.Error())
 		return
 	}
-	w, err := Svc.Get(ctx, req.GetId(), auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
+	w, access, err := Svc.GetWithAccess(ctx, req.GetId(), auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
 	if err != nil {
 		if resourceError(c, err) {
 			return
@@ -76,7 +76,9 @@ func GetWorkflow(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusNotFound, err.Error())
 		return
 	}
-	c.JSON(consts.StatusOK, toView(w))
+	view := toView(w)
+	view.MyPermission, view.AllowedActions = access.MyPermission, access.AllowedActions
+	c.JSON(consts.StatusOK, view)
 }
 
 func ListWorkflows(ctx context.Context, c *app.RequestContext) {
@@ -367,4 +369,58 @@ func PublishWorkflow(ctx context.Context, c *app.RequestContext) {
 		status = consts.StatusAccepted
 	}
 	c.JSON(status, toView(w))
+}
+
+// ListWorkflowGrants .
+// @router /api/v1/workflows/:id/grants [GET]
+func ListWorkflowGrants(ctx context.Context, c *app.RequestContext) {
+	var req pb.GetWorkflowReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	rows, err := Svc.ListGrants(ctx, req.GetId(), auth.CallerID(ctx))
+	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
+		c.String(consts.StatusServiceUnavailable, "resource grants unavailable")
+		return
+	}
+	items := make([]*pb.ResourceGrant, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, &pb.ResourceGrant{TeamId: row.TeamID, Permission: string(row.Permission), GrantedBy: row.GrantedBy, GrantedAt: row.GrantedAt.UnixNano()})
+	}
+	c.JSON(consts.StatusOK, &pb.GrantList{Items: items})
+}
+
+// GetWorkflowVersion .
+// @router /api/v1/workflows/:id/versions/:version [GET]
+func GetWorkflowVersion(ctx context.Context, c *app.RequestContext) {
+	var req pb.GetWorkflowVersionReq
+	if err := c.BindAndValidate(&req); err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	if req.GetVersion() <= 0 {
+		c.String(consts.StatusBadRequest, "invalid workflow version")
+		return
+	}
+	snapshot, access, err := Svc.GetVersionForCaller(ctx, req.GetId(), int(req.GetVersion()), auth.CallerID(ctx), auth.TeamsFromContext(ctx)...)
+	if err != nil {
+		if resourceError(c, err) {
+			return
+		}
+		if errors.Is(err, domain.ErrVersionNotFound) {
+			c.String(consts.StatusNotFound, "workflow version not found")
+			return
+		}
+		c.String(consts.StatusServiceUnavailable, "workflow version unavailable")
+		return
+	}
+	view := toView(snapshot.Definition)
+	view.DefinitionSource, view.MyPermission, view.AllowedActions = snapshot.Source, access.MyPermission, access.AllowedActions
+	c.JSON(consts.StatusOK, view)
 }

@@ -21,6 +21,10 @@ service WorkflowService {
     option (google.api.http) = { get: "/api/v1/workflows/{id}" };
     option (api.get) = "/api/v1/workflows/:id";
   }
+  rpc GetWorkflowVersion(GetWorkflowVersionReq) returns (Workflow) {
+    option (google.api.http) = { get: "/api/v1/workflows/{id}/versions/{version}" };
+    option (api.get) = "/api/v1/workflows/:id/versions/:version";
+  }
   rpc ListWorkflows(ListWorkflowsReq) returns (ListWorkflowsResp) {
     option (google.api.http) = { get: "/api/v1/workflows" };
     option (api.get) = "/api/v1/workflows";
@@ -40,6 +44,10 @@ service WorkflowService {
   rpc GrantWorkflow(GrantReq) returns (Workflow) {
     option (google.api.http) = { post: "/api/v1/workflows/{id}/grants" body: "*" };
     option (api.post) = "/api/v1/workflows/:id/grants";
+  }
+  rpc ListWorkflowGrants(GetWorkflowReq) returns (GrantList) {
+    option (google.api.http) = { get: "/api/v1/workflows/{id}/grants" };
+    option (api.get) = "/api/v1/workflows/:id/grants";
   }
   rpc RevokeWorkflow(RevokeReq) returns (Workflow) {
     option (google.api.http) = { delete: "/api/v1/workflows/{id}/grants/{team_id}" };
@@ -111,7 +119,18 @@ message Workflow {
   string publication_status = 15;
 	string organization_id = 16;
 	string workspace_id = 17;
+  string my_permission = 18;
+  repeated string allowed_actions = 19;
+  string definition_source = 20; // snapshot | compiled; compiled lacks historical display metadata
 }
+
+message ResourceGrant {
+  string team_id = 1;
+  string permission = 2;
+  string granted_by = 3;
+  int64 granted_at = 4;
+}
+message GrantList { repeated ResourceGrant items = 1; }
 
 message CreateWorkflowReq {
   string scope = 1 [(api.query) = "scope"];
@@ -135,6 +154,7 @@ message UpdateWorkflowReq {
 message UpdateWorkflowResp { int32 version = 1; }
 
 message GetWorkflowReq { string id = 1 [(api.path) = "id"]; }
+message GetWorkflowVersionReq { string id = 1 [(api.path) = "id"]; int32 version = 2 [(api.path) = "version"]; }
 
 message ListWorkflowsReq {
   string scope = 1 [(api.query) = "scope"];

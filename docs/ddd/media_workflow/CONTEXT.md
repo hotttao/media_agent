@@ -126,6 +126,10 @@ Workflow 中产出最终结果的 Step 的 `step.key`；同时是 DAG 的唯一 
 把已发布 Workflow 的不可变版本转换为 Conductor Workflow Definition，并保存源版本、目标 name/version 与 definition_hash 的映射；编译结果是执行适配物，不是新的业务 Workflow。
 _禁用替代词_：Workflow Execution、DAG Save
 
+**Workflow Version（工作流版本）**:
+Workflow 在某一版本的不可变业务定义，包含有序步骤、槽位绑定、入口契约及唯一输出。读取历史定义使用当前资源访问权限，不恢复历史授权。
+_禁用替代词_：Workflow Compilation、Conductor Definition、Execution
+
 **Workflow Publication Intent（工作流发布意图）**:
 拥有者请求发布某个不可变Workflow版本的持久事实，关联冻结编译与注册契约；发布尚在恢复中不等于该版本已经可执行。
 _禁用替代词_：Job、Workflow Execution、Compilation本身。

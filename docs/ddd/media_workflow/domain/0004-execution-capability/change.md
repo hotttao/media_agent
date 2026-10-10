@@ -35,3 +35,6 @@
 - 技术输出Media Type与Template业务Asset Kind解耦；旧字段/版本只作兼容，新注册/模板/Workflow使用新版本，不改既有IR和执行。
 - 本轮保持mock联调边界，真实Provider适配、UI、历史全量迁移及Conductor启动幂等不自动扩入。
 - 重新以001原始四类Task为基线，generation_method区分媒体转换，generation_type区分首帧/多图模式；规范Key绑定三维，version固定契约，首帧一图、多图有序至少一图。先前三种种子草稿已撤回，不作为最终能力目录。
+## 2026-10-09 公开只读能力目录
+
+为 standalone 模板编辑器提供已发布 Provider 契约的分页目录和指定版本查询，隐藏引擎任务名/Managed Pool/凭据；不新增能力写入或运行语义。纯查询审查无需新增 Workflow。

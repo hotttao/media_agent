@@ -1,4 +1,6 @@
 import { useTranslation } from "react-i18next";
+import { useState } from "react";
+import { CapabilitySelector } from "@/domains/capabilities/components/capability-selector";
 import { useCreateTemplate } from "@/domains/templates/hooks/use-template-mutations";
 import { TemplateForm } from "@/domains/templates/components/template-form";
 import type { TemplateInput } from "@/domains/templates/types";
@@ -13,6 +15,7 @@ export function TemplateCreate({
 }) {
   const { t } = useTranslation();
   const shell = hostShim.useShellContext();
+  const [capabilityReady, setCapabilityReady] = useState(false);
   const createTemplate = useCreateTemplate();
   const [value, setValue] = hostShim.useInstanceState<TemplateInput>(
     instanceId,
@@ -37,7 +40,7 @@ export function TemplateCreate({
   );
 
   function handleSubmit() {
-    if (shell.isLoading || !shell.organization.id) return;
+    if (shell.isLoading || !shell.organization.id || !capabilityReady) return;
     createTemplate.mutate(
       { ...value, organization_id: shell.organization.id },
       {
@@ -69,6 +72,25 @@ export function TemplateCreate({
         </p>
       ) : null}
       <TemplateForm
+        capabilityReady={capabilityReady}
+        capabilitySelector={
+          <CapabilitySelector
+            capabilityKey={value.capability_key}
+            version={value.capability_version}
+            onReady={setCapabilityReady}
+            onSelect={(contract) => {
+              setCapabilityReady(false);
+              setValue({
+                ...value,
+                capability_key: contract.key,
+                capability_version: contract.version,
+                platform: contract.provider,
+                gen_way: contract.generation_method,
+                gen_type: contract.generation_type,
+              });
+            }}
+          />
+        }
         value={value}
         onChange={setValue}
         onSubmit={handleSubmit}

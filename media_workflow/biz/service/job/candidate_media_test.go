@@ -72,3 +72,27 @@ func TestCandidateViewsRejectForeignAndUnreadableObjects(t *testing.T) {
 		})
 	}
 }
+
+func TestLegacyStorageCandidateViewRefreshesWithoutChangingSnapshot(t *testing.T) {
+	r := &candidateResolverStub{object: client.ResolvedStorageObject{URL: "https://storage.test/fresh", ExpiresAt: time.Now().Add(time.Minute).Unix()}}
+	s := &Service{candidateMedia: r, resumeStorageOrigin: "https://storage.test"}
+	j := &domain.Job{OrganizationID: "org", Scope: "scope"}
+	stored := &domain.StepRun{Candidates: []domain.Candidate{{URL: "https://storage.test/media/materials/org/scope/frame.png?old=expired"}}}
+	views, err := s.candidateViews(context.Background(), j, []*domain.StepRun{stored})
+	if err != nil || views[0].Candidates[0].URL != r.object.URL || stored.Candidates[0].URL != "https://storage.test/media/materials/org/scope/frame.png?old=expired" || stored.Candidates[0].ObjectPath != "" {
+		t.Fatal("legacy storage candidate was not refreshed as a response-only view", err)
+	}
+	stored.Candidates[0].URL = "https://external.test/media/materials/org/scope/frame.png"
+	views, err = s.candidateViews(context.Background(), j, []*domain.StepRun{stored})
+	if err != nil || views[0].Candidates[0].URL != stored.Candidates[0].URL || r.calls != 1 {
+		t.Fatal("external origin was interpreted as our storage")
+	}
+	stored.Candidates[0].URL = "https://storage.test/media/materials/org/other/frame.png"
+	if _, err := s.candidateViews(context.Background(), j, []*domain.StepRun{stored}); err == nil || r.calls != 1 {
+		t.Fatal("foreign Scope reached storage through a legacy URL")
+	}
+	stored.Candidates[0].URL = "https://storage.test/media/materials/other/scope/frame.png"
+	if _, err := s.candidateViews(context.Background(), j, []*domain.StepRun{stored}); err == nil || r.calls != 1 {
+		t.Fatal("foreign Organization reached storage through a legacy URL")
+	}
+}

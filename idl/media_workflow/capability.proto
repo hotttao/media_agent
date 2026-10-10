@@ -1,0 +1,59 @@
+syntax = "proto3";
+package media_workflow.capability;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_workflow/capability";
+
+service CapabilityService {
+  rpc ListCapabilities(ListCapabilitiesReq) returns (ListCapabilitiesResp) {
+    option (google.api.http) = { get: "/api/v1/capabilities" };
+    option (api.get) = "/api/v1/capabilities";
+  }
+  rpc GetCapabilityVersion(GetCapabilityVersionReq) returns (Capability) {
+    option (google.api.http) = { get: "/api/v1/capabilities/{key}/versions/{version}" };
+    option (api.get) = "/api/v1/capabilities/:key/versions/:version";
+  }
+}
+message CapabilityInput {
+  string name = 1;
+  string type = 2;
+  bool required = 3;
+  string media_type = 4;
+  int32 min_items = 5;
+  int32 max_items = 6;
+}
+message Capability {
+  string key = 1;
+  int32 version = 2;
+  string provider = 3;
+  string generation_method = 4;
+  string generation_type = 5;
+  string execution_target = 6;
+  repeated CapabilityInput inputs = 7;
+  string output_media_type = 8;
+  int32 retry_count = 9;
+  string retry_logic = 10;
+  int32 retry_delay_seconds = 11;
+  int32 timeout_seconds = 12;
+  string status = 13;
+  int64 created_at = 14;
+  int64 published_at = 15;
+}
+message ListCapabilitiesReq {
+  string provider = 1 [(api.query) = "provider"];
+  string generation_method = 2 [(api.query) = "generation_method"];
+  string generation_type = 3 [(api.query) = "generation_type"];
+  string execution_target = 4 [(api.query) = "execution_target"];
+  int32 page = 5 [(api.query) = "page"];
+  int32 page_size = 6 [(api.query) = "page_size"];
+}
+message ListCapabilitiesResp {
+  repeated Capability items = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+message GetCapabilityVersionReq {
+  string key = 1 [(api.path) = "key"];
+  int32 version = 2 [(api.path) = "version"];
+}

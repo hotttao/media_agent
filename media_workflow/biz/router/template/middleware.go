@@ -90,3 +90,8 @@ func _publishtemplateMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _listtemplategrantsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

@@ -1,4 +1,4 @@
-import { expect, test } from "../fixtures/base";
+import { expect, openStandaloneApp, test } from "../fixtures/base";
 
 // Isolated definitions; a borrowed product is read-only. No Job is submitted.
 test("product launches an instance-scoped run draft and never overwrites a cleared choice", async ({
@@ -58,6 +58,7 @@ test("product launches an instance-scoped run draft and never overwrites a clear
     );
     expect(createdWorkflow.ok()).toBeTruthy();
     workflowID = (await createdWorkflow.json()).id;
+    if (!workflowID) throw new Error("Workflow create receipt lacks an ID");
     expect(
       (await page.request.post(`/api/v1/workflows/${workflowID}/publish`)).ok(),
     ).toBeTruthy();
@@ -79,7 +80,7 @@ test("product launches an instance-scoped run draft and never overwrites a clear
     const { items } = await productsResponse.json();
     const product = items[0];
     expect(product.id).toBeTruthy();
-    await page.goto("/");
+    await openStandaloneApp(page);
     await page.getByRole("button", { name: /^素材$|^Materials$/ }).click();
     await page.getByRole("tab", { name: /^商品$|^Products$/ }).click();
     await page
@@ -102,7 +103,7 @@ test("product launches an instance-scoped run draft and never overwrites a clear
     });
     await dialog
       .getByRole("combobox", { name: /^可用工作流$|^Available workflow$/ })
-      .selectOption(workflowID!);
+      .selectOption(workflowID);
     await dialog
       .getByRole("button", {
         name: /^带入商品并准备运行$|^Prepare run with this product$/,
@@ -110,7 +111,7 @@ test("product launches an instance-scoped run draft and never overwrites a clear
       .click();
     await expect(
       page.getByRole("combobox", { name: /^工作流$|^Workflows$/ }),
-    ).toHaveValue(workflowID!);
+    ).toHaveValue(workflowID);
     const selectedProduct = page.getByTestId("run-input-product");
     await expect(selectedProduct).toHaveValue(product.id);
     await expect(

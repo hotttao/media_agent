@@ -20,11 +20,13 @@ import (
 	wfrepo "media_agent/media_workflow/biz/dal/repo/workflow"
 	templatedomain "media_agent/media_workflow/biz/domain/template"
 	wfdomain "media_agent/media_workflow/biz/domain/workflow"
+	capabilityhandler "media_agent/media_workflow/biz/handler/capability"
 	historypushhandler "media_agent/media_workflow/biz/handler/historical_publication"
 	jobhandler "media_agent/media_workflow/biz/handler/job"
 	tplhandler "media_agent/media_workflow/biz/handler/template"
 	workerhandler "media_agent/media_workflow/biz/handler/worker"
 	wfhandler "media_agent/media_workflow/biz/handler/workflow"
+	capabilitysvc "media_agent/media_workflow/biz/service/capability"
 	historypushsvc "media_agent/media_workflow/biz/service/historical_publication"
 	jobsvc "media_agent/media_workflow/biz/service/job"
 	tplsvc "media_agent/media_workflow/biz/service/template"
@@ -149,6 +151,7 @@ func main() {
 
 	// template 装配
 	capabilityRepo := capabilityrepo.NewRepo(db)
+	capabilityhandler.Svc = capabilitysvc.NewService(capabilityRepo)
 	tplRepo := tplrepo.NewRepo(db)
 	tplGrantRepo := tplrepo.NewGrantRepo(db)
 	tplSvc := tplsvc.NewService(tplRepo, tplGrantRepo, txRunner, materialsClient, capabilityRepo)
@@ -165,6 +168,7 @@ func main() {
 	}
 	wfSvc := wfsvc.NewService(wfRepo, wfGrantRepo, txRunner, tplLookup, publishFlow)
 	wfSvc.ConfigurePublications(compilationRepo)
+	wfSvc.ConfigureVersions(wfRepo)
 	wfhandler.Svc = wfSvc
 
 	// job 装配（P3）

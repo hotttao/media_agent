@@ -28,7 +28,14 @@ func (r *Repo) Save(ctx context.Context, w *domain.Workflow) error {
 	}
 	w.ID = row.ID
 	w.CreatedAt = row.CreatedAt
-	return r.saveSteps(ctx, Q, w)
+	if err := r.saveSteps(ctx, Q, w); err != nil {
+		return err
+	}
+	persisted, err := r.Get(ctx, w.ID)
+	if err != nil {
+		return err
+	}
+	return r.saveDefinitionVersion(ctx, persisted)
 }
 
 func (r *Repo) Get(ctx context.Context, id string) (*domain.Workflow, error) {
@@ -122,6 +129,16 @@ func (r *Repo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Workflow
 
 // Update 整体覆盖：更新主表 + 删旧 steps/bindings 重建。service 包在 RunInTx 内调用。
 func (r *Repo) Update(ctx context.Context, w *domain.Workflow) error {
+	old, err := r.GetForUpdate(ctx, w.ID)
+	if err != nil {
+		return err
+	}
+	if old.Version != w.Version-1 {
+		return domain.ErrPublicationConflict
+	}
+	if err := r.saveDefinitionVersion(ctx, old); err != nil {
+		return err
+	}
 	Q := query.Use(dal.FromContext(ctx, r.db))
 	schemaJSON, _ := json.Marshal(w.InputSchema)
 	result, err := Q.Workflow.WithContext(ctx).
@@ -141,7 +158,14 @@ func (r *Repo) Update(ctx context.Context, w *domain.Workflow) error {
 		Where(Q.WorkflowStep.WorkflowID.Eq(w.ID), Q.WorkflowStep.Version.Eq(w.Version-1)).Delete(); err != nil {
 		return err
 	}
-	return r.saveSteps(ctx, Q, w)
+	if err := r.saveSteps(ctx, Q, w); err != nil {
+		return err
+	}
+	persisted, err := r.Get(ctx, w.ID)
+	if err != nil {
+		return err
+	}
+	return r.saveDefinitionVersion(ctx, persisted)
 }
 
 func (r *Repo) UpdateStatus(ctx context.Context, id string, status domain.Status) error {

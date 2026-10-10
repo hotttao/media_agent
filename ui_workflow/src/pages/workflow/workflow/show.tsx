@@ -41,10 +41,12 @@ import { AppStudioHeader } from "@/foundation/components/app-studio-header";
 import { ListState } from "@/foundation/components/resource-list-layout";
 import { ResourceSharing } from "@/foundation/components/resource-sharing";
 import { hostShim } from "@/foundation/lib/host-shim";
+import { allows } from "@/foundation/types/resource-access";
 import {
   changeWorkflowVisibility,
   grantWorkflow,
   revokeWorkflow,
+  listWorkflowGrants,
 } from "@/domains/workflows/lib/api";
 
 export function WorkflowShow({
@@ -61,7 +63,6 @@ export function WorkflowShow({
   onRun: () => void;
 }) {
   const { t } = useTranslation();
-  const { user } = hostShim.useCurrentUser();
   const shell = hostShim.useShellContext();
   const {
     data: workflow,
@@ -169,14 +170,13 @@ export function WorkflowShow({
             >
               {t("studio.viewExecutions")}
             </Button>
-            {workflow.status === "published" &&
-            workflow.publication_status === "registered" ? (
+            {allows(workflow, "run") ? (
               <Button onClick={onRun}>
                 <Play className="mr-2 h-4 w-4" />
                 {t("workflowView.run")}
               </Button>
             ) : null}
-            {workflow.status === "draft" && workflow.created_by === user?.id ? (
+            {workflow.status === "draft" && allows(workflow, "publish") ? (
               <Button
                 onClick={() => publishWorkflow.mutate(id)}
                 disabled={publishWorkflow.isPending}
@@ -185,10 +185,12 @@ export function WorkflowShow({
                 {t("workflowView.publish")}
               </Button>
             ) : null}
-            <Button variant="outline" onClick={onEdit}>
-              <Pencil className="mr-2 h-4 w-4" />
-              {t("workflowView.edit")}
-            </Button>
+            {allows(workflow, "update") ? (
+              <Button variant="outline" onClick={onEdit}>
+                <Pencil className="mr-2 h-4 w-4" />
+                {t("workflowView.edit")}
+              </Button>
+            ) : null}
           </div>
         </AppStudioHeader>
 
@@ -224,7 +226,16 @@ export function WorkflowShow({
             </section>
             <ResourceSharing
               organizationId={workflow.organization_id || shell.organization.id}
-              owner={Boolean(user?.id && user.id === workflow.created_by)}
+              key={id}
+              owner={workflow.my_permission === "owner"}
+              allowedActions={workflow.allowed_actions ?? []}
+              resourceKey={[
+                "workflow-grants",
+                id,
+                workflow.organization_id ?? "",
+              ]}
+              loadGrants={() => listWorkflowGrants(id)}
+              onRefresh={() => refetch({ throwOnError: true })}
               visibility={workflow.visibility}
               onVisibility={async (value) => {
                 await changeWorkflowVisibility(id, value);
@@ -235,7 +246,7 @@ export function WorkflowShow({
               }
               onRevoke={(team) => revokeWorkflow(id, team)}
             />
-            {workflow.status !== "archived" ? (
+            {allows(workflow, "archive") ? (
               <Button
                 variant="destructive"
                 size="sm"

@@ -621,3 +621,9 @@ GOWORK=off go test -tags=e2e ./e2e -run '^TestGenerationRegistration(HTTPReplayP
 `MEDIA_E2E_CONDUCTOR_URL=http://127.0.0.1:8080 go test -tags=e2e ./e2e -run '^TestConductorTaskDefinitionFrozenRegistration$' -race -count=1` 使用独立技术TaskDefinition名称并在结束后清理，代理将实际POST成功响应替换成503，验证GET原定义恢复、重放0额外写入、不同契约拒绝且不PUT。无业务实例/Worker/模型执行或用户任务元数据改写。
 
 设置 `MEDIA_E2E_EXISTING_TASK_DEFINITIONS=1` 并运行 `TestConductorPublishedTaskDefinitionsCompatibility`，对当前四节点样本的6个TaskDefinition作只读兼容预检；测试代理禁止任何非GET请求，存在冲突时不能修复线上定义。该门禁只适用于文档样本契约，不是其他用户Capability的通用政策。
+
+## UI 查询支持门禁（2026-10-09）
+
+`go -C media_workflow test -tags=e2e ./e2e -run '^TestWorkflow(BusinessVersionPersistence|CompiledVersionEvidence)$' -count=1 -v -timeout=3m` 使用 testcontainers 隔离 PostgreSQL：migration 026 的当前定义回填、快照与更新共同回滚、不可覆盖/降级保护，以及由已注册 schema v3 IR + 指定模板版本恢复旧拓扑与入口契约。缺少历史证据明确缺失，读取不改编译、不注册/启动 Conductor，不替代真实网关验收。
+
+配置 `MEDIA_GATEWAY_ADDR`、忽略文件中的 User `MEDIA_API_TOKEN`、已有 owner 四节点 `MEDIA_E2E_QUERY_WORKFLOW_ID` 和独立 CLI 绝对路径 `MEDIA_E2E_CLI_BINARY`，运行 `go -C media-cli test ./e2e -run '^TestWorkflowUIQuerySupportGatewayAndCLI$' -count=1 -v -timeout=2m`。HTTP/CLI 读取 Capability 发布目录/指定版本、Template/Workflow 权限与 owner Grants、Workflow 冻结版本；不创建 Job、Worker、Token、授权或历史记录。当前测试环境使用 LAN 网关入口，不能用不匹配 Oathkeeper URL 规则的 loopback 地址替代。Token、原始输入与失败输出不打印。

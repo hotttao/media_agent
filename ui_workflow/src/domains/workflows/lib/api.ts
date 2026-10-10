@@ -1,5 +1,6 @@
 import { api } from "@/foundation/lib/api-client";
 import { wireStatus } from "@/foundation/lib/wire-status";
+import type { ResourceGrant } from "@/foundation/types/resource-access";
 import type {
   SlotBinding,
   ValidationResult,
@@ -114,6 +115,24 @@ export async function listWorkflows(
 export async function getWorkflow(id: string): Promise<Workflow> {
   return fromWire(
     await api.request<Workflow>(`/workflows/${encodeURIComponent(id)}`),
+  );
+}
+
+export async function listWorkflowGrants(id: string): Promise<ResourceGrant[]> {
+  const result = await api.request<{items?: ResourceGrant[]}>(`/workflows/${encodeURIComponent(id)}/grants`);
+  return result.items ?? [];
+}
+
+export async function getWorkflowVersion(
+  id: string,
+  version: number,
+): Promise<Workflow> {
+  if (!Number.isSafeInteger(version) || version <= 0)
+    throw new Error("Invalid workflow version");
+  return fromWire(
+    await api.request<Workflow>(
+      `/workflows/${encodeURIComponent(id)}/versions/${version}`,
+    ),
   );
 }
 

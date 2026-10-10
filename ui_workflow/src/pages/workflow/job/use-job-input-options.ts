@@ -16,9 +16,18 @@ export type JobInputOptions = Record<string, JobInputOption[]>;
 export function useJobInputOptions(
   workflow: WorkflowOption | undefined,
   organizationReady: boolean,
+  organizationId: string,
 ) {
   return useQuery({
-    queryKey: ["jobs", "input-options", workflow?.id, workflow?.version],
+    queryKey: [
+      "jobs",
+      "input-options",
+      organizationId,
+      workflow?.id,
+      workflow?.version,
+      workflow?.scope,
+      workflow?.input_schema?.entries,
+    ],
     enabled: Boolean(workflow && organizationReady),
     queryFn: async (): Promise<JobInputOptions> => {
       if (!workflow) return {};

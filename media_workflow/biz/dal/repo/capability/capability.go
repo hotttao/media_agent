@@ -3,6 +3,7 @@ package capability
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"gorm.io/gorm"
@@ -22,6 +23,9 @@ func (r *Repo) Get(ctx context.Context, key string, version int) (*domain.Capabi
 		Where("capability_key = ? AND version = ? AND status = ?", key, version, "published").
 		First(&row).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrCapabilityNotFound
+		}
 		return nil, err
 	}
 	return toDomain(&row)

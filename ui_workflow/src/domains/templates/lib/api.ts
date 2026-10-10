@@ -19,6 +19,7 @@
  */
 import { api } from "@/foundation/lib/api-client";
 import { wireStatus } from "@/foundation/lib/wire-status";
+import type { ResourceGrant } from "@/foundation/types/resource-access";
 import type {
   ChangeVisibilityInput,
   CreateTemplateResponse,
@@ -54,6 +55,11 @@ export async function getTemplate(id: string): Promise<Template> {
   return fromWire(
     await api.request<Template>(`/templates/${encodeURIComponent(id)}`),
   );
+}
+
+export async function listTemplateGrants(id: string): Promise<ResourceGrant[]> {
+  const result = await api.request<{items?: ResourceGrant[]}>(`/templates/${encodeURIComponent(id)}/grants`);
+  return result.items ?? [];
 }
 
 function fromWire(template: Template): Template {

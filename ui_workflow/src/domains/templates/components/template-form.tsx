@@ -1,5 +1,5 @@
 import { Trash2, Settings2 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   defaultImageInvocation,
@@ -70,6 +70,9 @@ export function TemplateForm({
   isPending,
   onCancel,
   scopeLocked = false,
+  editable = true,
+  capabilitySelector,
+  capabilityReady = true,
 }: {
   value: TemplateInput;
   onChange: (v: TemplateInput) => void;
@@ -78,6 +81,9 @@ export function TemplateForm({
   isPending: boolean;
   onCancel: () => void;
   scopeLocked?: boolean;
+  editable?: boolean;
+  capabilitySelector?: ReactNode;
+  capabilityReady?: boolean;
 }) {
   const { t } = useTranslation();
   const { data: assetKinds } = useAssetKinds();
@@ -86,6 +92,8 @@ export function TemplateForm({
   const [checked, setChecked] = useState(false);
   const issues = checkTemplateInputs(value);
   const saveDisabled =
+    !editable ||
+    !capabilityReady ||
     isPending ||
     !value.name ||
     !value.scope ||
@@ -152,7 +160,10 @@ export function TemplateForm({
         </div>
       </AppStudioHeader>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <fieldset disabled={isPending} className="template-workbench min-w-0">
+        <fieldset
+          disabled={isPending || !editable}
+          className="template-workbench min-w-0"
+        >
           <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
             <DialogContent>
               <DialogHeader>
@@ -343,45 +354,50 @@ export function TemplateForm({
           </div>
 
           <div className="template-provider space-y-5">
+            {capabilitySelector}
             <div className="grid gap-2">
-              <Label htmlFor="template-capability-key">
-                {t("templateEditor.capability")}
-              </Label>
-              <Input
-                id="template-capability-key"
-                value={value.capability_key}
-                placeholder="jimeng.i2i.multi_image_prompt"
-                onChange={(event) =>
-                  onChange({
-                    ...value,
-                    capability_key: event.target.value,
-                    ...(providerIdentity(event.target.value) ?? {
-                      platform: "",
-                      gen_way: "",
-                      gen_type: "",
-                    }),
-                  })
-                }
-              />
-              <Label htmlFor="template-capability-version">
-                {t("v12.version")}
-              </Label>
-              <Input
-                id="template-capability-version"
-                type="number"
-                min={1}
-                step={1}
-                value={value.capability_version}
-                onChange={(event) =>
-                  onChange({
-                    ...value,
-                    capability_version: Number(event.target.value),
-                  })
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                {t("templateEditor.catalogUnavailable")}
-              </p>
+              {!capabilitySelector ? (
+                <>
+                  <Label htmlFor="template-capability-key">
+                    {t("templateEditor.capability")}
+                  </Label>
+                  <Input
+                    id="template-capability-key"
+                    value={value.capability_key}
+                    placeholder="jimeng.i2i.multi_image_prompt"
+                    onChange={(event) =>
+                      onChange({
+                        ...value,
+                        capability_key: event.target.value,
+                        ...(providerIdentity(event.target.value) ?? {
+                          platform: "",
+                          gen_way: "",
+                          gen_type: "",
+                        }),
+                      })
+                    }
+                  />
+                  <Label htmlFor="template-capability-version">
+                    {t("v12.version")}
+                  </Label>
+                  <Input
+                    id="template-capability-version"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={value.capability_version}
+                    onChange={(event) =>
+                      onChange({
+                        ...value,
+                        capability_version: Number(event.target.value),
+                      })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("templateEditor.catalogUnavailable")}
+                  </p>
+                </>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"

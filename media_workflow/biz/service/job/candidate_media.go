@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"errors"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -29,24 +30,39 @@ func (s *Service) candidateViews(ctx context.Context, j *domain.Job, steps []*do
 		copy.Candidates = append([]domain.Candidate(nil), step.Candidates...)
 		views[i] = &copy
 		for n, candidate := range copy.Candidates {
-			if candidate.ObjectPath == "" {
+			objectPath := candidate.ObjectPath
+			// Legacy workers returned a storage URL rather than an ObjectPath.
+			// Refresh only verified links from our configured storage origin;
+			// derive the response view without rewriting the frozen candidate.
+			if objectPath == "" && candidate.URL != "" && s.resumeStorageOrigin != "" {
+				u, urlErr := url.Parse(candidate.URL)
+				origin, originErr := url.Parse(s.resumeStorageOrigin)
+				if urlErr == nil && originErr == nil && u.Scheme == origin.Scheme && u.Host == origin.Host {
+					var err error
+					objectPath, err = resumeObjectPath(candidate.URL, s.resumeStorageOrigin, j.OrganizationID)
+					if err != nil {
+						return nil, errors.New("candidate object outside execution namespace")
+					}
+				}
+			}
+			if objectPath == "" {
 				continue
 			}
 			prefix := "materials/" + j.OrganizationID + "/" + j.Scope + "/"
-			if j.OrganizationID == "" || j.Scope == "" || !strings.HasPrefix(candidate.ObjectPath, prefix) || path.Clean(candidate.ObjectPath) != candidate.ObjectPath || strings.Contains(candidate.ObjectPath, "\\") {
+			if j.OrganizationID == "" || j.Scope == "" || !strings.HasPrefix(objectPath, prefix) || path.Clean(objectPath) != objectPath || strings.Contains(objectPath, "\\") {
 				return nil, errors.New("candidate object outside execution namespace")
 			}
 			if s.candidateMedia == nil {
 				return nil, errors.New("candidate storage unavailable")
 			}
-			object, ok := cache[candidate.ObjectPath]
+			object, ok := cache[objectPath]
 			if !ok {
 				var err error
-				object, err = s.candidateMedia.ResolveInternalObject(ctx, j.OrganizationID, candidate.ObjectPath)
+				object, err = s.candidateMedia.ResolveInternalObject(ctx, j.OrganizationID, objectPath)
 				if err != nil || object.URL == "" || object.ExpiresAt <= time.Now().Unix() {
 					return nil, errors.New("candidate storage unavailable")
 				}
-				cache[candidate.ObjectPath] = object
+				cache[objectPath] = object
 			}
 			copy.Candidates[n].URL = object.URL
 		}

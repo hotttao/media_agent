@@ -123,8 +123,29 @@ const props = {
 };
 
 describe("execution inspector", () => {
+  it("offers input override only for failed native executions, not success, cancellation or historical jobs", () => {
+    setDetail({
+      ...detail,
+      job: { ...detail.job, status: "failed", origin: "native" },
+    });
+    const view = render(<JobShow {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "runForm.rerun" }));
+    expect(props.onRerun).toHaveBeenCalledTimes(1);
+    for (const job of [
+      { ...detail.job, status: "cancelled", origin: "native" },
+      { ...detail.job, status: "succeeded", origin: "native" },
+      { ...detail.job, status: "failed", origin: "legacy_import" },
+    ] as GetJobResponse["job"][]) {
+      setDetail({ ...detail, job });
+      view.rerender(<JobShow {...props} />);
+      expect(
+        screen.queryByRole("button", { name: "runForm.rerun" }),
+      ).toBeNull();
+    }
+  });
   it("shows the graph first and never substitutes another step's results for an unstarted node", () => {
     render(<JobShow {...props} />);
+    expect(useWorkflow).toHaveBeenCalledWith("wf", 1);
     expect(screen.getByTestId("workflow-canvas")).toBeTruthy();
     expect(screen.queryByRole("complementary")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "video" }));

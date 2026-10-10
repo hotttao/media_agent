@@ -165,6 +165,13 @@
 		"nine_view_object_pathHint": "多角度表情与姿态"
 	},
 	"sharing": {
+		"directoryScope": "部门目录仅包含你有权查询的部门；下方显示此资源的完整授权。",
+		"grants": "已有部门授权",
+		"privateGrants": "当前为私有，部门授权暂不生效；仍可撤销已有授权。",
+		"loadingGrants": "正在读取授权…",
+		"noGrants": "尚无部门授权。",
+		"unknownDepartment": "目录外部门 · {{id}}",
+		"readOnly": "当前没有编辑权限，草稿已保留，不能保存。",
 		"title": "共享与权限",
 		"ownerOnly": "仅资源拥有者可以发布、修改可见性和授权。",
 		"queryGap": "仅列出当前可查询的同企业部门。现有接口不提供完整授权列表；以下操作只提交指定部门的授权或撤权，不代表列出了全部授权。",
@@ -178,6 +185,19 @@
 		"grant": "保存部门授权",
 		"revoke": "撤销该部门授权",
 		"saved": "权限操作已保存；实际访问仍由服务端判定。"
+	},
+	"capability": {
+		"method": {"t2i":"文生图","i2i":"图生图","t2v":"文生视频","i2v":"图生视频"},
+		"type": {"first_frame_prompt":"首帧加提示词","multi_image_prompt":"多图加提示词","text_prompt":"文字提示词"},
+		"media": {"IMAGE":"图片","VIDEO":"视频","TEXT":"文字"},
+		"input": {"string":"文字","resource_ref":"媒体引用","resource_ref_list":"媒体列表"},
+		"choose": "选择已发布的生成能力与版本",
+		"empty": "暂无已发布生成能力。",
+		"executionTarget": "执行目标",
+		"personal_worker": "个人客户端 Worker",
+		"managed_worker": "服务端托管 Worker",
+		"output": "输出媒体类型",
+		"readOnlyHint": "输入契约和执行目标由能力版本固定；更换能力不会自动覆盖槽位或调用映射。"
 	},
 	"library": {
 		"virtualBack": "返回虚拟形象列表",
@@ -231,7 +251,7 @@
 			"pose": "姿势参考",
 			"scene": "场景参考"
 		},
-		"notRegistered": "该版本尚未注册就绪，不能提交。请返回工作流详情核对发布结果。",
+		"notRegistered": "当前不能运行：请核对版本的发布注册结果，以及工作空间的执行权限。",
 		"submit": "提交执行",
 		"resume": "补缺输入继续",
 		"rerun": "修改输入重新运行",
@@ -244,7 +264,7 @@
 		"failed": "提交失败，请检查当前输入与权限。",
 		"submitting": "正在提交…",
 		"replay": "核对原提交结果",
-		"frozenUnavailable": "该执行的冻结输入契约暂不可读取，不能用最新定义替代。暂不允许提交；查询支持将在统一 review 中列出。",
+		"frozenUnavailable": "该执行的冻结输入或历史步骤暂不可核对，请重试查询。恢复前不能提交，也不能用最新定义替代。",
 		"rerunUnknown": "重新运行请求结果尚未确认，请返回原执行刷新查看，不要重复重新运行。",
 		"intentRetained": "已保留原提交意图；核对结果将复用同一个键及输入，不创建另一条任务。"
 	},

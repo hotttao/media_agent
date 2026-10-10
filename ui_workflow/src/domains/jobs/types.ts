@@ -214,6 +214,7 @@ export interface WorkflowOption {
   version: number;
   status: number | string;
   publication_status?: string;
+  allowed_actions?: string[];
   input_schema?: { entries?: WorkflowInputSchemaEntry[] };
 }
 

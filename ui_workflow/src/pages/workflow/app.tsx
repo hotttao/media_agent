@@ -296,6 +296,7 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
                 instanceId={instanceId}
                 mode={launchJobID ? launchMode : "submit"}
                 sourceJob={launchJobID ? launchJob.data?.job : undefined}
+                sourceStepRuns={launchJobID ? launchJob.data?.step_runs : undefined}
                 preferredWorkflowId={launchWorkflowID}
                 onDone={() => {
                   if (launchJobID) {

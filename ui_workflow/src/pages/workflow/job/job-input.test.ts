@@ -72,6 +72,20 @@ describe("job input form mapping", () => {
       isWorkflowReady({
         status: "published",
         publication_status: "registered",
+        allowed_actions: ["run"],
+      }),
+    ).toBe(true);
+    expect(
+      isWorkflowReady({
+        status: "published",
+        publication_status: "registered",
+        allowed_actions: ["read"],
+      }),
+    ).toBe(false);
+    expect(
+      isWorkflowReady({
+        status: "published",
+        allowed_actions: ["read", "run"],
       }),
     ).toBe(true);
   });

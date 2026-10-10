@@ -36,17 +36,20 @@ func newWorkflowCommand() *cobra.Command {
 				return errors.New("workflow request failed; query workflow get with the same ID before retrying publish")
 			}
 			return writeWorkflowSummary(c, struct {
-				ID                string `json:"id"`
-				Version           int32  `json:"version"`
-				Status            string `json:"status"`
-				PublicationID     string `json:"publication_id,omitempty"`
-				PublicationStatus string `json:"publication_status,omitempty"`
-			}{result.GetId(), result.GetVersion(), result.GetStatus().String(), result.GetPublicationId(), result.GetPublicationStatus()})
+				ID                string   `json:"id"`
+				Version           int32    `json:"version"`
+				Status            string   `json:"status"`
+				PublicationID     string   `json:"publication_id,omitempty"`
+				PublicationStatus string   `json:"publication_status,omitempty"`
+				Permission        string   `json:"my_permission,omitempty"`
+				Actions           []string `json:"allowed_actions,omitempty"`
+			}{result.GetId(), result.GetVersion(), result.GetStatus().String(), result.GetPublicationId(), result.GetPublicationStatus(), result.GetMyPermission(), result.GetAllowedActions()})
 		}}
 		command.Flags().StringVar(&id, "id", "", "Workflow ID")
 		_ = command.MarkFlagRequired("id")
 		group.AddCommand(command)
 	}
+	group.AddCommand(newWorkflowVersionCommand(), newWorkflowGrantsCommand())
 	return group
 }
 

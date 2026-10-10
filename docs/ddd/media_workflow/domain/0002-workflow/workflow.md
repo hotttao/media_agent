@@ -40,6 +40,8 @@ Workflow 域负责存储「一组有序 Step 通过 SlotBinding 串联而成的 
 | CreateWorkflow | 提交 DAG 定义并 validate；创建者 = owner，visibility=private | `POST /api/v1/workflows` |
 | UpdateWorkflow | 整体覆盖 steps + inputs + output_key；version+1；editor+ | `PUT /api/v1/workflows/{id}` |
 | GetWorkflow | 取最新 version；viewer+ | `GET /api/v1/workflows/{id}` |
+| GetWorkflowVersion | 取指定业务版本；按当前资源 viewer+ 授权 | `GET /api/v1/workflows/{id}/versions/{version}` |
+| ListWorkflowGrants | 查看资源显式授权记录；owner | `GET /api/v1/workflows/{id}/grants` |
 | ListWorkflows | 按 scope/name/status/visibility 过滤分页；返回 viewer+ | `GET /api/v1/workflows?scope=&name=&status=&visibility=` |
 | ValidateWorkflow | 不保存，仅校验，返回 roots + edges + 错误；需 viewer+（或由 editor+ 触发） | `POST /api/v1/workflows/validate` |
 | ArchiveWorkflow | 改为 archived；editor+ | `POST /api/v1/workflows/{id}/archive` |
@@ -48,7 +50,27 @@ Workflow 域负责存储「一组有序 Step 通过 SlotBinding 串联而成的 
 | RevokeWorkflow | 删一条 workflow_grants；owner | `DELETE /api/v1/workflows/{id}/grants/{team_id}` |
 | ChangeVisibility | 改 visibility；owner | `POST /api/v1/workflows/{id}/visibility` |
 
-## 权限规则
+## 查询与访问投影
+
+最新详情返回当前调用者的 `my_permission` 与 `allowed_actions` 只读投影，使用现有企业/Workspace边界、部门事实、资源ACL、状态和编辑功能准入。读模型不授予权限、不保存为授权事实，实际命令仍重新判定。owner 的共享与授权回收不依赖 authoring 功能；历史版本仅供读取，不展示编辑或发布操作。授权列表只有 owner 可读，不能向 viewer/editor 泄露完整部门授权记录。
+
+## 不可变业务版本
+
+Workflow 创建和更新在聚合事务内追加完整业务定义快照（步骤、绑定、入口 Schema、输出、名称与描述），更新不能删除唯一历史定义。版本读取先读取当前资源并通过现行授权，再读取快照；资源共享撤销立即作用于历史读取。快照不保存调用者权限、JWT、Conductor任务或临时URL。发布状态读取该版本真实发布/编译回执，不将新头版本的状态投到旧版。既有当前定义可以准确回填；无法证实的历史草稿不得拿当前定义冒充，缺失版本明确未找到。历史已发布版本的保留编译可用于恢复可证实的定义，派生入口类型须由冻结模板契约证实，不能猜测。
+
+版本保存仍是单聚合事务，不新增跨服务编排；已有发布/执行 Workflow 边界不变。
+
+### `workflow_versions`
+
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| workflow_id, version | text, integer | Workflow 业务版本，复合主键 |
+| definition_snapshot | jsonb | 完整不可变业务定义，不含动态授权或引擎技术数据 |
+| created_at | timestamptz | 保存时间 |
+
+只追加且同版本不得覆盖不同定义；版本快照和头版本更新共同提交/回滚。降级不得自动丢弃已保存的历史定义。
+
+## 权限规则（命令）
 
 编辑/发布必须在资源ACL通过后检查所属Workspace的实时`use_workflow`准入；企业/部门禁用workflow后，即使owner/editor也不能继续编辑或发布。该检查不改变Conductor执行、已冻结Compilation或正在运行Job。旧未绑定定义保留owner兼容访问，但编辑/发布仍要求当前身份有工作流功能，不自动推断所属企业。
 
