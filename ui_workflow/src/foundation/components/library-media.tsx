@@ -9,11 +9,13 @@ export function LibraryMedia({
   objectPath,
   alt,
   video = false,
+  interactive = true,
 }: {
   organizationId?: string;
   objectPath?: string;
   alt: string;
   video?: boolean;
+  interactive?: boolean;
 }) {
   const { t } = useTranslation();
   const [failedURL, setFailedURL] = useState<string>();
@@ -31,17 +33,19 @@ export function LibraryMedia({
     return (
       <div className="grid min-h-36 place-items-center gap-2 rounded-xl bg-muted/40 p-4 text-xs text-muted-foreground">
         <p>{t("execution.mediaError")}</p>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            setFailedURL(undefined);
-            void media.refetch();
-          }}
-        >
-          {t("v12.retry")}
-        </Button>
+        {interactive ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setFailedURL(undefined);
+              void media.refetch();
+            }}
+          >
+            {t("v12.retry")}
+          </Button>
+        ) : null}
       </div>
     );
   if (!media.data)
@@ -54,7 +58,7 @@ export function LibraryMedia({
     return (
       // biome-ignore lint/a11y/useMediaCaption: generated media supplies no caption track.
       <video
-        controls
+        controls={interactive}
         preload="metadata"
         src={media.data.url}
         aria-label={alt}

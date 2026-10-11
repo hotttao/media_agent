@@ -2,6 +2,8 @@
 
 ## Materials → Workflow 启动意图
 
+取消运行按来源返回：Workflow 入口返回原 Workflow；Product 入口通过可选 `openProduct` Navigation Port 传递企业及商品 ID，Materials App 消费内存意图后定位商品详情，不能依赖素材 App 上次选中的 Tab。旧 plugin 宿主未提供 `openProduct` 时安全返回原 Workflow，不关闭 Slot 或猜测邻居 App。该导航不提交 Job，目标仍执行企业与资源授权校验。
+
 App 只消费 L1 Navigation Port，不直接调用 SlotProvider、Router 或全局事件。`openWorkflowRun` 传递工作流 ID、商品 ID、企业 ID 和唯一界面请求 ID，不携带商品正文、凭证或执行命令。standalone adapter 使用现有 Slot `ensureInstance/activate` 并向目标 instance 写入内存启动意图；Workflow App 消费一次，创建独立运行草稿，避免覆盖该实例的旧编辑/提交草稿。
 
 plugin 的 `window.tos.navigation.openWorkflowRun` 是可选宿主扩展契约，不假定旧宿主已经实现。不支持时仍可查看兼容定义，但不提供可点击的跨 App 启动，提示用户从 Workflow 手动运行；不嵌入第二个 Shell。目标页重新读取企业、注册回执、输入 Schema 与候选资源，预填商品只作用于该工作流的 PRODUCT 入口，用户换定义/清空选择后不自动重新填入。提交仍须明确合法 Workspace；导航不代表授权或执行成功。

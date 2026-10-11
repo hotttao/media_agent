@@ -29,7 +29,7 @@ func TestVerifiedPresignUsesOneHEADAndRejectsChangedDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	resolved, err := c.PresignVerifiedGet(t.Context(), "test.png", "recorded-digest")
-	if err != nil || resolved.URL == "" || resolved.SizeBytes != 42 || heads.Load() != 1 {
+	if err != nil || resolved.URL == "" || resolved.SizeBytes != 42 || resolved.ChecksumSHA256 != "recorded-digest" || heads.Load() != 1 {
 		t.Fatal("verified resolution must use one HEAD")
 	}
 	for _, checksum := range []string{"changed", ""} {

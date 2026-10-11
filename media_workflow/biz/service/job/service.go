@@ -462,9 +462,17 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Job, []*domain.St
 	if err != nil {
 		return nil, nil, err
 	}
+	var snapshot *domain.EngineExecution
 	if job.ConductorWorkflowID != "" && s.engine != nil {
-		if err := s.reconcileConductor(ctx, job); err != nil && !errors.Is(err, errExecutionSnapshotStale) {
+		beforeRead := *job
+		snapshot, err = s.engine.Get(ctx, job.ConductorWorkflowID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read conductor execution: %w", err)
+		}
+		if err := s.reconcileConductorSnapshot(ctx, &beforeRead, snapshot); err != nil && !errors.Is(err, errExecutionSnapshotStale) {
 			return nil, nil, fmt.Errorf("reconcile conductor execution: %w", err)
+		} else if err != nil {
+			snapshot = nil // A concurrently changed native execution cannot annotate this response.
 		}
 	}
 	job, steps, err := s.jobRepo.GetWithStepRuns(ctx, id)
@@ -474,6 +482,7 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Job, []*domain.St
 	if err := s.annotateReviews(ctx, id, steps); err != nil {
 		return nil, nil, err
 	}
+	annotateResultSources(snapshot, job, steps)
 	steps, err = s.candidateViews(ctx, job, steps)
 	if err != nil {
 		return nil, nil, err
@@ -599,11 +608,16 @@ func conductorInputs(input domain.JobInput) map[string]any {
 }
 
 func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error {
-	ctx = context.WithValue(ctx, executionSnapshotKey{}, executionSnapshot{jobID: job.ID, engineID: job.ConductorWorkflowID, retryCount: job.RetryCount})
+	beforeRead := *job
 	execution, err := s.engine.Get(ctx, job.ConductorWorkflowID)
 	if err != nil {
 		return err
 	}
+	return s.reconcileConductorSnapshot(ctx, &beforeRead, execution)
+}
+
+func (s *Service) reconcileConductorSnapshot(ctx context.Context, job *domain.Job, execution *domain.EngineExecution) error {
+	ctx = context.WithValue(ctx, executionSnapshotKey{}, executionSnapshot{jobID: job.ID, engineID: job.ConductorWorkflowID, retryCount: job.RetryCount})
 	if execution == nil {
 		return errors.New("execution snapshot unavailable")
 	}
@@ -657,10 +671,25 @@ func (s *Service) reconcileConductor(ctx context.Context, job *domain.Job) error
 			continue
 		}
 		switch phase {
-		case "render":
+		case "render", "prepare":
+			if nativeTaskFailed(task.Status) {
+				if err := s.withActiveStepProjection(ctx, job.ID, stepRun.ID, func(txCtx context.Context) error {
+					return s.stepRunRepo.UpdateStatus(txCtx, stepRun.ID, domain.SRFailed, nil)
+				}); err != nil {
+					return err
+				}
+			}
 			if prompt, ok := task.Output["prompt"].(string); ok && prompt != "" {
 				if err := s.withActiveStepProjection(ctx, job.ID, stepRun.ID, func(txCtx context.Context) error {
 					return s.stepRunRepo.UpdateResolvedInputs(txCtx, stepRun.ID, task.Input, prompt)
+				}); err != nil {
+					return err
+				}
+			}
+		case "reuse":
+			if nativeTaskFailed(task.Status) {
+				if err := s.withActiveStepProjection(ctx, job.ID, stepRun.ID, func(txCtx context.Context) error {
+					return s.stepRunRepo.UpdateStatus(txCtx, stepRun.ID, domain.SRFailed, nil)
 				}); err != nil {
 					return err
 				}

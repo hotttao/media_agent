@@ -50,6 +50,13 @@ afterEach(() => {
 });
 
 describe("candidate approval", () => {
+  it("shows native reuse provenance without review controls or a false empty result", () => {
+    render(<StepRunCard jobId="job" instanceId="window" stepRun={{ ...step, status: "succeeded", candidates: [], output_asset_id: "gen_existing", result_source: "reused", reused_from_step_run_id: "source-step" }} reviewAllowed={false} />);
+    expect(screen.getByText("execution.resultReused")).toBeTruthy();
+    expect(screen.queryByText("execution.noResults")).toBeNull();
+    expect(screen.queryByRole("button", { name: "execution.confirm" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "execution.regenerate" })).toBeNull();
+  });
   it("can replay a persisted undecided request even when the previous hook error is gone", () => {
     actions.intent.mockReturnValue({
       key: "prior-intent",

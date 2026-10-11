@@ -17,6 +17,7 @@ import (
 	"media_agent/media_workflow/biz/workflow/executable"
 	"media_agent/media_workflow/biz/workflow/finalize_task"
 	"media_agent/media_workflow/biz/workflow/render_task"
+	"media_agent/media_workflow/biz/workflow/reuse_task"
 	"media_agent/media_workflow/biz/workflow/semantic"
 )
 
@@ -213,6 +214,7 @@ func (f *Flow) compile(ctx context.Context, workflow *workflowdomain.Workflow) (
 		Status: "registering", CreatedAt: time.Now(),
 	}
 	taskDefinitions := []conductor.TaskDefinition{
+		{Name: reuse_task.TaskDefinitionName, RetryCount: 2, RetryLogic: "FIXED", RetryDelaySeconds: 1, TimeoutSeconds: 60, ResponseTimeoutSeconds: 30, TimeoutPolicy: "TIME_OUT_WF"},
 		{Name: render_task.TaskDefinitionName, RetryCount: 2, RetryLogic: "FIXED", RetryDelaySeconds: 1, TimeoutSeconds: 60, ResponseTimeoutSeconds: 30, TimeoutPolicy: "TIME_OUT_WF"},
 		{Name: finalize_task.TaskDefinitionName, RetryCount: 2, RetryLogic: "FIXED", RetryDelaySeconds: 1, TimeoutSeconds: 60, ResponseTimeoutSeconds: 30, TimeoutPolicy: "TIME_OUT_WF"},
 	}

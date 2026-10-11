@@ -141,6 +141,8 @@ message StepRun {
   int64 source_created_at = 22;
   string last_review_id = 23;       // opaque decision receipt, never a Conductor ID
   string last_review_status = 24;   // pending | applied | failed
+  string result_source = 25;        // generated | reused; empty for legacy/unfinished
+  string reused_from_step_run_id = 26; // opaque business source, not a Conductor ID
 }
 
 message Job {

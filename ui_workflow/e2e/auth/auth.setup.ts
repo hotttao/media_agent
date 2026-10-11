@@ -1,7 +1,11 @@
 import { expect, test as setup } from "@playwright/test";
 import { config } from "../config";
+import { openStandaloneApp } from "../fixtures/base";
 
 setup("authenticate", async ({ page }) => {
+  // Optional shared-workstation diagnostic budget; normal authentication
+  // acceptance stays at 30 seconds. This never retries a login/submission.
+  setup.setTimeout(Number(process.env.E2E_AUTH_TIMEOUT_MS || 30_000));
   if (process.env.E2E_DEV_AUTH === "true") {
     await page.goto("/");
     await expect(
@@ -29,11 +33,10 @@ setup("authenticate", async ({ page }) => {
 
   // Kratos returns to the requested application path with its session cookie.
   await page.waitForURL(/\/$/);
-  await expect(
-    page.getByRole("heading", { name: /Media (Agent|Workflow)/ }),
-  ).toBeVisible({
-    timeout: Number(process.env.E2E_APP_READY_TIMEOUT_MS || 15_000),
-  });
+  // Use the same authenticated bootstrap gate as the App tests. Its optional
+  // diagnostic reload is restricted to an observed ERR_NETWORK_CHANGED,
+  // before any business interaction, and never retries a submission.
+  await openStandaloneApp(page);
 
   // Save signed-in state
   await page.context().storageState({ path: "e2e/auth/storage-state.json" });

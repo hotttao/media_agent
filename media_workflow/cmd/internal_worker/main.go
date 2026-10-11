@@ -16,6 +16,7 @@ import (
 	"media_agent/media_workflow/biz/workflow/finalize_task"
 	"media_agent/media_workflow/biz/workflow/render_task"
 	"media_agent/media_workflow/biz/workflow/restore_task"
+	"media_agent/media_workflow/biz/workflow/reuse_task"
 )
 
 func main() {
@@ -41,11 +42,16 @@ func main() {
 		Jobs: job.NewJobRepo(db), Steps: job.NewStepRunRepo(db), Assets: client.NewMaterialsClient(materialsURL),
 	}
 	api := conductor.NewClient(conductorURL)
+	materials := client.NewMaterialsClient(materialsURL)
+	evidence := job.NewResultReuseRepo(db)
+	digests := reuse_task.StorageDigests{Objects: materials, StorageOrigin: os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"), StorageBucket: os.Getenv("MEDIA_STORAGE_BUCKET")}
+	reuseHandler := reuse_task.Handler{Jobs: job.NewJobRepo(db), Steps: job.NewStepRunRepo(db), Executions: &conductor.ExecutionEngine{Client: api}, Evidence: evidence, Assets: materials, Digests: digests, StorageOrigin: os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"), StorageBucket: os.Getenv("MEDIA_STORAGE_BUCKET")}
 	finalizeHandler := finalize_task.Handler{Jobs: job.NewJobRepo(db), Steps: job.NewStepRunRepo(db),
-		Executions: &conductor.ExecutionEngine{Client: api}, Assets: client.NewMaterialsClient(materialsURL), StorageOrigin: os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"), StorageBucket: os.Getenv("MEDIA_STORAGE_BUCKET")}
+		Executions: &conductor.ExecutionEngine{Client: api}, Assets: materials, Evidence: evidence, ReusableAssets: materials, Digests: digests, StorageOrigin: os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"), StorageBucket: os.Getenv("MEDIA_STORAGE_BUCKET")}
 	runner := conductor.Runner{
 		Client: api, WorkerID: workerID,
 		Handlers: map[string]conductor.Handler{
+			reuse_task.TaskDefinitionName:    conductor.JSONHandlerContext(reuseHandler.Execute),
 			render_task.TaskDefinitionName:   conductor.JSONHandler(renderHandler.Execute),
 			finalize_task.TaskDefinitionName: conductor.JSONHandlerContext(finalizeHandler.Execute),
 			restore_task.TaskDefinitionName:  conductor.JSONHandlerContext(restoreHandler.Execute),

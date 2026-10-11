@@ -314,6 +314,13 @@ export function JobShow({
             <div className="min-h-0 overflow-y-auto px-2 py-3">
               {focused ? (
                 <>
+                  {focused.output_asset_id && !focused.candidates.length && asset.isLoading ? <ListState loading /> : null}
+                  {focused.output_asset_id && !focused.candidates.length && asset.isError ? (
+                    <ListState error={t("execution.acceptedLoadFailed")} onRetry={() => void asset.refetch()} />
+                  ) : null}
+                  {asset.data?.content && !focused.candidates.length ? (
+                    <p className="whitespace-pre-wrap break-words px-4 py-3 text-sm leading-6">{asset.data.content}</p>
+                  ) : null}
                   {(asset.data?.object_path || asset.data?.url) &&
                   !focused.candidates.length ? (
                     <div className="p-4">

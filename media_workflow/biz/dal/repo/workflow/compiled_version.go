@@ -54,7 +54,7 @@ func (r *Repo) compiledDefinitionVersion(ctx context.Context, id string, version
 		return nil, err
 	}
 	var ir storedWorkflowIR
-	if json.Unmarshal(compiled.IRJSON, &ir) != nil || ir.SchemaVersion != 3 || ir.WorkflowID != id || ir.WorkflowVersion != version || len(ir.Steps) == 0 {
+	if json.Unmarshal(compiled.IRJSON, &ir) != nil || (ir.SchemaVersion != 3 && ir.SchemaVersion != 4) || ir.WorkflowID != id || ir.WorkflowVersion != version || len(ir.Steps) == 0 {
 		return nil, domain.ErrVersionNotFound
 	}
 	w := &domain.Workflow{ID: id, Version: version, OutputStepKey: ir.OutputStepKey, UpdatedAt: compiled.CreatedAt}

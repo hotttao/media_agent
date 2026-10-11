@@ -442,14 +442,18 @@ export function WorkflowForm({
               />
             </div>
             <div className="grid gap-2">
-              <Label>{t("editorUI.output")}</Label>
+              <Label htmlFor="workflow-output">{t("editorUI.output")}</Label>
               <Select
                 value={value.output_step_key}
+                disabled={!value.steps.some((step) => step.key)}
                 onValueChange={(output_step_key) =>
                   onChange({ ...value, output_step_key })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger
+                  id="workflow-output"
+                  aria-describedby="workflow-output-hint"
+                >
                   <SelectValue placeholder={t("editorUI.chooseOutput")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -462,6 +466,16 @@ export function WorkflowForm({
                     ))}
                 </SelectContent>
               </Select>
+              <p
+                id="workflow-output-hint"
+                className="text-xs text-muted-foreground"
+              >
+                {t(
+                  value.steps.some((step) => step.key)
+                    ? "studio.outputHint"
+                    : "studio.outputEmpty",
+                )}
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="workflow-visibility">
@@ -490,6 +504,11 @@ export function WorkflowForm({
               </p>
             </div>
           </section>
+          <DialogFooter>
+            <Button type="button" onClick={() => setSettingsOpen(false)}>
+              {t("studio.confirmSettings")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

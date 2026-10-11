@@ -31,6 +31,10 @@ func Register(r *server.Hertz) {
 						_import := _generated_assets.Group("/import", _importMw()...)
 						_import.GET("/:id", append(_getimportedgeneratedassetMw(), generated_asset.GetImportedGeneratedAsset)...)
 					}
+					{
+						_reusable := _generated_assets.Group("/reusable", _reusableMw()...)
+						_reusable.GET("/:id", append(_verifyreusablegeneratedassetMw(), generated_asset.VerifyReusableGeneratedAsset)...)
+					}
 				}
 			}
 		}

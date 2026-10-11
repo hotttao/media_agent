@@ -93,7 +93,7 @@ func TestFinalizeNativeAutomaticRetryAfterRegistrationResponseLoss(t *testing.T)
 	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")
 	queueDomain := "finalize_native_" + suffix
 	renderName, invokeName := "finalize_render_"+suffix, "finalize_invoke_"+suffix
-	ir := executable.ExecutableWorkflowIR{SchemaVersion: executable.SchemaVersion, WorkflowID: "finalize_flow_" + suffix, WorkflowVersion: 1, OutputStepKey: "image", Steps: []executable.ExecutableStepIR{{
+	ir := executable.ExecutableWorkflowIR{SchemaVersion: executable.LegacySchemaVersion, WorkflowID: "finalize_flow_" + suffix, WorkflowVersion: 1, OutputStepKey: "image", Steps: []executable.ExecutableStepIR{{
 		Key: "image", Order: 1, Template: executable.TemplateIR{ID: "test-template", Version: 1, Body: "technical fixture"}, Context: map[string]executable.ValueRef{},
 		Capability: executable.CapabilityIR{Key: "test-capability", Version: 1, ConductorTaskDef: invokeName, ExecutionTarget: "personal_worker"},
 		Invocation: template.InvocationMapping{"prompt": {Op: template.InvocationRenderTemplate}}, OutputAssetKind: "image", ApprovalPolicy: "when_multiple_candidates", CandidateCount: 1,
@@ -120,7 +120,7 @@ func TestFinalizeNativeAutomaticRetryAfterRegistrationResponseLoss(t *testing.T)
 		t.Fatal("isolated definition registration failed")
 	}
 	jobID := "finalize_job_" + suffix
-	id, err := api.StartWorkflow(ctx, conductor.StartWorkflowRequest{Name: definition.Name, Version: 1, Input: map[string]any{"job_id": jobID, "inputs": map[string]any{}}, TaskToDomain: map[string]string{renderName: queueDomain, invokeName: queueDomain, finalize_task.TaskDefinitionName: queueDomain}})
+	id, err := api.StartWorkflow(ctx, conductor.StartWorkflowRequest{Name: definition.Name, Version: 1, Input: map[string]any{"job_id": jobID, "inputs": map[string]any{"product": map[string]any{"value": map[string]any{"id": "test-product"}}}}, TaskToDomain: map[string]string{renderName: queueDomain, invokeName: queueDomain, finalize_task.TaskDefinitionName: queueDomain}})
 	if err != nil {
 		t.Fatal("isolated Start outcome unconfirmed; do not resubmit")
 	}

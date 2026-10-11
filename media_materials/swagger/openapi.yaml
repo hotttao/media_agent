@@ -81,6 +81,42 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/internal/v1/generated-assets/reusable/{id}:
+        get:
+            tags:
+                - GeneratedAssetService
+            operationId: GeneratedAssetService_VerifyReusableGeneratedAsset
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
+                - name: scope
+                  in: query
+                  schema:
+                    type: string
+                - name: owner_user_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ReusableGeneratedAsset'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/internal/v1/generated-assets:upsert:
         post:
             tags:
@@ -1481,6 +1517,35 @@ components:
                     type: string
                 size_bytes:
                     type: string
+                checksum_sha256:
+                    type: string
+                    description: Immutable content digest from trusted object metadata; empty when absent.
+        ReusableGeneratedAsset:
+            type: object
+            properties:
+                id:
+                    type: string
+                organization_id:
+                    type: string
+                scope:
+                    type: string
+                owner_user_id:
+                    type: string
+                asset_kind:
+                    type: string
+                object_path:
+                    type: string
+                content:
+                    type: string
+                job_id:
+                    type: string
+                step_run_id:
+                    type: string
+                template_id:
+                    type: string
+                template_version:
+                    type: integer
+                    format: int32
         Status:
             type: object
             properties:

@@ -2,6 +2,8 @@
 
 ## 目标
 
+2026-10-10 更新：新提交使用 [画布内节点向导](../../spec/ui_design/workflow-run-wizard.md)，按真实 Slot Binding 首次消费位置收集 Workflow Input；准备和执行均留在 Workflow App，不跳转任务列表。下述原表单规则仍约束 JobInput、资源校验与冻结 Resume/Rerun，不再规定新提交必须是独立整页表单。
+
 Workflow App 根据已发布 Workflow 的 Input Schema 生成 Job 输入表单。业务用户选择 Product、Virtual IP、Material 或 Generated Asset 后提交；UI 不要求用户理解或手写 JobInput JSON。
 
 ## 状态所有权
@@ -27,6 +29,9 @@ Workflow App 根据已发布 Workflow 的 Input Schema 生成 Job 输入表单�
 9. Job 列表先显示 Workflow 名称、执行状态和当前进度；进入 Job 后，使用与定义页一致的节点拓扑标出运行中、等待、完成和待审批节点。点击节点查看其候选、产物与可用操作，不在画布下方无差别展开全部步骤。
 
 ## 状态与失败
+
+- 已完成节点的结果来源只消费后端 `result_source`：`reused` 显示“复用已有结果”，`generated` 显示“本次生成”。来源步骤 ID 与产物 ID 放在按需展开的引用区，不把内部摘要/证据键作为正文。旧冻结定义未返回来源时不猜测。来源由同次授权查询的当前 Conductor Finalize 输出派生，不持久化在浏览器；复用不产生待审批按钮，也不伪造候选数组。
+- 复用节点没有本轮候选数组，按已登记产物读取媒体或纯文本。加载与读取失败在面板内显示，失败可重试，不把产物读取错误解释为执行失败，也不显示虚假的“暂无结果”。
 
 - 指定执行的拓扑和 Resume/Rerun 表单通过 `/workflows/:id/versions/:version` 读取冻结业务版本；权限仍由当前资源 ACL 判定。查询键包含版本，不用当前头的 Input Schema 或连线替代历史。`definition_source=compiled` 缺少历史展示名称时使用执行标题降级，不填造名称；404/403/503 保留真实 StepRun 列表和版本查询错误，恢复表单不可提交。
 

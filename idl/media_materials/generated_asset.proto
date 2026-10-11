@@ -10,6 +10,10 @@ option go_package = "media_materials/generated_asset";
 // GeneratedAssetService —— workflow 产物。
 // 创建由 media_workflow 调 UpsertGeneratedAsset（内部 RPC）；前端只读 + 删。
 service GeneratedAssetService {
+  rpc VerifyReusableGeneratedAsset(VerifyReusableGeneratedAssetReq) returns (ReusableGeneratedAsset) {
+    option (google.api.http) = { get: "/api/internal/v1/generated-assets/reusable/{id}" };
+    option (api.get) = "/api/internal/v1/generated-assets/reusable/:id";
+  }
   rpc GetGeneratedAsset(GetGeneratedAssetReq) returns (GeneratedAsset) {
     option (google.api.http) = { get: "/api/v1/generated-assets/{id}" };
     option (api.get) = "/api/v1/generated-assets/:id";
@@ -69,6 +73,26 @@ message GeneratedAsset {
 
 message GetGeneratedAssetReq {
   string id = 1 [(api.path) = "id"];
+}
+
+message VerifyReusableGeneratedAssetReq {
+  string id = 1 [(api.path) = "id"];
+  string organization_id = 2 [(api.query) = "organization_id"];
+  string scope = 3 [(api.query) = "scope"];
+  string owner_user_id = 4 [(api.query) = "owner_user_id"];
+}
+message ReusableGeneratedAsset {
+  string id = 1;
+  string organization_id = 2;
+  string scope = 3;
+  string owner_user_id = 4;
+  string asset_kind = 5;
+  string object_path = 6;
+  string content = 7;
+  string job_id = 8;
+  string step_run_id = 9;
+  string template_id = 10;
+  int32 template_version = 11;
 }
 
 message ListGeneratedAssetsReq {

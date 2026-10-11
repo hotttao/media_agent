@@ -144,11 +144,25 @@ func Compile(wf workflowdomain.Workflow, snapshots Snapshots) (executable.Execut
 			frozenProvider = capability.Provider
 			frozenMethod = string(capability.GenerationMethod)
 			frozenType = string(capability.GenerationType)
-			for _, input := range capability.Inputs {
-				frozenInputs = append(frozenInputs, capabilitydomain.Input{Name: input.Name, Type: capabilitydomain.InputType(input.Type), Required: input.Required, MediaType: input.MediaType, MinItems: input.MinItems, MaxItems: input.MaxItems})
-			}
+		}
+		for _, input := range capability.Inputs {
+			frozenInputs = append(frozenInputs, capabilitydomain.Input{Name: input.Name, Type: capabilitydomain.InputType(input.Type), Required: input.Required, MediaType: input.MediaType, MinItems: input.MinItems, MaxItems: input.MaxItems})
 		}
 
+		reusePolicy := step.ReusePolicy
+		if reusePolicy == "" {
+			reusePolicy = workflowdomain.ReuseIfAvailable
+		}
+		if reusePolicy != workflowdomain.ReuseIfAvailable && reusePolicy != workflowdomain.ForceNew {
+			return executable.ExecutableWorkflowIR{}, fmt.Errorf("step %q has invalid reuse policy", step.Key)
+		}
+		candidateCount := tpl.CandidateCount
+		if candidateCount == 0 {
+			candidateCount = 1
+		}
+		if candidateCount < 0 {
+			return executable.ExecutableWorkflowIR{}, fmt.Errorf("step %q has invalid candidate count", step.Key)
+		}
 		ir.Steps = append(ir.Steps, executable.ExecutableStepIR{
 			Key: step.Key, Order: step.Order, DependsOn: dependencies,
 			Template: executable.TemplateIR{ID: tpl.ID, Version: tpl.Version, Body: tpl.Body},
@@ -162,7 +176,7 @@ func Compile(wf workflowdomain.Workflow, snapshots Snapshots) (executable.Execut
 			Invocation: cloneMapping(tpl.Invocation), OutputAssetKind: tpl.OutputAssetKind,
 			ApprovalPolicy:   string(step.ApprovalPolicy),
 			ApprovalRequired: tpl.NeedsConfirm || tpl.CandidateCount > 1 || step.ApprovalPolicy == workflowdomain.ApprovalAlways,
-			CandidateCount:   tpl.CandidateCount, ReusePolicy: string(step.ReusePolicy),
+			CandidateCount:   candidateCount, ReusePolicy: string(reusePolicy),
 		})
 	}
 	if _, ok := seen[wf.OutputStepKey]; !ok {

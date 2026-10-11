@@ -4,6 +4,8 @@ import (
 	"errors"
 
 	domain "media_agent/media_workflow/biz/domain/job"
+	"media_agent/media_workflow/biz/workflow/executable"
+	"media_agent/media_workflow/biz/workflow/reuse_task"
 )
 
 const TaskDefinitionName = "media_finalize_step_v1"
@@ -13,27 +15,19 @@ var ErrApprovalRequired = errors.New("approval required")
 type Candidate = domain.Candidate
 
 type Input struct {
-	StepKey           string      `json:"step_key"`
-	Candidates        []Candidate `json:"candidates"`
-	OutputAssetKind   string      `json:"output_asset_kind"`
-	ApprovalPolicy    string      `json:"approval_policy"`
-	ReusePolicy       string      `json:"reuse_policy"`
-	JobID             string      `json:"job_id"`
-	SelectedCandidate *Candidate  `json:"selected_candidate,omitempty"`
+	StepKey             string               `json:"step_key"`
+	Candidates          []Candidate          `json:"candidates"`
+	OutputAssetKind     string               `json:"output_asset_kind"`
+	ApprovalPolicy      string               `json:"approval_policy"`
+	ReusePolicy         string               `json:"reuse_policy"`
+	JobID               string               `json:"job_id"`
+	SelectedCandidate   *Candidate           `json:"selected_candidate,omitempty"`
+	FingerprintIdentity *reuse_task.Identity `json:"fingerprint_identity,omitempty"`
+	ReuseResult         *reuse_task.Output   `json:"reuse_result,omitempty"`
 }
 
-type Resource struct {
-	ID        string `json:"id"`
-	AssetRef  string `json:"asset_ref"`
-	URL       string `json:"url"`
-	Content   string `json:"content,omitempty"`
-	AssetKind string `json:"asset_kind"`
-}
-
-type Output struct {
-	OutputResourceID string   `json:"output_resource_id"`
-	OutputResource   Resource `json:"output_resource"`
-}
+type Resource = executable.StepResource
+type Output = executable.StepOutput
 
 func selectCandidate(input Input) (Candidate, error) {
 	if len(input.Candidates) == 0 {

@@ -24,3 +24,18 @@ func TestInternalCredentialDoesNotBlockPublicGeneratedAssetReads(t *testing.T) {
 		t.Fatal("internal generated asset write accepted without a service credential")
 	}
 }
+
+func TestReusableAssetReadRequiresInternalServiceCredential(t *testing.T) {
+	t.Setenv("MEDIA_MATERIALS_INTERNAL_TOKEN", "internal-test-secret")
+	h := server.Default()
+	h.GET("/api/internal/v1/generated-assets/reusable/:id", append(_verifyreusablegeneratedassetMw(), func(_ context.Context, c *app.RequestContext) { c.Status(204) })...)
+	for _, test := range []struct {
+		credential string
+		status     int
+	}{{"", 401}, {"invalid", 401}, {"internal-test-secret", 204}} {
+		response := ut.PerformRequest(h.Engine, "GET", "/api/internal/v1/generated-assets/reusable/gen_test", nil, ut.Header{Key: "X-Media-Materials-Internal-Token", Value: test.credential})
+		if response.Result().StatusCode() != test.status {
+			t.Fatal("internal reusable asset authorization failed")
+		}
+	}
+}

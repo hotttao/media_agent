@@ -336,6 +336,8 @@ const (
 7. `Status` 流转：`draft -> publishing -> published | publish_failed`；编辑非归档源以旧版本/owner CAS增加版本并置draft，旧意图只可superseded，不能发布新版本。归档为终态，不允许编辑/发布；已启动 Job 不受归档影响。公开回执仅包含意图ID和状态，不公开冻结契约。
 8. `ApprovalPolicy` 只允许 `when_multiple_candidates | always`；它不能关闭多 Candidate 审批。`ReusePolicy` 只允许 `reuse_if_available | force_new`。
 
+`reuse_if_available` 表示节点优先使用与实际输入匹配的已接受结果，未命中才调用 Capability；`force_new` 始终生成。匹配包括冻结 Template/Capability 版本、实际渲染提示词、有序媒体内容摘要、生成参数及输出类别，不能仅以 Product ID 判断。等待审批、被拒绝、无可验证来源或已不可访问的结果不可复用。策略由已发布版本冻结，不原位改写已有 Conductor Definition。复用已有接受结果不是生成新的 Candidate，不重复审批；实际新生成仍遵守 `ApprovalPolicy`。
+
 ### Validate（不保存）
 
 ```go

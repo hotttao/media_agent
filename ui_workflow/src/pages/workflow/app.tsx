@@ -29,7 +29,7 @@ import { WorkflowList } from "./workflow/list";
 import { WorkflowShow } from "./workflow/show";
 
 type Resource = "template" | "workflow" | "job";
-type View = "list" | "show" | "create" | "edit";
+type View = "list" | "show" | "create" | "edit" | "run" | "execution";
 
 const RESOURCES: { id: Resource; labelKey: string }[] = [
   { id: "workflow", labelKey: "nav.workflows" },
@@ -46,6 +46,7 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
     useInstanceState,
   } = hostShim;
   const headerSlot = useAppHeaderSlot();
+  const navigation = hostShim.useNavigationPort();
   const [incoming, consumeIntent] =
     useInstanceState<WorkflowLaunchIntent | null>(
       instanceId,
@@ -113,9 +114,9 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
     setProductLaunch(incoming);
     setLaunchJobID(null);
     setLaunchWorkflowID(incoming.workflowId);
-    setResource("job");
-    setSelectedId(null);
-    setView("create");
+    setResource("workflow");
+    setSelectedId(incoming.workflowId);
+    setView("run");
     consumeIntent(null);
   }, [
     incoming,
@@ -221,9 +222,7 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
                 setProductLaunch(null);
                 setLaunchJobID(null);
                 setLaunchWorkflowID(selectedId);
-                setResource("job");
-                setSelectedId(null);
-                setView("create");
+                setView("run");
               }}
             />
           )}
@@ -254,24 +253,33 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
               onCreate={create}
             />
           )}
-          {resource === "job" && view === "show" && selectedId && (
-            <JobShow
-              onResume={() => {
-                setLaunchJobID(selectedId);
-                setLaunchMode("resume");
-                setView("create");
-              }}
-              onRerun={() => {
-                setLaunchJobID(selectedId);
-                setLaunchMode("rerun");
-                setView("create");
-              }}
-              key={selectedId}
-              instanceId={instanceId}
-              id={selectedId}
-              onBack={() => setView("list")}
-            />
-          )}
+          {((resource === "job" && view === "show") ||
+            (resource === "workflow" && view === "execution")) &&
+            selectedId && (
+              <JobShow
+                onResume={() => {
+                  setResource("job");
+                  setLaunchJobID(selectedId);
+                  setLaunchMode("resume");
+                  setView("create");
+                }}
+                onRerun={() => {
+                  setResource("job");
+                  setLaunchJobID(selectedId);
+                  setLaunchMode("rerun");
+                  setView("create");
+                }}
+                key={selectedId}
+                instanceId={instanceId}
+                id={selectedId}
+                onBack={() => {
+                  if (resource === "workflow" && launchWorkflowID) {
+                    setSelectedId(launchWorkflowID);
+                    setView("show");
+                  } else setView("list");
+                }}
+              />
+            )}
           {resource === "job" &&
             view === "create" &&
             launchJobID &&
@@ -282,8 +290,8 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
                 onRetry={() => void launchJob.refetch()}
               />
             )}
-          {resource === "job" &&
-            view === "create" &&
+          {((resource === "job" && view === "create") ||
+            (resource === "workflow" && view === "run")) &&
             (!launchJobID || launchJob.data?.job) && (
               <JobCreate
                 key={
@@ -296,17 +304,32 @@ export function WorkflowApp({ instanceId }: { instanceId: string }) {
                 instanceId={instanceId}
                 mode={launchJobID ? launchMode : "submit"}
                 sourceJob={launchJobID ? launchJob.data?.job : undefined}
-                sourceStepRuns={launchJobID ? launchJob.data?.step_runs : undefined}
+                sourceStepRuns={
+                  launchJobID ? launchJob.data?.step_runs : undefined
+                }
                 preferredWorkflowId={launchWorkflowID}
                 onDone={() => {
                   if (launchJobID) {
                     setSelectedId(launchJobID);
                     setView("show");
+                  } else if (productLaunch && navigation?.openProduct) {
+                    navigation.openProduct({
+                      organizationId: productLaunch.organizationId,
+                      productId: productLaunch.productId,
+                    });
+                    setResource("workflow");
+                    setSelectedId(launchWorkflowID || null);
+                    setView(launchWorkflowID ? "show" : "list");
+                    setProductLaunch(null);
+                  } else if (launchWorkflowID) {
+                    setResource("workflow");
+                    setSelectedId(launchWorkflowID);
+                    setView("show");
                   } else setView("list");
                 }}
                 onSubmitted={(jobId) => {
                   setSelectedId(jobId);
-                  setView("show");
+                  setView(resource === "workflow" ? "execution" : "show");
                 }}
               />
             )}

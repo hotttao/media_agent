@@ -33,7 +33,7 @@ func Parse(reference string) (key, phase string, iteration int, ok bool) {
 		return "", "", 0, false
 	}
 	switch phase {
-	case "render", "invoke", "approval", "gate", "loop":
+	case "render", "invoke", "approval", "gate", "loop", "prepare", "reuse", "reuse_gate":
 	default:
 		return "", "", 0, false
 	}

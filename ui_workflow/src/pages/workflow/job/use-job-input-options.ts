@@ -9,6 +9,7 @@ import type { Product } from "@/domains/products/types";
 import { listVirtualIps } from "@/domains/virtual-ips/lib/api";
 import type { VirtualIp } from "@/domains/virtual-ips/types";
 import { compatibleInputOptions } from "./input-option-filter";
+import { allResourcePages as allInputPages } from "@/foundation/lib/all-resource-pages";
 
 export type JobInputOption = Product | VirtualIp | Material | GeneratedAsset;
 export type JobInputOptions = Record<string, JobInputOption[]>;
@@ -36,51 +37,59 @@ export function useJobInputOptions(
           async (entry): Promise<[string, JobInputOption[]]> => {
             switch (entry.resource_type) {
               case "PRODUCT": {
-                const page = await listProducts({
-                  scope: workflow.scope,
-                  status: "active",
-                  page: 1,
-                  page_size: 200,
-                });
+                const items = await allInputPages((page) =>
+                  listProducts({
+                    scope: workflow.scope,
+                    status: "active",
+                    page,
+                    page_size: 200,
+                  }),
+                );
                 return [
                   entry.name,
-                  compatibleInputOptions(workflow.scope, entry, page.items),
+                  compatibleInputOptions(workflow.scope, entry, items),
                 ];
               }
               case "VIRTUAL_IP": {
-                const page = await listVirtualIps({
-                  scope: workflow.scope,
-                  status: "active",
-                  page: 1,
-                  page_size: 200,
-                });
+                const items = await allInputPages((page) =>
+                  listVirtualIps({
+                    scope: workflow.scope,
+                    status: "active",
+                    page,
+                    page_size: 200,
+                  }),
+                );
                 return [
                   entry.name,
-                  compatibleInputOptions(workflow.scope, entry, page.items),
+                  compatibleInputOptions(workflow.scope, entry, items),
                 ];
               }
               case "MATERIAL": {
-                const page = await listMaterials({
-                  scope: workflow.scope,
-                  asset_kind: entry.asset_kind,
-                  page: 1,
-                  page_size: 200,
-                });
+                const items = await allInputPages((page) =>
+                  listMaterials({
+                    scope: workflow.scope,
+                    asset_kind: entry.asset_kind,
+                    page,
+                    page_size: 200,
+                  }),
+                );
                 return [
                   entry.name,
-                  compatibleInputOptions(workflow.scope, entry, page.items),
+                  compatibleInputOptions(workflow.scope, entry, items),
                 ];
               }
               case "ASSET": {
-                const page = await listGeneratedAssets({
-                  scope: workflow.scope,
-                  asset_kind: entry.asset_kind,
-                  page: 1,
-                  page_size: 200,
-                });
+                const items = await allInputPages((page) =>
+                  listGeneratedAssets({
+                    scope: workflow.scope,
+                    asset_kind: entry.asset_kind,
+                    page,
+                    page_size: 200,
+                  }),
+                );
                 return [
                   entry.name,
-                  compatibleInputOptions(workflow.scope, entry, page.items),
+                  compatibleInputOptions(workflow.scope, entry, items),
                 ];
               }
             }

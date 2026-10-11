@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, openStandaloneApp, test } from "../fixtures/base";
+import { fromWire } from "../../src/domains/workflows/lib/api";
+import { runInputGroups } from "../../src/pages/workflow/job/run-input-groups";
 
 // Operator launches media_worker between these two gates. No embedded Worker,
 // repeated Submit, borrowed definition edits or automatic historical Resume.
@@ -214,24 +216,25 @@ test("submit one isolated workflow from the UI", async ({ page }) => {
   await page
     .getByRole("combobox", { name: /^工作流$|^Workflows$/ })
     .selectOption(ledger.workflow!);
-  const definition = await (
-    await page.request.get(`/api/v1/workflows/${ledger.workflow}`)
-  ).json();
-  for (const entry of definition.input_schema.entries) {
-    const picker = page.getByTestId(`run-input-${entry.name}`);
-    await expect(picker).toBeVisible({ timeout: 60000 });
-    await expect
-      .poll(() => picker.locator("option").count(), { timeout: 60000 })
-      .toBeGreaterThan(1);
-    const choice = await picker
-      .locator("option")
-      .evaluateAll((options) =>
-        options
-          .map((option) => (option as HTMLOptionElement).value)
-          .find(Boolean),
-      );
-    expect(choice).toBeTruthy();
-    await picker.selectOption(choice!);
+  const definition = fromWire(
+    await (
+      await page.request.get(`/api/v1/workflows/${ledger.workflow}`)
+    ).json(),
+  );
+  const plan = runInputGroups(
+    definition.steps,
+    definition.input_schema?.entries as Parameters<typeof runInputGroups>[1],
+  );
+  for (const group of plan.groups) {
+    for (const entry of group.entries) {
+      const choice = page.getByTestId(`run-choice-${entry.name}`).first();
+      await expect(choice).toBeVisible({ timeout: 60000 });
+      await choice.click();
+    }
+    await page
+      .getByRole("button", { name: /^下一步$|^Next$/ })
+      .last()
+      .click();
   }
   await page
     .getByRole("combobox", { name: /^归属工作空间$|^Workspace$/ })

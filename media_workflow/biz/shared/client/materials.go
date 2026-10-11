@@ -174,10 +174,11 @@ type ImportedGeneratedAsset struct {
 }
 
 type ResolvedStorageObject struct {
-	URL         string `json:"url"`
-	ExpiresAt   int64  `json:"expires_at"`
-	ContentType string `json:"content_type"`
-	SizeBytes   int64  `json:"size_bytes"`
+	URL            string `json:"url"`
+	ExpiresAt      int64  `json:"expires_at"`
+	ContentType    string `json:"content_type"`
+	SizeBytes      int64  `json:"size_bytes"`
+	ChecksumSHA256 string `json:"checksum_sha256"`
 }
 
 // ResolveInternalObject exchanges a stable, organization-scoped Object Path

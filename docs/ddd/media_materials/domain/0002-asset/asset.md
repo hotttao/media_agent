@@ -46,6 +46,10 @@ asset domain 管理**两类物理资源**，分落两张表：
 
 ## 能力清单
 
+原生已接受产物的内部复用核验只读查询现存 Generated Asset：要求明确的企业/Scope/owner 与真实产物一致、Origin 为 native、生成来源完整，且对象仍存在。私有产物不能因复用证据绕过 owner 归属；删除/不匹配返回不可用，数据库/存储暂时故障返回可重试错误，不将故障当成不存在。该入口由已有内部服务凭据保护，不经公开网关，不返回签名 URL，不创建资源或决定 Conductor 分支。
+
+内部对象解析附带上传时保存的内容 SHA-256；缺失时保持为空，不能使用路径、ETag 或业务 ID 替代。对象摘要不授予资源权限，资源核验与企业命名空间校验仍分别执行。
+
 | 能力 | 说明 | 对外接口 |
 |:---|:---|:---|
 | UpsertMaterial | 新建/更新 material；asset_kind.resource_type 必须=MATERIAL | `POST /api/v1/materials`、`PUT /api/v1/materials/{id}` |
@@ -55,6 +59,7 @@ asset domain 管理**两类物理资源**，分落两张表：
 | RemoveMaterialBinding | 解绑 | `DELETE /api/v1/materials/{id}/bindings/{owner_kind}/{owner_id}` |
 | ReplacePoseCompatibilities | 原子替换 movement 可兼容的 pose 集合 | `PUT /api/v1/materials/{movement_id}/compatible-poses` |
 | GetGeneratedAsset | 按 id 取（含生成记录链接） | `GET /api/v1/generated-assets/{id}` |
+| VerifyReusableGeneratedAsset | 内部核验原生已接受产物的归属、来源与可读性 | `GET /api/internal/v1/generated-assets/reusable/{id}` |
 | ListGeneratedAssets | 按 scope/asset_kind/owner/job_id 过滤；默认 `only_mine=true` | `GET /api/v1/generated-assets?scope=&asset_kind=&job_id=&only_mine=` |
 | SoftDeleteGeneratedAsset | 软删 | `DELETE /api/v1/generated-assets/{id}` |
 | UpsertGeneratedAsset | 由 workflow_execution 经 reachability 调用，落 step 产物；带生成记录字段 | `UpsertGeneratedAsset`（跨服务 RPC） |

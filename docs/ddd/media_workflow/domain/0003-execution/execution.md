@@ -15,6 +15,8 @@ Execution保存已编译Workflow实例的业务归属、冻结输入、审批和
 
 ### 生成结果与节点引用不变量
 
+步骤结果复用只改变新 StepRun 的产物引用，不重写源 StepRun 或旧 Asset，不登记伪造的新生成轮次。当前节点保留复用来源、输入摘要及已有产物 ID；不能声称本节点调用了 Worker。不同的实际生成调用仍遵守每轮独立产物身份。复用查找必须限定当前归属并核对资源权限与对象可读性，缓存不授予权限；未知历史来源不能猜测匹配。并发未命中允许独立生成，不以锁或自建调度去替代 Conductor。
+
 StepRun 是稳定业务节点，一次被接受的 Generation Result 是独立结果身份。每轮登记独立 Generated Asset；StepRun.output_asset_id 仅引用当前选定结果，不通过更新旧 Asset 表达 Retry。能力生成结果身份在同轮投递、Finalize 技术重试及落库重试期间保持不变；新能力生成轮次使用新身份。同键不同结果拒绝，旧结果和已存在产物引用不被覆盖。产物事实由 Materials asset 聚合维护，Execution 只在本地事务中原子维护当前引用与节点成功状态。
 
 ## 边界
@@ -93,6 +95,29 @@ StepRun 是稳定业务节点，一次被接受的 Generation Result 是独立�
 | WorkerDispatchExpired | 租约到期或任务取消 | dispatch_id, step_run_id, attempt | Conductor Adapter、审计 |
 
 ## 数据模型
+
+### `step_result_reuse`
+
+复用证据是 Generation Result 的派生来源读模型，不是新的执行聚合或任务状态机。只在真实 Finalize 已接受且登记产物后记录；同源结果重放不更新记录，另一次实际生成可记录独立证据。
+
+| 字段 | 类型 | 含义 |
+|:---|:---|:---|
+| id | text | 来源步骤及结果键的稳定证据身份 |
+| organization_id | text | 企业隔离 |
+| workspace_id | text | 执行归属隔离 |
+| owner_user_id | text | 已接受产物拥有者 |
+| scope | text | 业务范围 |
+| fingerprint | text | 实际生成输入身份摘要 |
+| source_job_id | text | 来源执行 |
+| source_step_run_id | text | 来源步骤 |
+| source_result_key | text | 已接受生成结果的稳定键 |
+| asset_id | text | Materials 已登记产物 ID |
+| object_path | text | 稳定受控对象引用，文本产物可为空 |
+| content | text | 已接受文本内容 |
+| asset_kind | text | 产物业务类别 |
+| created_at | timestamptz | 证据登记时间 |
+
+主键和 `(source_step_run_id, source_result_key)` 唯一，同键不同事实冲突；匹配索引包含企业、Workspace、owner、Scope 和 fingerprint，按时间降序选择候选。删除来源执行/步骤时清理派生证据；不引用 Materials 数据库，不存签名 URL，不将删除证据当作删除产物。
 
 Worker Artifact Upload不新增聚合表：Dispatch提供任务尝试与执行者绑定，上传对象的不可覆盖事实由Storage原子条件写持有。准备上传只签发当前尝试某个候选的短期写入凭据；不改变Task/Job/Step状态。上传后仍须原生Complete、审批及Finalize，参见[产物上传流程](../../../workflow/0001-worker_artifact_upload/worker_artifact_upload.md)。
 

@@ -53,6 +53,8 @@ message ResolveLibraryObjectResp {
   int64 expires_at = 2;
   string content_type = 3;
   int64 size_bytes = 4;
+  // Immutable content digest from trusted object metadata; empty when absent.
+  string checksum_sha256 = 5;
 }
 
 message UploadLibraryObjectReq {

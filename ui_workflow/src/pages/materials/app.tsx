@@ -12,6 +12,10 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { hostShim } from "@/foundation/lib/host-shim";
+import {
+  PRODUCT_OPEN_KEY,
+  type ProductOpenIntent,
+} from "@/foundation/types/app-navigation";
 import { AssetKindCreate } from "./asset-kind/create";
 import { AssetKindEdit } from "./asset-kind/edit";
 import { AssetKindList } from "./asset-kind/list";
@@ -59,6 +63,12 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
     useInstanceState,
   } = hostShim;
   const headerSlot = useAppHeaderSlot();
+  const shell = hostShim.useShellContext();
+  const [incoming, consumeIntent] = useInstanceState<ProductOpenIntent | null>(
+    instanceId,
+    PRODUCT_OPEN_KEY,
+    () => null,
+  );
   const [resource, setResource] = useInstancePersistentState<Resource>(
     instanceId,
     "materials_resource",
@@ -77,6 +87,24 @@ export function MaterialsApp({ instanceId }: { instanceId: string }) {
 
   const current = RESOURCES.find((r) => r.id === resource);
   const canCreate = !current?.readonly;
+
+  useEffect(() => {
+    if (!incoming || shell.isLoading) return;
+    if (incoming.organizationId === shell.organization.id) {
+      setResource("product");
+      setSelectedId(incoming.productId);
+      setView("show");
+    }
+    consumeIntent(null);
+  }, [
+    incoming,
+    shell.isLoading,
+    shell.organization.id,
+    setResource,
+    setSelectedId,
+    setView,
+    consumeIntent,
+  ]);
 
   function changeResource(r: Resource) {
     setResource(r);

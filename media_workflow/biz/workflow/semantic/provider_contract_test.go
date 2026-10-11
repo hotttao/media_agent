@@ -101,7 +101,7 @@ func TestLegacyCapabilityCanonicalBytesRemainUnchanged(t *testing.T) {
 	require.Equal(t, legacy, string(actual))
 }
 
-func TestLegacyCompileOmitsNewContractFieldsEvenWithLegacyProvider(t *testing.T) {
+func TestFreshCompilePinsLegacyInputsWithoutInventingProviderContract(t *testing.T) {
 	wf, s := providerCompileFixture()
 	ref := CapabilityRef{Key: "jimeng.i2i.multi_image_prompt", Version: 1}
 	cap := s.Capabilities[ref]
@@ -121,5 +121,15 @@ func TestLegacyCompileOmitsNewContractFieldsEvenWithLegacyProvider(t *testing.T)
 	require.NotContains(t, string(encoded), `"provider"`)
 	require.NotContains(t, string(encoded), `"output_media_type"`)
 	require.NotContains(t, string(encoded), `"generation_method"`)
-	require.Empty(t, ir.Steps[0].Capability.Inputs)
+	require.Equal(t, executable.SchemaVersion, ir.SchemaVersion)
+	require.Len(t, ir.Steps[0].Capability.Inputs, len(cap.Inputs))
+	for index, expected := range cap.Inputs {
+		actual := ir.Steps[0].Capability.Inputs[index]
+		require.Equal(t, expected.Name, actual.Name)
+		require.Equal(t, string(expected.Type), string(actual.Type))
+		require.Equal(t, expected.Required, actual.Required)
+		require.Equal(t, string(expected.MediaType), string(actual.MediaType))
+		require.Equal(t, expected.MinItems, actual.MinItems)
+		require.Equal(t, expected.MaxItems, actual.MaxItems)
+	}
 }

@@ -651,3 +651,38 @@
 		width: 100%;
 	}
 }
+/* Run preparation adapts to the App Slot, not the browser viewport. */
+.media-workflow-ui .workflow-run-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 420px;
+}
+.media-workflow-ui .workflow-run-toggle {
+	display: none;
+}
+.media-workflow-ui .workflow-run-canvas > .workflow-graph {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+}
+@container media-app (max-width: 850px) {
+	.media-workflow-ui .workflow-run-layout {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.media-workflow-ui .workflow-run-toggle {
+		display: inline-flex;
+	}
+	.media-workflow-ui .workflow-run-panel {
+		position: absolute;
+		inset: 64px 0 0;
+		z-index: 10;
+		border-left: 0;
+		border-top: 1px solid hsl(var(--border));
+	}
+	.media-workflow-ui
+		.workflow-run-layout[data-panel-open="false"]
+		.workflow-run-panel {
+		display: none;
+	}
+}

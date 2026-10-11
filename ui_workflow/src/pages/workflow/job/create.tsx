@@ -27,6 +27,7 @@ import {
   resumeInputContract,
 } from "./job-input";
 import { useJobInputOptions } from "./use-job-input-options";
+import { RunWizard } from "./run-wizard";
 
 export function JobCreate({
   onDone,
@@ -237,6 +238,65 @@ export function JobCreate({
     } finally {
       setPreparing(false);
     }
+  }
+  if (mode === "submit" && definition.data && effectiveWorkflow) {
+    return (
+      <RunWizard
+        instanceId={instanceId}
+        organizationId={shell.organization.id}
+        organizationName={shell.organization.name}
+        launchKey={launchIntent?.requestId || preferredWorkflowId || "new"}
+        workflow={definition.data}
+        entries={effectiveWorkflow.input_schema?.entries ?? []}
+        selected={draft.selected}
+        options={options.data ?? {}}
+        workspaceId={draft.workspaceId}
+        workspaces={choices}
+        busy={busy}
+        loading={options.isLoading || workspaces.isLoading}
+        error={
+          wrongCompany
+            ? t("productWorkflow.wrongCompany")
+            : !ready
+              ? t("runForm.notRegistered")
+              : options.error?.message || workspaces.error?.message
+        }
+        submitError={
+          error ||
+          mutation.error?.message ||
+          (!validSelections && options.isSuccess
+            ? t("productWorkflow.staleSelection")
+            : undefined)
+        }
+        canSubmit={
+          ready &&
+          validWorkspace &&
+          validSelections &&
+          !wrongCompany &&
+          missing.length === 0
+        }
+        replay={Boolean(currentIntent)}
+        onRetry={() => {
+          void options.refetch();
+          void workspaces.refetch();
+        }}
+        onChoose={(name, id) => {
+          setDraft((current) => ({
+            ...current,
+            selected: { ...current.selected, [name]: id },
+          }));
+          setIntent(null);
+          setError("");
+        }}
+        onWorkspace={(workspaceId) => {
+          setDraft((current) => ({ ...current, workspaceId }));
+          setIntent(null);
+          setError("");
+        }}
+        onCancel={onDone}
+        onSubmit={() => void submit()}
+      />
+    );
   }
   return (
     <div className="flex h-full min-h-0 flex-col">

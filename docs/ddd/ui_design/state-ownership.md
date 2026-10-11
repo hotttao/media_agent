@@ -10,6 +10,7 @@
 | 当前 Organization/Team/Workspace ID | Shell Router | URL path `/o/:organizationId/t/:teamId/w/:workspaceId`，服务端层级和成员关系校验 |
 | Shell Context 与 Navigation Port | Host Adapter | 内存注入；不得复制为 App 全局 store |
 | 商品到 Workflow 的启动意图 | Host Navigation Port → 目标 App Instance | 仅实例内存，携带 requestId/Organization/Workflow/Product ID；不含 Token、输入快照或自动提交指令，用户清空后不重新填入 |
+| Workflow 运行准备游标、选择与复核阶段 | Workflow App Instance | 企业/定义/启动意图隔离的内存；不是 StepRun 状态，不写 URL/localStorage，提交事实仍归后端 |
 | 当前 Session ID | Workspace Page | URL query `?session=`，服务端列表校验 |
 | Layout、Slot 打开实例和活动实例 | Slot Provider | Workspace 级 localStorage Profile |
 | 移动端当前可见 App | Layout/Dock | 内存；从活动 Slot 推导 |

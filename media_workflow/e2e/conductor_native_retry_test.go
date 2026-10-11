@@ -38,7 +38,7 @@ func TestConductorNativeRetryCompiledParallelWorkflow(t *testing.T) {
 	step := func(key string, order int, deps []string) executable.ExecutableStepIR {
 		return executable.ExecutableStepIR{Key: key, Order: order, DependsOn: deps, Template: executable.TemplateIR{ID: "fixture", Version: 1, Body: "fixture prompt"}, Context: map[string]executable.ValueRef{}, Capability: executable.CapabilityIR{Key: "fixture", Version: 1, ConductorTaskDef: invokeName, ExecutionTarget: "personal_worker"}, Invocation: template.InvocationMapping{"prompt": {Op: template.InvocationRenderTemplate}}, OutputAssetKind: "image", ApprovalPolicy: "when_multiple_candidates", CandidateCount: 1}
 	}
-	ir := executable.ExecutableWorkflowIR{SchemaVersion: executable.SchemaVersion, WorkflowID: "native_retry_" + suffix, WorkflowVersion: 1, OutputStepKey: "merge", Steps: []executable.ExecutableStepIR{step("a", 1, nil), step("b", 2, nil), step("merge", 3, []string{"a", "b"})}}
+	ir := executable.ExecutableWorkflowIR{SchemaVersion: executable.LegacySchemaVersion, WorkflowID: "native_retry_" + suffix, WorkflowVersion: 1, OutputStepKey: "merge", Steps: []executable.ExecutableStepIR{step("a", 1, nil), step("b", 2, nil), step("merge", 3, []string{"a", "b"})}}
 	definition, err := compiler.CompileExecutableIR(ir)
 	if err != nil {
 		t.Fatal(err)

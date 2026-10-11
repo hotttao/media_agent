@@ -385,3 +385,35 @@ sequenceDiagram
 客户端必须先保存完整待确认结果，再发送回写。直接代理不返回“已进入服务器队列”；仅在精确Task的状态与输出/失败原因匹配后返回submitted。请求响应丢失先查询同Task，不通过新Dispatch、新幂等键或重新调用Provider恢复。Task结果确认后，本地待交付文件才可移除；409/410结果留作拒绝记录而不继续发送。Task输出保存和对象存储写入不是分布式事务：生成完成但本地结果保存前崩溃仍由Provider/业务副作用的幂等与查询恢复解决，本地交付日志不消除该窗口。
 
 Managed运行时在一次执行内保存返回结果并只重试发送；进程退出后的函数恢复遵循Conductor至少一次执行与下游幂等契约，不声称具有Personal客户端文件日志的恢复保证。旧Inbox表仅保留历史，不删除或改写；切换前有pending/failed记录则拒绝启动新交付路径，要求先核对原Task，不能静默丢弃结果。
+
+## 新 Execution 的步骤结果复用
+
+```mermaid
+sequenceDiagram
+    participant C as Conductor
+    participant W as media_workflow Internal Task
+    participant D as Reuse evidence repository
+    participant M as media_materials
+    participant P as Capability Worker
+    C->>W: Render + check reuse（冻结契约、当前实际输入）
+    W->>D: 查询匹配输入摘要的已接受产物来源
+    W->>M: 复核归属、当前访问权限及对象可读性
+    W-->>C: 命中及稳定已有产物，或未命中
+    alt 命中且 reuse_if_available
+        C->>C: SWITCH 选择复用输出，跳过 Capability / HUMAN
+    else 未命中或 force_new
+        C->>P: 原生派发 Capability Task
+        P-->>C: 生成候选
+        C->>C: 原生审批与重新生成循环
+        C->>W: Finalize 已接受结果
+        W->>M: 幂等登记独立 Generated Asset
+        M-->>W: 稳定产物 ID
+        W->>D: 本地事务登记可复用输入与来源证据
+        W-->>C: 完成精确 Finalize Task
+    end
+    C->>C: 原生推进后继；输出统一为单一资源引用
+```
+
+命中只读核验不持有事务调用 Materials，不创建 Worker Dispatch；执行分支、后继推进和失败重试始终由 Conductor 负责。复用索引只保存输入/产物证据，不拥有执行状态或调度权。索引写入与 Materials 登记不是跨服务事务：登记成功而索引失败由 Finalize 原生重试，以原 result_key 重放登记；索引写入成功而 Task 回写失败仍完成原 Task，不再次生成。取消或替代 Task 不允许晚到结果推进新 Task。
+
+缓存缺失、资源已撤销或对象确定不存在为未命中；鉴权/存储服务暂时不可用不能当未命中并产生额外费用，报告可重试内部任务失败。输入摘要不包含签名 URL、Task/Job ID、投递次数或生成轮次；媒体顺序、真实内容和全部生成参数参与摘要。审批重新生成及显式 force_new 不命中复用，避免反复返回被拒绝结果。没有可信模板/能力版本与实际输入证据的旧迁移产物不自动推测命中。

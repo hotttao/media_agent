@@ -7,7 +7,8 @@ import (
 	template "media_agent/media_workflow/biz/domain/template"
 )
 
-const SchemaVersion = 3
+const SchemaVersion = 4
+const LegacySchemaVersion = 3
 
 type ValueSource string
 

@@ -363,6 +363,7 @@ func stepRunToPB(sr *domain.StepRun) *pb.StepRun {
 		FailureReason: sr.FailureReason, ClaimedBy: sr.ClaimedBy,
 		Origin: sr.Origin, SourceSystem: sr.SourceSystem, SourceRecordId: sr.SourceRecordID,
 		LastReviewId: sr.LastReviewID, LastReviewStatus: sr.LastReviewStatus,
+		ResultSource: sr.ResultSource, ReusedFromStepRunId: sr.ReusedFromStepRunID,
 	}
 	if sr.SourceCreatedAt != nil {
 		out.SourceCreatedAt = sr.SourceCreatedAt.UnixNano()

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isCompanyTemplate } from "./template-choices";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "@/foundation/lib/api-client";
@@ -133,7 +134,7 @@ export function WorkflowCreate({
             : null
         }
         templateOptions={templates?.items.filter(
-          (template) => template.organization_id === shell.organization.id,
+          (template) => isCompanyTemplate(shell.organization.id, template.organization_id),
         )}
         submitDisabled={
           !value.workspace_id ||

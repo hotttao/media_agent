@@ -340,6 +340,15 @@ export function StepRunCard({
           ) : null}
         </div>
       ) : null}
+      {stepRun.output_asset_id && (stepRun.result_source === "reused" || stepRun.result_source === "generated") ? (
+        <p className="text-xs text-muted-foreground">
+          {stepRun.result_source === "reused"
+            ? t("execution.resultReused")
+            : stepRun.result_source === "generated"
+              ? t("execution.resultGenerated")
+              : null}
+        </p>
+      ) : null}
       {stepRun.output_asset_id ? (
         <details className="text-xs">
           <summary className="cursor-pointer">
@@ -348,6 +357,11 @@ export function StepRunCard({
           <p className="mt-2 break-all text-muted-foreground">
             {stepRun.output_asset_id}
           </p>
+          {stepRun.result_source === "reused" && stepRun.reused_from_step_run_id ? (
+            <p className="mt-2 break-all text-muted-foreground">
+              {t("execution.reusedFromStep", { id: stepRun.reused_from_step_run_id })}
+            </p>
+          ) : null}
         </details>
       ) : null}
       {stepRun.rendered_prompt ? (
@@ -360,7 +374,7 @@ export function StepRunCard({
           </p>
         </details>
       ) : null}
-      {!stepRun.candidates.length ? (
+      {!stepRun.candidates.length && !stepRun.output_asset_id ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
           {t("execution.noResults")}
         </p>

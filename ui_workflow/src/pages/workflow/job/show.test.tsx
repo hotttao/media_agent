@@ -8,6 +8,7 @@ import {
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useJob } from "@/domains/jobs/hooks/use-job";
+import { useGeneratedAsset } from "@/domains/generated-assets/hooks/use-generated-asset";
 import { useWorkflow } from "@/domains/workflows/hooks/use-workflow";
 import type { GetJobResponse } from "@/domains/jobs/types";
 import type { Workflow } from "@/domains/workflows/types";
@@ -32,7 +33,7 @@ vi.mock("@/domains/workflows/hooks/use-workflow", () => ({
   useWorkflow: vi.fn(),
 }));
 vi.mock("@/domains/generated-assets/hooks/use-generated-asset", () => ({
-  useGeneratedAsset: () => ({ data: undefined }),
+  useGeneratedAsset: vi.fn(() => ({ data: undefined })),
 }));
 vi.mock("@/domains/jobs/hooks/use-job-mutations", () => ({
   useCancelJob: () => ({ isPending: false }),
@@ -106,6 +107,7 @@ function setDetail(value = detail) {
 }
 beforeEach(() => {
   setDetail();
+  vi.mocked(useGeneratedAsset).mockReturnValue({ data: undefined } as ReturnType<typeof useGeneratedAsset>);
   vi.mocked(useWorkflow).mockReturnValue({ data: workflow } as ReturnType<
     typeof useWorkflow
   >);
@@ -123,6 +125,15 @@ const props = {
 };
 
 describe("execution inspector", () => {
+  it("shows an accepted text result without inventing candidates or an empty result", () => {
+    setDetail({ ...detail, step_runs: [{ ...detail.step_runs[0], status: "succeeded", candidates: [], output_asset_id: "gen_reused", result_source: "reused", reused_from_step_run_id: "source" }] });
+    vi.mocked(useGeneratedAsset).mockReturnValue({ data: { content: "Accepted text from prior execution" } } as ReturnType<typeof useGeneratedAsset>);
+    render(<JobShow {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "image" }));
+    expect(screen.getByText("Accepted text from prior execution")).toBeTruthy();
+    expect(screen.getByText("execution.resultReused")).toBeTruthy();
+    expect(screen.queryByText("execution.noResults")).toBeNull();
+  });
   it("offers input override only for failed native executions, not success, cancellation or historical jobs", () => {
     setDetail({
       ...detail,

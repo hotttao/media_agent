@@ -147,6 +147,8 @@ export interface StepRun {
   candidates: Candidate[];
   selected_index: number;
   output_asset_id?: string;
+  result_source?: "generated" | "reused";
+  reused_from_step_run_id?: string;
   failure_reason?: string;
   claimed_by?: string;
   claimed_at?: string;

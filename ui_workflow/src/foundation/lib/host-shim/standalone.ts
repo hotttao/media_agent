@@ -4,7 +4,10 @@ import { api } from "@/foundation/lib/api-client";
 import { useAppHeaderSlot } from "@/foundation/providers/app-header-slot";
 import { useAuth } from "@/foundation/providers/auth-provider";
 import { useSlotContext } from "@/foundation/providers/slot-provider";
-import { WORKFLOW_LAUNCH_KEY } from "@/foundation/types/app-navigation";
+import {
+  WORKFLOW_LAUNCH_KEY,
+  PRODUCT_OPEN_KEY,
+} from "@/foundation/types/app-navigation";
 import { requestKey } from "@/foundation/lib/request-key";
 import {
   useInstancePersistentState,
@@ -84,6 +87,16 @@ export const standaloneShim: HostShim = {
     const slots = useSlotContext();
     return slots
       ? {
+          openProduct(request) {
+            const target = slots.ensureInstance("materials");
+            setInstanceState(
+              slots.workspaceId,
+              target.instanceId,
+              PRODUCT_OPEN_KEY,
+              { ...request, requestId: requestKey() },
+            );
+            slots.activate(target.slotId, target.instanceId);
+          },
           openWorkflowRun(request) {
             const target = slots.ensureInstance("workflow");
             setInstanceState(

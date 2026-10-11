@@ -1,4 +1,22 @@
 {
+	"runWizard": {
+		"company": "企业",
+		"hideInputs": "收起输入，查看画布",
+		"showInputs": "展开输入",
+		"preparation": "准备运行",
+		"progress": "第 {{current}} / {{total}} 步",
+		"review": "确认并运行",
+		"notExecuting": "当前仅选择输入，确认提交后才会开始执行。",
+		"invalid": "节点绑定与入口契约不一致，请先检查工作流。",
+		"skipped": "未选择（可选）",
+		"approvalHint": "生成后按节点审批策略确认候选；多张候选始终需要确认。",
+		"previous": "上一步",
+		"next": "下一步",
+		"clear": "清除选择",
+		"search": "搜索 {{name}}",
+		"noImage": "无图片预览",
+		"noMatches": "没有匹配的资源"
+	},
 	"detailCommon": {
 		"notFilled": "未填写",
 		"yes": "是",
@@ -18,6 +36,7 @@
 		"alwaysReview": "始终审批"
 	},
 	"productWorkflow": {
+		"search": "搜索可用工作流",
 		"choose": "选择兼容工作流",
 		"hint": "选择本企业、同业务范围且接收商品的已发布工作流。下一步带入此商品，仍需补齐输入并选择工作空间，不会自动执行。",
 		"empty": "当前企业没有兼容的已发布工作流。",
@@ -314,6 +333,10 @@
 		"feedbackHint": "说明下一轮应如何调整；是否支持反馈由冻结能力决定。",
 		"sendFeedback": "提交重新生成",
 		"assetReference": "查看登记产物编号",
+		"resultReused": "复用已有结果",
+		"acceptedLoadFailed": "已接受的产物暂时无法读取，请重试",
+		"resultGenerated": "本次生成",
+		"reusedFromStep": "来源步骤：{{id}}",
 		"prompt": "查看生成提示词",
 		"noResults": "当前没有可预览的候选结果。",
 		"stepStatus": {
@@ -395,6 +418,9 @@
 		"archiveHint": "归档后不能再创建新的任务，已有执行记录会保留。",
 		"settings": "工作流设置",
 		"settingsHint": "管理名称和业务范围，节点编辑仍在画布内完成。",
+		"outputEmpty": "还没有节点。请先确定并返回画布添加节点，再选择最终输出。",
+		"outputHint": "选择本次工作流最终交付结果的节点。",
+		"confirmSettings": "确定，返回画布",
 		"toolbox": "节点工具箱",
 		"generationNode": "生成节点",
 		"generationHint": "引用已发布模板，接受单一结果",

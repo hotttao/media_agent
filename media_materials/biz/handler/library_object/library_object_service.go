@@ -102,7 +102,7 @@ func ResolveLibraryObject(ctx context.Context, c *app.RequestContext) {
 		}
 		return
 	}
-	c.JSON(consts.StatusOK, &library_object.ResolveLibraryObjectResp{Url: resolved.URL, ExpiresAt: resolved.ExpiresAt, ContentType: resolved.ContentType, SizeBytes: resolved.SizeBytes})
+	c.JSON(consts.StatusOK, &library_object.ResolveLibraryObjectResp{Url: resolved.URL, ExpiresAt: resolved.ExpiresAt, ContentType: resolved.ContentType, SizeBytes: resolved.SizeBytes, ChecksumSha256: resolved.ChecksumSHA256})
 }
 
 // ResolveInternalLibraryObject .
@@ -133,7 +133,7 @@ func ResolveInternalLibraryObject(ctx context.Context, c *app.RequestContext) {
 		}
 		return
 	}
-	c.JSON(consts.StatusOK, &library_object.ResolveLibraryObjectResp{Url: resolved.URL, ExpiresAt: resolved.ExpiresAt, ContentType: resolved.ContentType, SizeBytes: resolved.SizeBytes})
+	c.JSON(consts.StatusOK, &library_object.ResolveLibraryObjectResp{Url: resolved.URL, ExpiresAt: resolved.ExpiresAt, ContentType: resolved.ContentType, SizeBytes: resolved.SizeBytes, ChecksumSha256: resolved.ChecksumSHA256})
 }
 
 func validOrganizationObjectPath(organizationID, objectPath string) bool {

@@ -1,4 +1,22 @@
 {
+	"runWizard": {
+		"company": "Company",
+		"hideInputs": "Hide inputs to view canvas",
+		"showInputs": "Show inputs",
+		"preparation": "Prepare run",
+		"progress": "Step {{current}} of {{total}}",
+		"review": "Review and run",
+		"notExecuting": "Select inputs here. Execution starts only after confirmation.",
+		"invalid": "Node bindings do not match the input contract. Check the workflow first.",
+		"skipped": "Not selected (optional)",
+		"approvalHint": "Generated candidates follow node approval policies. Multiple candidates always require confirmation.",
+		"previous": "Previous",
+		"next": "Next",
+		"clear": "Clear selection",
+		"search": "Search {{name}}",
+		"noImage": "No image preview",
+		"noMatches": "No matching resources"
+	},
 	"detailCommon": {
 		"notFilled": "Not provided",
 		"yes": "Yes",
@@ -18,6 +36,7 @@
 		"alwaysReview": "Always review"
 	},
 	"productWorkflow": {
+		"search": "Search available workflows",
 		"choose": "Choose compatible workflow",
 		"hint": "Choose a published workflow in this company and scope that accepts a product. The next page preselects this product; complete other inputs and choose a workspace. Nothing runs automatically.",
 		"empty": "No compatible published workflows in this company.",
@@ -317,6 +336,10 @@
 		"feedbackHint": "Describe adjustments for the next generation. Feedback support depends on the frozen capability.",
 		"sendFeedback": "Submit regeneration",
 		"assetReference": "View registered asset reference",
+		"resultReused": "Reused accepted result",
+		"acceptedLoadFailed": "Unable to load the accepted result. Please retry.",
+		"resultGenerated": "Generated in this execution",
+		"reusedFromStep": "Source step: {{id}}",
 		"prompt": "View generated prompt",
 		"noResults": "No candidate previews are available.",
 		"stepStatus": {
@@ -398,6 +421,9 @@
 		"archiveHint": "Archived workflows cannot start new runs. Existing run records are retained.",
 		"settings": "Workflow settings",
 		"settingsHint": "Manage name and scope. Edit nodes on the canvas.",
+		"outputEmpty": "No nodes yet. Confirm to return to the canvas, add nodes, then select the final output.",
+		"outputHint": "Choose the node that delivers the final workflow result.",
+		"confirmSettings": "Confirm and return to canvas",
 		"toolbox": "Node toolbox",
 		"generationNode": "Generation step",
 		"generationHint": "Published template, single accepted result",

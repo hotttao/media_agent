@@ -25,6 +25,9 @@ func authorizeInternalWrite(ctx context.Context, c *app.RequestContext) {
 	case "/api/internal/v1/generated-assets/import/" + string(c.Param("id")):
 		expected = os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN")
 		actual = c.Request.Header.Peek("X-Media-Materials-Internal-Token")
+	case "/api/internal/v1/generated-assets/reusable/" + string(c.Param("id")):
+		expected = os.Getenv("MEDIA_MATERIALS_INTERNAL_TOKEN")
+		actual = c.Request.Header.Peek("X-Media-Materials-Internal-Token")
 	case "/api/internal/v1/generated-assets/import":
 		expected = os.Getenv("MEDIA_MATERIALS_MIGRATION_TOKEN")
 		actual = c.Request.Header.Peek("X-Media-Materials-Migration-Token")
@@ -105,5 +108,14 @@ func _importMw() []app.HandlerFunc {
 }
 
 func _getimportedgeneratedassetMw() []app.HandlerFunc {
+	return []app.HandlerFunc{authorizeInternalWrite}
+}
+
+func _reusableMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _verifyreusablegeneratedassetMw() []app.HandlerFunc {
 	return []app.HandlerFunc{authorizeInternalWrite}
 }

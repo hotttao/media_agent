@@ -12,6 +12,7 @@ import (
 	"media_agent/media_workflow/biz/shared/taskcontext"
 	"media_agent/media_workflow/biz/shared/taskerror"
 	"media_agent/media_workflow/biz/shared/taskref"
+	"media_agent/media_workflow/biz/workflow/reuse_task"
 )
 
 type JobLookup interface {
@@ -28,12 +29,15 @@ type AssetRegistrar interface {
 }
 
 type Handler struct {
-	Jobs          JobLookup
-	Steps         StepLookup
-	Executions    ExecutionLookup
-	Assets        AssetRegistrar
-	StorageOrigin string
-	StorageBucket string
+	Jobs           JobLookup
+	Steps          StepLookup
+	Executions     ExecutionLookup
+	Assets         AssetRegistrar
+	StorageOrigin  string
+	StorageBucket  string
+	Evidence       domain.ResultReuseRepo
+	ReusableAssets reuse_task.AssetLookup
+	Digests        reuse_task.MediaDigestResolver
 }
 
 func (h Handler) Execute(ctx context.Context, input Input) (Output, error) {
@@ -86,6 +90,16 @@ func (h Handler) Execute(ctx context.Context, input Input) (Output, error) {
 	if decode(native.Input, &frozen) != nil || !equalInput(frozen, input) {
 		return Output{}, taskerror.Permanent("finalize_input_conflict")
 	}
+	if input.FingerprintIdentity != nil {
+		if err := verifyReuseCheck(execution, input, step); err != nil {
+			return Output{}, err
+		}
+		if input.ReuseResult.Hit {
+			return h.finalizeReuse(ctx, j, input)
+		}
+	} else if input.ReuseResult != nil {
+		return Output{}, taskerror.Permanent("finalize_reuse_contract_invalid")
+	}
 	invocation, err := successfulInvocation(execution, input.StepKey)
 	if err != nil {
 		return Output{}, err
@@ -132,7 +146,14 @@ func (h Handler) Execute(ctx context.Context, input Input) (Output, error) {
 	if !strings.HasPrefix(id, "gen_") {
 		return Output{}, taskerror.Retryable("finalize_registration_identity_invalid")
 	}
-	return Output{OutputResourceID: id, OutputResource: Resource{ID: id, AssetRef: assetRef, URL: registrationURL, Content: selected.Content, AssetKind: step.AssetKind}}, nil
+	output := Output{OutputResourceID: id, OutputResource: Resource{ID: id, AssetRef: assetRef, URL: registrationURL, Content: selected.Content, AssetKind: step.AssetKind}}
+	if input.FingerprintIdentity != nil {
+		if err := h.recordGeneration(ctx, j, step, invocation, input, output, resultKey); err != nil {
+			return Output{}, err
+		}
+		output.ResultSource = "generated"
+	}
+	return output, nil
 }
 
 // Native workflowInput is authoritative during an input-override rerun. Job's

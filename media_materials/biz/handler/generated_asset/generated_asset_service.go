@@ -199,3 +199,26 @@ func GetImportedGeneratedAsset(ctx context.Context, c *app.RequestContext) {
 		AccessUrl: resolved.URL, AccessExpiresAt: resolved.ExpiresAt,
 	})
 }
+
+// VerifyReusableGeneratedAsset .
+// @router /api/internal/v1/generated-assets/reusable/:id [GET]
+func VerifyReusableGeneratedAsset(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req pb.VerifyReusableGeneratedAssetReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	a, err := Svc.VerifyReusable(ctx, req.GetId(), req.GetOrganizationId(), req.GetScope(), req.GetOwnerUserId())
+	if err != nil {
+		if errors.Is(err, gensvc.ErrReusableAssetNotFound) {
+			c.String(consts.StatusNotFound, "reusable asset not found")
+		} else {
+			c.String(consts.StatusServiceUnavailable, "reusable asset verification unavailable")
+		}
+		return
+	}
+	c.JSON(consts.StatusOK, &pb.ReusableGeneratedAsset{Id: a.ID, OrganizationId: a.OrganizationID, Scope: a.Scope, OwnerUserId: a.OwnerUserID, AssetKind: a.AssetKind, ObjectPath: a.ObjectPath, Content: a.Content, JobId: a.JobID, StepRunId: a.StepRunID, TemplateId: a.TemplateID, TemplateVersion: int32(a.TemplateVersion)})
+}

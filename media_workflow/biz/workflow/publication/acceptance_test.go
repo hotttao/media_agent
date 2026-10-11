@@ -62,7 +62,7 @@ func TestAcceptPublicationFreezesAuthoritativeSourceAndReplaysOffline(t *testing
 		Retries int    `json:"retryCount"`
 		Timeout int    `json:"timeoutSeconds"`
 	}
-	if json.Unmarshal(accepted.TaskDefinitionsJSON, &tasks) != nil || len(tasks) != 3 {
+	if json.Unmarshal(accepted.TaskDefinitionsJSON, &tasks) != nil || len(tasks) != 4 {
 		t.Fatal("complete task definition set was not frozen")
 	}
 	names := make([]string, 0, len(tasks))

@@ -11,7 +11,7 @@ import (
 
 func TestCompileExecutableIRInlinesRendererAndCapabilityMapping(t *testing.T) {
 	ir := executable.ExecutableWorkflowIR{
-		SchemaVersion: executable.SchemaVersion, WorkflowID: "clothing-video", WorkflowVersion: 2, OutputStepKey: "model_image",
+		SchemaVersion: executable.LegacySchemaVersion, WorkflowID: "clothing-video", WorkflowVersion: 2, OutputStepKey: "model_image",
 		Steps: []executable.ExecutableStepIR{{
 			Key: "model_image", Order: 1,
 			Template: executable.TemplateIR{ID: "tpl_model", Version: 3, Body: "{{.person.description}} wears {{.garment.name}}"},
@@ -57,7 +57,7 @@ func TestCompileExecutableIRInlinesRendererAndCapabilityMapping(t *testing.T) {
 
 func TestCompileExecutableIRUsesStaticForkForParallelSteps(t *testing.T) {
 	ir := executable.ExecutableWorkflowIR{
-		SchemaVersion: executable.SchemaVersion, WorkflowID: "parallel", WorkflowVersion: 1, OutputStepKey: "finish",
+		SchemaVersion: executable.LegacySchemaVersion, WorkflowID: "parallel", WorkflowVersion: 1, OutputStepKey: "finish",
 		Steps: []executable.ExecutableStepIR{
 			minimalIRStep("a", 1, nil),
 			minimalIRStep("b", 2, nil),
@@ -79,7 +79,7 @@ func TestCompileExecutableIRInsertsHumanApprovalBeforeFinalize(t *testing.T) {
 	step.ApprovalRequired = true
 	step.CandidateCount = 1
 	ir := executable.ExecutableWorkflowIR{
-		SchemaVersion: executable.SchemaVersion, WorkflowID: "approval", WorkflowVersion: 1,
+		SchemaVersion: executable.LegacySchemaVersion, WorkflowID: "approval", WorkflowVersion: 1,
 		OutputStepKey: "image", Steps: []executable.ExecutableStepIR{step},
 	}
 
@@ -95,7 +95,7 @@ func TestCompileSingleExpectedCandidateStillGuardsActualMultipleCandidates(t *te
 	step := minimalIRStep("image", 1, nil)
 	step.CandidateCount = 1
 	step.ApprovalPolicy = "when_multiple_candidates"
-	definition, err := CompileExecutableIR(executable.ExecutableWorkflowIR{SchemaVersion: executable.SchemaVersion, WorkflowID: "runtime-review", WorkflowVersion: 1, OutputStepKey: "image", Steps: []executable.ExecutableStepIR{step}})
+	definition, err := CompileExecutableIR(executable.ExecutableWorkflowIR{SchemaVersion: executable.LegacySchemaVersion, WorkflowID: "runtime-review", WorkflowVersion: 1, OutputStepKey: "image", Steps: []executable.ExecutableStepIR{step}})
 	require.NoError(t, err)
 	gate := definition.Tasks[0].LoopOver[2]
 	require.Equal(t, "SWITCH", gate.Type)
@@ -119,7 +119,7 @@ func TestCompileResumeRestoresSuccessfulPrefixWithoutCapabilitySideEffects(t *te
 	video.Context = map[string]executable.ValueRef{"frame": {Source: executable.ValueStepOutput, Ref: "first_frame"}}
 	video.Invocation["images"] = template.InvocationExpression{Op: template.InvocationAssetRef, Slot: "frame"}
 	ir := executable.ExecutableWorkflowIR{
-		SchemaVersion: executable.SchemaVersion, WorkflowID: "legacy-video", WorkflowVersion: 1, OutputStepKey: "video",
+		SchemaVersion: executable.LegacySchemaVersion, WorkflowID: "legacy-video", WorkflowVersion: 1, OutputStepKey: "video",
 		Steps: []executable.ExecutableStepIR{
 			minimalIRStep("model_image", 1, nil),
 			minimalIRStep("style_image", 2, []string{"model_image"}),

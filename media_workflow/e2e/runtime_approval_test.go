@@ -217,7 +217,7 @@ func TestConductorRuntimeCandidateApproval(t *testing.T) {
 			if err := api.RegisterTaskDefinitions(ctx, []conductor.TaskDefinition{{Name: name, RetryCount: 0, TimeoutSeconds: 120, ResponseTimeoutSeconds: 90, TimeoutPolicy: "TIME_OUT_WF"}}); err != nil {
 				t.Fatal(err)
 			}
-			ir := executable.ExecutableWorkflowIR{SchemaVersion: executable.SchemaVersion, WorkflowID: name, WorkflowVersion: 1, OutputStepKey: "image", Steps: []executable.ExecutableStepIR{{
+			ir := executable.ExecutableWorkflowIR{SchemaVersion: executable.LegacySchemaVersion, WorkflowID: name, WorkflowVersion: 1, OutputStepKey: "image", Steps: []executable.ExecutableStepIR{{
 				Key: "image", Template: executable.TemplateIR{ID: "test-template", Version: 1, Body: "draw a test image"},
 				Capability: executable.CapabilityIR{Key: name, Version: 1, ConductorTaskDef: name, ExecutionTarget: "personal_worker"},
 				Invocation: template.InvocationMapping{"prompt": {Op: template.InvocationRenderTemplate}}, OutputAssetKind: "model_image", ApprovalPolicy: tc.policy, ApprovalRequired: tc.policy == "always", CandidateCount: 1,

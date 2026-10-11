@@ -53,10 +53,11 @@ type ObjectInfo struct {
 }
 
 type ResolvedObject struct {
-	URL         string
-	ExpiresAt   int64
-	ContentType string
-	SizeBytes   int64
+	URL            string
+	ExpiresAt      int64
+	ContentType    string
+	SizeBytes      int64
+	ChecksumSHA256 string
 }
 
 type Client struct {
@@ -182,7 +183,7 @@ func (c *Client) presignGet(ctx context.Context, objectPath string, info ObjectI
 	if err != nil {
 		return ResolvedObject{}, fmt.Errorf("%w: presign object: %v", ErrUnavailable, err)
 	}
-	return ResolvedObject{URL: result.URL, ExpiresAt: time.Now().Add(c.ttl).Unix(), ContentType: info.ContentType, SizeBytes: info.SizeBytes}, nil
+	return ResolvedObject{URL: result.URL, ExpiresAt: time.Now().Add(c.ttl).Unix(), ContentType: info.ContentType, SizeBytes: info.SizeBytes, ChecksumSHA256: info.Checksum}, nil
 }
 
 func (c *Client) Delete(ctx context.Context, objectPath string) error {

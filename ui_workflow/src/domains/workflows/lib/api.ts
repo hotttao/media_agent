@@ -50,7 +50,7 @@ function toWire(input: Partial<WorkflowInput>): Record<string, unknown> {
   };
 }
 
-function fromWire(workflow: Workflow): Workflow {
+export function fromWire(workflow: Workflow): Workflow {
   return {
     ...workflow,
     status: wireStatus(

@@ -6,6 +6,8 @@ Workflow App 使用 FlowGram 展示业务 Workflow 的节点与依赖，并用�
 
 ## 状态所有权
 
+新建企业 Workflow 的 Template 候选必须归属当前企业，不能把无企业归属的旧模板因为“当前用户拥有”就当作可绑定。旧模板/已发布历史 Workflow 的读取和运行不受此候选过滤影响；需要新定义时，用户先创建、发布当前企业的 Template，不能由 UI 暗中迁移或绕过后端授权。
+
 | 状态 | 所有者 | UI 行为 |
 |:---|:---|:---|
 | Workflow、Step、Slot Binding、output_step_key | `media_workflow` | 服务端业务事实；编辑表单维护未保存草稿 |
@@ -60,3 +62,7 @@ Workflow App 使用 FlowGram 展示业务 Workflow 的节点与依赖，并用�
 - 单元测试验证 Slot Binding 到 FlowGram edges 的确定性投影，以及 protobuf 数字枚举归一化。
 - Playwright 验证真实已发布 Workflow 显示 FlowGram 节点、没有 JSON `<pre>`，并能进入结构化编辑器。
 - Job 创建 E2E 继续验证 UI 改造没有破坏 Workflow Input Schema 到资源选择器的链路。
+
+## 设置面板的确认
+
+新建空工作流的最终输出选择保持禁用并解释前置条件：先确定返回画布添加节点，再选择最终交付节点。已有节点时选择修改当前草稿；“确定，返回画布”仅关闭设置并保留修改，不提交保存或发布。重新打开设置保留选项；定义保存仍由画布工具栏明确触发。

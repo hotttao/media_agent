@@ -119,6 +119,10 @@ _禁用替代词_：edge、link、wire。
 Step 对生成 Candidate 的人工审批要求，取值 `when_multiple_candidates | always`。多个 Candidate 无论配置如何都必须审批；`always` 还要求单个 Candidate 进入审批。0 个 Candidate 直接失败，不进入审批。
 _禁用替代词_：Multi-output、Optional Review、Skip Multi-candidate Review
 
+**Step Result Reuse（步骤结果复用）**:
+新 Execution 的节点使用与本次实际生成输入相匹配、已接受且当前仍可访问的既有 Generation Result，而不再次生成。它不同于同一次 Execution 的失败继续或历史 Resume。
+_禁用替代词_：Execution Retry、Resume Execution、提交幂等。
+
 **Output Step Key（输出步骤 key）**:
 Workflow 中产出最终结果的 Step 的 `step.key`；同时是 DAG 的唯一 sink；校验时强制 sink 唯一且与本值一致。归 `workflow` domain。
 

@@ -101,26 +101,27 @@ test("product launches an instance-scoped run draft and never overwrites a clear
     const dialog = page.getByRole("dialog", {
       name: /^选择兼容工作流$|^Choose compatible workflow$/,
     });
-    await dialog
-      .getByRole("combobox", { name: /^可用工作流$|^Available workflow$/ })
-      .selectOption(workflowID);
+    await dialog.getByRole("button", { name: new RegExp(name) }).click();
     await dialog
       .getByRole("button", {
         name: /^带入商品并准备运行$|^Prepare run with this product$/,
       })
       .click();
     await expect(
-      page.getByRole("combobox", { name: /^工作流$|^Workflows$/ }),
-    ).toHaveValue(workflowID);
-    const selectedProduct = page.getByTestId("run-input-product");
-    await expect(selectedProduct).toHaveValue(product.id);
-    await expect(
-      page.getByRole("button", { name: /^提交执行$|^Submit execution$/ }),
-    ).toBeDisabled();
-    await selectedProduct.selectOption("");
+      page.getByRole("heading", { name, exact: true }),
+    ).toBeVisible();
+    const field = page.getByRole("region", { name: "product", exact: true });
+    const selectedProduct = field.getByRole("button", {
+      name: product.name,
+      exact: true,
+    });
+    await expect(selectedProduct).toHaveAttribute("aria-pressed", "true");
+    await field
+      .getByRole("button", { name: /^清除选择$|^Clear selection$/ })
+      .click();
     await page.getByRole("button", { name: /^素材$|^Materials$/ }).click();
     await page.getByRole("button", { name: /^工作流$|^Workflow$/ }).click();
-    await expect(selectedProduct).toHaveValue("");
+    await expect(selectedProduct).toHaveAttribute("aria-pressed", "false");
     const jobsResponse = await page.request.get(
       `/api/v1/jobs?workflow_id=${workflowID}`,
     );

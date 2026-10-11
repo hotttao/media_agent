@@ -3,6 +3,7 @@ package compiler
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	template "media_agent/media_workflow/biz/domain/template"
 	"media_agent/media_workflow/biz/shared/taskref"
 	"media_agent/media_workflow/biz/workflow/executable"
+	"media_agent/media_workflow/biz/workflow/reuse_task"
 )
 
 const (
@@ -60,7 +62,7 @@ func CompileResumeExecutableIR(ir executable.ExecutableWorkflowIR, restored map[
 }
 
 func compileExecutableIR(ir executable.ExecutableWorkflowIR, restored map[string]bool) (Definition, error) {
-	if ir.SchemaVersion != executable.SchemaVersion {
+	if ir.SchemaVersion != executable.SchemaVersion && ir.SchemaVersion != executable.LegacySchemaVersion {
 		return Definition{}, fmt.Errorf("unsupported executable workflow IR schema version %d", ir.SchemaVersion)
 	}
 	if ir.WorkflowID == "" || ir.WorkflowVersion <= 0 || len(ir.Steps) == 0 {
@@ -90,7 +92,7 @@ func compileExecutableIR(ir executable.ExecutableWorkflowIR, restored map[string
 	}
 	for waveIndex, steps := range waves {
 		if len(steps) == 1 {
-			branch, err := lowerStepOrRestore(steps[0], restored)
+			branch, err := lowerStepOrRestore(steps[0], restored, ir.SchemaVersion == executable.SchemaVersion && restored == nil)
 			if err != nil {
 				return Definition{}, err
 			}
@@ -100,7 +102,7 @@ func compileExecutableIR(ir executable.ExecutableWorkflowIR, restored map[string
 		branches := make([][]Task, 0, len(steps))
 		joinOn := make([]string, 0, len(steps))
 		for _, step := range steps {
-			branch, err := lowerStepOrRestore(step, restored)
+			branch, err := lowerStepOrRestore(step, restored, ir.SchemaVersion == executable.SchemaVersion && restored == nil)
 			if err != nil {
 				return Definition{}, err
 			}
@@ -116,14 +118,63 @@ func compileExecutableIR(ir executable.ExecutableWorkflowIR, restored map[string
 	return definition, nil
 }
 
-func lowerStepOrRestore(step executable.ExecutableStepIR, restored map[string]bool) ([]Task, error) {
+func lowerStepOrRestore(step executable.ExecutableStepIR, restored map[string]bool, enableReuse bool) ([]Task, error) {
 	if restored[step.Key] {
 		return []Task{{
 			Name: RestoreStepTaskName, TaskReferenceName: finalizeRef(step.Key), Type: "SIMPLE",
 			InputParameters: map[string]any{"job_id": "${workflow.input.job_id}", "step_key": step.Key},
 		}}, nil
 	}
-	return lowerExecutableStep(step)
+	tasks, err := lowerExecutableStep(step)
+	if err != nil || !enableReuse {
+		return tasks, err
+	}
+	return lowerReusableStep(step, tasks)
+}
+
+// Only newly compiled v4 native definitions opt in. Frozen v3 definitions and
+// historical restore compilation retain the exact original execution plan.
+func lowerReusableStep(step executable.ExecutableStepIR, generated []Task) ([]Task, error) {
+	if step.ReusePolicy != "reuse_if_available" && step.ReusePolicy != "force_new" {
+		return nil, fmt.Errorf("step %q has an invalid reuse policy", step.Key)
+	}
+	if len(generated) != 2 || generated[0].Type != "DO_WHILE" {
+		return nil, fmt.Errorf("step %q has no generation loop", step.Key)
+	}
+	prepareRef := taskref.Reference(step.Key, "prepare")
+	checkRef := taskref.Reference(step.Key, "reuse")
+	context := make(map[string]any, len(step.Context))
+	for name, ref := range step.Context {
+		context[name] = lowerValueRef(ref)
+	}
+	parameters := make(map[string]any, len(step.Invocation))
+	for name, expression := range step.Invocation {
+		value, err := lowerInvocation(expression, step.Context, prepareRef)
+		if err != nil {
+			return nil, err
+		}
+		parameters[name] = value
+	}
+	identity := reuse_task.Identity{TemplateID: step.Template.ID, TemplateVersion: step.Template.Version, CapabilityKey: step.Capability.Key, CapabilityVersion: step.Capability.Version, CandidateCount: step.CandidateCount, OutputAssetKind: step.OutputAssetKind, Inputs: step.Capability.Inputs}
+	// Definition parameters must be JSON values, not nested Go structs. Struct
+	// field order differs from maps after persistence/decode and would invalidate
+	// the immutable Definition hash without any semantic change.
+	encoded, err := json.Marshal(identity)
+	if err != nil {
+		return nil, err
+	}
+	var frozenIdentity map[string]any
+	if err := json.Unmarshal(encoded, &frozenIdentity); err != nil {
+		return nil, err
+	}
+	generated[1].InputParameters["fingerprint_identity"] = frozenIdentity
+	generated[1].InputParameters["reuse_result"] = fmt.Sprintf("${%s.output}", checkRef)
+	return []Task{
+		{Name: RenderTemplateTaskName, TaskReferenceName: prepareRef, Type: "SIMPLE", InputParameters: map[string]any{"template": map[string]any{"id": step.Template.ID, "version": step.Template.Version, "body": step.Template.Body}, "context": context}},
+		{Name: reuse_task.TaskDefinitionName, TaskReferenceName: checkRef, Type: "SIMPLE", InputParameters: map[string]any{"job_id": "${workflow.input.job_id}", "step_key": step.Key, "policy": step.ReusePolicy, "identity": frozenIdentity, "provider_input": parameters}},
+		{Name: "reuse_gate_" + sanitize(step.Key), TaskReferenceName: taskref.Reference(step.Key, "reuse_gate"), Type: "SWITCH", EvaluatorType: "javascript", Expression: "$.hit === true ? 'reuse' : 'generate'", InputParameters: map[string]any{"hit": fmt.Sprintf("${%s.output.hit}", checkRef)}, DecisionCases: map[string][]Task{"reuse": {}, "generate": {generated[0]}}},
+		generated[1],
+	}, nil
 }
 
 func lowerExecutableStep(step executable.ExecutableStepIR) ([]Task, error) {
