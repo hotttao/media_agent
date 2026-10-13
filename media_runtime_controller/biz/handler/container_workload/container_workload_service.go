@@ -29,10 +29,17 @@ func EnsureContainer(ctx context.Context, c *app.RequestContext) {
 		c.AbortWithStatus(422)
 		return
 	}
-	v, e := application.Ensure(ctx, native.State{Spec: spec, Version: q.TargetVersion, Operation: q.DrainOperation, PendingReplicas: q.PendingReplicas, PendingVersion: q.PendingVersion}, q.ExpectedRevision, "", q.Observation)
+	if q.DrainOperation != "" || q.PendingReplicas != 0 || q.PendingVersion != 0 {
+		c.JSON(501, map[string]string{"error": "not_implemented"})
+		return
+	}
+	v, e := application.Ensure(ctx, native.State{Spec: spec, Version: q.TargetVersion}, q.ExpectedRevision, "", q.Observation)
 	if e != nil {
 		status := 503
+		code := "container_request_failed"
 		switch {
+		case errors.Is(e, native.ErrNotImplemented):
+			status, code = 501, "not_implemented"
 		case errors.Is(e, native.ErrNotFound):
 			status = 404
 		case errors.Is(e, native.ErrConflict):
@@ -40,9 +47,9 @@ func EnsureContainer(ctx context.Context, c *app.RequestContext) {
 		case errors.Is(e, native.ErrInvalid):
 			status = 422
 		}
-		c.JSON(status, map[string]string{"error": "container_request_failed"})
+		c.JSON(status, map[string]string{"error": code})
 		return
 	}
 	body, _ := json.Marshal(v.State.Spec)
-	c.JSON(200, &pb.ContainerResponse{ResourceUid: v.Container.ID, ResourceGeneration: native.Generation(v.Container), Running: v.Container.State.Running, Ready: native.Ready(v.Container), TargetVersion: v.State.Version, SpecJson: string(body), Revision: strconv.FormatInt(v.State.Revision, 10), DrainOperation: v.State.Operation, PendingReplicas: v.State.PendingReplicas, PendingVersion: v.State.PendingVersion})
+	c.JSON(200, &pb.ContainerResponse{ResourceUid: v.Container.ID, ResourceGeneration: native.Generation(v.Container), Running: v.Container.State.Running, Ready: native.Ready(v.Container), TargetVersion: v.State.Version, SpecJson: string(body), Revision: strconv.FormatInt(v.State.Revision, 10)})
 }

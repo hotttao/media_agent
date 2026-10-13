@@ -68,7 +68,7 @@
 - [x] 更新所有 Runtime 的 Gateway 客户端与配置。
 - [x] 真协议服务器/授权撤销/多 Gateway/旧 Session 隔离验证。
 
-阶段实现与验证见 [P4 审查](../review/agent-runtime/p4-mcp.md)。Plugin/Auth 仍为外部事实所有者；当前阶段完成后暂停，不提前实现 P5。
+阶段实现与验证见 [P4 审查](../review/agent-runtime/p4-mcp.md)。Plugin/Auth 仍为外部事实所有者；后续按用户授权自动推进。
 
 - [x] 用户确认 P4 总结后进入 P5（用户明确继续）。
 
@@ -101,10 +101,12 @@
 
 用户要求 Docker Runtime Controller 放到最后，保持单实例创建/查询/身份校验，保留扩缩容接口但返回明确未实现；不实现 Docker 扩缩容及对应复杂协调。P5 已提交的 Docker 基线在此阶段审查并精简。
 
-- [ ] 审查并精简 Docker Controller 与 Gateway 适配。
-- [ ] 受控单实例创建、稳定幂等、身份与必要持久目录验证。
-- [ ] 扩缩容保留接口并明确返回未实现。
-- [ ] 最终总审查与 P7/review.md、commit。
+- [x] 审查并精简 Docker Controller 与 Gateway 适配。
+- [x] 受控单实例创建、稳定幂等、身份与必要持久目录验证。
+- [x] 扩缩容保留接口并明确返回未实现。
+- [x] 最终总审查与 P7/review.md、commit。
+
+阶段证据见 [P7 审查](../review/agent-runtime/p7/review.md)。核心开发完成，Kubernetes 存储环境验收保留为部署前门禁。
 
 ## 风险与对策
 

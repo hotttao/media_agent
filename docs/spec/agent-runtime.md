@@ -15,7 +15,7 @@
 |:---|:---|:---|
 | EnsureWorkload | POST /internal/agent-workloads/{workspace_id}/ensure | expected Control version + idempotency_key；返回 workload_ref/status 与稳定地址引用 |
 | GetWorkload | GET /internal/agent-workloads/{workspace_id} | Kubernetes 原生资源读取或 Docker 创建结果，不调用 Controller 探活 |
-| ScaleWorkload | POST /internal/agent-workloads/{workspace_id}/scale | expected revision + replicas；K8s 缩容先 drain，再提交 CR 副本目标；Docker 拒绝 scale |
+| ScaleWorkload | POST /internal/agent-workloads/{workspace_id}/scale | expected revision + replicas；K8s 缩容先 drain，再提交 CR 副本目标；Docker 返回501 not_implemented |
 | ResolveInstanceIdentity | POST /api/agent/v1/instances/identity | 稳定 Agent 身份、原生身份凭证及定位；返回已核验资源 UID/generation/type 与登记版本 |
 | RegisterInstance | POST /api/agent/v1/instances/register | 稳定 Agent 身份、replica/环境身份、incarnation；返回实例凭证、登记版本、准入状态/排空操作，不缓存配置 |
 | GetRuntimeContext | GET /api/agent/v1/runtime-context | selection_revision + target_context_version，或当前已确认目标；返回 Control 快照 + 独立 Platform Prompt |
@@ -130,7 +130,7 @@ K8s Gateway 使用 dynamic/core 客户端提交/查询 AgentWorkload CR。Contro
 
 Gateway 根据 observed Ready Pod 与已登记 instance 选择新 Session。缩容先持久业务 admission/drain operation，代理 Agent 关闭 claim，排空后接管 queued，再更新 CR replicas；Controller 把目标落到 StatefulSet。不直接在 Gateway 修改 StatefulSet 与 CR 互相竞争，不在 Controller 执行排空业务。
 
-Docker 创建服务按 Workspace 派生唯一容器名和幂等标签，固定允许镜像与持久挂载根，禁止用户指定任意 privileged/socket/host路径。创建结果不明确以名称/标签读取，单实例；不做 Docker 扩缩容。
+Docker 创建服务按 Workspace 派生唯一容器名和幂等标签，固定允许镜像与持久挂载根，禁止用户指定任意 privileged/socket/host路径。创建结果不明确以名称/标签读取，仅接受 replicas=1；replicas 非1及 drain/pending 操作返回501 not_implemented，Gateway scale 同样返回501。创建记录仅保留 spec/target version/revision；相同版本与配置幂等，启动失败由重复 Ensure 恢复，不设后台 start/stop 协调循环；不做 Docker 扩缩容。
 
 ## 完整流程实现顺序
 

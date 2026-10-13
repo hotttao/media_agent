@@ -11,3 +11,7 @@
 ## 2026-10-13 · P5 工作负载落地
 
 - Control target CAS/请求幂等、CR 排空意图与原生回收确认、代次变化的绑定恢复、缩容到0逐 Session 核查、Docker 文件/容器 UID 一致及私有凭据交付。
+
+## 2026-10-13 · P7 Docker 最后收尾并精简
+
+按用户要求将 Docker 收尾移到最后，仅保留单实例创建/查询/原生身份、私有目录与稳定幂等。删除 Docker pending/drain 状态与后台 start/stop 协调循环；多副本、缩容到0及排空请求统一返回明确未实现（HTTP 501），接口字段保留以兼容但不承诺能力。创建结果不明用相同 Ensure 查询/启动恢复，Docker restart policy 承担普通进程重启。

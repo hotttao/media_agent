@@ -295,3 +295,20 @@ func TestMembershipIncludesMissingOrdinal(t *testing.T) {
 		t.Fatalf("missing replica omitted: %+v %v", result, e)
 	}
 }
+
+func TestDockerScalingDoesNotDrainOrWriteResources(t *testing.T) {
+	w, resources, _, control := workloadFixture()
+	control.target.Spec.Driver = "docker"
+	for _, replicas := range []int32{0, 2} {
+		control.target.Spec.Replicas = replicas
+		if e := w.Ensure(context.Background(), "owner", "ws"); !errors.Is(e, ErrWorkloadNotImplemented) {
+			t.Fatalf("Docker ensure scale must be unsupported: %v", e)
+		}
+		if e := w.Scale(context.Background(), "owner", "ws", "scale", replicas, 1); !errors.Is(e, ErrWorkloadNotImplemented) {
+			t.Fatalf("Docker scale must be unsupported: %v", e)
+		}
+	}
+	if len(resources.writes) != 0 {
+		t.Fatal("unsupported Docker scale touched native resources")
+	}
+}

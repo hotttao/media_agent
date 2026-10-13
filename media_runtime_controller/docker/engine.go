@@ -18,6 +18,7 @@ import (
 var ErrNotFound = errors.New("managed container not found")
 var ErrConflict = errors.New("container ownership or revision conflict")
 var ErrInvalid = errors.New("invalid container request")
+var ErrNotImplemented = errors.New("Docker scaling is not implemented")
 
 type EngineError struct{ Status int }
 

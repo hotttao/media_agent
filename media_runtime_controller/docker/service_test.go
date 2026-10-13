@@ -102,7 +102,9 @@ func TestConcurrentCreationStableProofAndRecovery(t *testing.T) {
 	if _, e := svc.Ensure(ctx, State{Spec: spec, Version: 1}, "", "", false); e == nil {
 		t.Fatal("lost start response not exposed")
 	}
-	svc.Reconcile(ctx)
+	if _, e := svc.Ensure(ctx, State{Spec: spec, Version: 1}, "", "", false); e != nil {
+		t.Fatalf("same create retry did not repair start: %v", e)
+	}
 	v, e := svc.Ensure(ctx, State{Spec: spec}, "", "", true)
 	if e != nil || !v.Container.State.Running {
 		t.Fatalf("persisted native intent not recovered: %v", e)
@@ -126,8 +128,8 @@ func TestConcurrentCreationStableProofAndRecovery(t *testing.T) {
 	for range 2 {
 		wg.Go(func() {
 			_, e := svc.Ensure(ctx, State{Spec: spec, Version: 1}, "", "", false)
-			if !errors.Is(e, ErrConflict) {
-				t.Errorf("stale create should conflict, got %v", e)
+			if e != nil {
+				t.Errorf("same create must be idempotent: %v", e)
 			}
 		})
 	}
@@ -135,11 +137,18 @@ func TestConcurrentCreationStableProofAndRecovery(t *testing.T) {
 	if creates != 1 {
 		t.Fatalf("created %d containers", creates)
 	}
-	spec.Replicas = 0
-	v, e = svc.Ensure(ctx, State{Spec: spec, Version: 2}, "2", "", false)
-	if e != nil {
-		t.Fatal(e)
+	if v.State.Revision != 1 {
+		t.Fatal("same-version retries changed revision")
 	}
+	spec.Replicas = 0
+	if _, e = svc.Ensure(ctx, State{Spec: spec, Version: 2}, "1", "", false); !errors.Is(e, ErrNotImplemented) {
+		t.Fatalf("Docker shrink must be unsupported: %v", e)
+	}
+	lock.Lock()
+	container.State.Running = false
+	container.State.FinishedAt = "2026-10-13T02:00:00Z"
+	lock.Unlock()
+	// External native termination is observable without a scaling workflow.
 	_, stopped, e = svc.Identity(ctx, spec.WorkspaceID, spec.AgentConfigID, v.Container.ID, Generation(v.Container), "", true)
 	if e != nil || !stopped {
 		t.Fatal("matching native termination not confirmed")
@@ -225,20 +234,25 @@ func TestLiveDockerCreation(t *testing.T) {
 	if _, e = svc.Ensure(ctx, State{Spec: spec, Version: 1}, "1", "", false); e != nil {
 		t.Fatal(e)
 	}
-	spec.Replicas = 0
-	result, e = svc.Ensure(ctx, State{Spec: spec, Version: 2}, "2", "", false)
-	if e != nil {
+	unsupported := spec
+	unsupported.Replicas = 0
+	if _, e = svc.Ensure(ctx, State{Spec: unsupported, Version: 2}, "1", "", false); !errors.Is(e, ErrNotImplemented) {
+		t.Fatalf("Docker shrink must be unsupported: %v", e)
+	}
+	// Simulate an operator stop through the native Engine, outside the creation API.
+	if e = engine.Stop(ctx, id); e != nil {
 		t.Fatal(e)
 	}
-	if result.Container.State.Running {
-		t.Fatal("native stop not applied")
+	result, e = svc.Ensure(ctx, State{Spec: spec}, "", "", true)
+	if e != nil || result.Container.State.Running {
+		t.Fatalf("native stop not observable: %v", e)
 	}
 	_, terminated, e := svc.Identity(ctx, spec.WorkspaceID, spec.AgentConfigID, id, generation, "", true)
 	if e != nil || !terminated {
 		t.Fatalf("matching termination missing: generation=%s current=%s state=%+v err=%v", generation, Generation(result.Container), result.Container.State, e)
 	}
 	spec.Replicas = 1
-	result, e = svc.Ensure(ctx, State{Spec: spec, Version: 3}, "3", "", false)
+	result, e = svc.Ensure(ctx, State{Spec: spec, Version: 1}, "", "", false)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -252,5 +266,5 @@ func TestLiveDockerCreation(t *testing.T) {
 	if after, e := readRegular(proofPath); e != nil || string(after) != string(proof) {
 		t.Fatal("restart changed native bootstrap proof")
 	}
-	t.Logf("real Engine creation/idempotency/proof/stop/restart/native generation/persistence verified (full Docker health=%t)", fullHealth)
+	t.Logf("real Engine creation/idempotency/proof/unsupported scaling/external stop/retry/native generation/persistence verified (full Docker health=%t)", fullHealth)
 }

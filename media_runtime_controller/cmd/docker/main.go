@@ -11,9 +11,6 @@ import (
 	"media_agent/media_runtime_controller/biz/router"
 	native "media_agent/media_runtime_controller/docker"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 func main() {
@@ -38,20 +35,6 @@ func main() {
 	middleware.Configure(credential)
 	containers.Configure(svc)
 	identity.Configure(svc)
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for {
-			svc.Reconcile(ctx)
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-		}
-	}()
 	addr := os.Getenv("RUNTIME_CREATION_ADDRESS")
 	if addr == "" {
 		addr = ":8010"

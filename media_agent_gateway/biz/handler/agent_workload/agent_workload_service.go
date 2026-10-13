@@ -38,10 +38,14 @@ func handle(ctx context.Context, c *app.RequestContext, action string) {
 	pending := errors.Is(e, workflow.ErrRuntimeWaiting)
 	if e != nil && !pending {
 		status := 503
+		code := "workload_operation_failed"
+		if errors.Is(e, workflow.ErrWorkloadNotImplemented) {
+			status, code = 501, "not_implemented"
+		}
 		if errors.Is(e, workflow.ErrWorkloadConflict) {
 			status = 409
 		}
-		c.JSON(status, map[string]string{"error": "workload_operation_failed"})
+		c.JSON(status, map[string]string{"error": code})
 		return
 	}
 	v, e := application.View(ctx, user, ws)

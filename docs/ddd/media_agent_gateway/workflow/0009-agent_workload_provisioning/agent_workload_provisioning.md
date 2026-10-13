@@ -55,7 +55,7 @@ sequenceDiagram
 1. Control 保持业务配置事实源，Gateway 生成 manifest 和调用环境创建接口，不让 Runtime Controller 承接控制面业务规则。
 2. 自定义控制器对 Agent CR 协调关联资源，不直接管理每个 Pod 的健康或自己维持副本数；副本由 StatefulSet 维护，探针由 kubelet 执行。读取所管理资源用于资源协调不等于增加 Agent 探活接口。
 3. Gateway 直接使用 Kubernetes 客户端提交/查询 manifest；自定义控制器不是 Gateway 的 RPC 健康代理。Gateway 创建后直接与 Agent 通信。
-4. Docker 创建服务持有 Docker 权限；本期只做单实例创建，不模拟 StatefulSet、不实现扩缩容。
+4. Docker 创建服务持有 Docker 权限；本期只做单实例创建/查询/原生身份校验，不模拟 StatefulSet、不实现扩缩容。replicas 非1及 drain/pending 操作明确返回未实现；重复同一目标版本/配置返回稳定结果，创建启动结果不明由下次相同 Ensure 查询恢复，无后台副本协调循环。
 5. Kubernetes 的业务排空与 Session 重绑由 Gateway/Agent 协调，完成后提交目标副本数。Controller 不查询 running Turn，不决定是否可以继续队列。
 
 ## 状态与不变量

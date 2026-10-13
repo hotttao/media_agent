@@ -28,6 +28,7 @@ type WorkloadResources interface {
 
 var ErrWorkloadAbsent = client.ErrWorkloadAbsent
 var ErrWorkloadConflict = client.ErrWorkloadConflict
+var ErrWorkloadNotImplemented = client.ErrWorkloadNotImplemented
 
 type WorkloadProvisioning struct {
 	Control       WorkloadControl
@@ -47,6 +48,9 @@ func (w *WorkloadProvisioning) Ensure(ctx context.Context, user, workspace strin
 	}
 	if target.Spec.EnvironmentID != w.EnvironmentID || target.Version < 1 {
 		return ErrWorkloadConflict
+	}
+	if target.Spec.Driver == "docker" && target.Spec.Replicas != 1 {
+		return ErrWorkloadNotImplemented
 	}
 	state, e := w.Resources.Read(ctx, target.Spec)
 	if errors.Is(e, ErrWorkloadAbsent) {
@@ -370,6 +374,9 @@ func (w *WorkloadProvisioning) Scale(ctx context.Context, user, ws, key string, 
 	target, e := w.Control.Ensure(ctx, user, ws)
 	if e != nil {
 		return e
+	}
+	if target.Spec.Driver == "docker" {
+		return ErrWorkloadNotImplemented
 	}
 	if target.Spec.Driver != "kubernetes" || target.Version != expected || target.Spec.Replicas != replicas {
 		return ErrWorkloadConflict

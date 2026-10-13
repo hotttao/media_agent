@@ -28,6 +28,7 @@ type NativeWorkload struct {
 
 var ErrWorkloadAbsent = errors.New("workload resource absent")
 var ErrWorkloadConflict = errors.New("workload resource conflict")
+var ErrWorkloadNotImplemented = errors.New("workload operation is not implemented")
 
 type WorkloadControl struct{ BaseURL, ServiceToken string }
 

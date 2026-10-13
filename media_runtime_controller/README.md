@@ -28,4 +28,6 @@ Docker 创建服务通过 Unix socket 创建单实例容器；Gateway 只连接�
 
 `go test ./...` 运行 fake Engine、client-go 资源协调与归属测试。显式设置 `MEDIA_RUNTIME_DOCKER_TEST=1 MEDIA_RUNTIME_DOCKER_REQUIRE_HEALTH=1` 验证独立真实容器与 healthcheck。Kubernetes 设置 `MEDIA_RUNTIME_KUBERNETES_TEST=1` 创建临时 namespace/CRD（已存在 CRD 不覆盖），验证真实资源及缩放目标；可用 RWX provisioner 另设 `MEDIA_RUNTIME_KUBERNETES_REQUIRE_READY=1` 验证双 Ready、PV Retain、逐 Pod DNS。全部资源清理限定本次创建的 UID/labels。
 
-Runtime 镜像以 media_agents 为 build context，可分别构建 codex/Dockerfile、claude_code/Dockerfile、goose/Dockerfile；默认都保留 `/workspace/.home`。Goose 镜像固定 CLI 1.52.0，安装依据 [官方版本](https://github.com/aaif-goose/goose/releases/tag/v1.52.0) 与 [官方安装脚本](https://raw.githubusercontent.com/aaif-goose/goose/v1.52.0/download_cli.sh)。镜像构建与完整部署可在 P6 验收执行。
+Runtime 镜像以 media_agents 为 build context，可分别构建 codex/Dockerfile、claude_code/Dockerfile、goose/Dockerfile；默认都保留 `/workspace/.home`。Goose 镜像固定 CLI 1.52.0，安装依据 [官方版本](https://github.com/aaif-goose/goose/releases/tag/v1.52.0) 与 [官方安装脚本](https://raw.githubusercontent.com/aaif-goose/goose/v1.52.0/download_cli.sh)。真实付费模型及生产镜像部署需按实际凭据与 RWX 存储环境验收；协议/创建 fixture 验证不能替代完整生产部署。
+
+Docker 创建服务只接受单实例目标；扩缩容和 drain/pending 请求返回 HTTP 501 `not_implemented`。重复同一版本/配置保持容器、bootstrap proof、目录与 revision 不变，启动失败可重复 Ensure 恢复。服务不运行副本协调循环；普通运行失败交给 Docker restart policy。创建服务从不发出停止容器的业务指令，原生身份查询仍可验证外部终止的代次。

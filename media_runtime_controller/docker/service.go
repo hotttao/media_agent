@@ -30,9 +30,6 @@ type Policy struct {
 type State struct {
 	Spec              contract.Spec
 	Version, Revision int64
-	Operation         string
-	PendingReplicas   int32
-	PendingVersion    int64
 }
 type Service struct {
 	Engine *Engine
@@ -139,6 +136,9 @@ func (s *Service) verify(v *Inspection, spec contract.Spec, proof []byte) error 
 	return nil
 }
 func (s *Service) Ensure(ctx context.Context, wanted State, expected string, apiToken string, observe bool) (*Result, error) {
+	if !observe && wanted.Spec.Replicas != 1 {
+		return nil, ErrNotImplemented
+	}
 	if e := s.validate(wanted.Spec); e != nil {
 		return nil, e
 	}
@@ -186,14 +186,11 @@ func (s *Service) Ensure(ctx context.Context, wanted State, expected string, api
 		}
 		return &Result{previous, v}, nil
 	}
-	if wanted.Version < 1 || exists && (expected != strconv.FormatInt(previous.Revision, 10) || wanted.Version < previous.Version) || !exists && expected != "" {
+	if wanted.Version < 1 || exists && (wanted.Version < previous.Version || wanted.Version != previous.Version && expected != strconv.FormatInt(previous.Revision, 10)) || !exists && expected != "" {
 		return nil, ErrConflict
 	}
 	if exists && digest(previous.Spec) != digest(wanted.Spec) {
 		return nil, ErrConflict
-	}
-	if wanted.Operation != "" && (wanted.PendingVersion < 1 || wanted.PendingReplicas < 0 || wanted.PendingReplicas > 1) {
-		return nil, ErrInvalid
 	}
 	proof, e := readRegular(proofPath)
 	if errors.Is(e, os.ErrNotExist) {
@@ -237,16 +234,17 @@ func (s *Service) Ensure(ctx context.Context, wanted State, expected string, api
 	if e = s.verify(v, wanted.Spec, proof); e != nil {
 		return nil, e
 	}
-	// Durable intent precedes Engine side effects. A failed start/stop is retried from
-	// the last committed projection, without recreating the container or its files.
-	wanted.Revision = previous.Revision + 1
-	encoded, _ := json.Marshal(wanted)
-	if e = atomicFile(statePath, encoded, 0600); e != nil {
-		return nil, e
+	// A same-version retry retains the original revision and files. Persist the
+	// create projection before start; a failed start is repaired by the next Ensure.
+	wanted.Revision = previous.Revision
+	if !exists || wanted.Version != previous.Version {
+		wanted.Revision++
+		encoded, _ := json.Marshal(wanted)
+		if e = atomicFile(statePath, encoded, 0600); e != nil {
+			return nil, e
+		}
 	}
-	if wanted.Spec.Replicas == 0 && v.State.Running {
-		e = s.Engine.Stop(ctx, v.ID)
-	} else if wanted.Spec.Replicas == 1 && !v.State.Running {
+	if !v.State.Running {
 		e = s.Engine.Start(ctx, v.ID)
 	}
 	if e != nil {
@@ -315,33 +313,4 @@ func (s *Service) Identity(ctx context.Context, workspace, config, uid, generati
 	finished, fe := time.Parse(time.RFC3339Nano, result.Container.State.FinishedAt)
 	terminated := generation == Generation(result.Container) && !result.Container.State.Running && !result.Container.State.Restarting && se == nil && fe == nil && !finished.IsZero() && !finished.Before(started)
 	return result, terminated, nil
-}
-
-// Reconcile repairs native start/stop outcomes from durable intent only.
-// It does not connect to Agent HTTP or inspect execution business state.
-func (s *Service) Reconcile(ctx context.Context) {
-	entries, e := os.ReadDir(s.Policy.Root)
-	if e != nil {
-		return
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		body, e := readRegular(filepath.Join(s.Policy.Root, entry.Name(), "state.json"))
-		if e != nil {
-			continue
-		}
-		var state State
-		if json.Unmarshal(body, &state) != nil || s.validate(state.Spec) != nil {
-			continue
-		}
-		result, e := s.Ensure(ctx, state, "", "", true)
-		if e != nil {
-			continue
-		}
-		if result.Container.State.Running != (state.Spec.Replicas == 1) {
-			_, _ = s.Ensure(ctx, state, strconv.FormatInt(state.Revision, 10), "", false)
-		}
-	}
 }
