@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-const defaultBuffer = 128
+const defaultBuffer = 256
 
 type Event struct {
 	// Sequence is zero for a transient live frame. Durable events always have
@@ -64,7 +64,17 @@ func (b *Broadcaster) Open(_ context.Context, sessionID string) (Subscription, e
 	return b.Subscribe(sessionID), nil
 }
 
-func (b *Broadcaster) Close() error { return nil }
+func (b *Broadcaster) Close() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, group := range b.subscribers {
+		for _, ch := range group {
+			close(ch)
+		}
+	}
+	clear(b.subscribers)
+	return nil
+}
 
 func (b *Broadcaster) Publish(sessionID string, event Event) {
 	b.mu.Lock()

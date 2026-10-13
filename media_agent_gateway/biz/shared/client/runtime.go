@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	sessionDomain "media_agent/media_agent_gateway/biz/domain/agent_session"
 	"net/http"
 	"os"
 )
@@ -39,18 +41,28 @@ type Runtime interface {
 }
 
 type RegisterRuntimeSessionInput struct {
+	InitialEpoch   int64  `json:"initial_epoch,omitempty"`
+	TransferID     string `json:"transfer_id,omitempty"`
+	WorkspaceID    string `json:"workspace_id,omitempty"`
+	AgentConfigID  string `json:"agent_config_id,omitempty"`
 	SessionID      string `json:"session_id"`
 	ContextVersion int64  `json:"context_version"`
 	ContextRef     string `json:"context_ref"`
 }
 
 type RuntimeSession struct {
-	SessionID        string `json:"session_id"`
-	Status           string `json:"status"`
-	ChatStatus       string `json:"chat_status"`
-	ActiveTurnID     string `json:"active_turn_id"`
-	RuntimeSessionID string `json:"runtime_session_id"`
-	ContextVersion   int64  `json:"context_version"`
+	WorkspaceID        string `json:"workspace_id"`
+	AgentConfigID      string `json:"agent_config_id"`
+	OwnerInstanceID    string `json:"owner_instance_id"`
+	OwnerIncarnationID string `json:"owner_incarnation_id"`
+	ExecutionEpoch     int64  `json:"execution_epoch"`
+	LastTransferID     string `json:"last_transfer_id"`
+	SessionID          string `json:"session_id"`
+	Status             string `json:"status"`
+	ChatStatus         string `json:"chat_status"`
+	ActiveTurnID       string `json:"active_turn_id"`
+	RuntimeSessionID   string `json:"runtime_session_id"`
+	ContextVersion     int64  `json:"context_version"`
 }
 
 type SubmitTurnInput struct {
@@ -63,6 +75,7 @@ type SubmitTurnInput struct {
 }
 
 type Turn struct {
+	ExecutionEpoch  int64  `json:"execution_epoch"`
 	TurnID          string `json:"turn_id"`
 	SessionID       string `json:"session_id"`
 	IdempotencyKey  string `json:"idempotency_key"`
@@ -101,4 +114,26 @@ type AgentRequest struct {
 	Response    json.RawMessage `json:"response"`
 	ResolvedAt  string          `json:"resolved_at"`
 	CreatedAt   string          `json:"created_at"`
+}
+
+type RuntimeRouter interface {
+	Resolve(context.Context, *sessionDomain.Session) (Runtime, error)
+	Facts(context.Context, *sessionDomain.Session) (Runtime, error)
+	Owner(context.Context, *sessionDomain.Session) (Runtime, error)
+}
+type ControlledRuntime interface {
+	Runtime
+	BeginDrain(context.Context, string) error
+	Quiesce(context.Context, string, string) error
+	GetDrain(context.Context) (DrainState, error)
+	Transfer(context.Context, string, TransferSessionInput) (*RuntimeSession, error)
+	Adopt(context.Context, string) (*RuntimeSession, error)
+	Resume(context.Context, string, string) (*RuntimeSession, error)
+}
+
+func SessionContextReference(s *sessionDomain.Session) string {
+	if s.MetadataTargetContextVersion != "" {
+		return "metadata:" + s.AgentConfigID + ":" + s.MetadataTargetContextVersion
+	}
+	return fmt.Sprintf("workspace:%s/agent:%s/context:%d", s.WorkspaceID, s.AgentID, s.ContextVersion)
 }

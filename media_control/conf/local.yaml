@@ -4,6 +4,7 @@ app:
   env: ${APP_ENV:-local}
 
 server:
+  max_request_body_bytes: ${MAX_REQUEST_BODY_BYTES:-12582912}
   enabled: true
   address: ${SERVER_ADDR:-:8007}
 
@@ -69,3 +70,39 @@ pprof:
 health:
   enabled: false
   path: "/health"
+
+agent_metadata:
+  enabled: ${AGENT_METADATA_ENABLED:-false}
+  artifact_root: ${AGENT_METADATA_ARTIFACT_ROOT:-./data/metadata}
+  metadata_exchange: ${AGENT_METADATA_EXCHANGE:-media.agent.metadata.v1}
+  gateway_credential: ${AGENT_METADATA_GATEWAY_CREDENTIAL:-}
+
+rabbitmq:
+  enabled: ${MEDIA_AGENTS_RABBITMQ_ENABLED:-true}
+  url: ${MEDIA_AGENTS_RABBITMQ_URL:-amqp://media_agent:media_agent@127.0.0.1:5672/}
+
+agent_workload:
+  session_exchange: ${MEDIA_AGENTS_SESSION_EXCHANGE:-media.agent.sessions.v1}
+  enabled: ${AGENT_WORKLOAD_ENABLED:-false}
+  driver: ${AGENT_WORKLOAD_DRIVER:-kubernetes}
+  namespace: ${AGENT_WORKLOAD_NAMESPACE:-media-agent-runtime}
+  gateway_url: ${AGENT_GATEWAY_URL:-http://media-agent-gateway:8006}
+  shared_secret: ${AGENT_WORKLOAD_SHARED_SECRET:-media-agent-runtime}
+  storage_class: ${AGENT_WORKLOAD_STORAGE_CLASS:-}
+  storage_size: ${AGENT_WORKLOAD_STORAGE_SIZE:-10Gi}
+  profiles:
+    codex:
+      image: ${AGENT_CODEX_IMAGE:-media-agent-codex:latest}
+      port: 3001
+      cpu: "1"
+      memory: 2Gi
+    claude-code:
+      image: ${AGENT_CLAUDE_IMAGE:-media-agent-claude-code:latest}
+      port: 3001
+      cpu: "1"
+      memory: 2Gi
+    goose:
+      image: ${AGENT_GOOSE_IMAGE:-media-agent-goose:latest}
+      port: 3001
+      cpu: "1"
+      memory: 2Gi

@@ -99,18 +99,22 @@ func GetRuntimeContext(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	value, apiKey, err := workspaceService.RuntimeContext(ctx, req.WorkspaceId, middleware.UserID(ctx))
+	value, apiKey, target, err := workspaceService.RuntimeContextVersion(ctx, req.WorkspaceId, middleware.UserID(ctx), req.ContextVersion)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-	c.JSON(consts.StatusOK, &workspace.RuntimeContextResponse{WorkspaceId: value.Workspace.ID, AgentId: value.AgentID, AgentType: value.AgentType, ApiKey: apiKey, ContextVersion: value.AgentConfiguration.Version})
+	c.JSON(consts.StatusOK, &workspace.RuntimeContextResponse{WorkspaceId: value.Workspace.ID, AgentId: value.AgentID, AgentType: value.AgentType, ApiKey: apiKey, ContextVersion: value.AgentConfiguration.Version, AgentConfigurationId: value.AgentConfiguration.ID, MetadataTargetContextVersion: target})
 }
 
 func toResponse(value *domain.ConfiguredWorkspace) *workspace.WorkspaceResponse {
 	return &workspace.WorkspaceResponse{Id: value.Workspace.ID, Name: value.Workspace.Name, AgentId: value.AgentID, AgentType: value.AgentType, ApiKeyConfigured: len(value.EncryptedAPIKey) > 0, ConfigurationVersion: value.AgentConfiguration.Version, CreatedAt: value.Workspace.CreatedAt.UnixMilli(), UpdatedAt: value.Workspace.UpdatedAt.UnixMilli(), AgentConfigurationId: value.AgentConfiguration.ID, OrganizationId: value.OrganizationID, TeamId: value.TeamID, CreatedBy: value.CreatedBy, DesiredState: value.DesiredState}
 }
 func writeError(c *app.RequestContext, err error) {
+	if errors.Is(err, domain.ErrConflict) {
+		c.JSON(consts.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
 	if errors.Is(err, service.ErrForbidden) {
 		c.JSON(consts.StatusForbidden, map[string]string{"error": err.Error()})
 		return

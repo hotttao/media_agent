@@ -159,7 +159,7 @@ func TestStartDelegatesSecretsAndFactsToAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if turn.TurnID != "turn" || runtime.submitInput.IdempotencyKey != "idem" || runtime.submitInput.APIKey != "secret-api-key" || runtime.submitInput.SessionToken != "session-token" {
+	if turn.TurnID != "turn" || runtime.submitInput.IdempotencyKey != "idem" || runtime.submitInput.APIKey != "secret-api-key" || runtime.submitInput.SessionToken != "" {
 		t.Fatalf("submit=%+v turn=%+v", runtime.submitInput, turn)
 	}
 	encoded, _ := json.Marshal(repo.session)

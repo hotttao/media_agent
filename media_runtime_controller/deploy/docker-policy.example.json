@@ -1,0 +1,15 @@
+{
+  "EnvironmentID": "local-docker",
+  "Network": "media-agent-private",
+  "Root": "/var/lib/media-agent/runtime",
+  "PublicKeysFile": "/var/lib/media-agent/keys/runtime-public-keys.json",
+  "SharedSecret": "media-agent-runtime",
+  "DatabaseURL": "postgresql+asyncpg://REPLACE_USER:REPLACE_PASSWORD@postgres:5432/media_agents",
+  "RabbitURL": "amqp://REPLACE_USER:REPLACE_PASSWORD@rabbitmq:5672/",
+  "Images": {
+    "codex": "media-agent-codex:latest",
+    "claude-code": "media-agent-claude-code:latest",
+    "goose": "media-agent-goose:latest"
+  },
+  "AgentTokens": {}
+}

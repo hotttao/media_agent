@@ -14,6 +14,7 @@ from adapter.biz.domain.runtime_session.entity import (
     TurnStatus,
     UniversalEvent,
 )
+from adapter.biz.domain.runtime_session.errors import ExecutionCredentialsDeferred
 from adapter.biz.service.runtime_session.command import SubmitTurn
 from adapter.biz.service.runtime_session.service import (
     AgentRequestChange,
@@ -277,3 +278,57 @@ async def test_recovery_fails_outcome_unknown_turn_without_reexecution() -> None
     assert recovered[0].error_class == "recovery_outcome_unknown"
     assert runtime.calls == []
     assert service.finalized == [("turn-1", TurnStatus.FAILED)]
+
+
+@pytest.mark.asyncio
+async def test_each_claim_refetches_credentials_including_queued_turn() -> None:
+    service = ScriptService()
+    runtime = ScriptRuntime([TurnStatus.COMPLETED, TurnStatus.COMPLETED])
+    bus = InMemorySessionEventBus()
+    claims: list[tuple[str, int]] = []
+
+    async def credentials(session_id: str, turn_id: str, epoch: int) -> RuntimeCredentials:
+        claims.append((turn_id, epoch))
+        return RuntimeCredentials(api_key="fresh-key", session_token="fresh-session-token")
+
+    flow = ExecuteTurnFlow(
+        service,
+        runtime,
+        lambda session_id, turn_id: TurnEventSink(service, bus, session_id, turn_id),
+        credential_resolver=credentials,
+    )
+    await flow.submit(
+        SubmitTurn("session-1", "first", 1, {"message": "first"}),
+        RuntimeCredentials(api_key="stale-key"),
+    )
+    await flow.wait("session-1")
+    assert claims == [("turn-1", 1), ("turn-2", 1)]
+    assert runtime.calls == ["prepare:turn-1", "execute:turn-1", "prepare:turn-2", "execute:turn-2"]
+    assert all(
+        "key" not in turn.input and "session_token" not in turn.input for turn in service.turns
+    )
+
+
+@pytest.mark.asyncio
+async def test_interrupt_during_credential_retry_never_starts_native_execution() -> None:
+    service = ScriptService()
+    runtime = ScriptRuntime([])
+    bus = InMemorySessionEventBus()
+    attempted = asyncio.Event()
+
+    async def credentials(session_id: str, turn_id: str, epoch: int) -> RuntimeCredentials:
+        attempted.set()
+        raise ExecutionCredentialsDeferred()
+
+    flow = ExecuteTurnFlow(
+        service,
+        runtime,
+        lambda session_id, turn_id: TurnEventSink(service, bus, session_id, turn_id),
+        credential_resolver=credentials,
+    )
+    await flow.submit(SubmitTurn("session-1", "first", 1, {"message": "first"}))
+    await asyncio.wait_for(attempted.wait(), 1)
+    assert await flow.interrupt("session-1", "turn-1")
+    await asyncio.wait_for(flow.wait("session-1"), 1)
+    assert runtime.calls == []
+    assert service.finalized == [("turn-1", TurnStatus.INTERRUPTED)]

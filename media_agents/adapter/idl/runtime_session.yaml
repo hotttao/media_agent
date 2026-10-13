@@ -25,10 +25,11 @@ paths:
     get:
       operationId: getRuntimeSession
       parameters:
-        - in: path
-          name: session_id
-          required: true
-          schema: {type: string}
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Runtime Session
@@ -40,190 +41,652 @@ paths:
     post:
       operationId: submitTurn
       parameters:
-        - in: path
-          name: session_id
-          required: true
-          schema: {type: string}
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/SubmitTurnRequest'}
+            schema:
+              $ref: '#/components/schemas/SubmitTurnRequest'
       responses:
         '202':
           description: Turn accepted and persisted
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/TurnResponse'}
-        '404': {description: Not found}
+              schema:
+                $ref: '#/components/schemas/TurnResponse'
+        '404':
+          description: Not found
   /api/v1/runtime-sessions/{session_id}/events:
     get:
       operationId: replayRuntimeSessionEvents
       parameters:
-        - {in: path, name: session_id, required: true, schema: {type: string}}
-        - {in: query, name: after_sequence, schema: {type: integer, minimum: 0, default: 0}}
-        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 1000, default: 200}}
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: after_sequence
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 200
       responses:
         '200':
           description: Durable events ordered by Session sequence
           content:
             application/json:
-              schema: {type: array, items: {$ref: '#/components/schemas/UniversalEventResponse'}}
-        '404': {description: Runtime Session not found}
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UniversalEventResponse'
+        '404':
+          description: Runtime Session not found
   /api/v1/runtime-sessions/{session_id}/messages:
     get:
       operationId: listRuntimeSessionMessages
       parameters:
-        - {in: path, name: session_id, required: true, schema: {type: string}}
-        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 1000, default: 200}}
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 200
       responses:
         '200':
           description: Stable Message history ordered by Message sequence
           content:
             application/json:
-              schema: {type: array, items: {$ref: '#/components/schemas/MessageResponse'}}
-        '404': {description: Runtime Session not found}
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Runtime Session not found
   /api/v1/runtime-sessions/{session_id}/turns/{turn_id}:
     get:
       operationId: getTurn
       parameters:
-        - {in: path, name: session_id, required: true, schema: {type: string}}
-        - {in: path, name: turn_id, required: true, schema: {type: string}}
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: turn_id
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Persisted Turn
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/TurnResponse'}
-        '404': {description: Not found}
+              schema:
+                $ref: '#/components/schemas/TurnResponse'
+        '404':
+          description: Not found
   /api/v1/runtime-sessions/{session_id}/turns/{turn_id}/interrupt:
     post:
       operationId: interruptTurn
       parameters:
-        - {in: path, name: session_id, required: true, schema: {type: string}}
-        - {in: path, name: turn_id, required: true, schema: {type: string}}
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: turn_id
+        required: true
+        schema:
+          type: string
       responses:
-        '202': {description: Soft interrupt accepted}
+        '202':
+          description: Soft interrupt accepted
   /api/v1/runtime-sessions/{session_id}/requests:
     get:
       operationId: listAgentRequests
       parameters:
-        - {in: path, name: session_id, required: true, schema: {type: string}}
-        - {in: query, name: turn_id, schema: {type: string}}
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: turn_id
+        schema:
+          type: string
       responses:
         '200':
           description: Agent Requests ordered by creation time
           content:
             application/json:
-              schema: {type: array, items: {$ref: '#/components/schemas/AgentRequestResponse'}}
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgentRequestResponse'
   /api/v1/runtime-sessions/{session_id}/turns/{turn_id}/requests/{request_id}/resolve:
     post:
       operationId: resolveAgentRequest
       parameters:
-        - {in: path, name: session_id, required: true, schema: {type: string}}
-        - {in: path, name: turn_id, required: true, schema: {type: string}}
-        - {in: path, name: request_id, required: true, schema: {type: string}}
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: turn_id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: request_id
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/ResolveAgentRequestRequest'}
+            schema:
+              $ref: '#/components/schemas/ResolveAgentRequestRequest'
       responses:
         '200':
           description: Idempotently resolved Agent Request
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/AgentRequestResponse'}
-        '409': {description: Conflicting response or terminal Turn}
+              schema:
+                $ref: '#/components/schemas/AgentRequestResponse'
+        '409':
+          description: Conflicting response or terminal Turn
+  /api/v1/runtime-sessions/{session_id}:quiesce:
+    post:
+      operationId: quiesceRuntimeSession
+      parameters:
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Committed Session ownership and queue state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeSessionResponse'
+        '409':
+          description: Stale owner, epoch, admission or conflicting operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuiesceSessionRequest'
+  /api/v1/runtime-sessions/{session_id}:transfer:
+    post:
+      operationId: transferRuntimeSession
+      parameters:
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Committed Session ownership and queue state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeSessionResponse'
+        '409':
+          description: Stale owner, epoch, admission or conflicting operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferSessionRequest'
+  /api/v1/runtime-sessions/{session_id}:resume:
+    post:
+      operationId: resumeRuntimeSession
+      parameters:
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Committed Session ownership and queue state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeSessionResponse'
+        '409':
+          description: Stale owner, epoch, admission or conflicting operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResumeSessionRequest'
+  /api/v1/runtime-sessions/{session_id}:adopt:
+    post:
+      operationId: adoptRuntimeSession
+      parameters:
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Committed Session ownership and queue state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeSessionResponse'
+        '409':
+          description: Stale owner, epoch, admission or conflicting operation
+  /api/v1/runtime-instance:drain:
+    post:
+      operationId: beginRuntimeInstanceDrain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DrainInstanceRequest'
+      responses:
+        '200':
+          description: Persisted instance admission barrier
+        '409':
+          description: Conflicting operation or stale incarnation
+  /api/v1/runtime-instance/drain:
+    get:
+      operationId: getRuntimeInstanceDrain
+      responses:
+        '200':
+          description: Admission, operation/version, running count, owned Session
+            IDs and quiesced flag; quiesced also requires local tasks to finish flushing
 components:
   schemas:
     ResolveAgentRequestRequest:
       type: object
       additionalProperties: false
-      required: [response]
+      required:
+      - response
       properties:
-        response: {type: object}
+        response:
+          type: object
     AgentRequestResponse:
       type: object
-      required: [request_id, session_id, turn_id, request_type, payload, status, created_at]
+      required:
+      - request_id
+      - session_id
+      - turn_id
+      - request_type
+      - payload
+      - status
+      - created_at
       properties:
-        request_id: {type: string}
-        session_id: {type: string}
-        turn_id: {type: string}
-        request_type: {type: string, enum: [confirm, input, permission]}
-        payload: {type: object}
-        status: {type: string, enum: [pending, resolved, cancelled, expired]}
-        response: {type: object, nullable: true}
-        resolved_at: {type: string, format: date-time, nullable: true}
-        created_at: {type: string, format: date-time}
+        request_id:
+          type: string
+        session_id:
+          type: string
+        turn_id:
+          type: string
+        request_type:
+          type: string
+          enum:
+          - confirm
+          - input
+          - permission
+        payload:
+          type: object
+        status:
+          type: string
+          enum:
+          - pending
+          - resolved
+          - cancelled
+          - expired
+        response:
+          type: object
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
     SubmitTurnRequest:
       type: object
       additionalProperties: false
-      required: [idempotency_key, context_version, input]
+      required:
+      - idempotency_key
+      - context_version
+      - input
       properties:
-        idempotency_key: {type: string, maxLength: 128}
-        context_version: {type: integer, minimum: 1}
-        input: {type: object}
-        api_key: {type: string, maxLength: 4096, writeOnly: true}
-        session_token: {type: string, maxLength: 4096, writeOnly: true}
+        idempotency_key:
+          type: string
+          maxLength: 128
+        context_version:
+          type: integer
+          minimum: 1
+        input:
+          type: object
+        api_key:
+          type: string
+          maxLength: 4096
+          writeOnly: true
+        session_token:
+          type: string
+          maxLength: 4096
+          writeOnly: true
     TurnResponse:
       type: object
-      required: [turn_id, session_id, idempotency_key, enqueue_sequence, status, context_version, input, created_at]
+      required:
+      - turn_id
+      - session_id
+      - idempotency_key
+      - enqueue_sequence
+      - status
+      - context_version
+      - input
+      - created_at
       properties:
-        turn_id: {type: string}
-        session_id: {type: string}
-        idempotency_key: {type: string}
-        enqueue_sequence: {type: integer}
-        status: {type: string, enum: [queued, running, completed, failed, interrupted, cancelled]}
-        context_version: {type: integer}
-        input: {type: object}
-        created_at: {type: string, format: date-time}
-        started_at: {type: string, format: date-time, nullable: true}
-        finished_at: {type: string, format: date-time, nullable: true}
-        error_class: {type: string, nullable: true}
+        turn_id:
+          type: string
+        session_id:
+          type: string
+        idempotency_key:
+          type: string
+        enqueue_sequence:
+          type: integer
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - completed
+          - failed
+          - interrupted
+          - cancelled
+        context_version:
+          type: integer
+        input:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_class:
+          type: string
+          nullable: true
+        execution_epoch:
+          type: integer
+          minimum: 1
+          default: 1
     RegisterRuntimeSessionRequest:
       type: object
       additionalProperties: false
-      required: [session_id, context_version, context_ref]
+      required:
+      - session_id
+      - context_version
+      - context_ref
       properties:
-        session_id: {type: string, minLength: 1, maxLength: 64}
-        context_version: {type: integer, format: int64, minimum: 1}
-        context_ref: {type: string, minLength: 1, maxLength: 512}
+        session_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        context_version:
+          type: integer
+          format: int64
+          minimum: 1
+        context_ref:
+          type: string
+          minLength: 1
+          maxLength: 512
+        workspace_id:
+          type: string
+          maxLength: 128
+          default: ''
+        agent_config_id:
+          type: string
+          maxLength: 128
+          default: ''
+        initial_epoch:
+          type: integer
+          minimum: 1
+          default: 1
+        transfer_id:
+          type: string
+          maxLength: 128
+          default: ''
     RuntimeSessionResponse:
       type: object
-      required: [session_id, context_version, context_ref, status, chat_status, next_turn_sequence, next_event_sequence, next_message_sequence, created_at, updated_at]
+      required:
+      - session_id
+      - context_version
+      - context_ref
+      - status
+      - chat_status
+      - next_turn_sequence
+      - next_event_sequence
+      - next_message_sequence
+      - created_at
+      - updated_at
       properties:
-        session_id: {type: string}
-        context_version: {type: integer, format: int64}
-        context_ref: {type: string}
-        status: {type: string, enum: [active, paused, failed, deleted]}
-        chat_status: {type: string, enum: [human, agent]}
-        active_turn_id: {type: string, nullable: true}
-        runtime_session_id: {type: string, nullable: true}
-        next_turn_sequence: {type: integer, format: int64}
-        next_event_sequence: {type: integer, format: int64}
-        next_message_sequence: {type: integer, format: int64}
-        created_at: {type: string, format: date-time}
-        updated_at: {type: string, format: date-time}
+        session_id:
+          type: string
+        context_version:
+          type: integer
+          format: int64
+        context_ref:
+          type: string
+        status:
+          type: string
+          enum:
+          - active
+          - paused
+          - failed
+          - deleted
+        chat_status:
+          type: string
+          enum:
+          - human
+          - agent
+        active_turn_id:
+          type: string
+          nullable: true
+        runtime_session_id:
+          type: string
+          nullable: true
+        next_turn_sequence:
+          type: integer
+          format: int64
+        next_event_sequence:
+          type: integer
+          format: int64
+        next_message_sequence:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        workspace_id:
+          type: string
+          default: ''
+        agent_config_id:
+          type: string
+          default: ''
+        owner_instance_id:
+          type: string
+          default: ''
+        owner_incarnation_id:
+          type: string
+          default: ''
+        last_transfer_id:
+          type: string
+          default: ''
+        handoff_id:
+          type: string
+          default: ''
+        execution_epoch:
+          type: integer
+          minimum: 1
+          default: 1
     UniversalEventResponse:
       type: object
-      required: [event_id, session_id, sequence, event_type, payload, created_at]
+      required:
+      - event_id
+      - session_id
+      - sequence
+      - event_type
+      - payload
+      - created_at
       properties:
-        event_id: {type: string}
-        session_id: {type: string}
-        turn_id: {type: string, nullable: true}
-        sequence: {type: integer, format: int64}
-        event_type: {type: string}
-        payload: {type: object}
-        created_at: {type: string, format: date-time}
+        event_id:
+          type: string
+        session_id:
+          type: string
+        turn_id:
+          type: string
+          nullable: true
+        sequence:
+          type: integer
+          format: int64
+        event_type:
+          type: string
+        payload:
+          type: object
+        created_at:
+          type: string
+          format: date-time
     MessageResponse:
       type: object
-      required: [message_id, session_id, turn_id, role, content_ref, sequence, created_at]
+      required:
+      - message_id
+      - session_id
+      - turn_id
+      - role
+      - content_ref
+      - sequence
+      - created_at
       properties:
-        message_id: {type: string}
-        session_id: {type: string}
-        turn_id: {type: string}
-        role: {type: string}
-        content_ref: {type: object}
-        sequence: {type: integer, format: int64}
-        created_at: {type: string, format: date-time}
+        message_id:
+          type: string
+        session_id:
+          type: string
+        turn_id:
+          type: string
+        role:
+          type: string
+        content_ref:
+          type: object
+        sequence:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+    QuiesceSessionRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - transfer_id
+      properties:
+        transfer_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    TransferSessionRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - transfer_id
+      - source_replica_id
+      - source_incarnation_id
+      - expected_epoch
+      properties:
+        transfer_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        source_replica_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        source_incarnation_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        expected_epoch:
+          type: integer
+          minimum: 1
+        termination_confirmed:
+          type: boolean
+          default: false
+    ResumeSessionRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - operation_id
+      properties:
+        operation_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    DrainInstanceRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - operation_id
+      - expected_incarnation
+      properties:
+        operation_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        expected_incarnation:
+          type: string
+          minLength: 1
+          maxLength: 128
+  securitySchemes:
+    RuntimeAssertion:
+      type: apiKey
+      in: header
+      name: X-Runtime-Assertion
+      description: Managed instances require Ed25519 request assertions bound to method,
+        path, body, scope and epoch. Standalone mode is compatible without assertions.

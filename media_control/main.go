@@ -9,9 +9,12 @@ import (
 
 	"media_agent/hertz_infra/authn/internaljwt"
 	"media_agent/hertz_infra/config"
+	"media_agent/hertz_infra/messagebus"
+	"media_agent/hertz_infra/metadataartifact"
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_control/biz/dal"
 	afsrepo "media_agent/media_control/biz/dal/repo/afs_binding"
+	metadatarepo "media_agent/media_control/biz/dal/repo/agent_configuration"
 	templaterepo "media_agent/media_control/biz/dal/repo/agent_template"
 	credentialrepo "media_agent/media_control/biz/dal/repo/credential_reference"
 	grantrepo "media_agent/media_control/biz/dal/repo/environment_grant"
@@ -29,7 +32,9 @@ import (
 	metadaterepo "media_agent/media_control/biz/dal/repo/workspace_metadata"
 	afshandler "media_agent/media_control/biz/handler/afs_binding"
 	agentidentityhandler "media_agent/media_control/biz/handler/agent_identity"
+	metadatahandler "media_agent/media_control/biz/handler/agent_metadata"
 	templatehandler "media_agent/media_control/biz/handler/agent_template"
+	workloadhandler "media_agent/media_control/biz/handler/agent_workload"
 	credentialhandler "media_agent/media_control/biz/handler/credential_reference"
 	granthandler "media_agent/media_control/biz/handler/environment_grant"
 	memoryhandler "media_agent/media_control/biz/handler/memory_store"
@@ -43,9 +48,10 @@ import (
 	skillhandler "media_agent/media_control/biz/handler/skill"
 	teamworkhandler "media_agent/media_control/biz/handler/teamwork"
 	workspacehandler "media_agent/media_control/biz/handler/workspace"
-	metadatahandler "media_agent/media_control/biz/handler/workspace_metadata"
+	workspacemetadatahandler "media_agent/media_control/biz/handler/workspace_metadata"
 	"media_agent/media_control/biz/middleware"
 	afsservice "media_agent/media_control/biz/service/afs_binding"
+	metadataservice "media_agent/media_control/biz/service/agent_configuration"
 	agentidentityservice "media_agent/media_control/biz/service/agent_identity"
 	templateservice "media_agent/media_control/biz/service/agent_template"
 	credentialservice "media_agent/media_control/biz/service/credential_reference"
@@ -61,11 +67,13 @@ import (
 	skillservice "media_agent/media_control/biz/service/skill"
 	teamworkservice "media_agent/media_control/biz/service/teamwork"
 	workspaceservice "media_agent/media_control/biz/service/workspace"
-	metadataservice "media_agent/media_control/biz/service/workspace_metadata"
+	workspacemetadataservice "media_agent/media_control/biz/service/workspace_metadata"
 	sharedclient "media_agent/media_control/biz/shared/client"
 	mediaauthclient "media_agent/media_control/biz/shared/client/mediaauth"
 	"media_agent/media_control/biz/shared/secret"
+	metadataflow "media_agent/media_control/biz/workflow/metadata_update"
 	teamworkchange "media_agent/media_control/biz/workflow/teamwork_change"
+	workloadflow "media_agent/media_control/biz/workflow/workload_target"
 )
 
 func main() {
@@ -116,10 +124,8 @@ func main() {
 	}
 	teamAccess := mediaauthclient.New(mediaAuthURL, mediaAuthInternalToken, nil)
 	agentidentityhandler.Configure(agentidentityservice.New(repo.New(db), teamAccess))
-	workspacehandler.Configure(
-		workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())), teamAccess),
-		internalToken,
-	)
+	workspaceApplication := workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())), teamAccess)
+	workspacehandler.Configure(workspaceApplication, internalToken)
 	prompthandler.Configure(promptservice.New(promptrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	templatehandler.Configure(templateservice.New(templaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	skillhandler.Configure(skillservice.New(skillrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
@@ -129,7 +135,21 @@ func main() {
 	credentialhandler.Configure(credentialservice.New(credentialrepo.New(db), dal.NewTxRunner(db), repo.New(db), providerrepo.New(db)))
 	memoryhandler.Configure(memoryservice.New(memoryrepo.New(db), dal.NewTxRunner(db), repo.New(db), credentialrepo.New(db)))
 	schedulehandler.Configure(scheduleservice.New(schedulerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
-	runtimehandler.Configure(runtimeservice.New(runtimerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
+	runtimeApplication := runtimeservice.New(runtimerepo.New(db), dal.NewTxRunner(db), repo.New(db))
+	runtimehandler.Configure(runtimeApplication)
+	if workloadCfg := cfg.GetAgentWorkload(); workloadCfg.GetEnabled() {
+		if !cfg.GetAgentMetadata().GetEnabled() {
+			log.Fatal("workload provisioning requires Agent Metadata")
+		}
+		if internalToken == "" {
+			log.Fatal("workload Control service credential is required")
+		}
+		profiles := map[string]workloadflow.Profile{}
+		for kind, profile := range workloadCfg.GetProfiles() {
+			profiles[kind] = workloadflow.Profile{Image: profile.GetImage(), CPU: profile.GetCpu(), Memory: profile.GetMemory(), Port: profile.GetPort()}
+		}
+		workloadhandler.Configure(&workloadflow.Flow{Service: runtimeApplication, Workspaces: workspaceApplication, Policy: workloadflow.Policy{SessionExchange: workloadCfg.GetSessionExchange(), MetadataExchange: cfg.GetAgentMetadata().GetMetadataExchange(), Driver: workloadCfg.GetDriver(), Namespace: workloadCfg.GetNamespace(), SharedSecret: workloadCfg.GetSharedSecret(), StorageClass: workloadCfg.GetStorageClass(), StorageSize: workloadCfg.GetStorageSize(), GatewayURL: workloadCfg.GetGatewayUrl(), Profiles: profiles}})
+	}
 	teamworkStore := teamworkrepo.New(db)
 	teamworkhandler.Configure(teamworkservice.New(teamworkStore, teamworkStore, dal.NewTxRunner(db), repo.New(db)))
 	eventCtx, cancelEvents := context.WithCancel(context.Background())
@@ -139,12 +159,31 @@ func main() {
 		log.Fatalf("init Teamwork event publisher: %v", err)
 	}
 	go teamworkchange.NewRelay(teamworkStore, teamworkPublisher).Run(eventCtx, time.Second)
-	metadatahandler.Configure(metadataservice.New(metadaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))
+	workspacemetadatahandler.Configure(workspacemetadataservice.New(metadaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	sharehandler.Configure(shareservice.New(sharerepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	exporthandler.Configure(exportservice.New(exportrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	afshandler.Configure(afsservice.New(afsrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	granthandler.Configure(grantservice.New(grantrepo.New(db), dal.NewTxRunner(db)))
 
+	if metadataCfg := cfg.GetAgentMetadata(); metadataCfg.GetEnabled() {
+		if metadataCfg.GetGatewayCredential() == "" {
+			log.Fatal("metadata Gateway identity credential is required")
+		}
+		middleware.ConfigureMetadataGateway(metadataCfg.GetGatewayCredential())
+		artifacts, err := metadataartifact.New(metadataCfg.GetArtifactRoot())
+		if err != nil {
+			log.Fatal("invalid metadata artifact root")
+		}
+		repository := metadatarepo.New(db)
+		workspaceAccess := workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())), teamAccess)
+		metadatahandler.Configure(metadataflow.New(metadataservice.New(repository, dal.NewTxRunner(db)), workspaceAccess, artifacts, sharedclient.NewMetadataInstances(envOr("MEDIA_AGENT_GATEWAY_URL", "http://127.0.0.1:8006"), internalToken)))
+		publisher, err := messagebus.NewTopicPublisher(cfg.GetRabbitmq().GetUrl(), metadataCfg.GetMetadataExchange())
+		if err != nil {
+			log.Fatal("invalid metadata Broker configuration")
+		}
+		defer publisher.Close()
+		go metadataflow.NewRelay(repository, publisher, dal.NewTxRunner(db)).Run(eventCtx)
+	}
 	h := suite.NewServer()
 	register(h)
 	suite.RegisterRoutes(h)

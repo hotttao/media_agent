@@ -29,7 +29,7 @@ Runtime Session 拥有同一 Agent Session 的 Turn 接受与串行调度、Mess
 - 不验证浏览器 Cookie，不决定 Web 用户是否有权访问 Session；该职责属于 Gateway。
 - 不拥有 Workspace、Agent 或 Plugin 的期望配置，只保存已注册的版本化运行快照引用。
 - 不提供浏览器 SSE framing；Gateway 负责把查询结果和总线通知转换为 SSE。
-- 不把 Redis、Kafka offset 或任一 Gateway 连接当成业务执行状态。
+- 不把 RabbitMQ 投递标识或任一 Gateway 连接当成业务执行状态。
 
 ## 能力清单
 
@@ -70,7 +70,7 @@ stateDiagram-v2
 ```
 
 - 只有最小 `enqueue_sequence` 的可执行 queued Turn 可以进入 running。
-- 当前 Turn completed 后自动声明下一条 queued Turn；failed/interrupted 后默认暂停自动排空，等待显式 resume/cancel，避免在副作用结果不明确时级联执行。
+- 当前 Turn completed 后，仅在副本未 draining、Session 未设 handoff_id 且仍拥有执行权时自动声明下一条 queued Turn；failed/interrupted 后默认暂停自动排空，等待显式 resume/cancel，避免在副作用结果不明确时级联执行。
 - 中断只作用于当前 running Turn，不隐式删除 queued Turn。
 
 ## 领域事件
@@ -97,6 +97,10 @@ stateDiagram-v2
 | chat_status | text | human/agent；可查询交互控制投影 |
 | active_turn_id | text nullable | 当前 running Turn |
 | runtime_session_id | text nullable | 底层 Runtime 返回的可恢复会话句柄；不得假设等于业务 session_id |
+| owner_instance_id | text | 当前允许执行的实例注册引用 |
+| owner_incarnation_id | text | 执行实例当前代次 |
+| execution_epoch | bigint | 执行所有权递增代次，所有执行写入校验 |
+| handoff_id | text | 当前 Session 迁移意图；非空阻止领取下一条 queued，转移成功清除 |
 | next_turn_sequence | bigint | 下一条 Turn enqueue sequence |
 | next_event_sequence | bigint | 下一条 Universal Event sequence |
 | next_message_sequence | bigint | 下一条 Message 查询 sequence；与事件恢复游标独立 |
@@ -202,7 +206,15 @@ Message 是面向历史查询的稳定模型；Universal Event 是恢复与订�
 
 ### 恢复
 
-Agent 启动时扫描 running Turn 并与 Runtime adapter 的执行状态协调；能确认仍在运行时重新挂接，能确认未启动时可以用原 `turn_id` 恢复，结果不明确或可能已产生不可逆工具副作用时进入 failed，禁止自动重复整个 Turn。
+Agent 启动时只扫描当前运行副本负责的 Session 的 running Turn，并与 Runtime adapter 的执行状态协调；禁止一个新副本把其他副本的运行 Turn 标成失败。能确认仍在运行时重新挂接，能确认未启动时可以用原 `turn_id` 恢复，结果不明确或可能已产生不可逆工具副作用时进入 failed，禁止自动重复整个 Turn。
+
+### Draining 与排队 Turn
+
+排空期间完成当前 running Turn 后停止声明下一条。已接受 queued Turn 保留原 ID、enqueue_sequence、context_version 和输入，在 Session 重绑并完成所有权协调后按 FIFO 继续。draining 不把 queued 转为 cancelled，也不把它当成 running 恢复；无可用副本时保留队列等待。原有 failed/interrupted 队列暂停保持不变，接管不是 resume 命令。
+
+### 多副本执行边界
+
+Gateway 持有 Session Replica Binding，Agent 负责 Session 内持久化 FIFO 与执行互斥。所有副本共享 Workspace 文件，但不同 Session 可以并行；底层 Runtime Handle 在重绑后继续加载。绑定变化时，旧运行 Turn 必须先确认终态或按恢复规则处理，不能因 Pod 不可达自动重放。旧进程与替代进程不能同时取得同一 Session 的执行所有权；运行代次/所有权校验的具体实现须在 spec 中定义。
 
 ## 关联关系
 
@@ -227,3 +239,9 @@ Agent 启动时扫描 running Turn 并与 Runtime adapter 的执行状态协调�
 - `Queued Turn`
 - `Universal Event`
 - `Session Sequence`
+
+### 跨副本接管一致性
+
+Runtime Session 行锁负责执行所有权与 Turn 状态原子检查。正常接管要求无 running Turn，原子更新 owner/incarnation 并递增 epoch；有 running 时只能在旧执行停止证据有效后以 unknown outcome 失败并暂停，不能自动重放。旧 epoch 的 event/finish/claim 拒绝。Gateway binding_version 只负责路由 CAS，不能代替 Agent execution_epoch。Gateway 的 transferring 意图与 Agent 实际 epoch 通过查询恢复，不开跨库事务。
+
+实例 admission 的新 incarnation 可依据受控登记的 active 状态恢复 active；相同 incarnation 的初始化不能清除 draining。未验证登记状态不允许隐式复位。

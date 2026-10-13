@@ -1,0 +1,25 @@
+syntax = "proto3";
+package media_agent_gateway.mcp_catalog;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_agent_gateway/mcp_catalog";
+message DefinitionCommand {
+ string definition_id=1 [(api.path)="definition_id",(api.body)="definition_id"];
+ string service_name=2 [(api.body)="service_name"]; string endpoint=3 [(api.body)="endpoint"];
+ string transport=4 [(api.body)="transport"]; string authentication_type=5 [(api.body)="authentication_type"];
+ string status=6 [(api.body)="status"]; int64 expected_version=7 [(api.body)="expected_version"];
+}
+message DefinitionQuery { int64 version=4 [(api.query)="version"]; string definition_id=1 [(api.path)="definition_id"]; int32 limit=2 [(api.query)="limit"]; string after_id=3 [(api.query)="after_id"]; }
+message Definition { string definition_id=1; string service_name=2; string endpoint=3; string transport=4; string authentication_type=5; string status=6; int64 version=7; }
+message Definitions { repeated Definition definitions=1; string next_after_id=2; }
+message ProtocolRequest {}
+message ProtocolResponse {}
+service McpCatalogService {
+ rpc RegisterDefinition(DefinitionCommand) returns(Definition) {option(api.post)="/api/v1/mcp-definitions";option(google.api.http)={post:"/api/v1/mcp-definitions" body:"*"};}
+ rpc UpdateDefinition(DefinitionCommand) returns(Definition) {option(api.put)="/api/v1/mcp-definitions/:definition_id";option(google.api.http)={put:"/api/v1/mcp-definitions/{definition_id}" body:"*"};}
+ rpc GetDefinition(DefinitionQuery) returns(Definition) {option(api.get)="/api/v1/mcp-definitions/:definition_id";option(google.api.http)={get:"/api/v1/mcp-definitions/{definition_id}"};}
+ rpc ListDefinitions(DefinitionQuery) returns(Definitions) {option(api.get)="/api/v1/mcp-definitions";option(google.api.http)={get:"/api/v1/mcp-definitions"};}
+ rpc GetInternalDefinition(DefinitionQuery) returns(Definition) {option(api.get)="/internal/mcp-definitions/:definition_id";option(google.api.http)={get:"/internal/mcp-definitions/{definition_id}"};}
+ rpc ListInternalDefinitions(DefinitionQuery) returns(Definitions) {option(api.get)="/internal/mcp-definitions";option(google.api.http)={get:"/internal/mcp-definitions"};}
+ rpc HandleMCP(ProtocolRequest) returns(ProtocolResponse) {option(api.post)="/mcp";option(api.get)="/mcp";option(api.delete)="/mcp";option(google.api.http)={post:"/mcp" body:"*" additional_bindings:{get:"/mcp"} additional_bindings:{delete:"/mcp"}};}
+}

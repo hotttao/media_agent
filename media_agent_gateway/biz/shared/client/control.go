@@ -18,7 +18,10 @@ type Control struct {
 func (c *Control) Default(ctx context.Context, userID string) (service.AgentContext, error) {
 	return c.Fallback.Default(ctx, userID)
 }
-func (c *Control) Resolve(ctx context.Context, userID string, workspaceID, token string) (service.AgentContext, error) {
+func (c *Control) Resolve(ctx context.Context, userID, workspaceID, token string) (service.AgentContext, error) {
+	return c.ResolveVersion(ctx, userID, workspaceID, token, 0)
+}
+func (c *Control) ResolveVersion(ctx context.Context, userID string, workspaceID, token string, version int64) (service.AgentContext, error) {
 	cli, err := controlclient.NewWorkspaceServiceClient(c.BaseURL, controlclient.WithHeader(http.Header{
 		"Cookie":                   []string{"token=" + token},
 		"X-Control-Service-Token":  []string{c.ServiceToken},
@@ -27,11 +30,11 @@ func (c *Control) Resolve(ctx context.Context, userID string, workspaceID, token
 	if err != nil {
 		return service.AgentContext{}, err
 	}
-	value, _, err := cli.GetRuntimeContext(ctx, &controlpb.GetRuntimeContextRequest{WorkspaceId: workspaceID})
+	value, _, err := cli.GetRuntimeContext(ctx, &controlpb.GetRuntimeContextRequest{WorkspaceId: workspaceID, ContextVersion: version})
 	if err != nil {
 		return service.AgentContext{}, err
 	}
-	return service.AgentContext{WorkspaceID: value.WorkspaceId, AgentID: value.AgentId, AgentType: value.AgentType, APIKey: value.ApiKey, ContextVersion: value.ContextVersion}, nil
+	return service.AgentContext{WorkspaceID: value.WorkspaceId, AgentID: value.AgentId, AgentType: value.AgentType, APIKey: value.ApiKey, ContextVersion: value.ContextVersion, AgentConfigID: value.AgentConfigurationId, MetadataTargetContextVersion: value.MetadataTargetContextVersion}, nil
 }
 
 func (c *Control) AuthorizeWorkspace(ctx context.Context, userID, workspaceID, token string) error {

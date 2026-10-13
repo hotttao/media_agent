@@ -109,7 +109,12 @@ func (r *Repository) Update(ctx context.Context, w *domain.Workspace, a *domain.
 	if result.RowsAffected == 0 {
 		return domain.ErrNotFound
 	}
-	return db.Model(&model.AgentConfiguration{}).Where("workspace_id = ?", w.ID).Updates(map[string]any{"agent_id": a.AgentID, "agent_type": a.AgentType, "encrypted_api_key": a.EncryptedAPIKey, "version": a.Version, "updated_at": a.UpdatedAt}).Error
+	err := db.Model(&model.AgentConfiguration{}).Where("workspace_id = ?", w.ID).Updates(map[string]any{"agent_id": a.AgentID, "agent_type": a.AgentType, "encrypted_api_key": a.EncryptedAPIKey, "version": a.Version, "updated_at": a.UpdatedAt}).Error
+	var conflict interface{ SQLState() string }
+	if errors.As(err, &conflict) && conflict.SQLState() == "40001" {
+		return domain.ErrConflict
+	}
+	return err
 }
 
 func toWorkspaceRow(v *domain.Workspace) *model.Workspace {
@@ -120,4 +125,33 @@ func toAgentRow(v *domain.AgentConfiguration) *model.AgentConfiguration {
 }
 func fromJoined(w model.Workspace, configID, agentID, agentType string, secret []byte, configVersion int64) domain.ConfiguredWorkspace {
 	return domain.ConfiguredWorkspace{Workspace: domain.Workspace{ID: w.ID, OrganizationID: w.OrganizationID, TeamID: w.TeamID, CreatedBy: w.CreatedBy, OwnerUserID: w.OwnerUserID, Name: w.Name, DesiredState: w.DesiredState, Version: w.Version, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt}, AgentConfiguration: domain.AgentConfiguration{ID: configID, WorkspaceID: w.ID, AgentID: agentID, AgentType: agentType, EncryptedAPIKey: secret, Version: configVersion, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt}}
+}
+
+func (r *Repository) GetConfigurationVersion(ctx context.Context, id string, version int64) (*domain.AgentConfiguration, string, error) {
+	var row struct {
+		AgentConfigID, AgentType string
+		Version                  int64
+		EncryptedAPIKey          []byte
+	}
+	db := dal.FromContext(ctx, r.db)
+	if err := db.Table("agent_configuration_versions").Where("agent_config_id=? AND version=?", id, version).Take(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, "", domain.ErrNotFound
+		}
+		return nil, "", err
+	}
+	var release struct{ ID string }
+	if err := db.Table("agent_metadata_releases").Where("agent_config_id=? AND selection_revision=?", id, version).Take(&release).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, "", err
+	}
+	return &domain.AgentConfiguration{ID: id, AgentID: row.AgentType, AgentType: row.AgentType, Version: version, EncryptedAPIKey: row.EncryptedAPIKey}, release.ID, nil
+}
+
+func (r *Repository) ConfirmedContextVersion(ctx context.Context, id string) (int64, error) {
+	var row struct{ SelectionRevision int64 }
+	err := dal.FromContext(ctx, r.db).Table("agent_metadata_releases").Where("agent_config_id=?", id).Order("selection_revision DESC").Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, nil
+	}
+	return row.SelectionRevision, err
 }

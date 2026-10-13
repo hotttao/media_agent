@@ -48,6 +48,7 @@ class _CpClient:
             "small_model": "small",
             "api_key": "sk-test",
             "prompt_content": "system prompt",
+            "platform_prompt": "Gateway platform body {{literal}}",
             "user_display_name": "Alice",
             "memory_attachments": [
                 {
@@ -88,27 +89,20 @@ async def test_codex_hook_writes_shared_workspace_files_and_mcp(tmp_path: Path) 
 
     assert (workspace / "AGENTS.md").read_text(encoding="utf-8") == "system prompt"
     platform_prompt = (codex_dir / "AGENTS.md").read_text(encoding="utf-8")
-    assert 'id: w1), serving user "Alice"' in platform_prompt
-    assert "`/mnt/memory/mem1/` (read_only) - Project Memory: notes" in platform_prompt
+    assert platform_prompt == "Gateway platform body {{literal}}"
     assert json.loads((workspace / "runtime.json").read_text(encoding="utf-8")) == {
         "model": "gpt-test",
         "provider_type": "openai",
         "base_url": "http://llm.test/v1",
         "small_model": "small",
     }
-    assert json.loads((codex_dir / "mcp.json").read_text(encoding="utf-8"))["mcpServers"][
-        "remote"
-    ] == {"url": "http://remote", "headers": {"A": "B"}}
+    assert json.loads((codex_dir / "mcp.json").read_text())["mcpServers"] == {}
     assert not (codex_dir / "auth.json").exists()
-
     servers = hooks.load_mcp_servers("token")
-    assert servers[0]["headers"] == {
-        "X-Builder": "b",
-        "X-Workspace-ID": "w1",
-        "X-Agent-ID": "w1",
-        "X-Session-Token": "token",
-    }
-    assert {server["name"] for server in servers} == {"tos-platform", "remote"}
+    assert len(servers) == 1
+    assert servers[0]["name"] == "media-agent-gateway"
+    assert servers[0]["url"] == "http://cp.test/mcp"
+    assert servers[0]["headers"]["X-Session-Token"] == "token"
 
     os.environ["ANTHROPIC_API_KEY"] = "old"
     os.environ["OPENAI_API_KEY"] = "old"

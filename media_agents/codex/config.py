@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import tomllib
 from pathlib import Path
 
 import tomli_w
@@ -14,7 +15,6 @@ from adapter.agent_environment import (
     McpServerMap,
     apply_credentials,
     build_acp_mcp_servers,
-    parse_mcp_servers,
     read_runtime_config,
     write_mcp_json,
     write_prompt_file,
@@ -23,7 +23,7 @@ from adapter.agent_environment import (
 from adapter.biz.shared.provider_environment import apply_openai_compatible_env
 from adapter.clients.cp import CpClient
 from adapter.config.config import AdapterConfig, ConfigError, load_agent_config
-from adapter.platform_prompt import normalize_memory_attachments, write_platform_prompt
+from adapter.platform_prompt import write_platform_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,6 @@ class CodexHooks:
         self._api_key: str = ""
         self._user_mcp: McpServerMap = {}
         self._has_mcp = False
-        self._user_display_name: str | None = None
         self._mock_control = mock_control
 
     def load_mcp_servers(self, session_token: str | None) -> list[AcpMcpServerDeclaration]:
@@ -91,10 +90,6 @@ class CodexHooks:
         return build_acp_mcp_servers(
             platform_url=self._cp_client.mcp_url(),
             platform_headers=self._cp_client.mcp_headers(session_token),
-            user_mcp_servers=self._user_mcp,
-            session_token=session_token,
-            include_user_http=True,
-            include_user_stdio=False,
         )
 
     def has_mcp_servers(self) -> bool:
@@ -115,20 +110,15 @@ class CodexHooks:
         if config is None:
             return False
 
-        if isinstance(config.get("user_display_name"), str):
-            self._user_display_name = config["user_display_name"]
+        platform = config.get("platform_prompt")
+        if not isinstance(platform, str):
+            return False
         write_platform_prompt(
-            agent_kind="codex",
-            target_dir=self._codex_config_dir,
-            filename="AGENTS.md",
-            workspace_id=self._cp_client.workspace_id,
-            user_name=self._user_display_name,
-            memory_attachments=normalize_memory_attachments(config.get("memory_attachments")),
+            target_dir=self._codex_config_dir, filename="AGENTS.md", body=platform
         )
-
         self._api_key = str(config.get("api_key") or "")
-        self._user_mcp = parse_mcp_servers(config.get("mcp_config"))
-        self._has_mcp = bool(self._user_mcp)
+        self._user_mcp = {}
+        self._has_mcp = self._cp_client.mcp_url() is not None
 
         prompt = write_prompt_file(self._workspace_dir, config)
         write_runtime_config(self._workspace_dir, config)
@@ -209,7 +199,9 @@ def _write_codex_toml(
 
     content = tomli_w.dumps(toml)
     if is_toml_agent_settings:
-        content += "\n# agent_settings\n" + agent_settings.rstrip() + "\n"
+        settings = tomllib.loads(agent_settings)
+        settings.pop("mcp_servers", None)
+        content += "\n# agent_settings\n" + tomli_w.dumps(settings)
     (codex_dir / "config.toml").write_bytes(content.encode("utf-8"))
 
 

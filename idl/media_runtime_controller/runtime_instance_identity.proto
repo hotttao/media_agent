@@ -1,0 +1,10 @@
+syntax = "proto3";
+package media_runtime_controller.runtime_instance_identity;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package="media_runtime_controller/runtime_instance_identity";
+message IdentityRequest { string workspace_id=1 [(api.path)="workspace_id"]; string agent_config_id=2 [(api.body)="agent_config_id"]; string bootstrap_proof=3 [(api.body)="bootstrap_proof"]; string resource_uid=4 [(api.body)="resource_uid"]; string resource_generation=5 [(api.body)="resource_generation"]; bool observation=6 [(api.body)="observation"]; }
+message IdentityResponse {string environment_id=1;string workspace_id=2;string agent_config_id=3;string resource_uid=4;string resource_generation=5;string endpoint=6;bool eligible=7;bool ready=8;bool running=9;bool terminated=10;string agent_type=11;}
+service RuntimeInstanceIdentityService {
+ rpc ResolveContainerIdentity(IdentityRequest) returns(IdentityResponse) {option(api.post)="/v1/workspaces/:workspace_id/container-identity";option(google.api.http)={post:"/v1/workspaces/{workspace_id}/container-identity" body:"*"};}
+}

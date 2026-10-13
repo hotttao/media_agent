@@ -2,7 +2,7 @@
 name: plugin_binding
 description: Workspace 对受控 MCP Definition 的启用与配置
 dependencies:
-    - mcp_catalog
+    - media_agent_gateway/mcp_catalog
 related_workflow:
     - agent_session_startup
     - plugin_binding_snapshot

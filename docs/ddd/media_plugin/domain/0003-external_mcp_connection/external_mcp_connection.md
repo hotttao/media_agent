@@ -2,7 +2,7 @@
 name: external_mcp_connection
 description: 用户与外部 OAuth MCP 的连接状态和代理使用
 dependencies:
-    - mcp_catalog
+    - media_agent_gateway/mcp_catalog
     - media_auth/oauth_credential
 related_workflow:
     - external_mcp_oauth_proxy

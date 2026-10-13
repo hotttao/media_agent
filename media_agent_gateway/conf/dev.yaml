@@ -4,6 +4,7 @@ app:
   env: ${APP_ENV:-dev}
 
 server:
+  max_request_body_bytes: ${MAX_REQUEST_BODY_BYTES:-12582912}
   enabled: true
   address: ${SERVER_ADDR:-:8006}
 
@@ -69,3 +70,34 @@ health:
 
 auth:
   jwt_secret: ${JWT_SECRET:-dev-shared-secret}
+
+rabbitmq:
+  enabled: ${MEDIA_AGENTS_RABBITMQ_ENABLED:-true}
+  url: ${MEDIA_AGENTS_RABBITMQ_URL:-amqp://media_agent:media_agent@127.0.0.1:5672/}
+  session_exchange: ${MEDIA_AGENTS_SESSION_EXCHANGE:-media.agent.sessions.v1}
+  receiver_buffer: 256
+
+agent_metadata:
+  enabled: ${AGENT_METADATA_ENABLED:-false}
+  artifact_root: ${AGENT_METADATA_ARTIFACT_ROOT:-./data/metadata}
+  metadata_exchange: ${AGENT_METADATA_EXCHANGE:-media.agent.metadata.v1}
+  gateway_credential: ${AGENT_METADATA_GATEWAY_CREDENTIAL:-}
+
+agent_runtime:
+  enabled: ${AGENT_RUNTIME_ENABLED:-false}
+  credential_keys_file: ${AGENT_RUNTIME_CREDENTIAL_KEYS_FILE:-}
+  signing_key_file: ${AGENT_RUNTIME_SIGNING_KEY_FILE:-}
+  environment_id: ${AGENT_ENVIRONMENT_ID:-}
+  kubernetes_config_file: ${AGENT_RUNTIME_KUBERNETES_CONFIG_FILE:-}
+  kubernetes_namespace: ${AGENT_RUNTIME_KUBERNETES_NAMESPACE:-default}
+  docker_identity_url: ${AGENT_RUNTIME_DOCKER_IDENTITY_URL:-}
+  docker_internal_credential: ${AGENT_RUNTIME_DOCKER_INTERNAL_CREDENTIAL:-}
+
+agent_mcp:
+  enabled: ${AGENT_MCP_ENABLED:-false}
+  allowed_upstream_hosts: ${AGENT_MCP_ALLOWED_UPSTREAM_HOSTS:-[]}
+  plugin_url: ${MEDIA_PLUGIN_URL:-}
+  plugin_credential: ${MCP_PLUGIN_GATEWAY_CREDENTIAL:-}
+
+agent_workload:
+  enabled: ${AGENT_WORKLOAD_ENABLED:-false}

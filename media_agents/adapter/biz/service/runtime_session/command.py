@@ -8,6 +8,10 @@ class RegisterRuntimeSession:
     session_id: str
     context_version: int
     context_ref: str
+    workspace_id: str = ""
+    agent_config_id: str = ""
+    initial_epoch: int = 1
+    transfer_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)

@@ -37,6 +37,11 @@ message Config {
   DatabaseConfig database = 10;
   RedisConfig redis = 11;
   ObjectStorageConfig object_storage = 12;
+  RabbitMQConfig rabbitmq = 13;
+ AgentMetadataConfig agent_metadata = 14;
+ AgentRuntimeConfig agent_runtime = 15;
+ AgentMCPConfig agent_mcp = 16;
+ AgentWorkloadConfig agent_workload = 17;
 
   // ---- 注册中心 / 服务发现 ----
   // consul：服务端注册（本服务把自己注册进去）
@@ -158,6 +163,13 @@ message RedisConfig {
   int32 db = 4;
   int32 pool_size = 5;
   int32 dial_timeout_ms = 6;
+}
+
+message RabbitMQConfig {
+  bool enabled = 1;
+  string url = 2;
+  string session_exchange = 3;
+  int32 receiver_buffer = 4;
 }
 
 message ObjectStorageConfig {
@@ -479,4 +491,37 @@ message JobConfig {
   int32 max_retries = 1;
   // CLAIMED 超时秒数（worker 崩溃保护），默认 600
   int32 claim_timeout_seconds = 2;
+}
+
+message AgentMetadataConfig {
+ bool enabled = 1;
+ string artifact_root = 2;
+ string metadata_exchange = 3;
+ string gateway_credential = 4;
+}
+
+message AgentRuntimeConfig {
+ bool enabled = 1;
+ string credential_keys_file = 2;
+ string signing_key_file = 3;
+ string environment_id = 4;
+ string kubernetes_config_file = 5;
+ string kubernetes_namespace = 6;
+ string docker_identity_url = 7;
+ string docker_internal_credential = 8;
+}
+
+message AgentMCPConfig {
+ bool enabled = 1;
+ repeated string allowed_upstream_hosts = 2;
+ string plugin_url = 3;
+ string plugin_credential = 4;
+}
+
+message AgentWorkloadProfile {string image=1;int32 port=2;string cpu=3;string memory=4;}
+message AgentWorkloadConfig {
+ bool enabled=1;string driver=2;string namespace=3;string gateway_url=4;
+ string shared_secret=5;string storage_class=6;string storage_size=7;
+ map<string,AgentWorkloadProfile> profiles=8;
+ string session_exchange=9;
 }

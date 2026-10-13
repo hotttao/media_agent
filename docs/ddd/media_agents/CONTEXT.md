@@ -4,6 +4,14 @@
 
 ## 业务术语词典
 
+**Agent Runtime Instance（Agent 执行实例）**:
+承载 Agent 执行的一份可替换运行实例；它与稳定 Agent Identity、Runtime Session 及底层 Runtime Handle 是不同概念。
+_禁用替代词_：Agent Identity、Agent Session、Runtime Handle
+
+**Runtime Incarnation（运行代次）**:
+同一稳定运行副本每次进程启动形成的一次运行身份，用于区分重启前后的执行与观测。
+_禁用替代词_：Replica ID、Agent Identity、Runtime Handle
+
 **Runtime Session（运行会话）**:
 Agent 内与一个 Agent Session ID 对应的持久化执行边界，拥有 Turn 队列、交互记录和事件游标。
 _禁用替代词_：Web Session、Gateway Session、Process
@@ -11,6 +19,22 @@ _禁用替代词_：Web Session、Gateway Session、Process
 **Runtime Handle（运行时句柄）**:
 底层 Agent Runtime 创建并返回、由 Runtime Session 持久化用于后续 Turn 加载和重启恢复的不透明会话标识；它与业务 Session ID 属于不同命名空间且不包含运行凭据。
 _禁用替代词_：Runtime Session、API Key、Process ID
+
+**Execution Ownership（执行所有权）**:
+Runtime Session 当前允许执行和提交事实的运行实例及其代次；会话副本绑定只定位请求，不能替代执行所有权。
+_禁用替代词_：Session Replica Binding、User Ownership、Gateway Lock
+
+**Execution Epoch（执行代次）**:
+同一 Runtime Session 执行归属的递增版本，与副本进程启动代次分别标识。
+_禁用替代词_：Incarnation、配置版本、事件序号
+
+**Session Handoff（会话移交）**:
+一个 Runtime Session 从当前执行归属转交给另一执行实例的稳定操作。
+_禁用替代词_：Instance Drain、Turn Retry、配置升级
+
+**Runtime Metadata Application（运行元数据应用）**:
+一个运行实例对用户已确认配置的准备、发布与结果记录；它不修改已有 Session 的固定配置。
+_禁用替代词_：Metadata Selection、Turn、RabbitMQ ACK
 
 **Turn（交互轮次）**:
 Runtime Session 内由一次用户输入触发的一轮持久化执行请求，以 completed、failed 或 interrupted 之一结束。

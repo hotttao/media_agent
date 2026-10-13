@@ -19,9 +19,12 @@ from adapter.biz.domain.runtime_session.errors import (
 from adapter.biz.service.runtime_session.command import RegisterRuntimeSession, SubmitTurn
 from adapter.biz.workflow.execute_turn_flow import RuntimeCredentials
 from adapter.schemas.runtime_session.request import (
+    QuiesceSessionRequest,
     RegisterRuntimeSessionRequest,
     ResolveAgentRequestRequest,
+    ResumeSessionRequest,
     SubmitTurnRequest,
+    TransferSessionRequest,
 )
 from adapter.schemas.runtime_session.response import (
     AgentRequestResponse,
@@ -110,6 +113,7 @@ def build_runtime_session_router() -> APIRouter:
         session_id: str, turn_id: str, service: RuntimeSessionServiceDep
     ) -> TurnResponse:
         try:
+            await service.get(session_id)
             turn = await service.get_turn(turn_id)
             if turn.session_id != session_id:
                 raise InvalidTurn(f"turn not found: {turn_id}")
@@ -157,6 +161,49 @@ def build_runtime_session_router() -> APIRouter:
         except InvalidTurn as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 
+    @router.post("/{session_id}:quiesce", response_model=RuntimeSessionResponse)
+    async def quiesce_session(
+        session_id: str,
+        body: QuiesceSessionRequest,
+        service: RuntimeSessionServiceDep,
+    ) -> RuntimeSessionResponse:
+        return _response(await service.quiesce(session_id, body.transfer_id))
+
+    @router.post("/{session_id}:transfer", response_model=RuntimeSessionResponse)
+    async def transfer_session(
+        session_id: str,
+        body: TransferSessionRequest,
+        service: RuntimeSessionServiceDep,
+        flow: ExecuteTurnFlowDep,
+    ) -> RuntimeSessionResponse:
+        value, events = await service.transfer(
+            session_id,
+            body.transfer_id,
+            body.source_replica_id,
+            body.source_incarnation_id,
+            body.expected_epoch,
+            termination_confirmed=body.termination_confirmed,
+        )
+        await flow.publish_transferred(events)
+        return _response(value)
+
+    @router.post("/{session_id}:adopt", response_model=RuntimeSessionResponse)
+    async def adopt_session(
+        session_id: str, service: RuntimeSessionServiceDep, flow: ExecuteTurnFlowDep
+    ) -> RuntimeSessionResponse:
+        await flow.adopt(session_id)
+        return _response(await service.get(session_id))
+
+    @router.post("/{session_id}:resume", response_model=RuntimeSessionResponse)
+    async def resume_session(
+        session_id: str,
+        body: ResumeSessionRequest,
+        service: RuntimeSessionServiceDep,
+        flow: ExecuteTurnFlowDep,
+    ) -> RuntimeSessionResponse:
+        await flow.adopt(session_id, resume=True, operation_id=body.operation_id)
+        return _response(await service.get(session_id))
+
     return router
 
 
@@ -165,6 +212,13 @@ def _response(value: RuntimeSession) -> RuntimeSessionResponse:
         session_id=value.session_id,
         context_version=value.context_version,
         context_ref=value.context_ref,
+        workspace_id=value.workspace_id,
+        agent_config_id=value.agent_config_id,
+        owner_instance_id=value.owner_instance_id,
+        owner_incarnation_id=value.owner_incarnation_id,
+        execution_epoch=value.execution_epoch,
+        last_transfer_id=value.last_transfer_id,
+        handoff_id=value.handoff_id,
         status=value.status.value,
         chat_status=value.chat_status.value,
         active_turn_id=value.active_turn_id,
@@ -180,6 +234,7 @@ def _response(value: RuntimeSession) -> RuntimeSessionResponse:
 def _turn_response(value: Turn) -> TurnResponse:
     return TurnResponse(
         turn_id=value.turn_id,
+        execution_epoch=value.execution_epoch,
         session_id=value.session_id,
         idempotency_key=value.idempotency_key,
         enqueue_sequence=value.enqueue_sequence,

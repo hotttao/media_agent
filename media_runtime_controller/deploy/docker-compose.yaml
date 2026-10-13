@@ -1,0 +1,21 @@
+services:
+  runtime-controller:
+    image: media-runtime-controller:latest
+    user: '0:0'
+    entrypoint: [/runtime-controller-docker]
+    environment:
+      RUNTIME_CREATION_ADDRESS: ':8010'
+      RUNTIME_CREATION_CREDENTIAL: ${RUNTIME_CREATION_CREDENTIAL:?required}
+      RUNTIME_DOCKER_POLICY_FILE: /run/config/runtime-policy.json
+    ports: ['127.0.0.1:8010:8010']
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${RUNTIME_DOCKER_POLICY_FILE:?required}:/run/config/runtime-policy.json:ro
+      - /var/lib/media-agent/runtime:/var/lib/media-agent/runtime
+      - /var/lib/media-agent/keys/runtime-public-keys.json:/var/lib/media-agent/keys/runtime-public-keys.json:ro
+    networks: [agent-private]
+    restart: unless-stopped
+networks:
+  agent-private:
+    external: true
+    name: ${RUNTIME_DOCKER_NETWORK:?required}

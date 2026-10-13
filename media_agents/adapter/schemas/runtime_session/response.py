@@ -5,6 +5,13 @@ class RuntimeSessionResponse(BaseModel):
     session_id: str
     context_version: int
     context_ref: str
+    workspace_id: str = ""
+    agent_config_id: str = ""
+    owner_instance_id: str = ""
+    owner_incarnation_id: str = ""
+    execution_epoch: int = 1
+    last_transfer_id: str = ""
+    handoff_id: str = ""
     status: str
     chat_status: str
     active_turn_id: str | None
@@ -17,6 +24,7 @@ class RuntimeSessionResponse(BaseModel):
 
 
 class TurnResponse(BaseModel):
+    execution_epoch: int = 1
     turn_id: str
     session_id: str
     idempotency_key: str

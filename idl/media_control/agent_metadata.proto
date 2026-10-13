@@ -1,0 +1,27 @@
+syntax = "proto3";
+package media_control.agent_metadata;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_control/agent_metadata";
+message ResourceReference { string kind = 1; string id = 2; int64 version = 3; string checksum = 4; }
+message MetadataResource { string kind = 1; string id = 2; int64 version = 3; string name = 4; string checksum = 5; string content_ref = 6; string content = 7; }
+message MetadataContext { int32 metadata_schema_version = 1; string workspace_id = 2; string agent_config_id = 3; int64 selection_revision = 4; string target_context_version = 5; int64 context_version = 6; string agent_type = 7; string configured_prompt = 8; repeated MetadataResource resources = 9; string status = 10; string platform_prompt = 11; string platform_prompt_template_version = 12; }
+message ApplicationResult { string report_id = 1; string workspace_id = 2; string agent_config_id = 3; int64 selection_revision = 4; string target_context_version = 5; string replica_id = 6; string incarnation_id = 7; string status = 8; string applied_context_version = 9; string error_code = 10; }
+message ResultResponse { bool accepted = 1; }
+message ArtifactResponse { bytes content = 1; string checksum = 2; }
+message InstanceView { string workspace_id = 1; string agent_config_id = 2; string replica_id = 3; string incarnation_id = 4; string admission = 5; }
+message ConfirmRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; string agent_config_id = 2; int64 expected_version = 3; string idempotency_key = 4; repeated ResourceReference resources = 5; }
+message ContextRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; string agent_config_id = 2 [(api.query) = "agent_config_id"]; int64 selection_revision = 3 [(api.query) = "selection_revision"]; string target_context_version = 4 [(api.query) = "target_context_version"]; bool for_session = 5 [(api.query) = "for_session"]; }
+message ReportRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; ApplicationResult result = 2; }
+message UploadArtifactRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; string checksum = 2 [(api.path) = "checksum"]; bytes content = 3; }
+message GetArtifactRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; string checksum = 2 [(api.path) = "checksum"]; string agent_config_id = 3 [(api.query) = "agent_config_id"]; string target_context_version = 4 [(api.query) = "target_context_version"]; }
+message ProgressRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; }
+message ProgressResponse { string status = 1; int64 selection_revision = 2; string target_context_version = 3; bool timed_out = 4; repeated ApplicationResult results = 5; repeated InstanceView instances = 6; }
+service AgentMetadataService {
+ rpc ConfirmMetadataSelection(ConfirmRequest) returns (MetadataContext) { option (api.post) = "/api/v1/workspaces/:workspace_id/agent-metadata:confirm"; option (google.api.http) = { post: "/api/v1/workspaces/{workspace_id}/agent-metadata:confirm" body: "*" }; }
+ rpc GetConfirmedMetadata(ContextRequest) returns (MetadataContext) { option (api.get) = "/internal/workspaces/:workspace_id/agent-metadata"; option (google.api.http) = { get: "/internal/workspaces/{workspace_id}/agent-metadata" }; }
+ rpc ReportMetadataApplication(ReportRequest) returns (ResultResponse) { option (api.post) = "/internal/workspaces/:workspace_id/agent-metadata/results"; option (google.api.http) = { post: "/internal/workspaces/{workspace_id}/agent-metadata/results" body: "*" }; }
+ rpc GetMetadataProgress(ProgressRequest) returns (ProgressResponse) { option (api.get) = "/api/v1/workspaces/:workspace_id/agent-metadata/progress"; option (google.api.http) = { get: "/api/v1/workspaces/{workspace_id}/agent-metadata/progress" }; }
+ rpc UploadMetadataArtifact(UploadArtifactRequest) returns (ArtifactResponse) { option (api.put) = "/api/v1/workspaces/:workspace_id/agent-metadata/artifacts/:checksum"; option (google.api.http) = { put: "/api/v1/workspaces/{workspace_id}/agent-metadata/artifacts/{checksum}" body: "*" }; }
+ rpc GetMetadataArtifact(GetArtifactRequest) returns (ArtifactResponse) { option (api.get) = "/internal/workspaces/:workspace_id/agent-metadata/artifacts/:checksum"; option (google.api.http) = { get: "/internal/workspaces/{workspace_id}/agent-metadata/artifacts/{checksum}" }; }
+}

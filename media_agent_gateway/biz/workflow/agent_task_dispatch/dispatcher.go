@@ -27,6 +27,7 @@ type Dispatcher struct {
 	tx       dal.TxRunner
 	sessions SessionService
 	runtimes client.Registry
+	routing  client.RuntimeRouter
 	now      func() time.Time
 }
 
@@ -81,13 +82,13 @@ func (d *Dispatcher) dispatch(ctx context.Context, taskID string) error {
 	if runtimeContext.WorkspaceID != session.WorkspaceID || runtimeContext.AgentID != session.AgentID || runtimeContext.AgentType != session.AgentType || runtimeContext.ContextVersion != session.ContextVersion {
 		return d.finish(ctx, task, taskdomain.StatusFailed, "", "context_conflict", "Agent Session context version no longer matches its Registration")
 	}
-	runtime, ok := d.runtimes.Get(session.AgentType)
-	if !ok {
+	runtime, runtimeErr := d.runtime(ctx, session, true)
+	if runtimeErr != nil {
 		return d.finish(ctx, task, taskdomain.StatusFailed, "", "runtime_unavailable", "Agent runtime is not registered")
 	}
 	registered, err := runtime.RegisterRuntimeSession(ctx, client.RegisterRuntimeSessionInput{
 		SessionID: session.ID, ContextVersion: session.ContextVersion,
-		ContextRef: fmt.Sprintf("workspace:%s/agent:%s/context:%d", session.WorkspaceID, session.AgentID, session.ContextVersion),
+		ContextRef: client.SessionContextReference(session), WorkspaceID: session.WorkspaceID, AgentConfigID: session.AgentConfigID,
 	})
 	if err != nil {
 		return d.submitFailure(ctx, task, err)
@@ -108,7 +109,21 @@ func (d *Dispatcher) dispatch(ctx context.Context, taskID string) error {
 	if err := json.Unmarshal([]byte(task.InputJSON), &input); err != nil {
 		return d.finish(ctx, task, taskdomain.StatusFailed, "", "invalid_input", "Task input is invalid")
 	}
-	turn, err := runtime.SubmitTurn(ctx, client.SubmitTurnInput{SessionID: session.ID, IdempotencyKey: task.ID, ContextVersion: session.ContextVersion, Input: input, APIKey: runtimeContext.APIKey})
+	token := ""
+	if issuer, ok := d.sessions.(interface {
+		EnsureToken(context.Context, *sessiondomain.Session, bool) (string, error)
+	}); ok {
+		token, err = issuer.EnsureToken(ctx, session, true)
+		if err != nil {
+			return err
+		}
+	}
+	apiKey := runtimeContext.APIKey
+	if d.routing != nil {
+		apiKey = ""
+		token = ""
+	}
+	turn, err := runtime.SubmitTurn(ctx, client.SubmitTurnInput{SessionID: session.ID, IdempotencyKey: task.ID, ContextVersion: session.ContextVersion, Input: input, APIKey: apiKey, SessionToken: token})
 	if err != nil {
 		return d.submitFailure(ctx, task, err)
 	}
@@ -154,8 +169,8 @@ func (d *Dispatcher) reconcileTask(ctx context.Context, task *taskdomain.Task) e
 	if err != nil {
 		return err
 	}
-	runtime, ok := d.runtimes.Get(session.AgentType)
-	if !ok {
+	runtime, runtimeErr := d.runtime(ctx, session, false)
+	if runtimeErr != nil {
 		return fmt.Errorf("agent runtime %q is not registered", session.AgentType)
 	}
 	turn, err := runtime.GetTurn(ctx, task.SessionID, task.TurnID)
@@ -203,8 +218,8 @@ func (d *Dispatcher) cancel(ctx context.Context, taskID string) error {
 	if err != nil {
 		return err
 	}
-	runtime, ok := d.runtimes.Get(session.AgentType)
-	if !ok {
+	runtime, runtimeErr := d.owner(ctx, session)
+	if runtimeErr != nil {
 		return fmt.Errorf("agent runtime %q is not registered", session.AgentType)
 	}
 	turn, err := runtime.GetTurn(ctx, task.SessionID, task.TurnID)
@@ -218,4 +233,29 @@ func (d *Dispatcher) cancel(ctx context.Context, taskID string) error {
 	default:
 		return nil
 	}
+}
+
+func (d *Dispatcher) WithRouting(routing client.RuntimeRouter) *Dispatcher {
+	d.routing = routing
+	return d
+}
+func (d *Dispatcher) runtime(ctx context.Context, s *sessiondomain.Session, execution bool) (client.Runtime, error) {
+	if d.routing != nil {
+		if execution {
+			return d.routing.Resolve(ctx, s)
+		}
+		return d.routing.Facts(ctx, s)
+	}
+	runtime, ok := d.runtimes.Get(s.AgentType)
+	if !ok {
+		return nil, fmt.Errorf("Agent runtime unavailable")
+	}
+	return runtime, nil
+}
+
+func (d *Dispatcher) owner(ctx context.Context, s *sessiondomain.Session) (client.Runtime, error) {
+	if d.routing != nil {
+		return d.routing.Owner(ctx, s)
+	}
+	return d.runtime(ctx, s, false)
 }

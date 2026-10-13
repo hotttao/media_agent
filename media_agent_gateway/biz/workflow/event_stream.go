@@ -29,13 +29,17 @@ func NewEventStream(turns *RunTurn, source sessionevents.Source) *EventStream {
 // contiguously; a high live sequence is withheld until Agent replay fills its gap.
 func (s *EventStream) Stream(ctx context.Context, sessionID, userID string, after int64, emit func(StreamEvent) error) error {
 	var subscription sessionevents.Subscription
-	if s.source != nil {
+	open := func() {
+		if s.source == nil {
+			return
+		}
 		opened, err := s.source.Open(ctx, sessionID)
 		if err == nil {
 			subscription = opened
 		}
 	}
-	defer subscription.Close()
+	open()
+	defer func() { subscription.Close() }()
 	cursor := after
 	replay := func() error {
 		events, err := s.turns.EventsAfter(ctx, sessionID, userID, cursor)
@@ -68,10 +72,15 @@ func (s *EventStream) Stream(ctx context.Context, sessionID, userID string, afte
 		select {
 		case event, ok := <-events:
 			if !ok {
+				subscription.Close()
+				subscription = sessionevents.Subscription{}
 				events = nil
 				continue
 			}
 			if event.Sequence == 0 {
+				if !s.turns.AllowLive(ctx, sessionID, event.Payload) {
+					continue
+				}
 				if err := emit(StreamEvent{Payload: event.Payload}); err != nil {
 					return err
 				}
@@ -96,6 +105,10 @@ func (s *EventStream) Stream(ctx context.Context, sessionID, userID string, afte
 				_ = replay()
 			}
 		case <-reconcile.C:
+			if events == nil {
+				open()
+				events = subscription.Events
+			}
 			_ = replay()
 		case <-heartbeat.C:
 			if err := emit(StreamEvent{Heartbeat: true}); err != nil {

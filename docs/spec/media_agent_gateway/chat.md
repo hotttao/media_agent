@@ -14,7 +14,7 @@ ui_platform --Cookie/Command+Subscription--> media_agent_gateway --Command/Repla
                                 |                         |
                                 |                         +--> PostgreSQL media_agents
                                 +--> PostgreSQL Registration
-                                +<------ Redis Pub/Sub Session Event Bus
+                                +<------ RabbitMQ Session Event Bus
 ```
 
 ## API
@@ -52,7 +52,7 @@ Session。Turn、Message 和事件不再写 Gateway 表。Live Event Frame 从�
 - `POSTGRES_DSN`：Gateway PostgreSQL DSN。
 - `JWT_SECRET`：与 media_auth 共享，local/dev 默认 `dev-shared-secret`。
 - `CODEX_RUNTIME_URL`、`CLAUDE_CODE_RUNTIME_URL`：Agent Runtime Session API 地址。
-- `MEDIA_AGENTS_REDIS_URL`：Session Event Bus Redis 地址；不可用时降级为周期回放。
+- `MEDIA_AGENTS_RABBITMQ_URL`：Session Event Bus RabbitMQ 地址；不可用时降级为周期回放。
 - `MEDIA_AGENTS_EVENT_CHANNEL_PREFIX`：与 Agent 一致的 Session channel 前缀。
 - `DEFAULT_WORKSPACE_ID`：默认 `default`。
 - `DEFAULT_AGENT_ID`：默认 `codex`。
@@ -68,3 +68,5 @@ Gateway PostgreSQL 只保存 Registration。历史旧 Turn/Message/Event 表在�
 2. `--mode verify` 比较两库逐 Session 的 Turn/Message/Event 数量及 context version。
 3. `--mode cleanup --confirm-drop-legacy-history` 在同次执行中再次验证后，才删除 Gateway
    的三个旧历史表。导入可重复执行；cleanup 不允许隐式执行。
+
+事件总线的实例队列、订阅屏障与重连契约以 [Agent Runtime spec](../agent-runtime.md) 为准。

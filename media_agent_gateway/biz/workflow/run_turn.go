@@ -16,11 +16,14 @@ import (
 type RunTurn struct {
 	sessions *service.Service
 	runtimes client.Registry
+	routing  client.RuntimeRouter
 }
 
 func NewRunTurn(sessions *service.Service, runtimes client.Registry) *RunTurn {
 	return &RunTurn{sessions: sessions, runtimes: runtimes}
 }
+
+func (w *RunTurn) WithRouting(routing client.RuntimeRouter) *RunTurn { w.routing = routing; return w }
 
 func (w *RunTurn) Register(ctx context.Context, session *domain.Session, authToken string) (*client.RuntimeSession, error) {
 	if session.Status != domain.StatusStarting && session.Status != domain.StatusActive {
@@ -30,20 +33,20 @@ func (w *RunTurn) Register(ctx context.Context, session *domain.Session, authTok
 	if err != nil {
 		return nil, err
 	}
+	contextRef := fmt.Sprintf("workspace:%s/agent:%s/context:%d", session.WorkspaceID, session.AgentID, session.ContextVersion)
+	if session.MetadataTargetContextVersion != "" {
+		contextRef = "metadata:" + session.AgentConfigID + ":" + session.MetadataTargetContextVersion
+	}
 	state, err := runtime.RegisterRuntimeSession(ctx, client.RegisterRuntimeSessionInput{
-		SessionID:      session.ID,
+		SessionID:   session.ID,
+		WorkspaceID: session.WorkspaceID, AgentConfigID: session.AgentConfigID,
 		ContextVersion: session.ContextVersion,
-		ContextRef: fmt.Sprintf(
-			"workspace:%s/agent:%s/context:%d",
-			session.WorkspaceID,
-			session.AgentID,
-			session.ContextVersion,
-		),
+		ContextRef:     contextRef,
 	})
 	if err != nil {
 		// A transport or server failure is outcome-unknown: preserve starting so the
 		// same session_id can be reconciled. A definitive client error is failed.
-		if client.IsDefinitiveRegistrationFailure(err) && session.Status == domain.StatusStarting {
+		if w.routing == nil && client.IsDefinitiveRegistrationFailure(err) && session.Status == domain.StatusStarting {
 			_ = w.sessions.TransitionStatus(ctx, session, domain.StatusFailed)
 		}
 		return nil, err
@@ -80,13 +83,22 @@ func (w *RunTurn) Start(ctx context.Context, sessionID, userID, authToken, key, 
 	if strings.TrimSpace(key) == "" {
 		key = uuid.NewString()
 	}
+	sessionToken, err := w.sessions.EnsureToken(ctx, session, true)
+	if err != nil {
+		return nil, err
+	}
+	apiKey := runtimeContext.APIKey
+	if w.routing != nil {
+		apiKey = ""
+		sessionToken = ""
+	} // Managed execution re-fetches credentials per claim.
 	return runtime.SubmitTurn(ctx, client.SubmitTurnInput{
 		SessionID:      session.ID,
 		IdempotencyKey: key,
 		ContextVersion: session.ContextVersion,
 		Input:          map[string]any{"message": message},
-		APIKey:         runtimeContext.APIKey,
-		SessionToken:   authToken,
+		APIKey:         apiKey,
+		SessionToken:   sessionToken,
 	})
 }
 
@@ -98,9 +110,9 @@ func (w *RunTurn) Interrupt(ctx context.Context, sessionID, userID, authToken st
 	if session.Status != domain.StatusActive {
 		return nil, domain.ErrInactive
 	}
-	runtime, ok := w.runtimes.Get(session.AgentType)
-	if !ok {
-		return nil, fmt.Errorf("agent runtime %q is not registered", session.AgentType)
+	_, runtime, err := w.ownerRuntime(ctx, sessionID, userID)
+	if err != nil {
+		return nil, err
 	}
 	state, err := runtime.GetRuntimeSession(ctx, session.ID)
 	if err != nil {
@@ -136,7 +148,7 @@ func (w *RunTurn) AgentRequests(ctx context.Context, sessionID, userID, turnID s
 }
 
 func (w *RunTurn) ResolveAgentRequest(ctx context.Context, sessionID, userID, turnID, requestID string, response map[string]any) (*client.AgentRequest, error) {
-	session, runtime, err := w.authorizedRuntime(ctx, sessionID, userID)
+	session, runtime, err := w.ownerRuntime(ctx, sessionID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -180,6 +192,10 @@ func (w *RunTurn) authorizedRuntime(ctx context.Context, sessionID, userID strin
 	if err != nil {
 		return nil, nil, err
 	}
+	if w.routing != nil {
+		runtime, err := w.routing.Facts(ctx, session)
+		return session, runtime, err
+	}
 	runtime, ok := w.runtimes.Get(session.AgentType)
 	if !ok {
 		return nil, nil, fmt.Errorf("agent runtime %q is not registered", session.AgentType)
@@ -195,9 +211,35 @@ func (w *RunTurn) runtime(ctx context.Context, session *domain.Session, authToke
 	if runtimeContext.AgentType != session.AgentType || runtimeContext.AgentID != session.AgentID || runtimeContext.ContextVersion != session.ContextVersion {
 		return service.AgentContext{}, nil, domain.ErrContextChanged
 	}
+	if w.routing != nil {
+		runtime, err := w.routing.Resolve(ctx, session)
+		return runtimeContext, runtime, err
+	}
 	runtime, ok := w.runtimes.Get(session.AgentType)
 	if !ok {
 		return service.AgentContext{}, nil, fmt.Errorf("agent runtime %q is not registered", session.AgentType)
 	}
 	return runtimeContext, runtime, nil
+}
+
+func (w *RunTurn) AllowLive(ctx context.Context, id string, payload []byte) bool {
+	if w.routing == nil {
+		return true
+	}
+	guard, ok := w.routing.(interface {
+		AllowLive(context.Context, string, []byte) bool
+	})
+	return ok && guard.AllowLive(ctx, id, payload)
+}
+
+func (w *RunTurn) ownerRuntime(ctx context.Context, id, user string) (*domain.Session, client.Runtime, error) {
+	session, err := w.sessions.Authorize(ctx, id, user)
+	if err != nil {
+		return nil, nil, err
+	}
+	if w.routing != nil {
+		runtime, err := w.routing.Owner(ctx, session)
+		return session, runtime, err
+	}
+	return w.authorizedRuntime(ctx, id, user)
 }

@@ -49,3 +49,6 @@ media_auth/.env.platform-token.local
 /media_workflow/media_workflow
 /media_example/media_example
 **/.worker-state/
+
+# Runtime bootstrap material is supplied by the creation adapter.
+media_agent_gateway/.runtime-identities/

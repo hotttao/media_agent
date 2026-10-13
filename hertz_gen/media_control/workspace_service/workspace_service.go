@@ -139,7 +139,9 @@ func (s *WorkspaceServiceClient) GetRuntimeContext(context context.Context, req 
 	httpResp := &workspace.RuntimeContextResponse{}
 	ret, err := s.client.r().
 		setContext(context).
-		setQueryParams(map[string]interface{}{}).
+		setQueryParams(map[string]interface{}{
+			"context_version": req.GetContextVersion(),
+		}).
 		setPathParams(map[string]string{
 			"workspace_id": req.GetWorkspaceId(),
 		}).

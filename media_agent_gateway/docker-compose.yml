@@ -1,10 +1,12 @@
 services:
   session_event_bus:
-    image: redis:7-alpine
+    image: rabbitmq:4.3-management-alpine
     network_mode: host
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-media_agent}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-media_agent}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 3s
       timeout: 2s
       retries: 20
@@ -17,6 +19,17 @@ services:
     image: media-agent-codex:local
     environment:
       PORT: "${CODEX_AGENT_PORT:-3001}"
+      AGENT_METADATA_ENABLED: ${AGENT_METADATA_ENABLED:-false}
+      AGENT_INSTANCE_ENABLED: ${AGENT_RUNTIME_ENABLED:-false}
+      AGENT_ENVIRONMENT_ID: ${AGENT_ENVIRONMENT_ID:-}
+      AGENT_BOOTSTRAP_PROOF_FILE: /run/secrets/runtime-identity/bootstrap-proof
+      RUNTIME_PUBLIC_KEYS_FILE: /run/secrets/runtime-public/keys.json
+      AGENT_GATEWAY_URL: http://127.0.0.1:8006
+      AGENT_API_TOKEN: ${CODEX_AGENT_API_TOKEN:-}
+      AGENT_INSTANCE_CREDENTIAL: ${CODEX_INSTANCE_CREDENTIAL:-}
+      AGENT_CONFIG_ID: ${CODEX_AGENT_CONFIG_ID:-}
+      AGENT_REPLICA_ID: "0"
+      AGENT_METADATA_EXCHANGE: ${AGENT_METADATA_EXCHANGE:-media.agent.metadata.v1}
       HOME: /workspace/.home
       CODEX_CONFIG_DIR: /workspace/.home/.codex
       CODEX_ACP_BIN: ${CODEX_ACP_BIN:-codex-acp}
@@ -26,9 +39,11 @@ services:
       MOCK_MEDIA_CONTROL: "true"
       CODEX_AUX_PROCESSES: "false"
       MEDIA_AGENTS_DB_URL: postgresql+asyncpg://media_auth:media_auth@127.0.0.1:5432/media_auth
-      MEDIA_AGENTS_REDIS_URL: redis://127.0.0.1:6379/0
+      MEDIA_AGENTS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-media_agent}:${RABBITMQ_PASSWORD:-media_agent}@127.0.0.1:5672/
       ALL_PROXY: ${CODEX_DOCKER_PROXY:-socks5://127.0.0.1:7891}
     volumes:
+      - ./.runtime-public:/run/secrets/runtime-public:ro
+      - ./.runtime-identities/codex:/run/secrets/runtime-identity:ro
       - ${CODEX_AUTH_FILE:-/home/tao/.codex/auth.json}:/run/secrets/codex-auth.json:ro
       - ${WORKSPACE_ROOT:-/workspace}/${RUNTIME_WORKSPACE_ID:-local}:/workspace
     network_mode: host
@@ -49,15 +64,28 @@ services:
     image: media-agent-claude-code:local
     environment:
       PORT: "${CLAUDE_CODE_AGENT_PORT:-3003}"
+      AGENT_METADATA_ENABLED: ${AGENT_METADATA_ENABLED:-false}
+      AGENT_INSTANCE_ENABLED: ${AGENT_RUNTIME_ENABLED:-false}
+      AGENT_ENVIRONMENT_ID: ${AGENT_ENVIRONMENT_ID:-}
+      AGENT_BOOTSTRAP_PROOF_FILE: /run/secrets/runtime-identity/bootstrap-proof
+      RUNTIME_PUBLIC_KEYS_FILE: /run/secrets/runtime-public/keys.json
+      AGENT_GATEWAY_URL: http://127.0.0.1:8006
+      AGENT_API_TOKEN: ${CLAUDE_CODE_AGENT_API_TOKEN:-}
+      AGENT_INSTANCE_CREDENTIAL: ${CLAUDE_CODE_INSTANCE_CREDENTIAL:-}
+      AGENT_CONFIG_ID: ${CLAUDE_CODE_AGENT_CONFIG_ID:-}
+      AGENT_REPLICA_ID: "0"
+      AGENT_METADATA_EXCHANGE: ${AGENT_METADATA_EXCHANGE:-media.agent.metadata.v1}
       HOME: /workspace/.home
       RUNTIME_WORKSPACE_ID: ${RUNTIME_WORKSPACE_ID:-local}
       WORKSPACE_DIR: /workspace
       SESSION_STORE_DIR: /workspace/.home/.claude/projects
       CLAUDE_CODE_BIN: ${CLAUDE_CODE_BIN:-claude}
       MEDIA_AGENTS_DB_URL: postgresql+asyncpg://media_auth:media_auth@127.0.0.1:5432/media_auth
-      MEDIA_AGENTS_REDIS_URL: redis://127.0.0.1:6379/0
+      MEDIA_AGENTS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-media_agent}:${RABBITMQ_PASSWORD:-media_agent}@127.0.0.1:5672/
       ALL_PROXY: ${CLAUDE_CODE_DOCKER_PROXY:-socks5://127.0.0.1:7891}
     volumes:
+      - ./.runtime-public:/run/secrets/runtime-public:ro
+      - ./.runtime-identities/claude-code:/run/secrets/runtime-identity:ro
       - ${WORKSPACE_ROOT:-/workspace}/${RUNTIME_WORKSPACE_ID:-local}:/workspace
     network_mode: host
     healthcheck:
@@ -97,7 +125,19 @@ services:
       INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
       INTERNAL_JWT_ISSUER: ${INTERNAL_JWT_ISSUER:-http://oathkeeper:4456/}
       CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
-      MEDIA_AGENTS_REDIS_URL: redis://host.docker.internal:6379/0
+      MEDIA_AGENTS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-media_agent}:${RABBITMQ_PASSWORD:-media_agent}@host.docker.internal:5672/
+      AGENT_MCP_ENABLED: ${AGENT_MCP_ENABLED:-false}
+      AGENT_MCP_ALLOWED_UPSTREAM_HOSTS: ${AGENT_MCP_ALLOWED_UPSTREAM_HOSTS:-[]}
+      MEDIA_PLUGIN_URL: ${MEDIA_PLUGIN_URL:-}
+      MCP_PLUGIN_GATEWAY_CREDENTIAL: ${MCP_PLUGIN_GATEWAY_CREDENTIAL:-}
+      AGENT_RUNTIME_ENABLED: ${AGENT_RUNTIME_ENABLED:-false}
+      AGENT_RUNTIME_CREDENTIAL_KEYS_FILE: ${AGENT_RUNTIME_CREDENTIAL_KEYS_FILE:-}
+      AGENT_RUNTIME_SIGNING_KEY_FILE: ${AGENT_RUNTIME_SIGNING_KEY_FILE:-}
+      AGENT_ENVIRONMENT_ID: ${AGENT_ENVIRONMENT_ID:-}
+      AGENT_RUNTIME_DOCKER_IDENTITY_URL: ${AGENT_RUNTIME_DOCKER_IDENTITY_URL:-}
+      AGENT_RUNTIME_DOCKER_INTERNAL_CREDENTIAL: ${AGENT_RUNTIME_DOCKER_INTERNAL_CREDENTIAL:-}
+      AGENT_METADATA_ENABLED: ${AGENT_METADATA_ENABLED:-false}
+      AGENT_METADATA_GATEWAY_CREDENTIAL: ${AGENT_METADATA_GATEWAY_CREDENTIAL:-}
       LOG_DIR: /media_logs/media-agent-gateway
     volumes:
       - ../media_logs/media-agent-gateway:/media_logs/media-agent-gateway

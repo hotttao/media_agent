@@ -38,9 +38,11 @@ class TurnEventSink:
         session_id: str,
         turn_id: str,
         *,
+        live_guard: Callable[[], Awaitable[dict[str, object]]] | None = None,
         tool_result_max_bytes: int = 32 * 1024,
         tool_result_window_ms: int = 300,
     ) -> None:
+        self._live_guard = live_guard
         self._service = service
         self._bus = bus
         self._session_id = session_id
@@ -63,6 +65,8 @@ class TurnEventSink:
     async def accept(self, payload: dict[str, object]) -> None:
         envelope = RuntimeEventEnvelope.parse(payload)
         if envelope.is_live:
+            if self._live_guard is not None:
+                payload = {**payload, **await self._live_guard()}
             await publish_notification(
                 self._bus,
                 SessionEventNotification(self._session_id, 0, payload),

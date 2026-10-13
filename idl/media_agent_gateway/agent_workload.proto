@@ -1,0 +1,12 @@
+syntax = "proto3";
+package media_agent_gateway.agent_workload;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package="media_agent_gateway/agent_workload";
+message WorkloadRequest {string workspace_id=1 [(api.path)="workspace_id"];int64 expected_version=2;int32 replicas=3;string idempotency_key=4;}
+message WorkloadView {string workspace_id=1;string environment_id=2;string agent_config_id=3;string resource_name=4;string namespace=5;int64 target_version=6;int64 applied_version=7;int32 desired_replicas=8;int32 committed_replicas=9;int32 ready_replicas=10;string drain_operation=11;}
+service AgentWorkloadService {
+ rpc EnsureWorkload(WorkloadRequest)returns(WorkloadView){option(api.post)="/internal/agent-workloads/:workspace_id/ensure";option(google.api.http)={post:"/internal/agent-workloads/{workspace_id}/ensure" body:"*"};}
+ rpc GetWorkload(WorkloadRequest)returns(WorkloadView){option(api.get)="/internal/agent-workloads/:workspace_id";option(google.api.http)={get:"/internal/agent-workloads/{workspace_id}"};}
+ rpc ScaleWorkload(WorkloadRequest)returns(WorkloadView){option(api.post)="/internal/agent-workloads/:workspace_id/scale";option(google.api.http)={post:"/internal/agent-workloads/{workspace_id}/scale" body:"*"};}
+}

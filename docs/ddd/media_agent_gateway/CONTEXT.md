@@ -1,8 +1,32 @@
 # media_agent_gateway Agent 接入上下文
 
-管理 Agent Session Registration、Web 用户访问、执行任务接入和 Platform MCP，并把 Agent 命令、查询及事件适配为客户端 API/SSE。它不拥有 Runtime 执行事实，也不决定同一 Session 的 Turn 顺序。
+管理 Agent Session Registration、Web 用户访问、执行任务接入、MCP 服务注册目录和统一 MCP 入口，并把 Agent 命令、查询及事件适配为客户端 API/SSE。它不拥有 Runtime 执行事实，也不决定同一 Session 的 Turn 顺序。
 
 ## 业务术语词典
+
+**Platform Prompt（平台提示词）**:
+平台管理的运行指导正文，说明平台能力、使用约定及已授权能力的上下文；它与用户配置的角色或任务提示词是不同内容。
+_禁用替代词_：Configured Prompt、User Message、Final Prompt
+
+**Session Replica Binding（会话副本绑定）**:
+Agent Session 在所属 Workspace 内选定的运行副本引用；后续调用沿用该引用，副本不可用或进入排空时可重新分配。
+_禁用替代词_：Placement、Agent Identity、Runtime Handle
+
+**Draining Replica（排空副本）**:
+为缩容而停止接收新会话及新执行分配、等待已有执行结束的运行副本。
+_禁用替代词_：Deleted Session、Interrupted Turn、Offline Replica
+
+**MCP Definition（MCP 定义）**:
+由平台运维登记的 MCP 服务描述，包含稳定标识、服务身份、Endpoint 和认证类型。
+_禁用替代词_：Plugin Instance、MCP Connection、Tool List
+
+**MCP Gateway（MCP 网关）**:
+Agent 访问平台工具的统一 MCP 入口，向调用方呈现有权访问的工具，并将调用路由到具体 MCP 实现。
+_禁用替代词_：Agent Runtime、Plugin Implementation、MCP Catalog
+
+**Agent Instance Registration（Agent 实例注册）**:
+Gateway 持有的稳定副本与当前运行代次、所属 Workspace/Agent 配置及通信身份之间的受控关联。
+_禁用替代词_：Agent Identity、Agent Session Registration、Pod Health
 
 **Agent Session（Agent 会话）**:
 一个用户在一个 Workspace 中与一个 Agent 持续交互的跨上下文稳定标识；Gateway 与 Agent 分别维护自身模型，不共享数据表。
@@ -33,7 +57,7 @@ Agent Session Registration 创建时固定引用的运行配置版本；Workspac
 _禁用替代词_：Workspace Version、Current Agent Version、Mutable Session Config
 
 **Session Event Subscription（会话事件订阅）**:
-客户端从指定 Session Sequence 开始订阅一个 Agent Session；Gateway 先注册 Session Event Bus 接收者，再通过 Agent 查询接口回放已提交事件，并转换为 SSE。
+客户端从指定 Session Sequence 开始订阅一个 Agent Session；Gateway 将会话事件分发给本机订阅者，并通过 Agent 查询接口回放已提交事件、转换为 SSE。
 _禁用替代词_：Turn Stream、Runtime Connection、Web Session
 
 **Event Replay Query（事件回放查询）**:

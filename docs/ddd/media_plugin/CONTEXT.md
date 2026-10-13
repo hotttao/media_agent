@@ -1,12 +1,8 @@
-# media_plugin 扩展目录上下文
+# media_plugin 扩展实现上下文
 
-管理平台受控发布的 MCP 定义、Workspace 启用关系和外部 OAuth MCP 连接。它不接收用户上传代码，也不转发平台内业务 MCP。
+管理 Workspace 启用关系和外部 OAuth MCP 连接，提供具体 Plugin 能力；MCP 服务注册目录归 Gateway。具体 MCP 实现提供工具能力，Agent 统一经 MCP Gateway 访问。
 
 ## 业务术语词典
-
-**MCP Definition（MCP 定义）**:
-由平台运维登记的 MCP 服务描述，包含稳定标识、服务身份、Endpoint 和认证类型。
-_禁用替代词_：Plugin Instance、MCP Connection、Tool List
 
 **Workspace Plugin Binding（Workspace Plugin 绑定）**:
 Workspace 对一个已批准 MCP Definition 的启用状态和非敏感配置。
@@ -21,7 +17,7 @@ _禁用替代词_：Plugin Binding、Runtime Context
 _禁用替代词_：MCP Definition、MCP Token
 
 **Internal Business MCP（平台内业务 MCP）**:
-随平台业务服务部署并由 Agent 直接调用的 MCP；通过 Session Token 获得用户和 Workspace 上下文。
+随平台业务服务部署、由 MCP Gateway 代理访问的 MCP；在经过验证的用户和 Workspace 上下文中执行工具能力。
 _禁用替代词_：Platform MCP、External MCP
 
 **External OAuth MCP（外部 OAuth MCP）**:

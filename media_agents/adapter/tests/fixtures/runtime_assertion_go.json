@@ -1,0 +1,9 @@
+{
+  "body": "{\"transfer_id\":\"wire-transfer\"}",
+  "keys": {
+    "rt-fe812c12f3ab4ce6": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"
+  },
+  "method": "POST",
+  "path": "/api/v1/runtime-sessions/wire:quiesce",
+  "token": "eyJ3b3Jrc3BhY2VfaWQiOiJ3aXJlLXdvcmtzcGFjZSIsImFnZW50X2NvbmZpZ19pZCI6IndpcmUtY29uZmlnIiwicmVwbGljYV9pZCI6IjAiLCJpbmNhcm5hdGlvbl9pZCI6IndpcmUtYm9vdCIsImV4ZWN1dGlvbl9lcG9jaCI6Mywia2lkIjoicnQtZmU4MTJjMTJmM2FiNGNlNiIsImF1ZCI6Im1lZGlhLWFnZW50LXJ1bnRpbWUiLCJtZXRob2QiOiJQT1NUIiwicGF0aCI6Ii9hcGkvdjEvcnVudGltZS1zZXNzaW9ucy93aXJlOnF1aWVzY2UiLCJib2R5X3NoYTI1NiI6IjAwZWQ0Y2I4NTFlOTNkZTViOWNmYmIzZGQxY2FhZDQwMzdkZWY1OGZiZTFhNzRiOWI4ZDY5OWFkYmFmNDZkODQiLCJpYXQiOjE3OTE4MTQyMDYsImV4cCI6MTc5MTgxNDI2Nn0.YvjqgyJuPELq7T9tKbO1Oek3MkiBsIgsKyIBioYRhzaDqnZnZq4tlwjhzM1klYm1hANTjoLlJhYRCSN5viqWBQ"
+}

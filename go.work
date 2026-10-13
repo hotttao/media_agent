@@ -11,6 +11,7 @@ use (
 	./media_example
 	./media_gen
 	./media_materials
-	./media_workflow
+	./media_runtime_controller
 	./media_worker
+	./media_workflow
 )

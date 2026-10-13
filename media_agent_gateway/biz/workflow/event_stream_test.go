@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -13,6 +14,51 @@ import (
 type orderedSource struct {
 	opened bool
 	events chan sessionevents.Event
+}
+
+type recoveringSource struct {
+	attempts int
+	closed   bool
+}
+
+func (s *recoveringSource) Open(context.Context, string) (sessionevents.Subscription, error) {
+	s.attempts++
+	if s.attempts == 1 && !s.closed {
+		return sessionevents.Subscription{}, errors.New("broker unavailable")
+	}
+	ch := make(chan sessionevents.Event, 1)
+	if s.attempts == 1 {
+		close(ch)
+	} else {
+		ch <- sessionevents.Event{Payload: []byte(`{"type":"delta"}`)}
+	}
+	return sessionevents.Subscription{Events: ch}, nil
+}
+
+func (*recoveringSource) Close() error { return nil }
+
+func TestEventStreamRestoresLiveFramesAfterSourceFailure(t *testing.T) {
+	for _, initiallyClosed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "initial failure", true: "closed subscription"}[initiallyClosed], func(t *testing.T) {
+			flow, _, runtime := newWorkflowFixture("active")
+			runtime.replay = func(int64) []client.UniversalEvent { return nil }
+			source := &recoveringSource{closed: initiallyClosed}
+			stream := NewEventStream(flow, source)
+			stream.reconcileEvery = time.Millisecond
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			received := errors.New("live frame received")
+			err := stream.Stream(ctx, "session", "user", 0, func(event StreamEvent) error {
+				if event.Sequence != 0 || string(event.Payload) != `{"type":"delta"}` {
+					t.Fatalf("unexpected restored event: %+v", event)
+				}
+				return received
+			})
+			if !errors.Is(err, received) || source.attempts != 2 {
+				t.Fatalf("error=%v attempts=%d", err, source.attempts)
+			}
+		})
+	}
 }
 
 func (s *orderedSource) Open(context.Context, string) (sessionevents.Subscription, error) {

@@ -7,6 +7,7 @@ SDK may call back into.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from acp import RequestError
@@ -63,6 +64,7 @@ class AcpClientAdapter:
 
     def __init__(self, session: AcpSession) -> None:
         self.session = session
+        self.extension_handler: Callable[[str, dict[str, object]], None] | None = None
 
     async def session_update(
         self,
@@ -140,7 +142,8 @@ class AcpClientAdapter:
         raise RequestError.method_not_found(method)
 
     async def ext_notification(self, method: str, params: dict[str, object]) -> None:
-        return None
+        if self.extension_handler is not None:
+            self.extension_handler(method, params)
 
     def on_connect(self, conn: object) -> None:
         return None

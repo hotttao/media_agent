@@ -1,0 +1,11 @@
+DROP TABLE metadata_application_reports;
+DROP TABLE metadata_notification_outbox;
+DROP TABLE agent_metadata_releases;
+DROP TRIGGER memory_version ON memory_stores;
+DROP TRIGGER skill_version ON skills;
+DROP TRIGGER prompt_version ON prompts;
+DROP FUNCTION capture_catalog_version();
+DROP TABLE catalog_resource_versions;
+DROP TRIGGER configuration_version ON agent_configurations;
+DROP FUNCTION capture_configuration_version();
+DROP TABLE agent_configuration_versions;

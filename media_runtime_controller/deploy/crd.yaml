@@ -1,0 +1,43 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: agentworkloads.runtime.media-agent.io
+spec:
+  group: runtime.media-agent.io
+  scope: Namespaced
+  names:
+    plural: agentworkloads
+    singular: agentworkload
+    kind: AgentWorkload
+    shortNames: [aw]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [driver, namespace, workspaceId, agentConfigId, environmentId, agentType, image, replicas, port, claimName, storageSize, cpu, memory, gatewayUrl, identitySecret, sharedSecret]
+              properties:
+                sessionExchange: {type: string, maxLength: 255}
+                metadataExchange: {type: string, maxLength: 255}
+                driver: {type: string, enum: [kubernetes]}
+                namespace: {type: string, minLength: 1, maxLength: 63}
+                workspaceId: {type: string, minLength: 1, maxLength: 63}
+                agentConfigId: {type: string, minLength: 1, maxLength: 63}
+                environmentId: {type: string, minLength: 1, maxLength: 63}
+                agentType: {type: string, enum: [codex, claude-code, goose]}
+                image: {type: string, minLength: 1}
+                replicas: {type: integer, minimum: 0, maximum: 64}
+                port: {type: integer, minimum: 1, maximum: 65535}
+                claimName: {type: string, minLength: 1}
+                storageClass: {type: string}
+                storageSize: {type: string, minLength: 1}
+                cpu: {type: string, minLength: 1}
+                memory: {type: string, minLength: 1}
+                gatewayUrl: {type: string, minLength: 1}
+                identitySecret: {type: string, minLength: 1}
+                sharedSecret: {type: string, minLength: 1}

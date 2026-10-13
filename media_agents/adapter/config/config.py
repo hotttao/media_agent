@@ -10,9 +10,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import TypeVar, overload
+from uuid import uuid4
 
 from omegaconf import OmegaConf
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 from adapter.schemas.acp.response import AgentCapabilities
 
@@ -112,10 +113,33 @@ class EventBusConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    redis_url: str | None = None
-    channel_prefix: str = "media-agents:session-events"
+    rabbitmq_url: str | None = None
+    session_exchange: str = "media.agent.sessions.v1"
     tool_result_max_bytes: int = Field(default=32 * 1024, gt=0)
     tool_result_window_ms: int = Field(default=300, ge=0)
+
+
+class InstanceConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    environment_id: str = ""
+    namespace: str = ""
+    resource_name: str = ""
+    resource_uid: str = ""
+    bootstrap_proof_file: str = "/var/run/secrets/media-agent/identity-token"
+    public_keys_file: str = "/run/secrets/runtime-public-keys.json"
+
+
+class MetadataConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    gateway_url: str = ""
+    agent_api_token: SecretStr = SecretStr("")
+    instance_credential: SecretStr = SecretStr("")
+    agent_config_id: str = ""
+    replica_id: str = "0"
+    incarnation_id: str = Field(default_factory=lambda: str(uuid4()))
+    exchange: str = "media.agent.metadata.v1"
 
 
 class RuntimeConfig(BaseModel):
@@ -155,6 +179,8 @@ class AdapterConfig(BaseModel):
     keepalive: KeepaliveConfig = Field(default_factory=KeepaliveConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     event_bus: EventBusConfig = Field(default_factory=EventBusConfig)
+    metadata: MetadataConfig = Field(default_factory=MetadataConfig)
+    instance: InstanceConfig = Field(default_factory=InstanceConfig)
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
@@ -196,6 +222,25 @@ class AdapterConfig(BaseModel):
         has_workspace_id = bool(self.cp.workspace_id)
         if has_cp_url != has_workspace_id:
             raise ConfigError("cp.url and cp.workspace_id must be configured together")
+
+        if self.instance.enabled and (
+            not self.metadata.enabled
+            or not self.instance.environment_id
+            or not self.instance.public_keys_file
+            or not self.instance.bootstrap_proof_file
+        ):
+            raise ConfigError("managed instance requires metadata, environment and public keys")
+        if self.metadata.enabled and (
+            not self.metadata.gateway_url.startswith(("http://", "https://"))
+            or not self.metadata.agent_api_token.get_secret_value()
+            or (
+                not self.metadata.instance_credential.get_secret_value()
+                and not self.instance.enabled
+            )
+            or not self.metadata.agent_config_id
+            or not self.event_bus.rabbitmq_url
+        ):
+            raise ConfigError("metadata requires Gateway identity, configuration ID and RabbitMQ")
 
         for keep_file in self.workspace.keep_files:
             keep_path = Path(keep_file)

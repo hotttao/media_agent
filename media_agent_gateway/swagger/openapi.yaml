@@ -6,6 +6,122 @@ info:
     title: ""
     version: 0.0.1
 paths:
+    /api/agent/v1/instances/identity:
+        post:
+            tags:
+                - AgentRuntimeService
+            operationId: AgentRuntimeService_ResolveInstanceIdentity
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/InstanceLocator'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InstanceIdentity'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/agent/v1/instances/register:
+        post:
+            tags:
+                - AgentRuntimeService
+            operationId: AgentRuntimeService_RegisterInstance
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/InstanceLocator'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InstanceRegistration'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/agent/v1/metadata-artifacts/{checksum}:
+        get:
+            tags:
+                - AgentMetadataService
+            operationId: AgentMetadataService_GetMetadataArtifact
+            parameters:
+                - name: checksum
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+                - name: agent_config_id
+                  in: query
+                  schema:
+                    type: string
+                - name: target_context_version
+                  in: query
+                  schema:
+                    type: string
+                - name: replica_id
+                  in: query
+                  schema:
+                    type: string
+                - name: incarnation_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ArtifactResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/agent/v1/metadata-results:
+        post:
+            tags:
+                - AgentMetadataService
+            operationId: AgentMetadataService_ReportMetadataResult
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApplicationResult'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ResultResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/agent/v1/requests:
         post:
             tags:
@@ -24,6 +140,83 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/ProxyAgentResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/agent/v1/runtime-context:
+        get:
+            tags:
+                - AgentMetadataService
+            operationId: AgentMetadataService_GetRuntimeMetadata
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+                - name: agent_config_id
+                  in: query
+                  schema:
+                    type: string
+                - name: selection_revision
+                  in: query
+                  schema:
+                    type: string
+                - name: target_context_version
+                  in: query
+                  schema:
+                    type: string
+                - name: replica_id
+                  in: query
+                  schema:
+                    type: string
+                - name: incarnation_id
+                  in: query
+                  schema:
+                    type: string
+                - name: for_session
+                  in: query
+                  schema:
+                    type: boolean
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MetadataContext'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/agent/v1/sessions/{session_id}/execution-context:
+        post:
+            tags:
+                - AgentRuntimeService
+            operationId: AgentRuntimeService_GetExecutionContext
+            parameters:
+                - name: session_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ExecutionContextRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExecutionContext'
                 default:
                     description: Default error response
                     content:
@@ -536,6 +729,161 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/v1/mcp-definitions:
+        get:
+            tags:
+                - McpCatalogService
+            operationId: McpCatalogService_ListDefinitions
+            parameters:
+                - name: version
+                  in: query
+                  schema:
+                    type: string
+                - name: definition_id
+                  in: query
+                  schema:
+                    type: string
+                - name: limit
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: after_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Definitions'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - McpCatalogService
+            operationId: McpCatalogService_RegisterDefinition
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DefinitionCommand'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Definition'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/mcp-definitions/{definition_id}:
+        get:
+            tags:
+                - McpCatalogService
+            operationId: McpCatalogService_GetDefinition
+            parameters:
+                - name: definition_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: query
+                  schema:
+                    type: string
+                - name: limit
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: after_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Definition'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - McpCatalogService
+            operationId: McpCatalogService_UpdateDefinition
+            parameters:
+                - name: definition_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DefinitionCommand'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Definition'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/sessions/{session_id}/resume:
+        post:
+            tags:
+                - AgentRuntimeService
+            operationId: AgentRuntimeService_ResumeSession
+            parameters:
+                - name: session_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SessionResumeRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SessionResumeResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /health:
         get:
             tags:
@@ -566,6 +914,257 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/AgentJWKS'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/agent-metadata/instances:
+        get:
+            tags:
+                - AgentMetadataService
+            operationId: AgentMetadataService_ListMetadataInstances
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InstancesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/agent-workloads/{workspace_id}:
+        get:
+            tags:
+                - AgentWorkloadService
+            operationId: AgentWorkloadService_GetWorkload
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: expected_version
+                  in: query
+                  schema:
+                    type: string
+                - name: replicas
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: idempotency_key
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadView'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/agent-workloads/{workspace_id}/ensure:
+        post:
+            tags:
+                - AgentWorkloadService
+            operationId: AgentWorkloadService_EnsureWorkload
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/WorkloadRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadView'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/agent-workloads/{workspace_id}/scale:
+        post:
+            tags:
+                - AgentWorkloadService
+            operationId: AgentWorkloadService_ScaleWorkload
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/WorkloadRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadView'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/mcp-definitions:
+        get:
+            tags:
+                - McpCatalogService
+            operationId: McpCatalogService_ListInternalDefinitions
+            parameters:
+                - name: version
+                  in: query
+                  schema:
+                    type: string
+                - name: definition_id
+                  in: query
+                  schema:
+                    type: string
+                - name: limit
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: after_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Definitions'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/mcp-definitions/{definition_id}:
+        get:
+            tags:
+                - McpCatalogService
+            operationId: McpCatalogService_GetInternalDefinition
+            parameters:
+                - name: definition_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: query
+                  schema:
+                    type: string
+                - name: limit
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: after_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Definition'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /mcp:
+        get:
+            tags:
+                - McpCatalogService
+            operationId: McpCatalogService_HandleMCP
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProtocolResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - McpCatalogService
+            operationId: McpCatalogService_HandleMCP
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ProtocolRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProtocolResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - McpCatalogService
+            operationId: McpCatalogService_HandleMCP
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProtocolResponse'
                 default:
                     description: Default error response
                     content:
@@ -646,6 +1245,29 @@ components:
                     type: string
                 revoked_at:
                     type: string
+        ApplicationResult:
+            type: object
+            properties:
+                report_id:
+                    type: string
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                selection_revision:
+                    type: string
+                target_context_version:
+                    type: string
+                replica_id:
+                    type: string
+                incarnation_id:
+                    type: string
+                status:
+                    type: string
+                applied_context_version:
+                    type: string
+                error_code:
+                    type: string
         ApplyTopologyChangedRequest:
             type: object
             properties:
@@ -667,6 +1289,14 @@ components:
                 cancelled_task_count:
                     type: integer
                     format: int32
+        ArtifactResponse:
+            type: object
+            properties:
+                content:
+                    type: string
+                    format: bytes
+                checksum:
+                    type: string
         BatchRunItemResponse:
             type: object
             properties:
@@ -798,6 +1428,77 @@ components:
                     type: string
                 topology_version:
                     type: string
+        Definition:
+            type: object
+            properties:
+                definition_id:
+                    type: string
+                service_name:
+                    type: string
+                endpoint:
+                    type: string
+                transport:
+                    type: string
+                authentication_type:
+                    type: string
+                status:
+                    type: string
+                version:
+                    type: string
+        DefinitionCommand:
+            type: object
+            properties:
+                definition_id:
+                    type: string
+                service_name:
+                    type: string
+                endpoint:
+                    type: string
+                transport:
+                    type: string
+                authentication_type:
+                    type: string
+                status:
+                    type: string
+                expected_version:
+                    type: string
+        Definitions:
+            type: object
+            properties:
+                definitions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Definition'
+                next_after_id:
+                    type: string
+        ExecutionContext:
+            type: object
+            properties:
+                api_key:
+                    type: string
+                session_token:
+                    type: string
+                execution_epoch:
+                    type: string
+                context_version:
+                    type: string
+        ExecutionContextRequest:
+            type: object
+            properties:
+                session_id:
+                    type: string
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                replica_id:
+                    type: string
+                incarnation_id:
+                    type: string
+                execution_epoch:
+                    type: string
+                turn_id:
+                    type: string
         GoogleProtobufAny:
             type: object
             properties:
@@ -811,6 +1512,77 @@ components:
             properties:
                 status:
                     type: string
+        InstanceIdentity:
+            type: object
+            properties:
+                environment_id:
+                    type: string
+                resource_uid:
+                    type: string
+                resource_generation:
+                    type: string
+                registration_version:
+                    type: string
+                agent_type:
+                    type: string
+        InstanceLocator:
+            type: object
+            properties:
+                environment_id:
+                    type: string
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                replica_id:
+                    type: string
+                incarnation_id:
+                    type: string
+                namespace:
+                    type: string
+                resource_name:
+                    type: string
+                resource_uid:
+                    type: string
+                resource_generation:
+                    type: string
+                expected_version:
+                    type: string
+        InstanceRegistration:
+            type: object
+            properties:
+                instance_credential:
+                    type: string
+                registration_version:
+                    type: string
+                admission:
+                    type: string
+                incarnation_id:
+                    type: string
+                drain_operation_id:
+                    type: string
+        InstanceView:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                replica_id:
+                    type: string
+                incarnation_id:
+                    type: string
+                admission:
+                    type: string
+        InstancesResponse:
+            type: object
+            properties:
+                instances:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InstanceView'
+                membership_complete:
+                    type: boolean
         InterruptTurnRequest:
             type: object
             properties:
@@ -873,6 +1645,59 @@ components:
                     type: string
                 created_at:
                     type: string
+        MetadataContext:
+            type: object
+            properties:
+                metadata_schema_version:
+                    type: integer
+                    format: int32
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                selection_revision:
+                    type: string
+                target_context_version:
+                    type: string
+                context_version:
+                    type: string
+                agent_type:
+                    type: string
+                configured_prompt:
+                    type: string
+                resources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MetadataResource'
+                status:
+                    type: string
+                platform_prompt:
+                    type: string
+                platform_prompt_template_version:
+                    type: string
+        MetadataResource:
+            type: object
+            properties:
+                kind:
+                    type: string
+                id:
+                    type: string
+                version:
+                    type: string
+                name:
+                    type: string
+                checksum:
+                    type: string
+                content_ref:
+                    type: string
+                content:
+                    type: string
+        ProtocolRequest:
+            type: object
+            properties: {}
+        ProtocolResponse:
+            type: object
+            properties: {}
         ProxyAgentRequestBody:
             type: object
             properties:
@@ -911,6 +1736,11 @@ components:
                     type: string
                 response_json:
                     type: string
+        ResultResponse:
+            type: object
+            properties:
+                accepted:
+                    type: boolean
         RunTurnRequest:
             type: object
             properties:
@@ -949,6 +1779,24 @@ components:
                 chat_status:
                     type: string
                 context_version:
+                    type: string
+        SessionResumeRequest:
+            type: object
+            properties:
+                session_id:
+                    type: string
+                operation_id:
+                    type: string
+                expected_epoch:
+                    type: string
+        SessionResumeResponse:
+            type: object
+            properties:
+                session_id:
+                    type: string
+                status:
+                    type: string
+                execution_epoch:
                     type: string
         Status:
             type: object
@@ -1014,11 +1862,55 @@ components:
                     type: string
                 topology_version:
                     type: string
+        WorkloadRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                expected_version:
+                    type: string
+                replicas:
+                    type: integer
+                    format: int32
+                idempotency_key:
+                    type: string
+        WorkloadView:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                environment_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                resource_name:
+                    type: string
+                namespace:
+                    type: string
+                target_version:
+                    type: string
+                applied_version:
+                    type: string
+                desired_replicas:
+                    type: integer
+                    format: int32
+                committed_replicas:
+                    type: integer
+                    format: int32
+                ready_replicas:
+                    type: integer
+                    format: int32
+                drain_operation:
+                    type: string
 tags:
     - name: AgentClientService
+    - name: AgentMetadataService
     - name: AgentProxyService
+    - name: AgentRuntimeService
     - name: AgentTaskService
+    - name: AgentWorkloadService
     - name: BatchRunService
     - name: ChatService
     - name: HealthService
+    - name: McpCatalogService
     - name: TeamworkRuntimeService

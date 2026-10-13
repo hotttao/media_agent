@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+
+from adapter.biz.domain.runtime_metadata.entity import VersionLoader
 from adapter.biz.domain.runtime_session.entity import RuntimeSession, Turn, TurnStatus
 from adapter.biz.domain.runtime_session.errors import InvalidTurn
 from adapter.biz.workflow.execute_turn_flow import (
@@ -11,12 +14,14 @@ from adapter.biz.workflow.execute_turn_flow import (
     RuntimeResult,
 )
 from adapter.biz.workflow.turn_event_sink import RuntimeEventHandler
+from adapter.runtime_metadata_files import claude_args
 from claude_code.agent import ClaudeCodeAgent
 
 
 class ClaudeCodeTurnRuntime:
-    def __init__(self, agent: ClaudeCodeAgent) -> None:
+    def __init__(self, agent: ClaudeCodeAgent, versions: VersionLoader | None = None) -> None:
         self._agent = agent
+        self._versions = versions
 
     async def prepare(
         self, session: RuntimeSession, turn: Turn, credentials: RuntimeCredentials
@@ -38,11 +43,39 @@ class ClaudeCodeTurnRuntime:
             raise InvalidTurn("Turn input.message is required")
         terminal = TurnStatus.FAILED
         error_class: str | None = None
+        if session.context_ref.startswith("metadata:") and self._versions is None:
+            raise InvalidTurn("versioned metadata unavailable")
+        directory = (
+            await self._versions.resolve_session(session.context_ref)
+            if self._versions is not None
+            else None
+        )
+        args = claude_args(directory) if directory else []
+        # Inline configuration never persists entry or instance credentials to shared storage.
+        if credentials.mcp_url:
+            args.extend(
+                [
+                    "--strict-mcp-config",
+                    "--mcp-config",
+                    json.dumps(
+                        {
+                            "mcpServers": {
+                                "media-agent-gateway": {
+                                    "type": "http",
+                                    "url": credentials.mcp_url,
+                                    "headers": credentials.mcp_headers,
+                                }
+                            }
+                        }
+                    ),
+                ]
+            )
         async for event in self._agent.stream(
             message=message,
             session_id=preparation.handle,
             api_key=credentials.api_key,
             resume=not preparation.is_new,
+            metadata_args=args or None,
         ):
             await event_handler(event)
             if event.get("type") == "error":

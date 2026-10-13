@@ -106,3 +106,22 @@ func ParseStatus(value string) (EnvironmentStatus, error) {
 		return "", fmt.Errorf("invalid environment status %q", value)
 	}
 }
+
+type WorkloadTarget struct {
+	DesiredReplicas                                        int32
+	WorkspaceVersion                                       int64
+	WorkspaceID, AgentConfigID, EnvironmentID, OwnerUserID string
+	Spec                                                   []byte
+	Replicas                                               int32
+	Version                                                int64
+}
+type WorkloadRequest struct {
+	WorkspaceID, IdempotencyKey, RequestHash string
+	Target                                   WorkloadTarget
+}
+type WorkloadRepository interface {
+	Workload(context.Context, string, bool) (*WorkloadTarget, error)
+	WorkloadRequest(context.Context, string, string) (*WorkloadRequest, error)
+	SaveWorkload(context.Context, WorkloadTarget, int64, WorkloadRequest) error
+	ListWorkloads(context.Context, string, int) ([]WorkloadTarget, error)
+}

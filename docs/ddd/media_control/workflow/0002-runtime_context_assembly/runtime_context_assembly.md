@@ -6,12 +6,12 @@ domains: [workspace, agent_configuration, runtime_environment, teamwork, afs_bin
 ---
 
 ## 一句话说明
-Agent 启动或控制配置变化时，Control 从各权威 Domain 组装一致版本的 Runtime Context 并下发给 Gateway/Runtime。
+Agent 启动、用户明确确认运行配置更新或按固定版本查询时，Control 从各权威 Domain 组装一致版本的 Runtime Context 并下发给 Gateway/Runtime。
 
 ## 触发与结果
 | 项目 | 内容 |
 |:---|:---|
-| 触发 | Session 启动查询或控制配置变更事件 |
+| 触发 | Session 启动查询、固定版本查询或用户明确确认的控制配置更新 |
 | 前置条件 | Workspace 可运行且 Agent Configuration 有效 |
 | 成功结果 | 返回或发布不可变 context_version 快照 |
 | 失败结果 | 不发布半成品快照，返回明确缺失项 |
@@ -42,12 +42,14 @@ Provider API Key 在 Agent Configuration 事务提交后才可被读取。Assemb
 且通过 `X-Control-Service-Token` 服务身份的同步内部响应中解密；同步用户链路从 Cookie 取得 owner，异步 Worker 使用受保护的 `X-Control-Acting-User-ID` 明确代表已持久化的 Task owner。不把明文写入快照表、Outbox、日志或错误。Gateway 不持久化明文，只将其随
 单次 Agent 请求传给 `agent_type` 对应 Runtime；Runtime 仅通过子进程环境使用。
 
+Control 持有 Configured Prompt 的内容与版本并提供已授权的运行配置；Agent 收到用户确认更新的通知后经 Gateway 拉取，Gateway 代理 Control 查询并在响应链路中生成独立 Platform Prompt 正文，不缓存控制配置。Agent 分别适配与加载。Control 不承担平台模板渲染，Gateway 不修改控制面的 Prompt 定义。
+
 ## 关键参数
 `workspace_id`、`agent_id` 定位配置；`agent_type` 只能为 `codex` 或 `claude-code`；
 `context_version` 供 Session 固定引用和变更检测。
 
 ## 状态与不变量
-快照创建后不可修改；新配置产生新 `context_version`。既有 Agent Session 固定使用启动时版本，配置变化只通知 Runtime 重新加载或新建 Session，不原地篡改历史 Turn。
+快照创建后不可修改；新配置产生新 `context_version`。既有 Agent Session 固定使用启动时版本，配置变化供新 Session 使用，不原地替换既有 Session 的运行快照，也不篡改历史 Turn。
 
 ## 一致性边界
 各来源独立读取，无跨 Domain 事务。TX1 只提交快照、版本向量与可选 Outbox；发布通知在事务外。保存前重新核对版本向量，冲突则重组。

@@ -18,15 +18,18 @@ async def agent_lifespan(
     *,
     hooks: AgentHooks,
     processes: Sequence[ManagedProcessSpec] = (),
+    initialize_config: bool = True,
 ) -> AsyncIterator[None]:
     """Run common boot-time hooks and own agent auxiliary processes."""
-    config_ok = await hooks.load_config()
-    skills_ok, failed = await hooks.load_skills()
-    if not skills_ok and failed:
-        raise RuntimeError(f"agent skills failed to load: {', '.join(failed)}")
-    credentials_ok = await hooks.load_credentials()
-    if config_ok or credentials_ok:
-        await hooks.restart_bridge()
+    config_ok, skills_ok, credentials_ok = False, True, False
+    if initialize_config:
+        config_ok = await hooks.load_config()
+        skills_ok, failed = await hooks.load_skills()
+        if not skills_ok and failed:
+            raise RuntimeError(f"agent skills failed to load: {', '.join(failed)}")
+        credentials_ok = await hooks.load_credentials()
+        if config_ok or credentials_ok:
+            await hooks.restart_bridge()
 
     group = ManagedProcessGroup(processes)
     group.start()

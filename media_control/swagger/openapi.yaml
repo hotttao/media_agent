@@ -2394,6 +2394,125 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/v1/workspaces/{workspace_id}/agent-metadata/artifacts/{checksum}:
+        put:
+            tags:
+                - AgentMetadataService
+            operationId: AgentMetadataService_UploadMetadataArtifact
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: checksum
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UploadArtifactRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ArtifactResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspaces/{workspace_id}/agent-metadata/progress:
+        get:
+            tags:
+                - AgentMetadataService
+            operationId: AgentMetadataService_GetMetadataProgress
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProgressResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspaces/{workspace_id}/agent-metadata:confirm:
+        post:
+            tags:
+                - AgentMetadataService
+            operationId: AgentMetadataService_ConfirmMetadataSelection
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ConfirmRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MetadataContext'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspaces/{workspace_id}/agent-workload:
+        put:
+            tags:
+                - AgentWorkloadService
+            operationId: AgentWorkloadService_UpdateWorkloadTarget
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateTarget'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Target'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/v1/workspaces/{workspace_id}/placement:
         get:
             tags:
@@ -2459,6 +2578,10 @@ paths:
                   required: true
                   schema:
                     type: string
+                - name: context_version
+                  in: query
+                  schema:
+                    type: string
             responses:
                 "200":
                     description: OK
@@ -2520,6 +2643,33 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /internal/agent-workload-targets:
+        get:
+            tags:
+                - AgentWorkloadService
+            operationId: AgentWorkloadService_ListWorkloadTargets
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+                - name: after_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Targets'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /internal/v1/agent-identities/{agent_configuration_id}:
         get:
             tags:
@@ -2538,6 +2688,171 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/AgentIdentityResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/workspaces/{workspace_id}/agent-metadata:
+        get:
+            tags:
+                - AgentMetadataService
+            operationId: AgentMetadataService_GetConfirmedMetadata
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: agent_config_id
+                  in: query
+                  schema:
+                    type: string
+                - name: selection_revision
+                  in: query
+                  schema:
+                    type: string
+                - name: target_context_version
+                  in: query
+                  schema:
+                    type: string
+                - name: for_session
+                  in: query
+                  schema:
+                    type: boolean
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MetadataContext'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/workspaces/{workspace_id}/agent-metadata/artifacts/{checksum}:
+        get:
+            tags:
+                - AgentMetadataService
+            operationId: AgentMetadataService_GetMetadataArtifact
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: checksum
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: agent_config_id
+                  in: query
+                  schema:
+                    type: string
+                - name: target_context_version
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ArtifactResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/workspaces/{workspace_id}/agent-metadata/results:
+        post:
+            tags:
+                - AgentMetadataService
+            operationId: AgentMetadataService_ReportMetadataApplication
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReportRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ResultResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/workspaces/{workspace_id}/agent-workload:
+        get:
+            tags:
+                - AgentWorkloadService
+            operationId: AgentWorkloadService_GetWorkloadTarget
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: after_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Target'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/workspaces/{workspace_id}/agent-workload:ensure:
+        post:
+            tags:
+                - AgentWorkloadService
+            operationId: AgentWorkloadService_EnsureWorkloadTarget
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/WorkloadQuery'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Target'
                 default:
                     description: Default error response
                     content:
@@ -2620,6 +2935,29 @@ components:
                     type: string
                 updated_at:
                     type: string
+        ApplicationResult:
+            type: object
+            properties:
+                report_id:
+                    type: string
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                selection_revision:
+                    type: string
+                target_context_version:
+                    type: string
+                replica_id:
+                    type: string
+                incarnation_id:
+                    type: string
+                status:
+                    type: string
+                applied_context_version:
+                    type: string
+                error_code:
+                    type: string
         ArchiveAgentTemplateRequest:
             type: object
             properties:
@@ -2640,6 +2978,14 @@ components:
                 skill_id:
                     type: string
                 expected_version:
+                    type: string
+        ArtifactResponse:
+            type: object
+            properties:
+                content:
+                    type: string
+                    format: bytes
+                checksum:
                     type: string
         AttachTagRequest:
             type: object
@@ -2689,6 +3035,21 @@ components:
                     type: string
                 observed_at:
                     type: string
+        ConfirmRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                expected_version:
+                    type: string
+                idempotency_key:
+                    type: string
+                resources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResourceReference'
         CreateAgentTemplateRequest:
             type: object
             properties:
@@ -3008,6 +3369,19 @@ components:
             properties:
                 status:
                     type: string
+        InstanceView:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                replica_id:
+                    type: string
+                incarnation_id:
+                    type: string
+                admission:
+                    type: string
         IssueEnvironmentTokenRequest:
             type: object
             properties:
@@ -3222,6 +3596,53 @@ components:
                     type: string
                 updated_at:
                     type: string
+        MetadataContext:
+            type: object
+            properties:
+                metadata_schema_version:
+                    type: integer
+                    format: int32
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                selection_revision:
+                    type: string
+                target_context_version:
+                    type: string
+                context_version:
+                    type: string
+                agent_type:
+                    type: string
+                configured_prompt:
+                    type: string
+                resources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MetadataResource'
+                status:
+                    type: string
+                platform_prompt:
+                    type: string
+                platform_prompt_template_version:
+                    type: string
+        MetadataResource:
+            type: object
+            properties:
+                kind:
+                    type: string
+                id:
+                    type: string
+                version:
+                    type: string
+                name:
+                    type: string
+                checksum:
+                    type: string
+                content_ref:
+                    type: string
+                content:
+                    type: string
         PlacementResponse:
             type: object
             properties:
@@ -3265,6 +3686,25 @@ components:
                     type: string
                 refreshed_at:
                     type: string
+        ProgressResponse:
+            type: object
+            properties:
+                status:
+                    type: string
+                selection_revision:
+                    type: string
+                target_context_version:
+                    type: string
+                timed_out:
+                    type: boolean
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ApplicationResult'
+                instances:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InstanceView'
         PromptResponse:
             type: object
             properties:
@@ -3359,6 +3799,24 @@ components:
                     type: string
                 refreshed_at:
                     type: string
+        ReportRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                result:
+                    $ref: '#/components/schemas/ApplicationResult'
+        ResourceReference:
+            type: object
+            properties:
+                kind:
+                    type: string
+                id:
+                    type: string
+                version:
+                    type: string
+                checksum:
+                    type: string
         ResourceTagResponse:
             type: object
             properties:
@@ -3372,6 +3830,11 @@ components:
                     type: string
                 created_at:
                     type: string
+        ResultResponse:
+            type: object
+            properties:
+                accepted:
+                    type: boolean
         RevokeCredentialReferenceRequest:
             type: object
             properties:
@@ -3550,6 +4013,33 @@ components:
                     type: string
                 updated_at:
                     type: string
+        Target:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                environment_id:
+                    type: string
+                owner_user_id:
+                    type: string
+                version:
+                    type: string
+                replicas:
+                    type: integer
+                    format: int32
+                spec_json:
+                    type: string
+        Targets:
+            type: object
+            properties:
+                targets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Target'
+                next_after_id:
+                    type: string
         TopologyResponse:
             type: object
             properties:
@@ -3712,6 +4202,18 @@ components:
                     type: string
                 expected_version:
                     type: string
+        UpdateTarget:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                replicas:
+                    type: integer
+                    format: int32
+                expected_version:
+                    type: string
+                idempotency_key:
+                    type: string
         UpdateTopologyRequest:
             type: object
             properties:
@@ -3737,6 +4239,23 @@ components:
                 agent_type:
                     type: string
                 api_key:
+                    type: string
+        UploadArtifactRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                checksum:
+                    type: string
+                content:
+                    type: string
+                    format: bytes
+        WorkloadQuery:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                after_id:
                     type: string
         WorkspaceResponse:
             type: object
@@ -3770,8 +4289,10 @@ components:
 tags:
     - name: AfsBindingService
     - name: AgentIdentityService
+    - name: AgentMetadataService
     - name: AgentScheduleService
     - name: AgentTemplateService
+    - name: AgentWorkloadService
     - name: CredentialReferenceService
     - name: EnvironmentGrantService
     - name: HealthService

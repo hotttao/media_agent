@@ -1,0 +1,10 @@
+syntax = "proto3";
+package media_runtime_controller.container_workload;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package="media_runtime_controller/container_workload";
+message ContainerRequest { string workspace_id=1 [(api.path)="workspace_id"]; string spec_json=2 [(api.body)="spec_json"]; int64 target_version=3 [(api.body)="target_version"]; reserved 4; bool observation=5; string expected_revision=6; string drain_operation=7; int32 pending_replicas=8; int64 pending_version=9; }
+message ContainerResponse {string resource_uid=1;string resource_generation=2;bool running=3;bool ready=4;int64 target_version=5;string spec_json=6;string revision=7;string drain_operation=8;int32 pending_replicas=9;int64 pending_version=10;}
+service ContainerWorkloadService {
+ rpc EnsureContainer(ContainerRequest) returns(ContainerResponse) {option(api.post)="/v1/workspaces/:workspace_id/container:ensure";option(google.api.http)={post:"/v1/workspaces/{workspace_id}/container:ensure" body:"*"};}
+}

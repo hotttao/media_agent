@@ -50,33 +50,19 @@ def test_write_runtime_prompt_and_mcp_files(tmp_path: Path) -> None:
     }
 
 
-def test_build_acp_mcp_servers_merges_platform_headers_and_user_servers() -> None:
+def test_build_acp_mcp_servers_rejects_backend_servers_and_user_headers() -> None:
     servers = build_acp_mcp_servers(
         platform_url="http://cp.test/mcp",
         platform_headers={"X-Workspace-ID": "w1", "X-Agent-ID": "w1"},
-        session_token="token",
-        include_user_stdio=True,
-        user_mcp_servers={
-            "tos-platform": {"headers": {"X-Builder": "b", "X-Agent-ID": "user"}},
-            "remote": {"url": "http://remote", "headers": {"A": "B"}},
-            "local": {"command": "tool", "args": ["--x"], "env": {"E": "V"}},
-        },
     )
 
     assert servers == [
         {
             "type": "http",
-            "name": "tos-platform",
+            "name": "media-agent-gateway",
             "url": "http://cp.test/mcp",
-            "headers": {"X-Builder": "b", "X-Agent-ID": "w1", "X-Workspace-ID": "w1"},
+            "headers": {"X-Workspace-ID": "w1", "X-Agent-ID": "w1"},
         },
-        {
-            "type": "http",
-            "name": "remote",
-            "url": "http://remote",
-            "headers": {"A": "B", "X-Session-Token": "token"},
-        },
-        {"name": "local", "command": "tool", "args": ["--x"], "env": {"E": "V"}},
     ]
 
 

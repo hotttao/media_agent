@@ -36,13 +36,18 @@ sequenceDiagram
     participant GD as Gateway DB
     participant A as media_agents
     participant AD as Agent PostgreSQL
+    participant K as Kubernetes / Docker Creation
 
     U->>G: CreateSession(workspace_id, agent_id, idempotency_key)
     G->>C: CheckWorkspaceAccess + GetRuntimeContext
     G->>P: GetMcpSnapshot(workspace_id, version)
-    G->>GD: TX-G1: 创建 starting Registration、token_hash、Outbox
+    G->>G: 按已授权输入生成 Platform Prompt 正文（不合并配置 Prompt）
+    G->>K: 按 agent_workload_provisioning 确保资源并解析地址
+    K-->>G: Kubernetes Ready 副本 / Docker 单实例地址
+    G->>GD: TX-G1: 创建 starting Registration、token_hash、副本绑定、Outbox
     GD-->>G: session_id, context_version
-    G->>A: RegisterRuntimeSession(session_id, context_version, snapshot, session_token)
+    Note over G,A: 按数据库已提交绑定解析逐副本地址，不经随机负载均衡
+    G->>A: RegisterRuntimeSession(session_id, context_version, gateway_mcp_config, platform_prompt, configured_prompt_ref, session_token)
     A->>AD: TX-A1: 幂等创建 Runtime Session(active)
     AD-->>A: registered / existing-compatible / conflict
     A-->>G: registration result
@@ -61,11 +66,15 @@ sequenceDiagram
 
 ### 步骤说明
 
-1. Control 执行 Workspace 最终授权，Plugin 提供版本化 MCP Snapshot。Default Agent Context 仍必须绑定真实用户和 Workspace。
+1. Control 执行 Workspace 最终授权，Plugin 提供版本化 MCP Snapshot。Gateway 保留后端 MCP 路由配置，只向 Agent 提供统一 Gateway MCP 入口配置；Gateway 只生成 Platform Prompt 正文；用户配置 Prompt 的内容及版本仍归 Control，两者分别交付。Agent 负责 Runtime 特有的配置转换、文件落盘与加载，不能把此次迁移解释为 Gateway 合成一个最终提示词。Default Agent Context 仍必须绑定真实用户和 Workspace。
 2. TX-G1 只提交 Gateway Registration 和 Token Hash；Agent PostgreSQL 不参与 Gateway 事务。
 3. `RegisterRuntimeSession` 以 session_id 幂等。相同版本重复调用成功等价，不同版本返回冲突，禁止静默覆盖正在运行的上下文。
 4. Agent Runtime Session 注册提交后，才允许 Gateway Registration 进入 active。结果不明确时查询 Agent，不重新生成 session_id 或 Session Token。
-5. 明文 Session Token 仅在首次受控链路交付给 Agent/用户；Gateway 数据库只保存 Hash，Agent 不获得 Platform Token。
+5. 明文 Session Token 只在受控注册/执行凭据链路交付；注册重试和实例接管可按该 Session 的持久密钥版本重新生成相同 Token。Gateway 数据库只保存 Hash 与密钥版本，不保存明文；用户请求仍使用 Web 身份，Agent 不获得 Platform Token。
+
+Platform Prompt 的生成流程见 [platform_prompt_assembly](../../media_agent_gateway/workflow/0008-platform_prompt_assembly/platform_prompt_assembly.md)。生成职责迁移不改变 Session 的固定配置版本，也不隐含运行时热更新。
+
+资源创建链路由 [agent_workload_provisioning](../../media_agent_gateway/workflow/0009-agent_workload_provisioning/agent_workload_provisioning.md) 协调。Gateway 直接提交 Kubernetes manifest 并读取原生副本状态，Docker 本期只创建单实例；Controller 不承担 Agent 状态探测。
 
 ## 状态与不变量
 

@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-runtime-controller
+  namespace: media-agent-runtime
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: media-runtime-controller}
+  template:
+    metadata:
+      labels: {app: media-runtime-controller}
+    spec:
+      serviceAccountName: media-runtime-controller
+      containers:
+        - name: controller
+          image: media-runtime-controller:latest
+          command: [/runtime-controller-kubernetes]
+          env:
+            - {name: RUNTIME_NAMESPACE, value: media-agent-runtime}
+            - {name: RUNTIME_SHARED_SECRET, value: media-agent-runtime}
+            - name: RUNTIME_ALLOWED_IMAGES
+              value: '{"codex":"media-agent-codex:latest","claude-code":"media-agent-claude-code:latest","goose":"media-agent-goose:latest"}'
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: '1', memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}

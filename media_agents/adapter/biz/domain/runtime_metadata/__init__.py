@@ -1,0 +1,1 @@
+"""Immutable metadata application contracts."""

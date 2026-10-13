@@ -1,5 +1,27 @@
 # Execute Turn 变更记录
 
+## 2026-10-11 · 缩容时 queued Turn 随 Session 重绑继续
+
+- draining 副本完成当前 running Turn 后停止领取下一条，无需清空 queued 队列。
+- 已接受 queued Turn 保留原 ID/FIFO/配置版本，由后台主动协调重绑，新副本获得所有权后继续，不等待新用户输入。
+- 无可用候选时保持等待；原失败/中断暂停不隐式恢复，执行凭据在新副本按固定引用重新协调，不迁移秘密。
+
+## 2026-10-11 · 参考 agent-platform 的副本路由与共享存储
+
+- Session 绑定副本持久化；Ready 且非 draining 时沿用，扩容不改变有效绑定。
+- 支持缩容及不可用/draining 副本上的 Session 重绑，替代本次讨论中较早的禁止缩容设想。
+- 多副本共享 Workspace RWX 卷及 HOME；执行互斥在 Session 级，共享文件采用独立的原子发布规则。
+- 保留本项目 Agent-owned FIFO；恢复扫描限定负责范围，重绑不得自动重复未知工具副作用。
+- 运行所有权与排空准入的实现细节待 spec 明确，本次仅更新目标设计。
+
+## 2026-10-11 · RabbitMQ 替换目标与执行实例术语
+
+- RabbitMQ 完全替代 Redis；保留 delta 不落库、不占恢复序号的规则。
+- 接受事实提交后投递的故障窗口，继续通过 Gateway 回放与补查恢复，不要求本次增加事件 Outbox。
+- Session 继续固定配置版本，忽略研究文档中运行时更新提示词的设想。
+- 区分稳定 Agent Identity 与可替换 Agent Runtime Instance；实例标识、代次与生命周期契约尚待细化。
+- 本次记录目标设计，Redis 代码尚未替换；队列拓扑和元数据通知流程仍待对齐。
+
 ## 2026-08-22 · Agent Request 与重启恢复落地
 
 - Codex ACP permission 请求先持久化再等待用户响应，resolve 提交后唤醒原 Runtime 调用。
@@ -43,3 +65,8 @@
 - Agent 负责 Runtime 输出分级、Message/Universal Event 持久化、Session sequence 和终态 flush。
 - 事件提交后发布 Session Event Bus；发布失败由 Gateway 持久化回放和补查恢复，不回滚执行事实。
 - failed/interrupted 后暂停自动排空；自然 completed 才自动拉起下一 queued Turn。
+
+
+### 2026-10-12 · P3 执行归属与 Session 迁移屏障
+
+执行归属使用 Workspace/config/replica/incarnation 加 Session execution_epoch；托管写入及实时事件校验归属。单 Session 迁移使用持久 handoff_id，实例级 draining 留给缩容；原队列、上下文版本和 native handle 保留。Gateway 保存可恢复转移意图，查询实际归属收敛绑定，执行结果未知不重放 running。

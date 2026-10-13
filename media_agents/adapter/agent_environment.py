@@ -32,8 +32,7 @@ class WorkspaceConfigPayload(TypedDict, total=False):
     system_prompt: str
     agent_settings: str
     mcp_config: JsonValue
-    user_display_name: str
-    memory_attachments: list[JsonObject]
+    platform_prompt: str
 
 
 class McpServerConfig(TypedDict, total=False):
@@ -159,40 +158,21 @@ def build_acp_mcp_servers(
     *,
     platform_url: str | None,
     platform_headers: dict[str, str],
-    user_mcp_servers: McpServerMap,
-    session_token: str | None,
-    include_user_http: bool = True,
-    include_user_stdio: bool = False,
 ) -> list[AcpMcpServerDeclaration]:
     """Build ACP-session MCP server declarations shared by agents."""
     if not platform_url:
         return []
 
-    servers: list[AcpMcpServerDeclaration] = []
-    user_platform = user_mcp_servers.get("tos-platform", {})
-    headers = {**user_platform.get("headers", {}), **platform_headers}
-    servers.append(
-        {"type": "http", "name": "tos-platform", "url": platform_url, "headers": headers}
-    )
-
-    for name, cfg in user_mcp_servers.items():
-        if name == "tos-platform":
-            continue
-        url = cfg.get("url")
-        command = cfg.get("command")
-        if include_user_http and url:
-            entry_headers = dict(cfg.get("headers", {}))
-            if session_token:
-                entry_headers["X-Session-Token"] = session_token
-            servers.append({"type": "http", "name": name, "url": url, "headers": entry_headers})
-        elif include_user_stdio and command:
-            server: AcpMcpServerDeclaration = {"name": name, "command": command}
-            if cfg.get("args"):
-                server["args"] = cfg["args"]
-            if cfg.get("env"):
-                server["env"] = cfg["env"]
-            servers.append(server)
-    return servers
+    # Backend selection and authentication belong to Gateway/Plugin. Request-supplied
+    # configuration cannot add servers or replace trusted Gateway headers.
+    return [
+        {
+            "type": "http",
+            "name": "media-agent-gateway",
+            "url": platform_url,
+            "headers": dict(platform_headers),
+        }
+    ]
 
 
 def apply_credentials(

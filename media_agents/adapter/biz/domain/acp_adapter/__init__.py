@@ -20,7 +20,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING
+
+from acp.schema import HttpHeader, HttpMcpServer
 
 from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks, BridgeFactory
 from adapter.biz.domain.acp_adapter.entity import Chat, PromptResult
@@ -31,7 +34,7 @@ from adapter.biz.shared.clock import Clock, SystemClock
 from adapter.biz.shared.id import new_session_id
 
 if TYPE_CHECKING:
-    from adapter.biz.domain.acp_adapter.bridge import AcpBridge
+    from adapter.biz.domain.acp_adapter.bridge import AcpBridge, McpServerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -258,14 +261,25 @@ class AcpServer:
     # ── 内部：session 创建/加载 ──────────────────────────────
 
     async def create_session(
-        self, session_token: str | None, api_key: str | None = None
+        self,
+        session_token: str | None,
+        api_key: str | None = None,
+        *,
+        configure_bridge: Callable[[AcpBridge], None] | None = None,
+        mcp_servers_override: list[McpServerConfig] | None = None,
     ) -> AcpSession:
         """创建新 session：bridge.start -> wait_for_mcp_ready -> create_session。"""
         draft_id = new_session_id()
         bridge = self._make_bridge(draft_id, api_key)
         try:
+            if configure_bridge is not None:
+                configure_bridge(bridge)
             await bridge.start()
-            mcp_servers = self.hooks.load_mcp_servers(session_token)
+            mcp_servers = (
+                mcp_servers_override
+                if mcp_servers_override is not None
+                else self._gateway_servers(session_token)
+            )
             if self.hooks.has_mcp_servers():
                 await bridge.wait_for_mcp_ready()
             session = await bridge.create_session(mcp_servers=mcp_servers)
@@ -283,12 +297,21 @@ class AcpServer:
         session_id: str,
         session_token: str | None,
         api_key: str | None = None,
+        *,
+        configure_bridge: Callable[[AcpBridge], None] | None = None,
+        mcp_servers_override: list[McpServerConfig] | None = None,
     ) -> AcpSession:
         """加载已持久化的 session：bridge.start -> load_session。"""
         bridge = self._make_bridge(session_id, api_key)
         try:
+            if configure_bridge is not None:
+                configure_bridge(bridge)
             await bridge.start()
-            mcp_servers = self.hooks.load_mcp_servers(session_token)
+            mcp_servers = (
+                mcp_servers_override
+                if mcp_servers_override is not None
+                else self._gateway_servers(session_token)
+            )
             session = await bridge.load_session(session_id, mcp_servers=mcp_servers)
         except LoadSessionFailed:
             bridge.destroy()
@@ -301,6 +324,39 @@ class AcpServer:
         self.bridges[session.session_id] = bridge
         logger.info("acp session loaded: session=%s", session.session_id)
         return session
+
+    def _gateway_servers(self, session_token: str | None) -> list[McpServerConfig]:
+        declarations = self.hooks.load_mcp_servers(session_token)
+        servers: list[McpServerConfig] = []
+        for declaration in declarations:
+            if declaration.get("name") != "media-agent-gateway" or not declaration.get("url"):
+                raise ValueError("ACP runtime only accepts the MCP Gateway")
+            servers.append(
+                HttpMcpServer(
+                    type="http",
+                    name="media-agent-gateway",
+                    url=declaration["url"],
+                    headers=[
+                        HttpHeader(name=k, value=v)
+                        for k, v in declaration.get("headers", {}).items()
+                    ],
+                )
+            )
+        return servers
+
+    async def detach_session(self, session_id: str) -> None:
+        """Close an idle transport while preserving the native Session's stored history."""
+        session = self.sessions.get(session_id)
+        if session is not None and session.busy_turns:
+            raise RuntimeError("cannot detach a running ACP Session")
+        bridge = self.bridges.get(session_id)
+        self._destroy(session_id)
+        if bridge is not None and bridge.proc is not None:
+            try:
+                await asyncio.wait_for(bridge.proc.wait(), timeout=5)
+            except TimeoutError:
+                bridge.proc.kill()
+                await bridge.proc.wait()
 
     # ── 内部工具 ─────────────────────────────────────────────
 

@@ -1,0 +1,15 @@
+# 变更记录
+
+## 2026-10-11 · MCP 注册目录归 Gateway
+
+- 将 MCP Catalog 与 MCP Definition 的权威归属从 media_plugin 移至 media_agent_gateway。
+- Plugin 保留具体实现、Workspace 启用关系与外部连接，通过 Gateway 服务接口读取 Definition，不共享数据库表。
+- 更新快照 Workflow，目录读取在 Plugin 本地事务外，版本冲突重新构建，失败保留上一有效快照。
+- 此次为目标设计调整，接口、消息投递与发现刷新细节仍需在 spec 前定稿。
+
+## 2026-10-11 · 统一 MCP 入口与 Prompt 职责
+
+- Agent 统一连接 Gateway MCP 入口；Gateway 负责工具发现、授权过滤和调用代理，后端负责具体实现和资源授权。
+- Gateway 组装 Platform Prompt；Agent 保留 Runtime 特有的转换、落盘与加载；Control 保留期望配置。
+- 目录归属、发现刷新与协议兼容细节尚未定稿，本次不宣称实现完成。
+

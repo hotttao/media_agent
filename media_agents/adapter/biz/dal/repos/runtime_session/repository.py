@@ -6,6 +6,7 @@ from datetime import UTC
 
 from adapter.biz.dal.models.runtime_session import (
     AgentRequestRow,
+    InstanceAdmissionRow,
     MessageRow,
     RuntimeSessionRow,
     TurnRow,
@@ -23,8 +24,10 @@ from adapter.biz.domain.runtime_session.entity import (
     TurnStatus,
     UniversalEvent,
 )
-from adapter.biz.domain.runtime_session.errors import RuntimeSessionAlreadyExists
-from sqlalchemy import select
+from adapter.biz.domain.runtime_session.errors import RuntimeSessionAlreadyExists, TransferConflict
+from adapter.biz.domain.runtime_session.ownership import Admission, InstanceScope
+from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
 
@@ -76,6 +79,7 @@ class SqlRuntimeSessionRepository:
         db.add(
             TurnRow(
                 turn_id=turn.turn_id,
+                execution_epoch=turn.execution_epoch,
                 session_id=turn.session_id,
                 idempotency_key=turn.idempotency_key,
                 enqueue_sequence=turn.enqueue_sequence,
@@ -190,6 +194,13 @@ class SqlRuntimeSessionRepository:
         row = await db.get(RuntimeSessionRow, session.session_id)
         if row is None:
             raise RuntimeSessionAlreadyExists(session.session_id)
+        row.workspace_id = session.workspace_id
+        row.agent_config_id = session.agent_config_id
+        row.owner_instance_id = session.owner_instance_id
+        row.owner_incarnation_id = session.owner_incarnation_id
+        row.execution_epoch = session.execution_epoch
+        row.last_transfer_id = session.last_transfer_id
+        row.handoff_id = session.handoff_id
         row.status = session.status.value
         row.chat_status = session.chat_status.value
         row.active_turn_id = session.active_turn_id
@@ -201,6 +212,7 @@ class SqlRuntimeSessionRepository:
             turn_row = await db.get(TurnRow, turn.turn_id)
             if turn_row is None:
                 raise RuntimeSessionAlreadyExists(turn.turn_id)
+            turn_row.execution_epoch = turn.execution_epoch
             turn_row.status = turn.status.value
             turn_row.started_at = turn.started_at
             turn_row.finished_at = turn.finished_at
@@ -271,10 +283,130 @@ class SqlRuntimeSessionRepository:
         )
         return [_turn_to_domain(row) for row in rows]
 
+    async def admission(
+        self, scope: InstanceScope, *, for_update: bool = False
+    ) -> Admission | None:
+        statement = select(InstanceAdmissionRow).where(
+            InstanceAdmissionRow.workspace_id == scope.workspace_id,
+            InstanceAdmissionRow.agent_config_id == scope.agent_config_id,
+            InstanceAdmissionRow.replica_id == scope.replica_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        row = (await current_session().execute(statement)).scalar_one_or_none()
+        if row is None:
+            return None
+        return Admission(
+            InstanceScope(
+                row.workspace_id, row.agent_config_id, row.replica_id, row.incarnation_id
+            ),
+            row.state,
+            row.operation_id,
+            row.version,
+        )
+
+    async def initialize_admission(self, scope: InstanceScope) -> Admission:
+        await current_session().execute(
+            insert(InstanceAdmissionRow)
+            .values(
+                workspace_id=scope.workspace_id,
+                agent_config_id=scope.agent_config_id,
+                replica_id=scope.replica_id,
+                incarnation_id=scope.incarnation_id,
+                state="active",
+                operation_id="",
+                version=1,
+            )
+            .on_conflict_do_nothing()
+        )
+        value = await self.admission(scope, for_update=True)
+        if value is None:
+            raise RuntimeError("admission_missing")
+        if value.scope.incarnation_id != scope.incarnation_id:
+            value = Admission(scope, value.state, value.operation_id, value.version + 1)
+            await self.save_admission(value)
+        return value
+
+    async def save_admission(self, value: Admission) -> None:
+        row = await current_session().get(
+            InstanceAdmissionRow,
+            (value.scope.workspace_id, value.scope.agent_config_id, value.scope.replica_id),
+        )
+        if row is None:
+            raise RuntimeError("admission_missing")
+        row.incarnation_id = value.scope.incarnation_id
+        row.state = value.state
+        row.operation_id = value.operation_id
+        row.version = value.version
+        await current_session().flush()
+
+    async def sessions(self, scope: InstanceScope) -> list[RuntimeSession]:
+        rows = (
+            (
+                await current_session().execute(
+                    select(RuntimeSessionRow)
+                    .where(
+                        RuntimeSessionRow.workspace_id == scope.workspace_id,
+                        RuntimeSessionRow.agent_config_id == scope.agent_config_id,
+                        RuntimeSessionRow.owner_instance_id == scope.replica_id,
+                        RuntimeSessionRow.owner_incarnation_id == scope.incarnation_id,
+                    )
+                    .order_by(RuntimeSessionRow.session_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [_to_domain(row) for row in rows]
+
+    async def fence(self, scope: InstanceScope, epoch: int, *, transfer: bool = False) -> None:
+        for name, value in {
+            "workspace": scope.workspace_id,
+            "config": scope.agent_config_id,
+            "replica": scope.replica_id,
+            "incarnation": scope.incarnation_id,
+            "epoch": str(epoch),
+            "transfer": "true" if transfer else "false",
+        }.items():
+            await current_session().execute(
+                text("SELECT set_config(:name,:value,true)"),
+                {"name": "media_agent." + name, "value": value},
+            )
+
+    async def resume_once(self, session_id: str, operation_id: str, epoch: int) -> bool:
+        result = await current_session().execute(
+            text(
+                "INSERT INTO media_agents.runtime_session_resumes"
+                "(session_id,operation_id,execution_epoch) "
+                "VALUES(:session,:operation,:epoch) ON CONFLICT DO NOTHING "
+                "RETURNING execution_epoch"
+            ),
+            {"session": session_id, "operation": operation_id, "epoch": epoch},
+        )
+        if result.scalar_one_or_none() is not None:
+            return True
+        result = await current_session().execute(
+            text(
+                "SELECT execution_epoch FROM media_agents.runtime_session_resumes "
+                "WHERE session_id=:session AND operation_id=:operation"
+            ),
+            {"session": session_id, "operation": operation_id},
+        )
+        if result.scalar_one() != epoch:
+            raise TransferConflict()
+        return False
+
 
 def _to_row(session: RuntimeSession) -> RuntimeSessionRow:
     return RuntimeSessionRow(
         session_id=session.session_id,
+        workspace_id=session.workspace_id,
+        agent_config_id=session.agent_config_id,
+        owner_instance_id=session.owner_instance_id,
+        owner_incarnation_id=session.owner_incarnation_id,
+        execution_epoch=session.execution_epoch,
+        last_transfer_id=session.last_transfer_id,
+        handoff_id=session.handoff_id,
         context_version=session.context_version,
         context_ref=session.context_ref,
         status=session.status.value,
@@ -294,6 +426,13 @@ def _to_domain(row: RuntimeSessionRow) -> RuntimeSession:
     updated_at = row.updated_at.replace(tzinfo=row.updated_at.tzinfo or UTC)
     return RuntimeSession(
         session_id=row.session_id,
+        workspace_id=row.workspace_id,
+        agent_config_id=row.agent_config_id,
+        owner_instance_id=row.owner_instance_id,
+        owner_incarnation_id=row.owner_incarnation_id,
+        execution_epoch=row.execution_epoch,
+        last_transfer_id=row.last_transfer_id,
+        handoff_id=row.handoff_id,
         context_version=row.context_version,
         context_ref=row.context_ref,
         status=SessionStatus(row.status),
@@ -321,6 +460,7 @@ def _turn_to_domain(row: TurnRow) -> Turn:
         started_at=row.started_at,
         finished_at=row.finished_at,
         error_class=row.error_class,
+        execution_epoch=row.execution_epoch,
     )
 
 

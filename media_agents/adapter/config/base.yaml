@@ -36,8 +36,8 @@ database:
   echo: ${oc.decode:${oc.env:MEDIA_AGENTS_DB_ECHO,false}}
 
 event_bus:
-  redis_url: ${oc.env:MEDIA_AGENTS_REDIS_URL,null}
-  channel_prefix: ${oc.env:MEDIA_AGENTS_EVENT_CHANNEL_PREFIX,media-agents:session-events}
+  rabbitmq_url: ${oc.env:MEDIA_AGENTS_RABBITMQ_URL,null}
+  session_exchange: ${oc.env:MEDIA_AGENTS_SESSION_EXCHANGE,media.agent.sessions.v1}
   tool_result_max_bytes: ${oc.decode:${oc.env:MEDIA_AGENTS_TOOL_RESULT_MAX_BYTES,32768}}
   tool_result_window_ms: ${oc.decode:${oc.env:MEDIA_AGENTS_TOOL_RESULT_WINDOW_MS,300}}
 
@@ -52,3 +52,21 @@ skills:
 environment:
   shell_rc: .bashrc
   credentials_dir: .credentials
+
+metadata:
+  enabled: ${oc.decode:${oc.env:AGENT_METADATA_ENABLED,false}}
+  gateway_url: ${oc.env:AGENT_GATEWAY_URL,""}
+  agent_api_token: ${oc.env:AGENT_API_TOKEN,""}
+  instance_credential: ${oc.env:AGENT_INSTANCE_CREDENTIAL,""}
+  agent_config_id: ${oc.env:AGENT_CONFIG_ID,""}
+  replica_id: "${oc.env:AGENT_REPLICA_ID,0}"
+  exchange: ${oc.env:AGENT_METADATA_EXCHANGE,media.agent.metadata.v1}
+
+instance:
+  enabled: ${oc.decode:${oc.env:AGENT_INSTANCE_ENABLED,false}}
+  environment_id: ${oc.env:AGENT_ENVIRONMENT_ID,""}
+  namespace: ${oc.env:POD_NAMESPACE,""}
+  resource_name: ${oc.env:POD_NAME,""}
+  resource_uid: ${oc.env:POD_UID,""}
+  bootstrap_proof_file: ${oc.env:AGENT_BOOTSTRAP_PROOF_FILE,/var/run/secrets/media-agent/identity-token}
+  public_keys_file: ${oc.env:RUNTIME_PUBLIC_KEYS_FILE,/run/secrets/runtime-public-keys.json}

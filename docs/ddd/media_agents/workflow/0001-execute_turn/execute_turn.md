@@ -35,7 +35,7 @@ sequenceDiagram
     participant D as Runtime Session Domain
     participant DB as Agent PostgreSQL
     participant R as Runtime Adapter
-    participant B as Session Event Bus
+    participant B as RabbitMQ Session Event Bus
 
     G->>A: SubmitTurn(session_id, input, idempotency_key, identity)
     A->>DB: TX-ENQUEUE: 锁 Session、查重、写 queued Turn + User Message
@@ -71,7 +71,11 @@ sequenceDiagram
         A->>DB: TX-FINAL: running -> completed, chat_status=human, 追加终态事件
         DB-->>A: final_sequence
         A-->>B: Publish TurnCompleted
-        A->>DB: TX-NEXT: 原子声明下一 queued Turn
+        alt 副本未 draining 且仍拥有 Session 执行权
+            A->>DB: TX-NEXT: 原子声明下一 queued Turn
+        else 副本 draining
+            A->>A: 保留 queued，停止领取，等待 Session 重绑
+        end
     else 执行失败或恢复结果不明确
         R-->>A: failed(error_class)
         A->>A: Flush 已接收快照
@@ -93,17 +97,20 @@ sequenceDiagram
 2. TX-CLAIM 锁定 Runtime Session，并依赖 `UNIQUE(session_id) WHERE status='running'`。进程内 Session Lock 可以包住 enqueue/claim 调度代码，但不能替代数据库约束。
 3. Runtime 执行不持有数据库事务。临时帧只走总线；权威事件、Message 和工具快照先提交数据库，再发布总线。
 4. 发布失败不把已提交事件回滚或把 Turn 标成失败；Gateway 通过 replay、缺口检测和周期补查取得事实。
-5. 所有终止路径先停止 timer 并 flush 已接收工具快照，再提交终态。只有自然 completed 自动拉起下一 queued Turn；failed/interrupted 暂停队列，避免未知副作用后继续级联执行。
+5. 所有终止路径先停止 timer 并 flush 已接收工具快照，再提交终态。只有自然 completed、当前副本未 draining 且仍拥有 Session 执行权时自动拉起下一 queued Turn；failed/interrupted 暂停队列，避免未知副作用后继续级联执行。
 6. 重复 Submit、Runtime 重放和总线重复投递都以业务 ID/sequence 收敛，消息中间件的 offset 不属于业务幂等键。
 7. 底层 Runtime 会话 ID 由 Runtime adapter 返回并持久化，不得从业务 Session ID 推导。Gateway 把已授权的 API key/Session Token 放在 SubmitTurn 的 write-only 执行信封中；Agent 只在对应 Turn 执行前以内存暂存，禁止写入 input、Message、事件或数据库。进程丢失后的凭据重取由恢复阶段按 `context_ref` 协调。
 
 ## 状态与不变量
 
-- Turn 状态由 Runtime Session Domain 决定，Gateway 和 Redis 不得直接修改。
-- 同一 Session 最多一个 running Turn，不同 Session 可以并行。
+- Turn 状态由 Runtime Session Domain 决定，Gateway 和 RabbitMQ 不得直接修改。
+- 同一 Session 最多一个 running Turn，不同 Session 可以并行并分布在不同 Workspace 副本。
+- 启动恢复只处理当前副本绑定范围内的 Session；重绑与旧执行恢复由 session_replica_routing 协调，不能全库扫描并终结其他副本的 Turn。
 - 队列次序只由 `enqueue_sequence` 决定；优先级需求必须作为显式新规则设计，禁止依赖到达某个 Agent 进程的先后。
 - 客户端连接、Gateway 节点和订阅数量不影响 Turn 生命周期。
 - Turn 终态不可覆盖；晚到 Runtime 事件只审计或按稳定 item ID 去重，不得复活终态 Turn。
+
+- draining 时旧副本完成当前 running 后不声明下一条；queued 保持 FIFO 随 Session 重绑继续。新副本接管后只继续原队列，不能重入队或改变 Turn 的 context_version；failed/interrupted 导致的暂停状态不因迁移解除。
 
 ## 关键参数
 
@@ -163,3 +170,12 @@ Gateway 先完成 Web 用户与 Session Registration 的资源授权，再以 mT
 | `TurnCompleted` | Turn 自然完成且终态提交 | Gateway、Analytics、Task Dispatch |
 | `TurnFailed` | Turn failed 提交 | Gateway、Analytics、Task Dispatch |
 | `TurnInterrupted` | Runtime 确认中断且终态提交 | Gateway、Analytics |
+
+
+### Session 迁移屏障与执行代次
+
+单 Session 迁移在源实例持久化 handoff_id，当前 running 可完成，完成后不领取 queued；同实例其他 Session 不受影响。实例级 draining 用于整副本退出。Transfer 在 Session 行锁内切换 owner replica/incarnation，递增 execution_epoch、记录 last_transfer_id 并清除 handoff_id。不同 Session 并行；同 Session 的旧 epoch 回调不能提交。
+
+Gateway 先保存 transferring 意图，再执行 Quiesce/Transfer，查询 Agent 的 last_transfer_id 与 owner/epoch 后完成 binding CAS。目标不可用时，只有已查询事实仍在源 epoch（或确认执行聚合不存在）才允许保持同 transfer_id 更新目标；迟到目标已完成的转移以 Agent 实际 owner 为准。执行聚合尚不存在时，新目标在 epoch+1 创建，唯一主键与旧源迟到创建互斥；不能把查询超时当成不存在。
+
+新原生代次启动时使用已验证的 Gateway 登记 admission 初始化本库屏障：登记仍 draining 时保留对应 operation；登记 active 且 incarnation 已变化（已退休序号恢复运行）时清除旧屏障。相同 incarnation 的重复启动不清除本库 draining，未提供可信登记状态时保持保守的既有规则。

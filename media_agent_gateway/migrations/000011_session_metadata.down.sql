@@ -1,0 +1,1 @@
+ALTER TABLE media_agent_gateway.agent_sessions DROP COLUMN metadata_target_context_version,DROP COLUMN agent_config_id;

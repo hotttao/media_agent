@@ -16,6 +16,7 @@ from adapter.agent_lifespan import agent_lifespan
 from adapter.biz.api.v1.routes.usage.router import build_usage_router
 from adapter.biz.shared.managed_process import ManagedProcessSpec
 from adapter.clients.cp import CpClient
+from adapter.runtime_metadata_files import codex_home
 from codex.bridge import CodexAcpBridge
 from codex.config import CodexHooks, load_codex_config
 
@@ -41,6 +42,15 @@ def create_app() -> FastAPI:
             api_key=api_key,
         )
 
+    def metadata_bridge_setup(bridge: object, bundle: Path, session_id: str) -> None:
+        if not isinstance(bridge, CodexAcpBridge):
+            raise TypeError("unexpected Codex bridge")
+        bridge.env["CODEX_HOME"] = str(
+            codex_home(
+                bundle, session_id, Path(cfg.workspace.dir), Path(cfg.codex.config_dir).expanduser()
+            )
+        )
+
     @asynccontextmanager
     async def codex_lifespan(app: FastAPI) -> AsyncIterator[None]:
         auxiliary = os.environ.get("CODEX_AUX_PROCESSES", "false").lower() in {
@@ -49,7 +59,9 @@ def create_app() -> FastAPI:
             "yes",
         }
         processes = _codex_processes(cfg.workspace.dir) if auxiliary else []
-        async with agent_lifespan(app, hooks=hooks, processes=processes):
+        async with agent_lifespan(
+            app, hooks=hooks, processes=processes, initialize_config=not cfg.metadata.enabled
+        ):
             yield
 
     app = build_app(
@@ -57,6 +69,7 @@ def create_app() -> FastAPI:
         hooks=hooks,
         bridge_factory=bridge_factory,
         extra_lifespan=codex_lifespan,
+        metadata_bridge_setup=metadata_bridge_setup,
     )
     app.include_router(
         build_usage_router(

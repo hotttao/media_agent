@@ -8,8 +8,19 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from adapter.biz.domain.runtime_session.entity import AgentRequest, RuntimeSession, Turn, TurnStatus
-from adapter.biz.domain.runtime_session.errors import InvalidTurn
+from adapter.biz.domain.runtime_session.entity import (
+    AgentRequest,
+    RuntimeSession,
+    Turn,
+    TurnStatus,
+    UniversalEvent,
+)
+from adapter.biz.domain.runtime_session.errors import (
+    ExecutionCredentialsDeferred,
+    ExecutionCredentialsRejected,
+    InvalidTurn,
+    StaleExecutionOwner,
+)
 from adapter.biz.service.runtime_session.command import SubmitTurn
 from adapter.biz.service.runtime_session.service import (
     AgentRequestChange,
@@ -32,6 +43,8 @@ class RuntimePreparation:
 class RuntimeCredentials:
     api_key: str | None = field(default=None, repr=False)
     session_token: str | None = field(default=None, repr=False)
+    mcp_url: str | None = field(default=None, repr=False)
+    mcp_headers: dict[str, str] = field(default_factory=dict, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,16 +106,26 @@ class RuntimeSessionUseCases(Protocol):
     ) -> AgentRequestChange: ...
 
 
+class AdoptionUseCases(Protocol):
+    async def adopt(
+        self, session_id: str, *, resume: bool = False, operation_id: str = ""
+    ) -> TurnSubmission | None: ...
+
+
 class ExecuteTurnFlow:
     def __init__(
         self,
         service: RuntimeSessionUseCases,
         runtime: TurnRuntime,
         sink_factory: Callable[[str, str], TurnEventSink],
+        adoption_service: AdoptionUseCases | None = None,
+        credential_resolver: Callable[[str, str, int], Awaitable[RuntimeCredentials]] | None = None,
     ) -> None:
         self._service = service
         self._runtime = runtime
         self._sink_factory = sink_factory
+        self._credential_resolver = credential_resolver
+        self._adoption_service = adoption_service
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._scheduled_turns: set[str] = set()
         self._credentials: dict[str, RuntimeCredentials] = {}
@@ -168,7 +191,7 @@ class ExecuteTurnFlow:
                         TurnStatus.FAILED,
                         error_class="recovery_outcome_unknown",
                     )
-            except InvalidTurn:
+            except (InvalidTurn, StaleExecutionOwner):
                 current = await self._service.get_turn(turn.turn_id)
                 if current.status is TurnStatus.RUNNING:
                     raise
@@ -178,6 +201,27 @@ class ExecuteTurnFlow:
                 await sink.publish_committed(event)
             recovered.append(finalized.terminal_turn)
         return recovered
+
+    async def publish_transferred(self, events: tuple[UniversalEvent, ...]) -> None:
+        for event in events:
+            await self._sink_factory(event.session_id, event.turn_id or "").publish_committed(event)
+
+    def local_idle(self) -> bool:
+        return not any(not task.done() for task in self._tasks.values())
+
+    async def adopt(self, session_id: str, *, resume: bool = False, operation_id: str = "") -> None:
+        async with self._session_lock(session_id):
+            if self._adoption_service is None:
+                raise InvalidTurn("adoption_unavailable")
+            submission = await self._adoption_service.adopt(
+                session_id, resume=resume, operation_id=operation_id
+            )
+            if submission is not None:
+                for event in submission.events:
+                    await self._sink_factory(session_id, submission.turn.turn_id).publish_committed(
+                        event
+                    )
+                self._schedule(session_id, submission.turn.turn_id)
 
     async def close(self) -> None:
         tasks = list(self._tasks.values())
@@ -231,6 +275,10 @@ class ExecuteTurnFlow:
             sink = self._sink_factory(session_id, current_turn_id)
             active_turn_id = current_turn_id
             try:
+                if self._credential_resolver is not None:
+                    credentials = await self._fresh_credentials(
+                        session_id, current_turn_id, execution.session.execution_epoch
+                    )
                 preparation = await self._runtime.prepare(
                     execution.session, execution.turn, credentials
                 )
@@ -267,6 +315,11 @@ class ExecuteTurnFlow:
             except asyncio.CancelledError:
                 await sink.discard()
                 raise
+            except _InterruptedBeforePreparation:
+                result = RuntimeResult(TurnStatus.INTERRUPTED)
+            except StaleExecutionOwner:
+                await sink.discard()
+                return
             except Exception as error:
                 result = RuntimeResult(TurnStatus.FAILED, _stable_error_class(error))
             async with self._session_lock(session_id):
@@ -313,6 +366,25 @@ class ExecuteTurnFlow:
         finally:
             self._request_waiters.pop(request.request_id, None)
 
+    async def _fresh_credentials(
+        self, session_id: str, turn_id: str, epoch: int
+    ) -> RuntimeCredentials:
+        if self._credential_resolver is None:
+            raise ExecutionCredentialsRejected()
+        delay = 1
+        while True:
+            if turn_id in self._interrupt_requested:
+                raise _InterruptedBeforePreparation()
+            await self._service.execution(session_id, turn_id)
+            try:
+                return await self._credential_resolver(session_id, turn_id, epoch)
+            except ExecutionCredentialsDeferred:
+                for _ in range(delay * 10):
+                    if turn_id in self._interrupt_requested:
+                        raise _InterruptedBeforePreparation()
+                    await asyncio.sleep(0.1)
+                delay = min(delay * 2, 30)
+
     async def _send_interrupt(
         self, handle: str, runtime_task: asyncio.Task[RuntimeResult] | None = None
     ) -> bool:
@@ -344,8 +416,14 @@ class ExecuteTurnFlow:
 
 
 def _stable_error_class(error: Exception) -> str:
+    if isinstance(error, ExecutionCredentialsRejected):
+        return "execution_credentials_rejected"
     if isinstance(error, InvalidTurn):
         return "invalid_turn_input"
     if isinstance(error, TimeoutError):
         return "runtime_timeout"
     return "runtime_error"
+
+
+class _InterruptedBeforePreparation(Exception):
+    """The queued claim was interrupted before starting native execution."""

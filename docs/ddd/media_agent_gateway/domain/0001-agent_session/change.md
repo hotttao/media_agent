@@ -1,5 +1,20 @@
 # Agent Session 变更记录
 
+## 2026-10-12 · DDD 收拢与核心接口模型验证
+
+- 核心六能力与旧入口纳入覆盖矩阵，保持完整目标与 Plugin/Auth 外部所有者。
+- 实例注册、执行所有权、配置发布/应用分开建模；迁移持久意图与 Agent epoch 双侧协调。
+- queued 接管重取凭据，浏览器 Cookie 与稳定 Session Token 分离；原Session配置产物保持。
+- 接口伪代码22场景通过，完整spec与plan已形成；模型验证不替代实际数据库/Broker/环境集成测试。
+
+## 2026-10-11 · 参考 agent-platform 的副本路由与共享存储
+
+- Session 绑定副本持久化；Ready 且非 draining 时沿用，扩容不改变有效绑定。
+- 支持缩容及不可用/draining 副本上的 Session 重绑，替代本次讨论中较早的禁止缩容设想。
+- 多副本共享 Workspace RWX 卷及 HOME；执行互斥在 Session 级，共享文件采用独立的原子发布规则。
+- 保留本项目 Agent-owned FIFO；恢复扫描限定负责范围，重绑不得自动重复未知工具副作用。
+- 运行所有权与排空准入的实现细节待 spec 明确，本次仅更新目标设计。
+
 ## 2026-08-23 · Workspace Agent 切换后的 Session 兼容性
 
 - Session Response 公开创建时固定的 Context Version，供客户端识别与 Workspace 当前配置是否兼容。
@@ -41,3 +56,8 @@
 - 增加查询当前 running Turn 的领域能力，作为中断前的 Session 归属与执行状态事实。
 - 用户中断不创建新的持久化实体，也不直接把 Turn 改为终态；Runtime 确认取消后，由既有执行流提交 `interrupted`。
 - `interrupted` 与 `completed`、`failed` 同为不可互相覆盖的终态；中断前已提交的 Message、Universal Event 和 Tool Result Snapshot 全部保留。
+
+
+### 2026-10-13 · P3 路由与执行归属对齐
+
+Session Token 使用持久密钥版本和 MAC，浏览器 Cookie 不再作为会话执行凭证。Registration 保存 CAS 绑定和可恢复转移意图；执行所有权与 epoch 由 Agent 原子维护。固定版本历史上下文用于 queued 和后续 Turn，配置确认更新不改变已有 Session。历史读取走同范围事实端口，执行响应走实际 owner。

@@ -107,6 +107,7 @@ class Turn:
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error_class: str | None = None
+    execution_epoch: int = 1
 
     def finish(
         self,
@@ -158,6 +159,13 @@ class RuntimeSession:
     next_message_sequence: int
     created_at: datetime
     updated_at: datetime
+    workspace_id: str = ""
+    agent_config_id: str = ""
+    owner_instance_id: str = ""
+    owner_incarnation_id: str = ""
+    execution_epoch: int = 1
+    last_transfer_id: str = ""
+    handoff_id: str = ""
 
     @classmethod
     def register(
@@ -276,11 +284,17 @@ class RuntimeSession:
         )
 
     def claim(self, turn: Turn, *, now: datetime) -> tuple[RuntimeSession, Turn]:
-        if self.status is not SessionStatus.ACTIVE or self.active_turn_id is not None:
+        if (
+            self.status is not SessionStatus.ACTIVE
+            or self.active_turn_id is not None
+            or self.handoff_id
+        ):
             raise InvalidTurn("runtime session cannot claim a Turn")
         if turn.session_id != self.session_id or turn.status is not TurnStatus.QUEUED:
             raise InvalidTurn("only this Session's queued head can be claimed")
-        running = replace(turn, status=TurnStatus.RUNNING, started_at=now)
+        running = replace(
+            turn, status=TurnStatus.RUNNING, started_at=now, execution_epoch=self.execution_epoch
+        )
         return (
             replace(
                 self,

@@ -33,7 +33,7 @@ class EventStore:
 
 class FailingBus:
     async def publish(self, notification: SessionEventNotification) -> None:
-        raise ConnectionError("Redis unavailable")
+        raise ConnectionError("RabbitMQ unavailable")
 
     async def subscribe(self, session_id: str) -> AsyncIterator[SessionEventNotification]:
         if False:

@@ -22,7 +22,11 @@ CONF_PATH = Path(__file__).resolve().parent / "conf" / "config.yaml"
 def create_app() -> FastAPI:
     cfg = load_claude_code_config(CONF_PATH)
     agent = ClaudeCodeAgent(cfg.claude_code.bin, cfg.workspace.dir)
-    app = build_base_app(cfg, turn_runtime=ClaudeCodeTurnRuntime(agent))
+    app = build_base_app(
+        cfg,
+        turn_runtime=ClaudeCodeTurnRuntime(agent),
+        metadata_runtime_factory=lambda versions: ClaudeCodeTurnRuntime(agent, versions),
+    )
     app.state.claude_code_agent = agent
     app.include_router(build_claude_code_router(app.state.claude_code_agent))
     return app

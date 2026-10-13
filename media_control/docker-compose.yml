@@ -19,10 +19,16 @@ services:
       INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
       INTERNAL_JWT_ISSUER: http://oathkeeper:4456/
       MEDIA_AGENT_GATEWAY_URL: http://host.docker.internal:8006
+      AGENT_METADATA_ENABLED: ${AGENT_METADATA_ENABLED:-false}
+      AGENT_METADATA_GATEWAY_CREDENTIAL: ${AGENT_METADATA_GATEWAY_CREDENTIAL:-}
+      AGENT_METADATA_ARTIFACT_ROOT: /data/metadata
+      AGENT_METADATA_EXCHANGE: ${AGENT_METADATA_EXCHANGE:-media.agent.metadata.v1}
+      MEDIA_AGENTS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-media_agent}:${RABBITMQ_PASSWORD:-media_agent}@host.docker.internal:5672/
       LOG_DIR: /media_logs/media-control
     volumes:
       - ../media_logs/media-control:/media_logs/media-control
       - ./conf:/app/conf:ro
+      - metadata_artifacts:/data/metadata
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -34,3 +40,6 @@ networks:
   auth:
     external: true
     name: media-auth
+
+volumes:
+  metadata_artifacts:

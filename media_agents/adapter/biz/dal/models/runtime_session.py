@@ -14,6 +14,27 @@ class RuntimeSessionRow(Base):
     __table_args__ = {"schema": "media_agents"}
 
     session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="", server_default=""
+    )
+    agent_config_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="", server_default=""
+    )
+    owner_instance_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="", server_default=""
+    )
+    owner_incarnation_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="", server_default=""
+    )
+    execution_epoch: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default="1"
+    )
+    last_transfer_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="", server_default=""
+    )
+    handoff_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="", server_default=""
+    )
     context_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
     context_ref: Mapped[str] = mapped_column(String(512), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -53,6 +74,9 @@ class TurnRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    execution_epoch: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default="1"
+    )
     error_class: Mapped[str | None] = mapped_column(String(64))
 
 
@@ -108,3 +132,15 @@ class AgentRequestRow(Base):
     response: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class InstanceAdmissionRow(Base):
+    __tablename__ = "runtime_instance_admission"
+    __table_args__ = {"schema": "media_agents"}
+    workspace_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    agent_config_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    replica_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    incarnation_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    operation_id: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    version: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)

@@ -57,6 +57,7 @@ message UpdateWorkspaceRequest {
 
 message GetRuntimeContextRequest {
   string workspace_id = 1 [(api.path) = "workspace_id"];
+ int64 context_version = 2 [(api.query) = "context_version"];
 }
 
 message WorkspaceResponse {
@@ -85,4 +86,6 @@ message RuntimeContextResponse {
   string agent_type = 3;
   string api_key = 4;
   int64 context_version = 5;
+ string agent_configuration_id = 6;
+ string metadata_target_context_version = 7;
 }

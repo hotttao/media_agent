@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: media-agent-runtime
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: media-agent-runtime
+  namespace: media-agent-runtime
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: media-runtime-controller
+  namespace: media-agent-runtime
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: media-runtime-controller
+  namespace: media-agent-runtime
+rules:
+  - apiGroups: [runtime.media-agent.io]
+    resources: [agentworkloads]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [statefulsets]
+    verbs: [get, create, update]
+  - apiGroups: ['']
+    resources: [services, persistentvolumeclaims]
+    verbs: [get, create, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: media-runtime-controller
+  namespace: media-agent-runtime
+subjects:
+  - kind: ServiceAccount
+    name: media-runtime-controller
+    namespace: media-agent-runtime
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: media-runtime-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: media-runtime-controller-volume-retention
+rules:
+  - apiGroups: ['']
+    resources: [persistentvolumes]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: media-runtime-controller-volume-retention
+subjects:
+  - kind: ServiceAccount
+    name: media-runtime-controller
+    namespace: media-agent-runtime
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: media-runtime-controller-volume-retention
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: media-agent-gateway
+  namespace: media-agent-runtime
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: media-agent-gateway-runtime
+  namespace: media-agent-runtime
+rules:
+  - apiGroups: [runtime.media-agent.io]
+    resources: [agentworkloads]
+    verbs: [get, list, create, update]
+  - apiGroups: [apps]
+    resources: [statefulsets]
+    verbs: [get]
+  - apiGroups: ['']
+    resources: [pods, services, persistentvolumeclaims]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: media-agent-gateway-runtime
+  namespace: media-agent-runtime
+subjects:
+  - kind: ServiceAccount
+    name: media-agent-gateway
+    namespace: media-agent-runtime
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: media-agent-gateway-runtime
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: media-agent-gateway-bootstrap-review
+rules:
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: media-agent-gateway-bootstrap-review
+subjects:
+  - kind: ServiceAccount
+    name: media-agent-gateway
+    namespace: media-agent-runtime
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: media-agent-gateway-bootstrap-review

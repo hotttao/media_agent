@@ -21,23 +21,24 @@ domains: [external_mcp_connection]
 sequenceDiagram
     participant R as Agent Runtime
     participant P as media_plugin Proxy
-    participant S as Gateway Session Resolver
+    participant S as MCP Gateway
     participant A as media_auth
     participant E as External MCP
-    R->>P: tools/call + Session Token
-    P->>S: ResolveSessionContext(token)
-    S-->>P: user/workspace/session
+    R->>S: tools/call + Session Token
+    S->>S: 验证 Session 与当前工具授权
+    S->>P: 代理已验证 user/workspace/session/definition
     P->>P: 校验 Binding 与 Connection owner
     P->>A: GetUsableCredential(credential_ref)
     A->>A: 必要时单航班刷新
     A-->>P: 短暂可用凭据
     P->>E: MCP call + external credential
     E-->>P: result / OAuth error
-    P-->>R: 过滤后的 MCP result
+    P-->>S: 过滤后的 MCP result
+    S-->>R: MCP result
 ```
 
 ### 步骤说明
-只有外部 OAuth MCP 经 Plugin 代理。长期 refresh token 始终归 Auth；Agent 和 Plugin 数据库都不保存明文。身份以 Session Token 解析结果为准，不能由 MCP 参数指定其他用户。
+只有外部 OAuth MCP 经 Plugin 代理。长期 refresh token 始终归 Auth；Agent 和 Plugin 数据库都不保存明文。Agent 只连接 Gateway；Plugin 使用受信 Gateway 传递的已验证上下文，不把入口 Token 当作外部 OAuth Token。身份以 Gateway 验证结果为准，不能由 MCP 参数指定其他用户。
 
 ## 关键参数
 `user_id + definition_id` 定位连接；OAuth Credential 仅以引用跨服务传递。

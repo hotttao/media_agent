@@ -31,7 +31,7 @@ var (
 	ErrAgentTokenConflict     = errors.New("Agent Token command already processed")
 )
 
-type GatewayUser struct{ UserID, OrganizationID string }
+type GatewayUser struct{ UserID, OrganizationID, Role string }
 type AgentIdentity struct {
 	ConfigurationID, ActorID, OwnerUserID, OrganizationID, WorkspaceID, TeamID, State string
 	OwnerAuthorized                                                                   bool
@@ -154,6 +154,7 @@ func (c *AgentTokenClient) Authenticate(ctx context.Context, authorization, cook
 		return GatewayUser{}, ErrAgentTokenUnauthorized
 	}
 	principal.UserID = value.GetId()
+	principal.Role = value.GetRole()
 	return principal, nil
 }
 

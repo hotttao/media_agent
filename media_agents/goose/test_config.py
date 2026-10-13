@@ -45,6 +45,7 @@ class _CpClient:
             "base_url": "http://llm.test/v1",
             "small_model": "small",
             "api_key": "sk-test",
+            "platform_prompt": "Gateway platform body {{literal}}",
             "system_prompt": "goose prompt",
             "user_display_name": "Alice",
             "memory_attachments": [
@@ -86,14 +87,11 @@ async def test_goose_hook_writes_shared_files_and_session_mcp(tmp_path: Path) ->
 
     assert (workspace / "AGENTS.md").read_text(encoding="utf-8") == "goose prompt"
     platform_prompt = (goose_dir / "AGENTS.md").read_text(encoding="utf-8")
-    assert 'id: w1), serving user "Alice"' in platform_prompt
-    assert "`/mnt/memory/mem1/` (read_write) - Project Memory: notes" in platform_prompt
+    assert platform_prompt == "Gateway platform body {{literal}}"
     assert json.loads((workspace / "runtime.json").read_text(encoding="utf-8"))["model"] == (
         "gpt-test"
     )
-    assert json.loads((goose_dir / "mcp.json").read_text(encoding="utf-8"))["mcpServers"][
-        "local"
-    ] == {"command": "tool", "args": ["--x"], "env": {"E": "V"}}
+    assert json.loads((goose_dir / "mcp.json").read_text())["mcpServers"] == {}
 
     goose_yaml = (goose_dir / "config.yaml").read_text(encoding="utf-8")
     assert "GOOSE_MODEL" in goose_yaml
@@ -101,10 +99,6 @@ async def test_goose_hook_writes_shared_files_and_session_mcp(tmp_path: Path) ->
     assert "custom: true" in goose_yaml
 
     servers = hooks.load_mcp_servers("token")
-    assert {server["name"] for server in servers} == {"tos-platform", "remote", "local"}
-    assert {server["name"]: server for server in servers}["local"] == {
-        "name": "local",
-        "command": "tool",
-        "args": ["--x"],
-        "env": {"E": "V"},
-    }
+    assert len(servers) == 1
+    assert servers[0]["name"] == "media-agent-gateway"
+    assert servers[0]["url"] == "http://cp.test/mcp"

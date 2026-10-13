@@ -1,0 +1,15 @@
+syntax="proto3";
+package media_control.agent_workload;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package="media_control/agent_workload";
+message WorkloadQuery {string workspace_id=1 [(api.path)="workspace_id"];string after_id=2 [(api.query)="after_id"];}
+message UpdateTarget {string workspace_id=1 [(api.path)="workspace_id"];int32 replicas=2 [(api.body)="replicas"];int64 expected_version=3 [(api.body)="expected_version"];string idempotency_key=4 [(api.body)="idempotency_key"];}
+message Target {string workspace_id=1;string agent_config_id=2;string environment_id=3;string owner_user_id=4;int64 version=5;int32 replicas=6;string spec_json=7;}
+message Targets {repeated Target targets=1;string next_after_id=2;}
+service AgentWorkloadService {
+ rpc EnsureWorkloadTarget(WorkloadQuery)returns(Target){option(api.post)="/internal/workspaces/:workspace_id/agent-workload:ensure";option(google.api.http)={post:"/internal/workspaces/{workspace_id}/agent-workload:ensure" body:"*"};}
+ rpc GetWorkloadTarget(WorkloadQuery)returns(Target){option(api.get)="/internal/workspaces/:workspace_id/agent-workload";option(google.api.http)={get:"/internal/workspaces/{workspace_id}/agent-workload"};}
+ rpc UpdateWorkloadTarget(UpdateTarget)returns(Target){option(api.put)="/api/v1/workspaces/:workspace_id/agent-workload";option(google.api.http)={put:"/api/v1/workspaces/{workspace_id}/agent-workload" body:"*"};}
+ rpc ListWorkloadTargets(WorkloadQuery)returns(Targets){option(api.get)="/internal/agent-workload-targets";option(google.api.http)={get:"/internal/agent-workload-targets"};}
+}

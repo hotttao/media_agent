@@ -1,5 +1,19 @@
 # Run Turn 变更记录
 
+## 2026-10-11 · Gateway 实例级临时队列与服务内广播
+
+- 每个 Gateway 实例对应一个会话事件临时队列，消费后由服务内 Broadcaster 按 Session 扇出到本机 SSE。
+- 每个 SSE 只注册本机接收者并持有独立恢复 cursor，不创建 RabbitMQ 队列。
+- 实例队列与连接生命周期解耦；重建队列后以 Agent 回放恢复持久事件，delta 仍不补发。
+
+## 2026-10-11 · RabbitMQ 替换目标与执行实例术语
+
+- RabbitMQ 完全替代 Redis；保留 delta 不落库、不占恢复序号的规则。
+- 接受事实提交后投递的故障窗口，继续通过 Gateway 回放与补查恢复，不要求本次增加事件 Outbox。
+- Session 继续固定配置版本，忽略研究文档中运行时更新提示词的设想。
+- 区分稳定 Agent Identity 与可替换 Agent Runtime Instance；实例标识、代次与生命周期契约尚待细化。
+- 本次记录目标设计，Redis 代码尚未替换；队列拓扑和元数据通知流程仍待对齐。
+
 ## 2026-08-22 · Agent 事实库统一为 PostgreSQL
 
 - Gateway 与 Agent 的命令、回放和补查契约不变，仅把 Agent 权威库从 MySQL 修订为 PostgreSQL。
@@ -38,3 +52,8 @@
 - 所有终止路径必须先强制 flush pending tool result，再提交并广播 Turn 终态。
 - tool result 在统一持久化边界按 Runtime capability 做一次 UTF-8 安全截断，并保存截断元数据。
 - 新增独立于 Session 生命周期的 `chat_status=human|agent`：创建 Turn 时切到 agent，终态 flush 完成后切回 human，供刷新后的客户端查询后台执行状态。
+
+
+### 2026-10-12 · P3 执行归属与 Session 迁移屏障
+
+执行归属使用 Workspace/config/replica/incarnation 加 Session execution_epoch；托管写入及实时事件校验归属。单 Session 迁移使用持久 handoff_id，实例级 draining 留给缩容；原队列、上下文版本和 native handle 保留。Gateway 保存可恢复转移意图，查询实际归属收敛绑定，执行结果未知不重放 running。

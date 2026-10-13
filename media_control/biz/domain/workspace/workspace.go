@@ -9,18 +9,20 @@ import (
 )
 
 var ErrNotFound = errors.New("workspace not found")
+var ErrConflict = errors.New("workspace configuration version conflict")
 
 type AgentType string
 
 const (
 	AgentTypeCodex      AgentType = "codex"
+	AgentTypeGoose      AgentType = "goose"
 	AgentTypeClaudeCode AgentType = "claude-code"
 )
 
 func ParseAgentType(value string) (AgentType, error) {
 	value = strings.ToLower(strings.TrimSpace(value))
 	switch AgentType(value) {
-	case AgentTypeCodex, AgentTypeClaudeCode:
+	case AgentTypeCodex, AgentTypeClaudeCode, AgentTypeGoose:
 		return AgentType(value), nil
 	default:
 		return "", fmt.Errorf("unsupported agent type %q", value)

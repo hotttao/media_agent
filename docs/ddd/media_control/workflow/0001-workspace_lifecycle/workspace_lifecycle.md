@@ -1,66 +1,80 @@
 ---
 name: workspace_lifecycle
-description: 将 Workspace 期望状态、Placement 与持久化运行目录协调到 Runtime Environment
-participants: [workspace, runtime_environment, afs_binding]
+description: 保存 Workspace 生命周期目标，并委托 Gateway 落地 Agent 运行资源
+participants: [workspace, runtime_environment, afs_binding, media_agent_gateway, afs_controller]
 domains: [workspace, runtime_environment, afs_binding]
 ---
 
 ## 一句话说明
-用户提交 start、stop、restart 或 rebuild 后，Control 先持久化 Workspace 期望状态，再协调 Placement、Workspace Runtime Directory 与既有 AFS Controller，直到收敛或进入可恢复失败。
+
+用户提交 start、stop、restart 或 rebuild 后，Control 保存 Workspace 业务期望状态与 Placement，通过 Gateway 协调 Agent 资源创建/生命周期，并按既有语义协调 AFS；Control 不直接调用自定义控制器探活或管理 Pod 副本。
 
 ## 触发与结果
+
 | 项目 | 内容 |
 |:---|:---|
-| 触发 | Workspace 生命周期命令 |
-| 前置条件 | 调用者有 Workspace manage 权限 |
-| 成功结果 | 实际状态与期望状态收敛 |
-| 失败结果 | 保留期望状态和失败原因，允许重试 |
+| 触发 | 已授权用户的 Workspace 生命周期命令 |
+| 成功 | 业务目标持久化；Gateway 按目标版本落地资源与 Agent 通信 |
+| 失败 | 保留目标与失败原因，可按原 Workspace/version 重试 |
+| 部署范围 | Kubernetes 使用自定义资源及 StatefulSet；Docker 本期只创建单实例，不做扩缩容 |
 
 ## 执行时间线
+
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant C as media_control
+    participant C as Control
     participant DB as Control DB
     participant Q as River
-    participant W as Lifecycle Worker
-    participant R as Runtime Controller
+    participant W as Lifecycle Workflow
+    participant G as Agent Gateway
     participant A as AFS Controller
     U->>C: Start/Stop/Restart/Rebuild(workspace_id, expected_version)
-    C->>DB: TX1: 更新 desired_state/version + Outbox
+    C->>DB: TX1: 提交 desired_state/version 与协调意图
     DB-->>Q: 投递 workspace_id/version
     Q->>W: 至少一次执行
-    W->>DB: TX2: 认领版本，创建/更新 Placement 意图
-    W->>R: EnsureWorkspaceRuntimeDirectory(workspace_id, placement)
-    R-->>W: volume_ref + mount identity
-    W->>R: Start/Restart Agent(/workspace <- volume_ref)
-    R-->>W: observed agent + mounted workspace_id
-    W->>A: 按原 control-plane 语义协调运行状态
-    A-->>W: observed state / error
-    W->>DB: TX3: 回写 observed_state 或失败原因
+    W->>DB: TX2: 校验当前版本并保存 Placement/目录引用
+    W->>G: 协调指定 Workspace/version 的 Agent 资源
+    Note over G: Kubernetes 提交 manifest，Docker 调创建服务
+    G-->>W: 资源引用 / 已接受 / 明确失败
+    W->>A: 按既有 AFS 语义协调
+    A-->>W: 结果 / 错误
+    W->>DB: TX3: 保存当前版本的协调结果
 ```
 
 ### 步骤说明
-命令只提交期望状态，不等待基础设施完成。Worker 只处理当前 version；旧版本消息直接结束。Runtime Controller 必须先确保 Workspace Runtime Directory，再启动 Agent；容器内固定挂载点为 `/workspace`，具体宿主路径属于部署适配器。Agent 启动时校验目录中的 mount identity 与配置 `workspace_id` 相同，冲突时拒绝启动，禁止误用其他 Workspace 文件。AFS Controller 是第三方依赖，保持原使用方式，不修改其代码和内部生命周期语义。
 
-## 关键参数
-`workspace_id` 固定业务资源与运行数据隔离边界，也是 Workspace Runtime Directory 的唯一归属键；`version` 同时作为乐观锁和幂等版本。
+1. Control 拥有 Workspace 业务状态、配置与 Placement，不拥有 Pod 调度与探针执行。Gateway 的落地流程见 [agent_workload_provisioning](../../../media_agent_gateway/workflow/0009-agent_workload_provisioning/agent_workload_provisioning.md)。
+2. Kubernetes 创建请求被接受不等于 Agent Ready；Gateway 使用 Kubernetes 客户端读取承载资源状态，并在可连接后直接与 Agent 通信。Runtime Controller 只创建/协调 StatefulSet、Headless Service、PVC 等资源，不实现第二套 Agent 健康管理循环。
+3. Workspace Runtime Directory 仍以 Workspace 独占，Agent 挂载 /workspace，启动校验 mount identity。AFS 是既有外部依赖，不改其内部生命周期。
+4. Kubernetes 的业务排空、Session 重绑由 Gateway/Agent 协调，StatefulSet 负责实际副本维护。Docker 本期不实现多副本和排空缩容。
 
 ## 状态与不变量
-Workspace 的 `desired_state` 由 Workspace 聚合决定，`observed_state` 是协调结果。二者短暂不一致是正常状态。每个 Workspace 只有一个 Workspace Runtime Directory；不同 Workspace 不共享目录。普通 stop/restart 不删除目录；rebuild 只重建容器和可再生运行文件，是否清理用户文件必须是显式独立命令。删除遵守回收期，晚到的旧 version 结果不得覆盖新期望。
+
+Workspace 决定 desired_state；资源创建结果、Agent Ready 和 Turn 状态是不同事实。每个 Workspace 独占目录，普通 stop/restart 保留目录；rebuild 不隐式清理用户文件，删除遵守既有回收策略。旧 version 任务与晚到结果不得覆盖新目标。
 
 ## 一致性边界
-| 事务 | 原子事实 | 事务外动作 |
+
+| 事务 | 原子事实 | 事务外操作 |
 |:---|:---|:---|
-| TX1 | desired_state、version、Outbox | River 投递 |
-| TX2 | 当前协调版本、Placement 意图/lease、volume_ref | 创建/挂载目录、启动 Agent、调 AFS Controller |
-| TX3 | observed_state、错误、结果事件 | 通知订阅方 |
+| TX1 | 目标、版本、协调意图 | River/Gateway 调用 |
+| TX2 | 当前协调版本、Placement/目录引用 | Kubernetes/Docker/AFS 操作 |
+| TX3 | 当前版本协调结果与错误 | 用户通知 |
 
 ## 幂等、重试与补偿
-`workspace_id + version` 是协调幂等键，Workspace Runtime Directory 以 `workspace_id` 幂等取得。外部结果不明确时先读取 Runtime/AFS 当前状态再决定继续，不重复创建资源。目录已存在但 mount identity 不匹配属于不可自动覆盖的隔离错误；瞬时错误退避重试，新 version 到达即使旧任务失效。无法收敛时保留 desired_state 和错误，管理员可重新发命令产生新 version。
+
+Workspace/version 是协调键。Gateway 使用稳定资源名与归属校验确保重复 manifest/创建请求不生成另一套资源；结果不明确先查询创建结果。Control 不因 Gateway 超时回滚业务目标。版本过期结束旧协调；mount identity 不匹配不可自动覆盖。
 
 ## 权限与失败
-入口用 Web Session/用户 API Token Internal JWT 校验 Workspace manage；内部调用通过可配置 mTLS 认证服务。配置错误不可重试，基础设施瞬时错误重试，权限撤销不回滚已提交命令但阻止后续用户命令。
+
+Control 校验 Workspace manage 与环境授权后，以受信服务身份请求 Gateway。Gateway 从权威配置生成 manifest，不接受用户提供任意 Namespace、镜像、挂载路径或凭据。配置/隔离错误明确失败，基础设施瞬时错误有限重试，创建接受后按环境原生资源状态协调。
 
 ## 结果事件
-产生 `WorkspaceStateConverged` 或 `WorkspaceConvergenceFailed`。
+
+沿用 WorkspaceStateConverged / WorkspaceConvergenceFailed 的业务协调结果；不得把 manifest 提交成功当作 Agent 可执行。
+
+## Harness 映射
+
+Control 的 biz/workflow 协调业务生命周期，domain 保存 Workspace/Placement。Gateway 的 biz/workflow 落地 Agent 资源并管理 Session 路由，Kubernetes/Docker 客户端属于其基础设施适配。自定义控制器不访问 Agent 执行数据库或调用业务状态接口。
+
+受控 Agent 类型包含 codex、claude-code 与 goose；所选类型必须在部署提供的工作负载 profile 中有对应镜像与资源配置。

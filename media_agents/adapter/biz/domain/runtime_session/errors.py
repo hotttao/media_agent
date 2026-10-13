@@ -29,3 +29,28 @@ class ContextVersionConflict(RuntimeSessionError):
             f"runtime session {session_id} already uses context version "
             f"{existing}, requested {requested}"
         )
+
+
+class StaleExecutionOwner(RuntimeSessionError):
+    def __init__(self) -> None:
+        super().__init__("stale_execution_owner")
+
+
+class InstanceDraining(RuntimeSessionError):
+    def __init__(self) -> None:
+        super().__init__("instance_draining")
+
+
+class TransferConflict(RuntimeSessionError):
+    def __init__(self) -> None:
+        super().__init__("session_transfer_conflict")
+
+
+class ExecutionCredentialsDeferred(RuntimeSessionError):
+    def __init__(self) -> None:
+        super().__init__("execution_credentials_deferred")
+
+
+class ExecutionCredentialsRejected(RuntimeSessionError):
+    def __init__(self) -> None:
+        super().__init__("execution_credentials_rejected")

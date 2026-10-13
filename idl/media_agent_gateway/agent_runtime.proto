@@ -1,0 +1,24 @@
+syntax = "proto3";
+package media_agent_gateway.agent_runtime;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_agent_gateway/agent_runtime";
+message InstanceLocator {
+ string environment_id = 1 [(api.body)="environment_id"]; string workspace_id = 2 [(api.body)="workspace_id"];
+ string agent_config_id = 3 [(api.body)="agent_config_id"]; string replica_id = 4 [(api.body)="replica_id"];
+ string incarnation_id = 5 [(api.body)="incarnation_id"]; string namespace = 6 [(api.body)="namespace"];
+ string resource_name = 7 [(api.body)="resource_name"]; string resource_uid = 8 [(api.body)="resource_uid"];
+ string resource_generation = 9 [(api.body)="resource_generation"]; int64 expected_version = 10 [(api.body)="expected_version"];
+}
+message InstanceIdentity { string environment_id=1; string resource_uid=2; string resource_generation=3; int64 registration_version=4; string agent_type=5; }
+message InstanceRegistration { string instance_credential=1; int64 registration_version=2; string admission=3; string incarnation_id=4; string drain_operation_id=5; }
+message ExecutionContextRequest { string session_id=1 [(api.path)="session_id"]; string workspace_id=2 [(api.body)="workspace_id"]; string agent_config_id=3 [(api.body)="agent_config_id"]; string replica_id=4 [(api.body)="replica_id"]; string incarnation_id=5 [(api.body)="incarnation_id"]; int64 execution_epoch=6 [(api.body)="execution_epoch"]; string turn_id=7 [(api.body)="turn_id"]; }
+message ExecutionContext { string api_key=1; string session_token=2; int64 execution_epoch=3; int64 context_version=4; }
+message SessionResumeRequest { string session_id=1 [(api.path)="session_id"]; string operation_id=2 [(api.body)="operation_id"]; int64 expected_epoch=3 [(api.body)="expected_epoch"]; }
+message SessionResumeResponse { string session_id=1; string status=2; int64 execution_epoch=3; }
+service AgentRuntimeService {
+ rpc ResolveInstanceIdentity(InstanceLocator) returns (InstanceIdentity) { option(api.post)="/api/agent/v1/instances/identity"; option(google.api.http)={post:"/api/agent/v1/instances/identity" body:"*"}; }
+ rpc RegisterInstance(InstanceLocator) returns (InstanceRegistration) { option(api.post)="/api/agent/v1/instances/register"; option(google.api.http)={post:"/api/agent/v1/instances/register" body:"*"}; }
+ rpc GetExecutionContext(ExecutionContextRequest) returns (ExecutionContext) { option(api.post)="/api/agent/v1/sessions/:session_id/execution-context"; option(google.api.http)={post:"/api/agent/v1/sessions/{session_id}/execution-context" body:"*"}; }
+ rpc ResumeSession(SessionResumeRequest) returns (SessionResumeResponse) { option(api.post)="/api/v1/sessions/:session_id/resume"; option(google.api.http)={post:"/api/v1/sessions/{session_id}/resume" body:"*"}; }
+}

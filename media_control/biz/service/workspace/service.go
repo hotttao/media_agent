@@ -183,3 +183,38 @@ func (s *Service) CheckAccess(ctx context.Context, workspaceID, userID, action s
 	}
 	return decision.Allowed && decision.OrganizationID == value.OrganizationID, nil
 }
+
+func (s *Service) RuntimeContextVersion(ctx context.Context, id, user string, version int64) (*domain.ConfiguredWorkspace, string, string, error) {
+	value, key, err := s.RuntimeContext(ctx, id, user)
+	if err != nil {
+		return nil, "", "", err
+	}
+	reader, ok := s.repo.(interface {
+		GetConfigurationVersion(context.Context, string, int64) (*domain.AgentConfiguration, string, error)
+	})
+	if !ok {
+		return nil, "", "", fmt.Errorf("configuration history unavailable")
+	}
+	if version == 0 {
+		version = value.AgentConfiguration.Version
+		if selected, ok := s.repo.(interface {
+			ConfirmedContextVersion(context.Context, string) (int64, error)
+		}); ok {
+			confirmed, err := selected.ConfirmedContextVersion(ctx, value.AgentConfiguration.ID)
+			if err != nil {
+				return nil, "", "", err
+			}
+			if confirmed > 0 {
+				version = confirmed
+			}
+		}
+	}
+	previous, target, err := reader.GetConfigurationVersion(ctx, value.AgentConfiguration.ID, version)
+	if err != nil {
+		return nil, "", "", err
+	}
+	previous.WorkspaceID = id
+	value.AgentConfiguration = *previous
+	key, err = s.cipher.Decrypt(previous.EncryptedAPIKey)
+	return value, key, target, err
+}

@@ -1,0 +1,4 @@
+DROP TABLE media_agent_gateway.mcp_catalog_revision;
+DROP TABLE media_agent_gateway.mcp_catalog_events;
+DROP TABLE media_agent_gateway.mcp_definition_versions;
+DROP TABLE media_agent_gateway.mcp_definitions;

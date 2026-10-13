@@ -15,7 +15,7 @@ domains:
 
 ## 一句话说明
 
-Gateway 校验 Agent Session Registration 后把 Turn 命令交给 Agent；页面事件连接先订阅 Session Event Bus，再通过 Agent 查询接口回放已提交 Universal Event，最后按 Agent Session Sequence 去重并持续转发 SSE。
+Gateway 校验 Agent Session Registration 后把 Turn 命令交给 Agent；页面事件连接先注册本机 Session 广播订阅并确保 RabbitMQ 路由就绪，再通过 Agent 查询接口回放已提交 Universal Event，最后按 Agent Session Sequence 去重并持续转发 SSE。
 
 ## 触发与结果
 
@@ -38,8 +38,12 @@ sequenceDiagram
     participant GD as Gateway DB
     participant A as media_agents API
     participant AD as Agent PostgreSQL
-    participant B as Session Event Bus
+    participant B as RabbitMQ Session Event Bus
+    participant L as Gateway Local Broadcaster
     participant X as Session Analytics
+
+    G->>B: 实例启动：创建一个临时队列并启动消费
+    Note over G,B: 队列属于 Gateway 实例，跨所有本机 SSE 连接共享
 
     par 提交 Turn
         C->>G: POST Turn(session_id, input, idempotency_key)
@@ -52,8 +56,9 @@ sequenceDiagram
     and 建立/恢复事件订阅
         C->>G: GET /events?after_sequence=N
         G->>GD: 校验 Session Registration 访问权
-        G->>B: Subscribe(session subject)
-        Note over G: 开始缓存实时总线消息
+        G->>L: 注册当前 SSE 的 Session 接收者
+        G->>B: 确保实例队列的 Session 路由已就绪
+        Note over G,L: 开始缓存当前 SSE 接收者的事件
         G->>A: ReplayEvents(session_id, after_sequence=N)
         A->>AD: SELECT sequence > N ORDER BY sequence
         AD-->>A: persisted events
@@ -61,7 +66,9 @@ sequenceDiagram
         G-->>C: 按 sequence 回放 SSE
         G->>G: 合并缓存事件，丢弃 sequence <= cursor 的重复项
         loop 实时阶段
-            B-->>G: Live Frame 或 Universal Event
+            B-->>G: 实例队列消费 Live Frame 或 Universal Event
+            G->>L: Publish(session_id, event)
+            L-->>G: 广播给本机该 Session 的各 SSE 接收者
             alt sequence = 0
                 G-->>C: SSE 无 id 临时帧
             else sequence = cursor + 1
@@ -92,17 +99,19 @@ sequenceDiagram
 
 1. **Gateway 只授权和转发**：Gateway Registration 决定用户能否访问 Session；Agent Runtime Session 决定输入是立即 running 还是 queued。Gateway 不创建 Turn、Message 或 pending message。
 2. **Agent 接受才算成功**：只有 Agent PostgreSQL 已提交 Queued Turn 后 Gateway 才返回 202。Gateway 超时且结果不明确时，以同一 `idempotency_key` 重试或查询 Agent，不创建新 ID。
-3. **先订阅再回放**：Gateway 必须先订阅 Session subject 并缓存消息，再调用 Agent `ReplayEvents`。回放和缓存重叠由 Session sequence 去重，因此页面刷新窗口内正常发布的事件不会丢。
+3. **先订阅再回放**：Gateway 必须先注册本机 Session 广播接收者并缓存消息，确认实例队列的 RabbitMQ 路由就绪，再调用 Agent `ReplayEvents`。回放和缓存重叠由 Session sequence 去重，因此页面刷新窗口内正常发布的事件不会丢。
 4. **补偿数据库提交/发布间隙**：Agent 先提交 PostgreSQL 再发布总线。若在两步之间失败，Gateway 通过 sequence 跳号、周期检查以及 Turn 终态补查重新调用 `ReplayEvents`。当前连接最终补齐；页面重连也能从 PostgreSQL 恢复。
-5. **总线不是恢复事实**：初始实现采用 Redis Pub/Sub 的按 Session 广播语义。Gateway 不使用共享 Consumer Group 分摊事件；每个持有相关 SSE 的 Gateway 都订阅对应 Session subject。
+5. **总线不是恢复事实**：Session Event Bus 使用 RabbitMQ 替代 Redis，保持按 Session 广播语义；每个持有相关 SSE 的 Gateway 都必须收到对应 Session 的事件副本。每个 Gateway 实例只有一个会话事件临时队列，消费后调用本机服务层 Broadcaster 按 Session 分发；SSE 连接不创建 RabbitMQ 队列。
 6. **临时帧语义**：Live Event Frame 没有持久 sequence，允许因断线、慢消费者或总线故障丢失；UI 最终由完成 Message、工具快照和终态事件收敛。
-7. **连接与执行解耦**：关闭 SSE 只取消当前订阅。中断必须调用 Agent `InterruptTurn`；Gateway、Redis 或浏览器不能直接改变 Turn 状态。
+7. **连接与执行解耦**：关闭 SSE 只取消当前订阅。中断必须调用 Agent `InterruptTurn`；Gateway、RabbitMQ 或浏览器不能直接改变 Turn 状态。
 
 ## 状态与不变量
 
 - Gateway 不持有 Turn 状态机；queued/running/completed/failed/interrupted/cancelled 均由 Agent Runtime Session 决定。
 - 同一 Session 多个 SSE 订阅相互独立，任一断开不能取消 Agent Turn。
-- 业务 cursor 只由 Agent Session Sequence 推进；Redis message id、Kafka offset 和 Gateway 内存下标不得写回客户端 cursor。
+- RabbitMQ 队列和消费循环的生命周期属于 Gateway 实例；SSE 接收者、缓存与 cursor 属于各连接。关闭单个 SSE 只释放本机接收者，不能删除实例队列或停止其消费。
+- Gateway 重启或消息连接丢失后重建实例临时队列和必要路由，持久事件通过回放补齐；delta 不补发。
+- 业务 cursor 只由 Agent Session Sequence 推进；RabbitMQ delivery tag 和 Gateway 内存下标不得写回客户端 cursor。
 - 持久事件以 `session_id + sequence` 去重；Live Event Frame 不承诺重放。
 - 同一 Session Turn 串行性由 Agent 队列和数据库约束保证，与请求落在哪个 Gateway 无关。
 
@@ -133,7 +142,7 @@ Gateway 禁止开启跨 Gateway DB 与 Agent PostgreSQL 的事务。跨服务通
 | 步骤 | 幂等键 | 重试策略 | 补偿/恢复 |
 |:---|:---|:---|:---|
 | SubmitTurn | session_id + idempotency_key | 超时可用相同 key 重试 | Agent 返回既有 turn_id |
-| Subscribe bus | connection_id + session_id | 断线重新建立 | 随后 ReplayEvents 补齐 |
+| 注册本机订阅 / 确保总线路由 | Gateway 实例 + session_id；本机接收者另有 connection_id | 总线断线时重建实例队列与路由 | 各 SSE 按自身 cursor ReplayEvents 补齐 |
 | ReplayEvents | session_id + after_sequence | 可安全分页重试 | sequence 去重 |
 | Bus delivery | event_id/sequence | 允许重复 | sequence <= cursor 丢弃 |
 | Publish 缺失 | sequence gap/periodic check | 查询 Agent | 从 Agent PostgreSQL 补齐 |
@@ -157,3 +166,10 @@ Gateway 从 Web Session 或用户 API Token 的 Internal JWT 取得身份，读�
 ## 结果事件
 
 Gateway 不产生 Turn 领域事件。它把 Agent 已提交的 `TurnQueued`、`TurnStarted`、`TurnCompleted`、`TurnFailed` 和 `TurnInterrupted` 适配为 SSE，并把终态事件交给 Session Analytics 与 Agent Task Dispatch。
+
+
+### Session 迁移屏障与执行代次
+
+单 Session 迁移在源实例持久化 handoff_id，当前 running 可完成，完成后不领取 queued；同实例其他 Session 不受影响。实例级 draining 用于整副本退出。Transfer 在 Session 行锁内切换 owner replica/incarnation，递增 execution_epoch、记录 last_transfer_id 并清除 handoff_id。不同 Session 并行；同 Session 的旧 epoch 回调不能提交。
+
+Gateway 先保存 transferring 意图，再执行 Quiesce/Transfer，查询 Agent 的 last_transfer_id 与 owner/epoch 后完成 binding CAS。目标不可用时，只有已查询事实仍在源 epoch（或确认执行聚合不存在）才允许保持同 transfer_id 更新目标；迟到目标已完成的转移以 Agent 实际 owner 为准。执行聚合尚不存在时，新目标在 epoch+1 创建，唯一主键与旧源迟到创建互斥；不能把查询超时当成不存在。

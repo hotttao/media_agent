@@ -16,10 +16,12 @@ Agent Catalog 管理 Agent Configuration 可引用的 Prompt、Agent Template、
 ### 做什么
 - 分别维护六类独立聚合及其状态和版本。
 - 分发 Skill 内容引用与 Provider 能力描述。
+- 资源编辑产生目录新版本，不自动更新 Agent 的已选版本；运行更新必须由用户在 Control 明确确认。
 - 保存 Credential 的外部 Secret 引用，不保存明文 Secret。
 
 ### 不做什么
 - 不管理业务 Plugin/MCP Definition。
+- Prompt 聚合持有 Configured Prompt 的内容与版本，不拥有 Gateway 的 Platform Prompt 模板与正文生成。
 - 不读取 Credential 明文，不执行模型或 Skill。
 
 ## 能力清单
