@@ -8,7 +8,6 @@ import os
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -295,4 +294,4 @@ def _apply_goose_provider_env(runtime: RuntimeConfig, api_key: str) -> None:
 
 def _load_runtime_model(workspace_dir: Path) -> str | None:
     runtime = read_runtime_config(workspace_dir)
-    return cast(str | None, runtime.get("model") if runtime else None)
+    return runtime.get("model") if runtime else None

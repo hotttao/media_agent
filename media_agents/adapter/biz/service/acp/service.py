@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from adapter.biz.domain.acp_adapter import AcpServer
 from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks, BridgeFactory
+from adapter.biz.domain.acp_adapter.clock import Clock
 from adapter.biz.domain.acp_adapter.entity import PromptResult as DomainPromptResult
 from adapter.biz.domain.acp_adapter.session import AcpSession
-from adapter.biz.shared.clock import Clock
 
 
 class SessionManager(AcpServer):

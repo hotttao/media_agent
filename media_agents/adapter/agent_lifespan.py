@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
+from typing import Protocol
+
+from starlette.datastructures import State
 
 from adapter.biz.domain.acp_adapter.acp_abs import AgentHooks
 from adapter.biz.shared.managed_process import ManagedProcessGroup, ManagedProcessSpec
@@ -12,9 +15,13 @@ from adapter.biz.shared.managed_process import ManagedProcessGroup, ManagedProce
 logger = logging.getLogger(__name__)
 
 
+class LifespanApplication(Protocol):
+    state: State
+
+
 @asynccontextmanager
 async def agent_lifespan(
-    app: object,
+    app: LifespanApplication,
     *,
     hooks: AgentHooks,
     processes: Sequence[ManagedProcessSpec] = (),

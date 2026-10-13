@@ -17,7 +17,7 @@
     - `ruff check .` + `ruff format --check .`（lint + 格式）
     - `mypy adapter codex goose claude_code`（类型）
     - `lint-imports`（层级依赖 + 同层隔离，对标 Go archcheck）
-    - `vulture adapter codex goose claude_code --min-confidence 60`（死代码，对标 Go deadcheck）
+    - `vulture adapter codex goose claude_code scripts/vulture_whitelist.py --min-confidence 60`（死代码，对标 Go deadcheck）
     - `pytest`（单测）
     - 已配置 pre-commit：`pre-commit install` 后 commit 前自动跑上述全部检查
 9. 如果某条规则确实无法遵守，必须在最终回复中解释原因，不允许默默绕过架构。
@@ -572,7 +572,7 @@ Domain Model  ──(dal/repo 翻译)──->  ORM 行模型
 | 类型 | mypy | `mypy adapter codex goose claude_code` | — |
 | 层级依赖 + 同层隔离 | import-linter | `lint-imports --config adapter/pyproject.toml` | archcheck |
 | 跨包边界 | check_layers | `python scripts/check_layers.py` | archcheck (monorepo) |
-| 死代码 | vulture | `vulture adapter codex goose claude_code --min-confidence 60` | deadcheck |
+| 死代码 | vulture | `vulture adapter codex goose claude_code scripts/vulture_whitelist.py --min-confidence 60` | deadcheck |
 | 单测 | pytest | `pytest` | — |
 
 ```bash
@@ -580,14 +580,14 @@ Domain Model  ──(dal/repo 翻译)──->  ORM 行模型
 ruff check adapter codex goose claude_code && ruff format --check adapter codex goose claude_code \
   && mypy adapter codex goose claude_code \
   && lint-imports --config adapter/pyproject.toml \
-  && vulture adapter codex goose claude_code --min-confidence 60 \
+  && vulture adapter codex goose claude_code scripts/vulture_whitelist.py --min-confidence 60 \
   && python scripts/check_layers.py \
   && pytest
 ```
 
 **import-linter 规则**：`[tool.importlinter]` 在 `pyproject.toml` 用 `forbidden` contract 逐层声明禁止方向（对标上文"禁止方向"表），用 `independence` contract 声明同层 feature 隔离。新增 feature 时在对应 `independence` contract 的 `modules` 列表登记。
 
-**vulture 说明**：基于 AST 的死代码检测，报告未用的函数/类/变量/import/属性，带 confidence 分。`--min-confidence 60` 过滤低置信噪声；不可避免的误报用 `# noqa: Vulture` 或 whitelist 文件豁免。Go 版的"re-export 别名检查"是 Go export 语义特有，Python 无对应物，不纳入。
+**vulture 说明**：基于 AST 的死代码检测，报告未用的函数/类/变量/import/属性，带 confidence 分。`--min-confidence 60` 过滤低置信噪声；不可避免的误报用 明确代码（如 `# noqa: V105`） 或 whitelist 文件豁免。Go 版的"re-export 别名检查"是 Go export 语义特有，Python 无对应物，不纳入。
 
 **pre-commit**：`.pre-commit-config.yaml`（在 workspace 根 `media_agents/`）用 `language: system` 的 local hooks 跑上述全部工具 + `check_layers.py`，用 `uv sync --extra dev` 装的本地工具，不联网拉 hook 仓库。
 

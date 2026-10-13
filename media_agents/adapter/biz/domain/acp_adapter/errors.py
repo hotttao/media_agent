@@ -7,10 +7,6 @@ class AcpError(Exception):
     """ACP domain 基类错误。"""
 
 
-class BridgeNotInitialized(AcpError):
-    """bridge factory 未注入时 /health 返回 503。"""
-
-
 class BridgeNotFound(AcpError):
     """session 对应的 bridge 不存在（已驱逐或从未创建）。"""
 
@@ -35,11 +31,3 @@ class LoadSessionFailed(AcpError):
         )
         self.session_id = session_id
         self.detail = detail
-
-
-class BridgePoisoned(AcpError):
-    """复用的 bridge 进程存活但内部 session 已死，需重建后重试一次。"""
-
-    def __init__(self, session_id: str) -> None:
-        super().__init__(f"Reused bridge poisoned session={session_id}")
-        self.session_id = session_id

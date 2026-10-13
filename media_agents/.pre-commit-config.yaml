@@ -38,11 +38,7 @@ repos:
         files: ^media_agents/(adapter|codex|goose|claude_code)/
         pass_filenames: false
         args:
-          - media_agents/adapter/biz
-          - media_agents/adapter/schemas
-          - media_agents/adapter/clients
-          - media_agents/adapter/config
-          - media_agents/adapter/infra
+          - media_agents/adapter
           - media_agents/codex
           - media_agents/goose
           - media_agents/claude_code
@@ -69,13 +65,12 @@ repos:
         files: ^media_agents/(adapter|codex|goose|claude_code)/
         pass_filenames: false
         args:
-          - media_agents/adapter/biz
-          - media_agents/adapter/schemas
-          - media_agents/adapter/config
-          - media_agents/adapter/infra
-          - media_agents/adapter/clients
+          - --config
+          - media_agents/pyproject.toml
+          - media_agents/adapter
           - media_agents/codex
           - media_agents/goose
           - media_agents/claude_code
+          - media_agents/scripts/vulture_whitelist.py
           - --min-confidence
-          - "80"
+          - "60"

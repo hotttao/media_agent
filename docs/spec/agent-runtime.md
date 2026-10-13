@@ -1,6 +1,6 @@
 # 003 Agent 架构实现规格
 
-状态：核心接口已通过22个伪代码模型场景验证，真实协议/数据库/环境集成验证仍须执行。全部业务事实仍由权威上下文保存，接口不依赖共享 Gateway 内存。
+状态：核心接口已通过22个伪代码模型场景验证；真实协议、PostgreSQL/RabbitMQ 与双 Gateway/双 Agent 主链路已验收，环境证据与剩余部署门禁见 docs/review/agent-runtime/review.md。全部业务事实仍由权威上下文保存，接口不依赖共享 Gateway 内存。
 
 ## 身份、版本与错误
 
@@ -13,9 +13,9 @@
 
 | 方法 | 路由 | 输入/结果 |
 |:---|:---|:---|
-| EnsureWorkload | POST /internal/agent-workloads/{workspace_id}:ensure | expected Control version + idempotency_key；返回 workload_ref/status 与稳定地址引用 |
+| EnsureWorkload | POST /internal/agent-workloads/{workspace_id}/ensure | expected Control version + idempotency_key；返回 workload_ref/status 与稳定地址引用 |
 | GetWorkload | GET /internal/agent-workloads/{workspace_id} | Kubernetes 原生资源读取或 Docker 创建结果，不调用 Controller 探活 |
-| ScaleWorkload | POST /internal/agent-workloads/{workspace_id}:scale | expected revision + replicas；K8s 缩容先 drain，再提交 CR 副本目标；Docker 拒绝 scale |
+| ScaleWorkload | POST /internal/agent-workloads/{workspace_id}/scale | expected revision + replicas；K8s 缩容先 drain，再提交 CR 副本目标；Docker 拒绝 scale |
 | ResolveInstanceIdentity | POST /api/agent/v1/instances/identity | 稳定 Agent 身份、原生身份凭证及定位；返回已核验资源 UID/generation/type 与登记版本 |
 | RegisterInstance | POST /api/agent/v1/instances/register | 稳定 Agent 身份、replica/环境身份、incarnation；返回实例凭证、登记版本、准入状态/排空操作，不缓存配置 |
 | GetRuntimeContext | GET /api/agent/v1/runtime-context | selection_revision + target_context_version，或当前已确认目标；返回 Control 快照 + 独立 Platform Prompt |
@@ -79,7 +79,7 @@ Gateway 增加 GET /api/agent/v1/metadata-artifacts/{checksum}，核对已验证
 
 AgentWorkload CR：apiVersion runtime.media-agent.io/v1alpha1；spec 包含 workspace_id、agent_config_id、image、replicas、volume_ref、resources、Gateway/Broker 连接及 Secret 引用。稳定资源名以 Workspace 安全 hash 生成；ownerReferences 指向 CR，PVC 使用 Retain 策略，不因 CR 删除清理用户数据。Gateway 缩容修改 CR.spec.replicas，禁止直接 patch StatefulSet 与 Controller 相互覆盖。
 
-Docker service：PUT /v1/workspaces/{workspace_id}/agent-container，使用稳定创建键和允许镜像/挂载根；返回 container_id/base_url。重复请求配置不兼容返回409；不创建多副本，不将 Docker socket 提供给 Gateway。
+Docker service：POST /v1/workspaces/{workspace_id}/container:ensure，使用稳定创建键和允许镜像/挂载根；返回 container_id/base_url。重复请求配置不兼容返回409；不创建多副本，不将 Docker socket 提供给 Gateway。
 
 
 ## 目录与依赖

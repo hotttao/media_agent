@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+from typing import Any, Literal
+
 from acp.schema import ToolCallProgress, ToolCallStart
 
 from adapter.biz.domain.acp_adapter.translator import AcpEventTranslator
+
+ToolKind = Literal[
+    "read", "edit", "delete", "move", "search", "execute", "think", "fetch", "switch_mode", "other"
+]
+ToolStatus = Literal["pending", "in_progress", "completed", "failed"]
 
 
 def _tool_start(
     tool_call_id: str,
     *,
     title: str = "Run tool",
-    kind: str | None = "execute",
-    status: str | None = None,
+    kind: ToolKind | None = "execute",
+    status: ToolStatus | None = None,
     raw_input: object | None = None,
     field_meta: dict[str, object] | None = None,
 ) -> ToolCallStart:
@@ -29,11 +36,11 @@ def _tool_progress(
     tool_call_id: str,
     *,
     title: str | None = None,
-    kind: str | None = None,
-    status: str | None = None,
+    kind: ToolKind | None = None,
+    status: ToolStatus | None = None,
     raw_input: object | None = None,
     raw_output: object | None = None,
-    content: list[object] | None = None,
+    content: list[Any] | None = None,
     field_meta: dict[str, object] | None = None,
 ) -> ToolCallProgress:
     return ToolCallProgress.model_construct(
@@ -66,7 +73,9 @@ def test_mcp_startup_tool_call_is_suppressed() -> None:
 
 def test_goose_tool_name_prefers_structured_meta() -> None:
     translator = AcpEventTranslator("s1")
-    meta = {"goose": {"toolCall": {"toolName": "tos-platform__sandbox_run_command"}}}
+    meta: dict[str, object] = {
+        "goose": {"toolCall": {"toolName": "tos-platform__sandbox_run_command"}}
+    }
 
     events = translator.translate(
         _tool_start(

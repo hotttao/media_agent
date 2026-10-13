@@ -7,3 +7,5 @@ P0–P4 的既有审查与 P5 代码一起形成基线提交。后续每阶段�
 - [P3 所有权](p3-ownership.md)
 - [P4 MCP](p4-mcp.md)
 - [P5 资源创建](p5/review.md)
+
+- [P6 主链路验收与环境限制](p6/review.md)

@@ -1,6 +1,7 @@
 package agent_ownership_integration
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ed25519"
@@ -8,8 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
-	"github.com/cloudwego/hertz/pkg/common/ut"
+	"github.com/cloudwego/hertz/pkg/protocol/sse"
 	"github.com/google/uuid"
 	"io"
 	cfg "media_agent/hertz_gen/config"
@@ -31,11 +33,11 @@ import (
 	flow "media_agent/media_agent_gateway/biz/workflow"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -152,20 +154,82 @@ func port(t *testing.T) int {
 	defer l.Close()
 	return l.Addr().(*net.TCPAddr).Port
 }
-func mount(h *server.Hertz) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		headers := []ut.Header{}
-		for k, values := range r.Header {
-			for _, v := range values {
-				headers = append(headers, ut.Header{Key: k, Value: v})
-			}
+
+type gatewayEndpoint struct {
+	URL string
+	h   *server.Hertz
+}
+
+func (g *gatewayEndpoint) Close() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = g.h.Shutdown(ctx)
+}
+func mount(t *testing.T, h *server.Hertz, address string) *gatewayEndpoint {
+	t.Helper()
+	h.GET("/test/ready", func(_ context.Context, c *app.RequestContext) { c.Status(200) })
+	go func() { _ = h.Run() }()
+	gateway := &gatewayEndpoint{URL: "http://" + address, h: h}
+	readyCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	wait(t, readyCtx, func() bool {
+		conn, err := net.DialTimeout("tcp", address, time.Second)
+		if err != nil {
+			return false
 		}
-		rec := ut.PerformRequest(h.Engine, r.Method, r.URL.RequestURI(), &ut.Body{Body: r.Body, Len: int(r.ContentLength)}, headers...)
-		resp := rec.Result()
-		resp.Header.VisitAll(func(k, v []byte) { w.Header().Add(string(k), string(v)) })
-		w.WriteHeader(resp.StatusCode())
-		_, _ = w.Write(resp.Body())
-	}))
+		_ = conn.Close()
+		return true
+	})
+	return gateway
+}
+
+// Owner authorization is a fixture; HTTP transport, stream reconciliation,
+// independent Rabbit queues and the execution workflows are production code.
+func mountEvents(h *server.Hertz, stream *flow.EventStream) {
+	h.GET("/test/sessions/:session/events", func(ctx context.Context, c *app.RequestContext) {
+		after, _ := strconv.ParseInt(c.Query("after"), 10, 64)
+		writer := sse.NewWriter(c)
+		if err := writer.WriteEvent("", "ready", []byte(`{}`)); err != nil {
+			return
+		}
+		_ = stream.Stream(ctx, c.Param("session"), "user", after, func(event flow.StreamEvent) error {
+			if event.Heartbeat {
+				return nil
+			}
+			id := ""
+			if event.Sequence > 0 {
+				id = strconv.FormatInt(event.Sequence, 10)
+			}
+			return writer.WriteEvent(id, "message", event.Payload)
+		})
+	})
+}
+func openEvents(t *testing.T, ctx context.Context, gateway, session string, after int64) (*http.Response, *bufio.Reader) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/test/sessions/%s/events?after=%d", gateway, session, after), nil)
+	must(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	must(t, err)
+	if resp.StatusCode != 200 {
+		t.Fatalf("SSE status: %d", resp.StatusCode)
+	}
+	reader := bufio.NewReader(resp.Body)
+	line, err := reader.ReadString('\n')
+	must(t, err)
+	if !strings.Contains(line, "ready") {
+		t.Fatalf("missing SSE ready: %s", line)
+	}
+	return resp, reader
+}
+func awaitSSE(t *testing.T, reader *bufio.Reader, contains string) {
+	t.Helper()
+	for {
+		line, err := reader.ReadString('\n')
+		must(t, err)
+		if strings.Contains(line, contains) {
+			return
+		}
+	}
 }
 
 func TestSignedRegistrationQueuedCredentialsAndLostTransferRecovery(t *testing.T) {
@@ -220,13 +284,29 @@ func TestSignedRegistrationQueuedCredentialsAndLostTransferRecovery(t *testing.T
 	execution := flow.NewExecutionContext(registration, store, sessions, routing)
 	handler.Configure(registration, execution)
 	mcpIdentity := flow.NewMCPIdentity(sessions, credentialAuthority{}, credentialAuthority{}, execution)
-	h := server.New()
+	source, e := sessionevents.NewRabbitSource(broker, "test.ownership.sessions", 256)
+	must(t, e)
+	defer source.Close()
+	secondSource, e := sessionevents.NewRabbitSource(broker, "test.ownership.sessions", 256)
+	must(t, e)
+	defer secondSource.Close()
+	run := flow.NewRunTurn(sessions, nil).WithRouting(routing)
+	secondRun := flow.NewRunTurn(secondSessions, nil).WithRouting(secondRouting)
+	address := fmt.Sprintf("127.0.0.1:%d", port(t))
+	h := server.New(server.WithHostPorts(address))
 	router.Register(h)
-	gateway := mount(h)
+	mountEvents(h, flow.NewEventStream(run, source))
+	gateway := mount(t, h, address)
 	defer gateway.Close()
+	secondAddress := fmt.Sprintf("127.0.0.1:%d", port(t))
+	secondH := server.New(server.WithHostPorts(secondAddress))
+	router.Register(secondH)
+	mountEvents(secondH, flow.NewEventStream(secondRun, secondSource))
+	secondGateway := mount(t, secondH, secondAddress)
+	defer secondGateway.Close()
 	release := filepath.Join(root, "release")
 	command := exec.CommandContext(ctx, "../../../media_agents/.venv/bin/python", "../../../media_agents/scripts/ownership_pipeline_server.py")
-	command.Env = append(os.Environ(), "TEST_GATEWAY_URL="+gateway.URL, "TEST_RUNTIME_BOOT_ID="+uuid.NewString(), "TEST_RUNTIME_ROOT="+root, "TEST_RUNTIME_PUBLIC_KEYS="+publicFile, "TEST_RUNTIME_PROOF="+proofFile, "TEST_RUNTIME_RELEASE="+release, "TEST_RUNTIME_PORT_0="+strconv.Itoa(ports[0]), "TEST_RUNTIME_PORT_1="+strconv.Itoa(ports[1]))
+	command.Env = append(os.Environ(), "TEST_GATEWAY_URL="+gateway.URL, "TEST_GATEWAY_URL_1="+secondGateway.URL, "TEST_RUNTIME_BOOT_ID="+uuid.NewString(), "TEST_RUNTIME_ROOT="+root, "TEST_RUNTIME_PUBLIC_KEYS="+publicFile, "TEST_RUNTIME_PROOF="+proofFile, "TEST_RUNTIME_RELEASE="+release, "TEST_RUNTIME_PORT_0="+strconv.Itoa(ports[0]), "TEST_RUNTIME_PORT_1="+strconv.Itoa(ports[1]))
 	var output bytes.Buffer
 	command.Stdout = &output
 	command.Stderr = &output
@@ -248,19 +328,23 @@ func TestSignedRegistrationQueuedCredentialsAndLostTransferRecovery(t *testing.T
 	session, e := sessions.Create(ctx, "user", "workspace", "Ownership", "")
 	must(t, e)
 	defer db.Exec("DELETE FROM media_agent_gateway.agent_sessions WHERE id=?", session.ID)
-	source, e := sessionevents.NewRabbitSource(broker, "test.ownership.sessions", 256)
-	must(t, e)
-	defer source.Close()
 	subscription, e := source.Open(ctx, session.ID)
 	must(t, e)
 	defer subscription.Close()
-	run := flow.NewRunTurn(sessions, nil).WithRouting(routing)
 	_, e = run.Register(ctx, session, "")
 	must(t, e)
+	streamCtx, stopStreams := context.WithCancel(ctx)
+	defer stopStreams()
+	firstStream, firstReader := openEvents(t, streamCtx, gateway.URL, session.ID, 0)
+	defer firstStream.Body.Close()
+	secondStream, secondReader := openEvents(t, streamCtx, secondGateway.URL, session.ID, 0)
+	defer secondStream.Body.Close()
 	first, e := run.Start(ctx, session.ID, "user", "browser-cookie", "first", "hold")
 	must(t, e)
 	queued, e := run.Start(ctx, session.ID, "user", "browser-cookie", "second", "queued")
 	must(t, e)
+	awaitSSE(t, firstReader, "item.delta")
+	awaitSSE(t, secondReader, "item.delta")
 	if queued.Status != "queued" {
 		t.Fatal("queued Turn executed in parallel")
 	}
@@ -310,6 +394,11 @@ func TestSignedRegistrationQueuedCredentialsAndLostTransferRecovery(t *testing.T
 		if e != nil {
 			return false
 		}
+		firstStream.Body.Close()
+		secondStream.Body.Close()
+		replay, replayReader := openEvents(t, streamCtx, secondGateway.URL, session.ID, 0)
+		awaitSSE(t, replayReader, "item.completed")
+		replay.Body.Close()
 		facts, e := peer.GetRuntimeSession(ctx, session.ID)
 		return e == nil && facts.ActiveTurnID == ""
 	})

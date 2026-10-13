@@ -35,9 +35,8 @@ class FailingBus:
     async def publish(self, notification: SessionEventNotification) -> None:
         raise ConnectionError("RabbitMQ unavailable")
 
-    async def subscribe(self, session_id: str) -> AsyncIterator[SessionEventNotification]:
-        if False:
-            yield SessionEventNotification(session_id, 0, {})
+    def subscribe(self, session_id: str) -> AsyncIterator[SessionEventNotification]:
+        raise NotImplementedError("publish-failure fixture has no subscriber")
 
     async def close(self) -> None:
         pass

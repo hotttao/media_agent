@@ -87,13 +87,24 @@
 
 - [x] 用户授权自动进入 P6；阶段完成后生成 review.md 并 commit。
 
-## P6 · 完整验收
+## P6 · Kubernetes 与 Agent 主链路验收
 
-- [ ] Go各模块go test/arch-check/gofmt；Python全部Harness检查。
-- [ ] IDL/router/client/swagger/schema生成一致。
-- [ ] 集成部署配置启动两个Gateway和两个Agent，验证完整交互链。
-- [ ] 六能力逐项设计实现review，覆盖矩阵无缺失。
+- [x] Go各模块go test/arch-check/gofmt；Python全部Harness检查。
+- [x] IDL/router/client/swagger/schema生成一致。
+- [x] 集成夹具启动两个真实 HTTP Gateway 和两个 Agent，验证核心交互链（外部身份/模型使用明确 fixture）。
+- [x] 六能力逐项设计实现review，覆盖矩阵无缺失。
 - [ ] 整理修改、验证证据与环境限制；全部门禁满足才完成目标。
+
+阶段证据见 [P6 审查](../review/agent-runtime/p6/review.md)。Kubernetes 双 Ready/RWX 环境门禁仍未通过；保持未勾选，不能据此宣称总体全部验收完成。
+
+## P7 · Docker 最小创建服务收尾
+
+用户要求 Docker Runtime Controller 放到最后，保持单实例创建/查询/身份校验，保留扩缩容接口但返回明确未实现；不实现 Docker 扩缩容及对应复杂协调。P5 已提交的 Docker 基线在此阶段审查并精简。
+
+- [ ] 审查并精简 Docker Controller 与 Gateway 适配。
+- [ ] 受控单实例创建、稳定幂等、身份与必要持久目录验证。
+- [ ] 扩缩容保留接口并明确返回未实现。
+- [ ] 最终总审查与 P7/review.md、commit。
 
 ## 风险与对策
 

@@ -13,13 +13,19 @@ from typing import TYPE_CHECKING
 
 from acp import PROTOCOL_VERSION, connect_to_agent, image_block, text_block
 from acp.schema import (
+    AcpMcpServer,
+    AudioContentBlock,
     ClientCapabilities,
+    EmbeddedResourceContentBlock,
     HttpMcpServer,
+    ImageContentBlock,
     Implementation,
     LoadSessionResponse,
     McpServerStdio,
     NewSessionResponse,
+    ResourceContentBlock,
     SseMcpServer,
+    TextContentBlock,
 )
 
 from adapter.biz.domain.acp_adapter.client import AcpClientAdapter
@@ -33,7 +39,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-McpServerConfig = HttpMcpServer | SseMcpServer | McpServerStdio
+McpServerConfig = HttpMcpServer | SseMcpServer | AcpMcpServer | McpServerStdio
 
 
 class AcpBridge:
@@ -126,7 +132,13 @@ class AcpBridge:
         self, session_id: str, message: str, images: list[ChatImageAttachment] | None = None
     ) -> PromptResult:
         assert self.conn is not None, "bridge not started"
-        prompt: list[object] = [text_block(message)]
+        prompt: list[
+            TextContentBlock
+            | ImageContentBlock
+            | AudioContentBlock
+            | ResourceContentBlock
+            | EmbeddedResourceContentBlock
+        ] = [text_block(message)]
         if images:
             for img in images:
                 data = getattr(img, "data", None) or (

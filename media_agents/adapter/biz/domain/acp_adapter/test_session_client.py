@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from acp import RequestError
+from acp.schema import AgentMessageChunk, TextContentBlock
 
 from adapter.biz.domain.acp_adapter.client import AcpClientAdapter
 from adapter.biz.domain.acp_adapter.llm_event import ContentDelta, UniversalEvent
@@ -11,6 +12,9 @@ from adapter.biz.domain.acp_adapter.session import AcpSession, SessionStream
 
 
 class _Bridge:
+    def is_alive(self) -> bool:
+        return True
+
     async def prompt(self, session_id: str, message: str, images: list[Any] | None = None) -> Any:
         return None
 
@@ -41,7 +45,13 @@ async def test_session_update_writes_structured_json_event() -> None:
     session = AcpSession("s1", _Bridge())
     session.translator = _FakeTranslator(event)  # type: ignore[assignment]
 
-    await session.session_update("s1", object())
+    await session.session_update(
+        "s1",
+        AgentMessageChunk(
+            session_update="agent_message_chunk",
+            content=TextContentBlock(type="text", text="hello"),
+        ),
+    )
 
     chunk = await anext(session.read())
     assert chunk.startswith("event: message\n")

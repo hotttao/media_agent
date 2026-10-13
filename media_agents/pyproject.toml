@@ -59,3 +59,9 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["adapter", "codex", "goose", "claude_code", "tests"]
+
+# Dynamic callbacks and schema fields are reviewed explicitly in this whitelist.
+[tool.vulture]
+min_confidence = 60
+paths = ["adapter", "codex", "goose", "claude_code", "scripts/vulture_whitelist.py"]
+ignore_decorators = ["@router.*", "@field_validator", "@model_validator"]

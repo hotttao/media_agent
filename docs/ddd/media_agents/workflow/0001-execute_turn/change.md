@@ -70,3 +70,7 @@
 ### 2026-10-12 · P3 执行归属与 Session 迁移屏障
 
 执行归属使用 Workspace/config/replica/incarnation 加 Session execution_epoch；托管写入及实时事件校验归属。单 Session 迁移使用持久 handoff_id，实例级 draining 留给缩容；原队列、上下文版本和 native handle 保留。Gateway 保存可恢复转移意图，查询实际归属收敛绑定，执行结果未知不重放 running。
+
+## 2026-10-13 · P6 ACP 边界与类型验收
+
+ACP 会话仅依赖 prompt/cancel/is_alive 结构契约；Clock 与 draft ID 纯辅助能力归入 ACP 自有包，消除 Domain 对外层 shared 的反向依赖。流队列通过内部 typed Queue 提供只读快照，维持唯一 FIFO 与重连顺序。SDK 回调、MCP server union 和测试替身签名按现有 SDK 契约补齐，不调整执行规则。

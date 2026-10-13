@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from adapter.biz.domain.acp_adapter import AcpServer
+from adapter.biz.domain.acp_adapter.bridge import AcpBridge
 from adapter.biz.domain.acp_adapter.entity import Chat, PromptResult, StopReason
 from adapter.biz.domain.acp_adapter.errors import BridgeNotFound
 
@@ -33,7 +34,7 @@ class _Hooks:
         pass
 
 
-class _Bridge:
+class _Bridge(AcpBridge):
     def __init__(self, draft_id: str) -> None:
         self.draft_id = draft_id
         self.destroyed = False
@@ -44,12 +45,12 @@ class _Bridge:
     async def wait_for_mcp_ready(self) -> None:
         pass
 
-    async def create_session(self, mcp_servers: list[Any]) -> Any:
+    async def create_session(self, *, mcp_servers: list[Any] | None = None) -> Any:
         from adapter.biz.domain.acp_adapter.session import AcpSession
 
         return AcpSession("s1", self)
 
-    async def load_session(self, session_id: str, mcp_servers: list[Any]) -> Any:
+    async def load_session(self, session_id: str, *, mcp_servers: list[Any] | None = None) -> Any:
         from adapter.biz.domain.acp_adapter.session import AcpSession
 
         return AcpSession(session_id, self)
@@ -69,9 +70,13 @@ class _Bridge:
         return not self.destroyed
 
 
+def _bridge_factory(session_id: str, api_key: str | None = None) -> AcpBridge:
+    return _Bridge(session_id)
+
+
 @pytest.mark.asyncio
 async def test_chat_opens_stream_and_reconnect_attaches_same_stream() -> None:
-    server = AcpServer(_Hooks(), lambda draft_id: _Bridge(draft_id))
+    server = AcpServer(_Hooks(), _bridge_factory)
     session, _ = await server.chat(Chat(message="hello"))
     stream = session.stream
     writer_id = stream.writer_id
@@ -89,7 +94,7 @@ async def test_chat_opens_stream_and_reconnect_attaches_same_stream() -> None:
 
 @pytest.mark.asyncio
 async def test_reconnect_requires_active_stream_not_just_session() -> None:
-    server = AcpServer(_Hooks(), lambda draft_id: _Bridge(draft_id))
+    server = AcpServer(_Hooks(), _bridge_factory)
     session, _ = await server.chat(Chat(message="hello"))
     session.finish_stream()
 
@@ -99,7 +104,7 @@ async def test_reconnect_requires_active_stream_not_just_session() -> None:
 
 @pytest.mark.asyncio
 async def test_destroy_closes_active_stream() -> None:
-    server = AcpServer(_Hooks(), lambda draft_id: _Bridge(draft_id))
+    server = AcpServer(_Hooks(), _bridge_factory)
     session, _ = await server.chat(Chat(message="hello"))
 
     server._destroy(session.session_id)
@@ -109,7 +114,7 @@ async def test_destroy_closes_active_stream() -> None:
 
 @pytest.mark.asyncio
 async def test_reconnect_after_done_flushes_buffer_and_exits() -> None:
-    server = AcpServer(_Hooks(), lambda draft_id: _Bridge(draft_id))
+    server = AcpServer(_Hooks(), _bridge_factory)
     session, _ = await server.chat(Chat(message="hello"))
     writer_id = session.stream.writer_id
     server.detach_stream(session.session_id, writer_id)

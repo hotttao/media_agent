@@ -103,7 +103,7 @@ def application(ordinal: str) -> FastAPI:
                 "event_bus": {"rabbitmq_url": os.environ["MEDIA_AGENTS_TEST_RABBITMQ_URL"]},
                 "metadata": {
                     "enabled": True,
-                    "gateway_url": os.environ["TEST_GATEWAY_URL"],
+                    "gateway_url": os.environ.get("TEST_GATEWAY_URL_" + ordinal, os.environ["TEST_GATEWAY_URL"]),
                     "agent_api_token": "agent-test-token",
                     "agent_config_id": "config",
                     "replica_id": ordinal,

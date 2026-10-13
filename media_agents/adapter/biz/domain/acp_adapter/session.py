@@ -16,7 +16,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING
+from collections import deque
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from acp.schema import (
     AgentMessageChunk,
@@ -47,9 +48,8 @@ from adapter.biz.domain.acp_adapter.llm_event import (
 from adapter.biz.domain.acp_adapter.translator import AcpEventTranslator
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Awaitable, Callable
+    from collections.abc import AsyncGenerator, Awaitable, Callable
 
-    from adapter.biz.domain.acp_adapter.bridge import AcpBridge
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,24 @@ SessionUpdate = (
 )
 
 
+class SessionBridge(Protocol):
+    async def prompt(
+        self, session_id: str, message: str, images: list[ChatImageAttachment] | None = None
+    ) -> PromptResult: ...
+
+    def cancel(self, session_id: str) -> None: ...
+
+    def is_alive(self) -> bool: ...
+
+
+class _EventQueue(asyncio.Queue[tuple[str, str]]):
+    # asyncio.Queue owns this deque; snapshots never consume or reorder events.
+    _queue: deque[tuple[str, str]]
+
+    def snapshot(self) -> list[tuple[str, str]]:
+        return list(self._queue)
+
+
 class SessionStream:
     """Ordered SSE event stream for one active ACP turn.
 
@@ -84,7 +102,7 @@ class SessionStream:
 
     def __init__(self, session_id: str) -> None:
         self.session_id = session_id
-        self._queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
+        self._queue = _EventQueue()
         self._writer_seq: int = 0
         self._active_writer_id: int | None = None
         self.disconnected: bool = False
@@ -102,7 +120,7 @@ class SessionStream:
     def buffered_events(self) -> list[tuple[str, str]]:
         if not self.disconnected:
             return []
-        return list(self._queue._queue)
+        return self._queue.snapshot()
 
     def attach_writer(self) -> int:
         self._writer_seq += 1
@@ -133,7 +151,7 @@ class SessionStream:
         self.done.set()
         self._queue.put_nowait(self._SENTINEL)
 
-    async def read(self, keepalive_interval: float = 0.0) -> AsyncIterator[str]:
+    async def read(self, keepalive_interval: float = 0.0) -> AsyncGenerator[str, None]:
         """Yield SSE chunks in production order, with optional comment heartbeats."""
         while True:
             try:
@@ -167,7 +185,7 @@ class AcpSession:
     - request_permission: 默认接受第一个选项（对标 TS onPermissionRequest）
     """
 
-    def __init__(self, session_id: str, bridge: AcpBridge) -> None:
+    def __init__(self, session_id: str, bridge: SessionBridge) -> None:
         self.session_id = session_id
         self.bridge = bridge
         self.stream = SessionStream(session_id)
@@ -286,7 +304,7 @@ class AcpSession:
 
     # ── SSE 读取（router 层消费）────────────────────────────
 
-    async def read(self, keepalive_interval: float = 0.0) -> AsyncIterator[str]:
+    async def read(self, keepalive_interval: float = 0.0) -> AsyncGenerator[str, None]:
         """返回 SSE 事件 generator 供 StreamingResponse 消费。"""
         async for chunk in self.stream.read(keepalive_interval=keepalive_interval):
             yield chunk
@@ -306,7 +324,9 @@ class AcpSession:
             result = await self.bridge.prompt(self.session_id, message, images)
             for event in self.translator.finalize():
                 await self.write_event(event)
-            reason = "interrupted" if result.stop_reason == StopReason.CANCELLED else "completed"
+            reason: Literal["interrupted", "completed"] = (
+                "interrupted" if result.stop_reason == StopReason.CANCELLED else "completed"
+            )
             await self.write_event(
                 self.translator.session_ended(reason, self.translator.build_stats(result))
             )

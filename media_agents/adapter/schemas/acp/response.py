@@ -49,9 +49,3 @@ class ResetWorkspaceResponse(BaseModel):
     success: bool
     removed: list[str] = Field(default_factory=list)
     error: str | None = None
-
-
-class PendingQuestionResponse(BaseModel):
-    """GET /sessions/:id/pending-question 的 stub 响应（ACP 用 permissions，不用 ASQ）。"""
-
-    root: None = None

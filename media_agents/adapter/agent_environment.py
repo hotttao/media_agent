@@ -18,7 +18,6 @@ from typing import NotRequired, TypeAlias, TypedDict
 logger = logging.getLogger(__name__)
 
 JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
-JsonObject: TypeAlias = dict[str, JsonValue]
 RuntimeConfig: TypeAlias = dict[str, str]
 
 
@@ -235,7 +234,7 @@ def shell_quote(value: str) -> str:
     return "'" + value.replace("'", "'\\''") + "'"
 
 
-def _normalize_mcp_server(raw_cfg: Mapping[object, object]) -> McpServerConfig:
+def _normalize_mcp_server(raw_cfg: Mapping[str, object]) -> McpServerConfig:
     cfg: McpServerConfig = {}
     url = raw_cfg.get("url")
     command = raw_cfg.get("command")
