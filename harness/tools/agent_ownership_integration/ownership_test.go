@@ -186,13 +186,19 @@ func mount(t *testing.T, h *server.Hertz, address string) *gatewayEndpoint {
 // Owner authorization is a fixture; HTTP transport, stream reconciliation,
 // independent Rabbit queues and the execution workflows are production code.
 func mountEvents(h *server.Hertz, stream *flow.EventStream) {
+	lifetime, closeStreams := context.WithCancel(context.Background())
+	h.OnShutdown = append(h.OnShutdown, func(context.Context) { closeStreams() })
 	h.GET("/test/sessions/:session/events", func(ctx context.Context, c *app.RequestContext) {
 		after, _ := strconv.ParseInt(c.Query("after"), 10, 64)
 		writer := sse.NewWriter(c)
 		if err := writer.WriteEvent("", "ready", []byte(`{}`)); err != nil {
 			return
 		}
-		_ = stream.Stream(ctx, c.Param("session"), "user", after, func(event flow.StreamEvent) error {
+		streamCtx, cancel := context.WithCancel(ctx)
+		unlink := context.AfterFunc(lifetime, cancel)
+		defer unlink()
+		defer cancel()
+		_ = stream.Stream(streamCtx, c.Param("session"), "user", after, func(event flow.StreamEvent) error {
 			if event.Heartbeat {
 				return nil
 			}

@@ -81,10 +81,10 @@ class FixtureRuntime:
         return False
 
 
-def application(ordinal: str) -> FastAPI:
+def application(ordinal: str, *, configuration: AdapterConfig | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        cfg = AdapterConfig.model_validate(
+        cfg = configuration or AdapterConfig.model_validate(
             {
                 "agent": {"type": "codex"},
                 "capabilities": {
@@ -103,7 +103,9 @@ def application(ordinal: str) -> FastAPI:
                 "event_bus": {"rabbitmq_url": os.environ["MEDIA_AGENTS_TEST_RABBITMQ_URL"]},
                 "metadata": {
                     "enabled": True,
-                    "gateway_url": os.environ.get("TEST_GATEWAY_URL_" + ordinal, os.environ["TEST_GATEWAY_URL"]),
+                    "gateway_url": os.environ.get(
+                        "TEST_GATEWAY_URL_" + ordinal, os.environ["TEST_GATEWAY_URL"]
+                    ),
                     "agent_api_token": "agent-test-token",
                     "agent_config_id": "config",
                     "replica_id": ordinal,
@@ -141,7 +143,8 @@ def application(ordinal: str) -> FastAPI:
         service = RuntimeSessionService(TxRunner(factory), repo, scope, repo)
         await service.initialize_instance(client.admission, client.drain_operation_id)
         bus = RabbitMQSessionEventBus(
-            os.environ["MEDIA_AGENTS_TEST_RABBITMQ_URL"], "test.ownership.sessions"
+            os.environ["MEDIA_AGENTS_TEST_RABBITMQ_URL"],
+            os.environ.get("MEDIA_AGENTS_SESSION_EXCHANGE", "test.ownership.sessions"),
         )
 
         def sink_factory(session_id: str, turn_id: str) -> TurnEventSink:

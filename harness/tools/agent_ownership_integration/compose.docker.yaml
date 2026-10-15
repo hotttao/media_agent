@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: p8fixture
+      POSTGRES_DB: agent_runtime
+    ports: ["127.0.0.1:${P8_POSTGRES_PORT:-25432}:5432"]
+    cpus: 0.5
+    mem_limit: 256m
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d agent_runtime"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  rabbitmq:
+    image: rabbitmq:4.3-management-alpine
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_NODENAME: rabbit@localhost
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: '+S 2:2 +A 2'
+    ports: ["127.0.0.1:${P8_RABBIT_PORT:-25672}:5672"]
+    cpus: 1.0
+    mem_limit: 384m
+    healthcheck:
+      start_period: 120s
+      # Avoid starting an Erlang CLI VM for every probe on a small machine.
+      test: [CMD-SHELL, "awk '$$2 ~ /:1628$$/ && $$4 == \"0A\" {ready=1} END {exit !ready}' /proc/net/tcp /proc/net/tcp6"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+networks:
+  default:
+    name: ${P8_DOCKER_NETWORK:-media-agent-p8}

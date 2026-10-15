@@ -31,3 +31,5 @@ Docker 创建服务通过 Unix socket 创建单实例容器；Gateway 只连接�
 Runtime 镜像以 media_agents 为 build context，可分别构建 codex/Dockerfile、claude_code/Dockerfile、goose/Dockerfile；默认都保留 `/workspace/.home`。Goose 镜像固定 CLI 1.52.0，安装依据 [官方版本](https://github.com/aaif-goose/goose/releases/tag/v1.52.0) 与 [官方安装脚本](https://raw.githubusercontent.com/aaif-goose/goose/v1.52.0/download_cli.sh)。真实付费模型及生产镜像部署需按实际凭据与 RWX 存储环境验收；协议/创建 fixture 验证不能替代完整生产部署。
 
 Docker 创建服务只接受单实例目标；扩缩容和 drain/pending 请求返回 HTTP 501 `not_implemented`。重复同一版本/配置保持容器、bootstrap proof、目录与 revision 不变，启动失败可重复 Ensure 恢复。服务不运行副本协调循环；普通运行失败交给 Docker restart policy。创建服务从不发出停止容器的业务指令，原生身份查询仍可验证外部终止的代次。
+
+完整的 Docker 创建→原生身份→Agent Session/FIFO/SSE/重启联调，可在仓库根执行 `harness/tools/agent_ownership_integration/run-docker.sh`；资源上限、fixture 范围与依赖镜像说明见[联调入口](../harness/tools/agent_ownership_integration/README.md)。

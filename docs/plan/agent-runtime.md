@@ -93,9 +93,9 @@
 - [x] IDL/router/client/swagger/schema生成一致。
 - [x] 集成夹具启动两个真实 HTTP Gateway 和两个 Agent，验证核心交互链（外部身份/模型使用明确 fixture）。
 - [x] 六能力逐项设计实现review，覆盖矩阵无缺失。
-- [ ] 整理修改、验证证据与环境限制；全部门禁满足才完成目标。
+- [x] 整理修改、验证证据与环境限制；用户接受当前结果，Kubernetes 实测另行延期。
 
-阶段证据见 [P6 审查](../review/agent-runtime/p6/review.md)。Kubernetes 双 Ready/RWX 环境门禁仍未通过；保持未勾选，不能据此宣称总体全部验收完成。
+阶段证据见 [P6 审查](../review/agent-runtime/p6/review.md)。Kubernetes 双 Ready/RWX 实测尚未完成；用户明确后续先使用 Docker，本机关闭 k3s，该项延期至具备可用 RWX 的独立环境，不阻塞后续 Docker 功能开发。
 
 ## P7 · Docker 最小创建服务收尾
 
@@ -107,6 +107,17 @@
 - [x] 最终总审查与 P7/review.md、commit。
 
 阶段证据见 [P7 审查](../review/agent-runtime/p7/review.md)。核心开发完成，Kubernetes 存储环境验收保留为部署前门禁。
+
+## P8 · Docker 完整链路功能联调
+
+依据 [Docker 联调规格](../spec/agent-runtime-docker-validation.md)，串行、受限资源执行，保留每阶段 review.md 与 commit。
+
+- [x] 停止本机 k3s 及其工作负载，保留持久数据。
+- [x] 增加可复用 Docker Agent 协议镜像和单 Workspace 原生联调夹具。
+- [x] 真实创建服务/Gateway/Agent 路由、FIFO/SSE/replay/重启持久性验证。
+- [x] 必要缺陷修复及相关检查；P8/review.md 与 commit。
+
+阶段审查见 [P8/review.md](../review/agent-runtime/p8/review.md)，复现命令见 `harness/tools/agent_ownership_integration/README.md`。
 
 ## 风险与对策
 

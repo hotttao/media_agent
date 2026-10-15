@@ -1,0 +1,14 @@
+# Protocol fixture overlay; prepare the base Agent dependency image first.
+ARG BASE_AGENT_IMAGE=media-agent-codex:local
+FROM ${BASE_AGENT_IMAGE}
+WORKDIR /app/media_agents
+COPY adapter ./adapter
+COPY codex ./codex
+COPY scripts ./scripts
+COPY goose ./goose
+COPY claude_code ./claude_code
+COPY pyproject.toml uv.lock alembic.ini ./
+COPY alembic ./alembic
+RUN uv sync --frozen --package codex --no-dev
+ENTRYPOINT ["python", "-m", "scripts.docker_pipeline_server"]
+CMD []
