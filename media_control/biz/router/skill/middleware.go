@@ -60,3 +60,88 @@ func _setskillstatusMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _importgitskillMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listunassignedskillsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _setskillaccessMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _assignskillorganizationMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _uploadskilldraftMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _discardskilldraftMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _deleteskillfileMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getskillfileMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _putskillfileMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listskillfilesMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _syncgitskillMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _publishskillMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _setskillsourceMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listskillversionsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _versionsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _versionMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getskillpackageMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

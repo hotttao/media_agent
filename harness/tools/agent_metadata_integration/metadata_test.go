@@ -28,6 +28,7 @@ import (
 	ctrlDal "media_agent/media_control/biz/dal"
 	ctrlRepo "media_agent/media_control/biz/dal/repo/agent_configuration"
 	promptRepo "media_agent/media_control/biz/dal/repo/prompt"
+	skillRepo "media_agent/media_control/biz/dal/repo/skill"
 	ctrlWorkspaceRepo "media_agent/media_control/biz/dal/repo/workspace"
 	ctrlDomain "media_agent/media_control/biz/domain/agent_configuration"
 	workspaceDomain "media_agent/media_control/biz/domain/workspace"
@@ -36,9 +37,11 @@ import (
 	ctrlRouter "media_agent/media_control/biz/router/agent_metadata"
 	ctrlService "media_agent/media_control/biz/service/agent_configuration"
 	promptService "media_agent/media_control/biz/service/prompt"
+	skillService "media_agent/media_control/biz/service/skill"
 	ctrlWorkspace "media_agent/media_control/biz/service/workspace"
 	"media_agent/media_control/biz/shared/secret"
 	ctrlFlow "media_agent/media_control/biz/workflow/metadata_update"
+	skillFlow "media_agent/media_control/biz/workflow/skill_content"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -172,7 +175,8 @@ func TestConfirmedMetadataPipeline(t *testing.T) {
 	service := ctrlService.New(repository, ctrlDal.NewTxRunner(db))
 	workspace := ctrlWorkspace.New(ctrlWorkspaceRepo.New(db), ctrlDal.NewTxRunner(db), secret.New("integration-secret"), teams{})
 	prompts := promptService.New(promptRepo.New(db), ctrlDal.NewTxRunner(db), catalogAccess{})
-	ctrlHandler.Configure(ctrlFlow.New(service, workspace, artifacts, roster{}).WithPrompts(prompts))
+	skills := skillFlow.New(skillService.New(skillRepo.New(db), ctrlDal.NewTxRunner(db), catalogAccess{}), artifacts, nil, nil)
+	ctrlHandler.Configure(ctrlFlow.New(service, workspace, artifacts, roster{}).WithPrompts(prompts).WithSkills(skills))
 	ctrlMiddleware.Configure("integration-secret", "internal-test-token")
 	ctrlMiddleware.ConfigureMetadataGateway("metadata-gateway-test")
 	controlHertz := server.New()
@@ -200,8 +204,11 @@ func TestConfirmedMetadataPipeline(t *testing.T) {
 	for hash, content := range map[string][]byte{oldHash: oldSkill, newHash: newSkill} {
 		call(t, control.URL, "PUT", "/api/v1/workspaces/workspace/agent-metadata/artifacts/"+hash, map[string]any{"content": content}, 201, nil)
 	}
-	must(t, db.Exec("INSERT INTO skills(id,owner_user_id,name,content_path,checksum,status,version,created_at,updated_at) VALUES('skill','user','Skill',?,?,'active',1,now(),now())", "sha256/"+oldHash, oldHash).Error)
-	must(t, db.Exec("UPDATE skills SET content_path=?,checksum=?,version=2 WHERE id='skill'", "sha256/"+newHash, newHash).Error)
+	must(t, db.Exec("INSERT INTO skills(id,organization_id,owner_user_id,name,content_path,checksum,status,version,published_version,draft_checksum,created_at,updated_at) VALUES('skill','org','user','Skill',?,?,'active',1,1,?,now(),now())", "sha256/"+oldHash, oldHash, oldHash).Error)
+	must(t, db.Exec("UPDATE skills SET content_path=?,checksum=?,draft_checksum=?,published_version=2,version=2 WHERE id='skill'", "sha256/"+newHash, newHash, newHash).Error)
+	for version, hash := range map[int]string{1: oldHash, 2: newHash} {
+		must(t, db.Exec("INSERT INTO skill_versions(skill_id,version,checksum,slug,description,published_by) VALUES('skill',?,?,'skill','Metadata integration skill','user')", version, hash).Error)
+	}
 	must(t, db.Exec("INSERT INTO providers(id,name,provider_type,endpoint,capabilities,status,version,created_at,updated_at) VALUES('provider','Provider','vector','https://example.invalid','{}','active',1,now(),now())").Error)
 	must(t, db.Exec("INSERT INTO credential_references(id,workspace_id,owner_user_id,name,provider_id,secret_ref,status,version,created_at,updated_at) VALUES('credential-ref','workspace','user','Credential','provider','secret-reference','active',1,now(),now())").Error)
 	must(t, db.Exec("INSERT INTO memory_stores(id,workspace_id,owner_user_id,name,store_type,configuration,credential_reference_id,status,version,created_at,updated_at) VALUES('memory','workspace','user','Memory','vector','{\"api_key\":\"must-stay-private\"}','credential-ref','active',1,now(),now())").Error)
@@ -330,7 +337,7 @@ func TestConfirmedMetadataPipeline(t *testing.T) {
 
 	// Two confirmations of the same expected version must commit exactly one release.
 	competing := make(chan error, 2)
-	flow := ctrlFlow.New(service, workspace, artifacts, roster{}).WithPrompts(prompts)
+	flow := ctrlFlow.New(service, workspace, artifacts, roster{}).WithPrompts(prompts).WithSkills(skills)
 	for _, key := range []string{"competing-a", "competing-b"} {
 		go func(key string) {
 			_, err := flow.Confirm(ctx, ctrlFlow.Confirm{WorkspaceID: "workspace", AgentConfigID: "config", UserID: "user", IdempotencyKey: key, ExpectedVersion: 4, Resources: []ctrlDomain.ResourceReference{{Kind: "media_control.configured_prompt", ID: "prompt", Version: 2}}})

@@ -6,6 +6,7 @@ import (
 	"errors"
 	d "media_agent/media_control/biz/domain/agent_configuration"
 	prompt "media_agent/media_control/biz/domain/prompt"
+	skill "media_agent/media_control/biz/domain/skill"
 	workspace "media_agent/media_control/biz/domain/workspace"
 	service "media_agent/media_control/biz/service/agent_configuration"
 	"sort"
@@ -28,17 +29,23 @@ type Flow struct {
 	artifacts  Artifacts
 	instances  InstanceReader
 	prompts    PromptLibrary
+	skills     SkillLibrary
 }
 
 type PromptLibrary interface {
 	SelectedVersion(context.Context, string, string, string, int64) (*prompt.Version, error)
 	ReadableVersion(context.Context, string, string, string, int64) (*prompt.Version, error)
 }
+type SkillLibrary interface {
+	SelectedVersion(context.Context, string, string, string, int64) (*skill.Version, error)
+	ReadableVersion(context.Context, string, string, string, int64) (*skill.Version, error)
+}
 
 func New(s *service.Service, ws WorkspaceAccess, artifacts Artifacts, instances InstanceReader) *Flow {
 	return &Flow{service: s, workspaces: ws, artifacts: artifacts, instances: instances}
 }
 func (f *Flow) WithPrompts(library PromptLibrary) *Flow { f.prompts = library; return f }
+func (f *Flow) WithSkills(library SkillLibrary) *Flow   { f.skills = library; return f }
 func (f *Flow) authorize(ctx context.Context, ws, user, permission string) (*workspace.ConfiguredWorkspace, error) {
 	ok, err := f.workspaces.CheckAccess(ctx, ws, user, permission)
 	if err != nil {
@@ -103,6 +110,7 @@ func (f *Flow) Confirm(ctx context.Context, cmd Confirm) (*d.Release, error) {
 		snapshot.ConfiguredPrompt = selection.Content
 	}
 	promptSet := false
+	skillNames := map[string]bool{}
 	for i, ref := range refs {
 		if ref.Version <= 0 || ref.ID == "" || i > 0 && refs[i-1].Kind == ref.Kind && refs[i-1].ID == ref.ID {
 			return nil, d.ErrInvalid
@@ -128,6 +136,25 @@ func (f *Flow) Confirm(ctx context.Context, cmd Confirm) (*d.Release, error) {
 			snapshot.Resources = append(snapshot.Resources, d.Resource{ResourceReference: ref, Name: version.Name})
 			continue
 		}
+		if ref.Kind == "media_control.skill" {
+			if f.skills == nil {
+				return nil, skill.ErrUnavailable
+			}
+			version, err := f.skills.SelectedVersion(ctx, ref.ID, cmd.UserID, configured.OrganizationID, ref.Version)
+			if err != nil {
+				return nil, skillError(err)
+			}
+			if skillNames[version.Slug] {
+				return nil, d.ErrInvalid
+			}
+			skillNames[version.Slug] = true
+			if ref.Checksum != "" && ref.Checksum != version.Checksum {
+				return nil, d.ErrConflict
+			}
+			ref.Checksum = version.Checksum
+			snapshot.Resources = append(snapshot.Resources, d.Resource{ResourceReference: ref, Name: version.Slug, ContentRef: "sha256/" + version.Checksum})
+			continue
+		}
 		version, err := f.service.Resource(ctx, ref)
 		if err != nil {
 			return nil, err
@@ -150,16 +177,6 @@ func (f *Flow) Confirm(ctx context.Context, cmd Confirm) (*d.Release, error) {
 		}
 		resource := d.Resource{ResourceReference: ref, Name: payload.Name}
 		switch ref.Kind {
-		case "media_control.skill":
-			if payload.ContentPath != "sha256/"+payload.Checksum {
-				return nil, d.ErrInvalid
-			}
-			body, err := f.artifacts.Get(ctx, payload.Checksum)
-			if err != nil {
-				return nil, err
-			}
-			resource.Checksum = service.Hash(body)
-			resource.ContentRef = "sha256/" + resource.Checksum
 		case "media_control.memory_store":
 			// The selected descriptor retains immutable configuration and credential references,
 			// never arbitrary provider configuration or secret values.
@@ -228,6 +245,16 @@ func promptError(err error) error {
 		return err
 	}
 }
+func skillError(err error) error {
+	switch {
+	case errors.Is(err, skill.ErrNotFound), errors.Is(err, skill.ErrForbidden):
+		return d.ErrForbidden
+	case errors.Is(err, skill.ErrInvalid), errors.Is(err, skill.ErrArchived):
+		return d.ErrInvalid
+	default:
+		return err
+	}
+}
 func (f *Flow) Selection(ctx context.Context, ws, user string) (*d.Release, int64, error) {
 	v, err := f.authorize(ctx, ws, user, "view")
 	if err != nil {
@@ -242,6 +269,14 @@ func (f *Flow) Selection(ctx context.Context, ws, user string) (*d.Release, int6
 				}
 				if _, err := f.prompts.ReadableVersion(ctx, ref.ID, user, v.OrganizationID, ref.Version); err != nil {
 					return nil, 0, promptError(err)
+				}
+			}
+			if ref.Kind == "media_control.skill" {
+				if f.skills == nil {
+					return nil, 0, skill.ErrUnavailable
+				}
+				if _, err := f.skills.ReadableVersion(ctx, ref.ID, user, v.OrganizationID, ref.Version); err != nil {
+					return nil, 0, skillError(err)
 				}
 			}
 		}

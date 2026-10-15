@@ -1964,6 +1964,10 @@ paths:
                   in: query
                   schema:
                     type: string
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
             responses:
                 "200":
                     description: OK
@@ -1994,6 +1998,48 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/import-git:
+        post:
+            tags:
+                - SkillService
+            operationId: SkillService_ImportGitSkill
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSkillRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/unassigned:
+        get:
+            tags:
+                - SkillService
+            operationId: SkillService_ListUnassignedSkills
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSkillsResponse'
                 default:
                     description: Default error response
                     content:
@@ -2053,6 +2099,36 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/access:
+        put:
+            tags:
+                - SkillService
+            operationId: SkillService_SetSkillAccess
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetSkillAccessRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/v1/skills/{skill_id}/archive:
         post:
             tags:
@@ -2069,6 +2145,310 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/ArchiveSkillRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/assign-organization:
+        post:
+            tags:
+                - SkillService
+            operationId: SkillService_AssignSkillOrganization
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AssignSkillOrganizationRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/draft:
+        put:
+            tags:
+                - SkillService
+            operationId: SkillService_UploadSkillDraft
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UploadSkillDraftRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/draft:discard:
+        post:
+            tags:
+                - SkillService
+            operationId: SkillService_DiscardSkillDraft
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SkillWriteRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/file:
+        get:
+            tags:
+                - SkillService
+            operationId: SkillService_GetSkillFile
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: path
+                  in: query
+                  schema:
+                    type: string
+                - name: version
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillFileResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - SkillService
+            operationId: SkillService_PutSkillFile
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PutSkillFileRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - SkillService
+            operationId: SkillService_DeleteSkillFile
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: path
+                  in: query
+                  schema:
+                    type: string
+                - name: expected_version
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/files:
+        get:
+            tags:
+                - SkillService
+            operationId: SkillService_ListSkillFiles
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: path
+                  in: query
+                  schema:
+                    type: string
+                - name: version
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillFilesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/git:sync:
+        post:
+            tags:
+                - SkillService
+            operationId: SkillService_SyncGitSkill
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SkillWriteRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/publish:
+        post:
+            tags:
+                - SkillService
+            operationId: SkillService_PublishSkill
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SkillWriteRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/source:
+        put:
+            tags:
+                - SkillService
+            operationId: SkillService_SetSkillSource
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetSkillSourceRequest'
                 required: true
             responses:
                 "200":
@@ -2107,6 +2487,59 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/SkillResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/versions:
+        get:
+            tags:
+                - SkillService
+            operationId: SkillService_ListSkillVersions
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillVersionsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/skills/{skill_id}/versions/{version}/package:
+        get:
+            tags:
+                - SkillService
+            operationId: SkillService_GetSkillPackage
+            parameters:
+                - name: skill_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillPackageResponse'
                 default:
                     description: Default error response
                     content:
@@ -3185,6 +3618,15 @@ components:
                     type: string
                 expected_version:
                     type: string
+        AssignSkillOrganizationRequest:
+            type: object
+            properties:
+                skill_id:
+                    type: string
+                organization_id:
+                    type: string
+                expected_version:
+                    type: string
         AttachTagRequest:
             type: object
             properties:
@@ -3389,6 +3831,23 @@ components:
                     type: string
                 checksum:
                     type: string
+                organization_id:
+                    type: string
+                description:
+                    type: string
+                visibility:
+                    type: string
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillGrant'
+                content:
+                    type: string
+                    format: bytes
+                slug:
+                    type: string
+                git:
+                    $ref: '#/components/schemas/GitSourceInput'
         CreateTagRequest:
             type: object
             properties:
@@ -3544,6 +4003,30 @@ components:
                 created_by:
                     type: string
                 created_at:
+                    type: string
+        GitSource:
+            type: object
+            properties:
+                url:
+                    type: string
+                branch:
+                    type: string
+                subpath:
+                    type: string
+                commit:
+                    type: string
+                credential_configured:
+                    type: boolean
+        GitSourceInput:
+            type: object
+            properties:
+                url:
+                    type: string
+                branch:
+                    type: string
+                subpath:
+                    type: string
+                access_token:
                     type: string
         GoogleProtobufAny:
             type: object
@@ -4018,6 +4501,20 @@ components:
                     type: string
                 updated_at:
                     type: string
+        PutSkillFileRequest:
+            type: object
+            properties:
+                skill_id:
+                    type: string
+                path:
+                    type: string
+                content:
+                    type: string
+                    format: bytes
+                expected_version:
+                    type: string
+                executable:
+                    type: boolean
         ReconcileBindingRequest:
             type: object
             properties:
@@ -4226,6 +4723,28 @@ components:
                     type: string
                 expected_version:
                     type: string
+        SetSkillAccessRequest:
+            type: object
+            properties:
+                skill_id:
+                    type: string
+                visibility:
+                    type: string
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillGrant'
+                expected_version:
+                    type: string
+        SetSkillSourceRequest:
+            type: object
+            properties:
+                skill_id:
+                    type: string
+                source:
+                    $ref: '#/components/schemas/GitSourceInput'
+                expected_version:
+                    type: string
         SetSkillStatusRequest:
             type: object
             properties:
@@ -4254,6 +4773,57 @@ components:
                     type: string
                 revoked_at:
                     type: string
+        SkillFile:
+            type: object
+            properties:
+                path:
+                    type: string
+                size:
+                    type: string
+                binary:
+                    type: boolean
+                executable:
+                    type: boolean
+        SkillFileResponse:
+            type: object
+            properties:
+                path:
+                    type: string
+                content:
+                    type: string
+                    format: bytes
+                binary:
+                    type: boolean
+                executable:
+                    type: boolean
+                expected_version:
+                    type: string
+        SkillFilesResponse:
+            type: object
+            properties:
+                files:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillFile'
+                expected_version:
+                    type: string
+        SkillGrant:
+            type: object
+            properties:
+                team_id:
+                    type: string
+                permission:
+                    type: string
+        SkillPackageResponse:
+            type: object
+            properties:
+                content:
+                    type: string
+                    format: bytes
+                checksum:
+                    type: string
+                filename:
+                    type: string
         SkillResponse:
             type: object
             properties:
@@ -4274,6 +4844,59 @@ components:
                 created_at:
                     type: string
                 updated_at:
+                    type: string
+                organization_id:
+                    type: string
+                owner_user_id:
+                    type: string
+                visibility:
+                    type: string
+                my_permission:
+                    type: string
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillGrant'
+                description:
+                    type: string
+                draft_checksum:
+                    type: string
+                published_version:
+                    type: string
+                source_kind:
+                    type: string
+                source:
+                    $ref: '#/components/schemas/GitSource'
+                has_draft:
+                    type: boolean
+        SkillVersion:
+            type: object
+            properties:
+                version:
+                    type: string
+                checksum:
+                    type: string
+                slug:
+                    type: string
+                description:
+                    type: string
+                published_by:
+                    type: string
+                created_at:
+                    type: string
+        SkillVersionsResponse:
+            type: object
+            properties:
+                versions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillVersion'
+        SkillWriteRequest:
+            type: object
+            properties:
+                skill_id:
+                    type: string
+                expected_version:
                     type: string
         Status:
             type: object
@@ -4486,6 +5109,8 @@ components:
                     type: string
                 expected_version:
                     type: string
+                description:
+                    type: string
         UpdateTagRequest:
             type: object
             properties:
@@ -4545,6 +5170,16 @@ components:
                 content:
                     type: string
                     format: bytes
+        UploadSkillDraftRequest:
+            type: object
+            properties:
+                skill_id:
+                    type: string
+                content:
+                    type: string
+                    format: bytes
+                expected_version:
+                    type: string
         WorkloadQuery:
             type: object
             properties:

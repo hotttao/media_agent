@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import subprocess
 import zipfile
 from dataclasses import replace
 from pathlib import Path
@@ -20,6 +21,24 @@ def skill_zip(text: str, *, name: str = "SKILL.md") -> bytes:
     with zipfile.ZipFile(stream, "w") as archive:
         archive.writestr(name, "---\nname: skill\ndescription: Metadata test skill\n---\n" + text)
     return stream.getvalue()
+
+
+def test_published_skill_script_can_execute_after_installation(tmp_path: Path) -> None:
+    source = tmp_path / "run.sh"
+    source.write_text("#!/bin/sh\nprintf 'skill works\\n'\n")
+    source.chmod(0o700)
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as archive:
+        archive.writestr("SKILL.md", "---\nname: skill\ndescription: Executable test\n---\n")
+        archive.write(source, "scripts/run.sh")
+    artifact = stream.getvalue()
+    store = MetadataArtifacts(tmp_path, "config", "0", "incarnation")
+    bundle = store.prepare(
+        snapshot("scripts", 1, "", artifact),
+        {hashlib.sha256(artifact).hexdigest(): artifact},
+    )
+    output = subprocess.check_output([str(bundle / "skills/skill/scripts/run.sh")], text=True)
+    assert output == "skill works\n"
 
 
 def snapshot(

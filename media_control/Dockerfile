@@ -13,7 +13,7 @@ COPY media_control/ media_control/
 RUN --mount=type=cache,target=/root/.cache/go-build cd media_control && GOWORK=off CGO_ENABLED=0 go build -o /out/media_control .
 
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata git
 WORKDIR /app
 COPY --from=builder /out/media_control /app/media_control
 COPY media_control/migrations/ /app/migrations/

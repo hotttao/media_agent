@@ -1,90 +1,77 @@
 syntax = "proto3";
-
 package media_control.skill;
-
 import "api.proto";
 import "google/api/annotations.proto";
-
 option go_package = "media_control/skill";
 
 service SkillService {
-  rpc CreateSkill(CreateSkillRequest) returns (SkillResponse) {
-    option (api.post) = "/api/v1/skills";
-    option (google.api.http) = { post: "/api/v1/skills" body: "*" };
-  }
-
-  rpc ListSkills(ListSkillsRequest) returns (ListSkillsResponse) {
-    option (api.get) = "/api/v1/skills";
-    option (google.api.http) = { get: "/api/v1/skills" };
-  }
-
-  rpc GetSkill(GetSkillRequest) returns (SkillResponse) {
-    option (api.get) = "/api/v1/skills/:skill_id";
-    option (google.api.http) = { get: "/api/v1/skills/{skill_id}" };
-  }
-
-  rpc UpdateSkill(UpdateSkillRequest) returns (SkillResponse) {
-    option (api.put) = "/api/v1/skills/:skill_id";
-    option (google.api.http) = { put: "/api/v1/skills/{skill_id}" body: "*" };
-  }
-
-  rpc SetSkillStatus(SetSkillStatusRequest) returns (SkillResponse) {
-    option (api.post) = "/api/v1/skills/:skill_id/status";
-    option (google.api.http) = { post: "/api/v1/skills/{skill_id}/status" body: "*" };
-  }
-
-  rpc ArchiveSkill(ArchiveSkillRequest) returns (SkillResponse) {
-    option (api.post) = "/api/v1/skills/:skill_id/archive";
-    option (google.api.http) = { post: "/api/v1/skills/{skill_id}/archive" body: "*" };
-  }
+ rpc CreateSkill(CreateSkillRequest) returns(SkillResponse) { option(api.post)="/api/v1/skills";option(google.api.http)={post:"/api/v1/skills" body:"*"}; }
+ rpc ImportGitSkill(CreateSkillRequest) returns(SkillResponse) { option(api.post)="/api/v1/skills/import-git";option(google.api.http)={post:"/api/v1/skills/import-git" body:"*"}; }
+ rpc ListSkills(ListSkillsRequest) returns(ListSkillsResponse) { option(api.get)="/api/v1/skills";option(google.api.http)={get:"/api/v1/skills"}; }
+ rpc ListUnassignedSkills(EmptyRequest) returns(ListSkillsResponse) { option(api.get)="/api/v1/skills/unassigned";option(google.api.http)={get:"/api/v1/skills/unassigned"}; }
+ rpc GetSkill(GetSkillRequest) returns(SkillResponse) { option(api.get)="/api/v1/skills/:skill_id";option(google.api.http)={get:"/api/v1/skills/{skill_id}"}; }
+ rpc UpdateSkill(UpdateSkillRequest) returns(SkillResponse) { option(api.put)="/api/v1/skills/:skill_id";option(google.api.http)={put:"/api/v1/skills/{skill_id}" body:"*"}; }
+ rpc SetSkillStatus(SetSkillStatusRequest) returns(SkillResponse) { option(api.post)="/api/v1/skills/:skill_id/status";option(google.api.http)={post:"/api/v1/skills/{skill_id}/status" body:"*"}; }
+ rpc ArchiveSkill(ArchiveSkillRequest) returns(SkillResponse) { option(api.post)="/api/v1/skills/:skill_id/archive";option(google.api.http)={post:"/api/v1/skills/{skill_id}/archive" body:"*"}; }
+ rpc SetSkillAccess(SetSkillAccessRequest) returns(SkillResponse) { option(api.put)="/api/v1/skills/:skill_id/access";option(google.api.http)={put:"/api/v1/skills/{skill_id}/access" body:"*"}; }
+ rpc AssignSkillOrganization(AssignSkillOrganizationRequest) returns(SkillResponse) { option(api.post)="/api/v1/skills/:skill_id/assign-organization";option(google.api.http)={post:"/api/v1/skills/{skill_id}/assign-organization" body:"*"}; }
+ rpc ListSkillFiles(SkillFileQuery) returns(SkillFilesResponse) { option(api.get)="/api/v1/skills/:skill_id/files";option(google.api.http)={get:"/api/v1/skills/{skill_id}/files"}; }
+ rpc GetSkillFile(SkillFileQuery) returns(SkillFileResponse) { option(api.get)="/api/v1/skills/:skill_id/file";option(google.api.http)={get:"/api/v1/skills/{skill_id}/file"}; }
+ rpc PutSkillFile(PutSkillFileRequest) returns(SkillResponse) { option(api.put)="/api/v1/skills/:skill_id/file";option(google.api.http)={put:"/api/v1/skills/{skill_id}/file" body:"*"}; }
+ rpc DeleteSkillFile(DeleteSkillFileRequest) returns(SkillResponse) { option(api.delete)="/api/v1/skills/:skill_id/file";option(google.api.http)={delete:"/api/v1/skills/{skill_id}/file"}; }
+ rpc UploadSkillDraft(UploadSkillDraftRequest) returns(SkillResponse) { option(api.put)="/api/v1/skills/:skill_id/draft";option(google.api.http)={put:"/api/v1/skills/{skill_id}/draft" body:"*"}; }
+ rpc DiscardSkillDraft(SkillWriteRequest) returns(SkillResponse) { option(api.post)="/api/v1/skills/:skill_id/draft:discard";option(google.api.http)={post:"/api/v1/skills/{skill_id}/draft:discard" body:"*"}; }
+ rpc PublishSkill(SkillWriteRequest) returns(SkillResponse) { option(api.post)="/api/v1/skills/:skill_id/publish";option(google.api.http)={post:"/api/v1/skills/{skill_id}/publish" body:"*"}; }
+ rpc ListSkillVersions(GetSkillRequest) returns(SkillVersionsResponse) { option(api.get)="/api/v1/skills/:skill_id/versions";option(google.api.http)={get:"/api/v1/skills/{skill_id}/versions"}; }
+ rpc GetSkillPackage(SkillVersionQuery) returns(SkillPackageResponse) { option(api.get)="/api/v1/skills/:skill_id/versions/:version/package";option(google.api.http)={get:"/api/v1/skills/{skill_id}/versions/{version}/package"}; }
+ rpc SetSkillSource(SetSkillSourceRequest) returns(SkillResponse) { option(api.put)="/api/v1/skills/:skill_id/source";option(google.api.http)={put:"/api/v1/skills/{skill_id}/source" body:"*"}; }
+ rpc SyncGitSkill(SkillWriteRequest) returns(SkillResponse) { option(api.post)="/api/v1/skills/:skill_id/git:sync";option(google.api.http)={post:"/api/v1/skills/{skill_id}/git:sync" body:"*"}; }
 }
-
+message EmptyRequest {}
+message SkillGrant { string team_id=1;string permission=2; }
+message GitSourceInput { string url=1;string branch=2;string subpath=3;optional string access_token=4; }
+message GitSource { string url=1;string branch=2;string subpath=3;string commit=4;bool credential_configured=5; }
 message CreateSkillRequest {
-  string workspace_id = 1 [(api.body) = "workspace_id"];
-  string name = 2 [(api.body) = "name"];
-  string content_path = 3 [(api.body) = "content_path"];
-  string checksum = 4 [(api.body) = "checksum"];
+ string workspace_id=1 [deprecated=true,(api.body)="workspace_id"];
+ string name=2 [(api.body)="name"];
+ string content_path=3 [deprecated=true,(api.body)="content_path"];
+ string checksum=4 [deprecated=true,(api.body)="checksum"];
+ string organization_id=5 [(api.body)="organization_id"];
+ string description=6 [(api.body)="description"];
+ string visibility=7 [(api.body)="visibility"];
+ repeated SkillGrant grants=8 [(api.body)="grants"];
+ bytes content=9 [(api.body)="content"];
+ string slug=10 [(api.body)="slug"];
+ GitSourceInput git=11 [(api.body)="git"];
 }
-
-message ListSkillsRequest {
-  string workspace_id = 1 [(api.query) = "workspace_id"];
-}
-
-message GetSkillRequest {
-  string skill_id = 1 [(api.path) = "skill_id"];
-}
-
+message ListSkillsRequest { string workspace_id=1 [deprecated=true,(api.query)="workspace_id"];string organization_id=2 [(api.query)="organization_id"]; }
+message GetSkillRequest { string skill_id=1 [(api.path)="skill_id"]; }
 message UpdateSkillRequest {
-  string skill_id = 1 [(api.path) = "skill_id"];
-  string name = 2 [(api.body) = "name"];
-  string content_path = 3 [(api.body) = "content_path"];
-  string checksum = 4 [(api.body) = "checksum"];
-  int64 expected_version = 5 [(api.body) = "expected_version"];
+ string skill_id=1 [(api.path)="skill_id"];string name=2 [(api.body)="name"];
+ string content_path=3 [deprecated=true,(api.body)="content_path"];
+ string checksum=4 [deprecated=true,(api.body)="checksum"];
+ int64 expected_version=5 [(api.body)="expected_version"];
+ string description=6 [(api.body)="description"];
 }
-
-message SetSkillStatusRequest {
-  string skill_id = 1 [(api.path) = "skill_id"];
-  string status = 2 [(api.body) = "status"];
-  int64 expected_version = 3 [(api.body) = "expected_version"];
-}
-
-message ArchiveSkillRequest {
-  string skill_id = 1 [(api.path) = "skill_id"];
-  int64 expected_version = 2 [(api.body) = "expected_version"];
-}
-
+message SetSkillStatusRequest { string skill_id=1 [(api.path)="skill_id"];string status=2 [(api.body)="status"];int64 expected_version=3 [(api.body)="expected_version"]; }
+message ArchiveSkillRequest { string skill_id=1 [(api.path)="skill_id"];int64 expected_version=2 [(api.body)="expected_version"]; }
 message SkillResponse {
-  string id = 1;
-  string workspace_id = 2;
-  string name = 3;
-  string content_path = 4;
-  string checksum = 5;
-  string status = 6;
-  int64 version = 7;
-  int64 created_at = 8;
-  int64 updated_at = 9;
+ string id=1;string workspace_id=2 [deprecated=true];string name=3;string content_path=4;string checksum=5;string status=6;int64 version=7;int64 created_at=8;int64 updated_at=9;
+ string organization_id=10;string owner_user_id=11;string visibility=12;string my_permission=13;repeated SkillGrant grants=14;string description=15;string draft_checksum=16;int64 published_version=17;string source_kind=18;GitSource source=19;bool has_draft=20;
 }
-
-message ListSkillsResponse {
-  repeated SkillResponse skills = 1;
-}
+message ListSkillsResponse { repeated SkillResponse skills=1; }
+message SetSkillAccessRequest { string skill_id=1 [(api.path)="skill_id"];string visibility=2 [(api.body)="visibility"];repeated SkillGrant grants=3 [(api.body)="grants"];int64 expected_version=4 [(api.body)="expected_version"]; }
+message AssignSkillOrganizationRequest { string skill_id=1 [(api.path)="skill_id"];string organization_id=2 [(api.body)="organization_id"];int64 expected_version=3 [(api.body)="expected_version"]; }
+message SkillFileQuery { string skill_id=1 [(api.path)="skill_id"];string path=2 [(api.query)="path"];int64 version=3 [(api.query)="version"]; }
+message SkillFile { string path=1;int64 size=2;bool binary=3;bool executable=4; }
+message SkillFilesResponse { repeated SkillFile files=1;int64 expected_version=2; }
+message SkillFileResponse { string path=1;bytes content=2;bool binary=3;bool executable=4;int64 expected_version=5; }
+message PutSkillFileRequest { string skill_id=1 [(api.path)="skill_id"];string path=2 [(api.body)="path"];bytes content=3 [(api.body)="content"];int64 expected_version=4 [(api.body)="expected_version"];bool executable=5 [(api.body)="executable"]; }
+message DeleteSkillFileRequest { string skill_id=1 [(api.path)="skill_id"];string path=2 [(api.query)="path"];int64 expected_version=3 [(api.query)="expected_version"]; }
+message UploadSkillDraftRequest { string skill_id=1 [(api.path)="skill_id"];bytes content=2 [(api.body)="content"];int64 expected_version=3 [(api.body)="expected_version"]; }
+message SkillWriteRequest { string skill_id=1 [(api.path)="skill_id"];int64 expected_version=2 [(api.body)="expected_version"]; }
+message SkillVersion { int64 version=1;string checksum=2;string slug=3;string description=4;string published_by=5;int64 created_at=6; }
+message SkillVersionsResponse { repeated SkillVersion versions=1; }
+message SkillVersionQuery { string skill_id=1 [(api.path)="skill_id"];int64 version=2 [(api.path)="version"]; }
+message SkillPackageResponse { bytes content=1;string checksum=2;string filename=3; }
+message SetSkillSourceRequest { string skill_id=1 [(api.path)="skill_id"];GitSourceInput source=2 [(api.body)="source"];int64 expected_version=3 [(api.body)="expected_version"]; }

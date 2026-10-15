@@ -25,12 +25,33 @@ func Register(r *server.Hertz) {
 			_v1.POST("/skills", append(_createskillMw(), skill.CreateSkill)...)
 			{
 				_skills := _v1.Group("/skills", _skillsMw()...)
+				_skills.POST("/import-git", append(_importgitskillMw(), skill.ImportGitSkill)...)
 				_skills.GET("/:skill_id", append(_getskillMw(), skill.GetSkill)...)
 				_skills.PUT("/:skill_id", append(_updateskillMw(), skill.UpdateSkill)...)
+				_skills.GET("/unassigned", append(_listunassignedskillsMw(), skill.ListUnassignedSkills)...)
 				{
 					_skill_id := _skills.Group("/:skill_id", _skill_idMw()...)
+					_skill_id.PUT("/access", append(_setskillaccessMw(), skill.SetSkillAccess)...)
 					_skill_id.POST("/archive", append(_archiveskillMw(), skill.ArchiveSkill)...)
+					_skill_id.POST("/assign-organization", append(_assignskillorganizationMw(), skill.AssignSkillOrganization)...)
+					_skill_id.PUT("/draft", append(_uploadskilldraftMw(), skill.UploadSkillDraft)...)
+					_skill_id.POST("/draft:discard", append(_discardskilldraftMw(), skill.DiscardSkillDraft)...)
+					_skill_id.DELETE("/file", append(_deleteskillfileMw(), skill.DeleteSkillFile)...)
+					_skill_id.GET("/file", append(_getskillfileMw(), skill.GetSkillFile)...)
+					_skill_id.PUT("/file", append(_putskillfileMw(), skill.PutSkillFile)...)
+					_skill_id.GET("/files", append(_listskillfilesMw(), skill.ListSkillFiles)...)
+					_skill_id.POST("/git:sync", append(_syncgitskillMw(), skill.SyncGitSkill)...)
+					_skill_id.POST("/publish", append(_publishskillMw(), skill.PublishSkill)...)
+					_skill_id.PUT("/source", append(_setskillsourceMw(), skill.SetSkillSource)...)
 					_skill_id.POST("/status", append(_setskillstatusMw(), skill.SetSkillStatus)...)
+					_skill_id.GET("/versions", append(_listskillversionsMw(), skill.ListSkillVersions)...)
+					{
+						_versions := _skill_id.Group("/versions", _versionsMw()...)
+						{
+							_version := _versions.Group("/:version", _versionMw()...)
+							_version.GET("/package", append(_getskillpackageMw(), skill.GetSkillPackage)...)
+						}
+					}
 				}
 			}
 		}

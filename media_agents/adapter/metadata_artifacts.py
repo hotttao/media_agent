@@ -220,6 +220,8 @@ class MetadataArtifacts:
                     path.mkdir(parents=True, exist_ok=True)
                 else:
                     _write(path, archive.read(entry))
+                    if mode & 0o111:
+                        path.chmod(0o700)
             if not (target / "SKILL.md").is_file():
                 raise InvalidMetadata("skill_manifest_missing")
 

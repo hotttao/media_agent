@@ -28,7 +28,7 @@ Agent Catalog 管理 Agent Configuration 可引用的 Prompt、Agent Template、
 ### 不做什么
 - 不管理业务 Plugin/MCP Definition。
 - Prompt 聚合持有 Configured Prompt 的内容与版本，不拥有 Gateway 的 Platform Prompt 模板与正文生成。
-- 不读取 Credential 明文，不执行模型或 Skill。
+- 不读取外部 Credential Reference 的明文，不执行模型或 Skill。
 
 ## 能力清单
 
@@ -82,11 +82,17 @@ Agent Catalog 管理 Agent Configuration 可引用的 Prompt、Agent Template、
 | organization_id | text | 所属企业，创建后不可变；不表示平台级公开 |
 | owner_user_id | text | 创建用户 ID |
 | name | text | Skill 名称 |
+| description | text | 资源描述 |
 | visibility | text | private/team/public；public 仅限所属企业 |
-| content_path | text | Storage 中的内容路径 |
+| content_path | text | 产物存储中的不可变发布 ZIP 引用 |
 | checksum | text | 内容校验值 |
+| draft_checksum | text | 当前可编辑文件集合的产物引用 |
+| published_version | bigint | 最近发布的不可变内容版本；零表示未发布 |
+| source_kind | text | native/upload/git |
+| git_url/git_branch/git_subpath/git_commit | text | Git 来源与当前草稿来源提交 |
+| encrypted_git_token | bytea nullable | 来源访问凭据密文，不进入目录历史、文件包、运行快照或 API 回显 |
 | status | text | active/disabled/archived |
-| version | bigint | Skill 版本 |
+| version | bigint | 资源 CAS；与供运行选择的 published_version 分开 |
 | created_at | timestamptz | 创建时间 |
 | updated_at | timestamptz | 最后更新时间 |
 
@@ -166,11 +172,14 @@ Agent Configuration 可选择不设置 Prompt、直接填写正文或引用一�
 ### Skill 内容与发布
 
 - Skill 聚合包含可编辑草稿和发布版本的元数据；实际文件通过产物引用保存。现有 `content_path/checksum` 两个字段不足以表达完整内容管理能力。
+- `skill_versions` 保存不可变内容版本、包校验值、入口名称、描述和发布者；资源 CAS 不作为已发布内容版本。当前资源 ACL 控制历史内容访问，发布不回滚 ACL。
 - 上传支持 ZIP、tar.gz，文件集合包含入口 `SKILL.md` 以及可选脚本和参考资料。Git 导入选择仓库、分支和子目录，并支持用户手动同步。
 - 在线编辑支持浏览文件树、读取、创建、修改和删除文件；未发布的草稿不出现在 Agent 可选版本中。
 - 发布时校验完整文件集合和 `SKILL.md`，生成不可变版本；已发布版本的文件、校验值和内容引用不能原地修改。
 - 可以查看历史版本并下载版本包；选择历史版本供 Agent 使用仍通过既有显式确认流程，不覆盖发布历史。
 - 编辑、导入、同步和发布均校验资源编辑权限；内容读取、历史查看和下载校验资源读取权限，企业边界保持一致。
 - 资源发布和 Agent 配置确认是两个独立动作；发布或同步不通知 Agent 自动升级。
+- Git 来源和凭据只允许 owner 更改，editor 可编辑草稿、手动同步和发布；来源 URL 改变时不默默复用旧凭据。凭据只由 Control 在抓取请求内解密，不交给 Agent。
+- 原 owner 可为无法自动确定企业的旧资源明确选择所属有效企业；资源归属确定后不可迁移企业。
 
 文件产物保存与发布事实提交由 [Skill 内容发布工作流](../../workflow/0003-skill_content_publication/skill_content_publication.md) 协调。

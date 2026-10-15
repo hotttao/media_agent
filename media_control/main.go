@@ -71,8 +71,10 @@ import (
 	workspacemetadataservice "media_agent/media_control/biz/service/workspace_metadata"
 	sharedclient "media_agent/media_control/biz/shared/client"
 	mediaauthclient "media_agent/media_control/biz/shared/client/mediaauth"
+	"media_agent/media_control/biz/shared/client/skillgit"
 	"media_agent/media_control/biz/shared/secret"
 	metadataflow "media_agent/media_control/biz/workflow/metadata_update"
+	skillflow "media_agent/media_control/biz/workflow/skill_content"
 	teamworkchange "media_agent/media_control/biz/workflow/teamwork_change"
 	workloadflow "media_agent/media_control/biz/workflow/workload_target"
 )
@@ -130,7 +132,17 @@ func main() {
 	promptApplication := promptservice.New(promptrepo.New(db), dal.NewTxRunner(db), resourceaccess.New(mediaAuthURL, mediaAuthInternalToken, nil))
 	prompthandler.Configure(promptApplication)
 	templatehandler.Configure(templateservice.New(templaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))
-	skillhandler.Configure(skillservice.New(skillrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
+	artifactRoot := cfg.GetAgentMetadata().GetArtifactRoot()
+	if artifactRoot == "" {
+		artifactRoot = envOr("AGENT_METADATA_ARTIFACT_ROOT", "./data/metadata")
+	}
+	artifacts, err := metadataartifact.New(artifactRoot)
+	if err != nil {
+		log.Fatal("invalid metadata artifact root")
+	}
+	skillApplication := skillservice.New(skillrepo.New(db), dal.NewTxRunner(db), resourceaccess.New(mediaAuthURL, mediaAuthInternalToken, nil))
+	skillContent := skillflow.New(skillApplication, artifacts, skillgit.Client{}, secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())))
+	skillhandler.Configure(skillContent)
 	providerhandler.Configure(providerservice.New(providerrepo.New(db), dal.NewTxRunner(db)))
 	adminStore := adminrepo.New(db)
 	adminhandler.Configure(adminservice.New(adminStore, dal.NewTxRunner(db)), adminservice.NewClusterService(adminStore), adminservice.NewStatisticsService(adminStore), adminservice.NewAdminWorkspaceService(adminStore))
@@ -172,13 +184,9 @@ func main() {
 			log.Fatal("metadata Gateway identity credential is required")
 		}
 		middleware.ConfigureMetadataGateway(metadataCfg.GetGatewayCredential())
-		artifacts, err := metadataartifact.New(metadataCfg.GetArtifactRoot())
-		if err != nil {
-			log.Fatal("invalid metadata artifact root")
-		}
 		repository := metadatarepo.New(db)
 		workspaceAccess := workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())), teamAccess)
-		metadatahandler.Configure(metadataflow.New(metadataservice.New(repository, dal.NewTxRunner(db)), workspaceAccess, artifacts, sharedclient.NewMetadataInstances(envOr("MEDIA_AGENT_GATEWAY_URL", "http://127.0.0.1:8006"), internalToken)).WithPrompts(promptApplication))
+		metadatahandler.Configure(metadataflow.New(metadataservice.New(repository, dal.NewTxRunner(db)), workspaceAccess, artifacts, sharedclient.NewMetadataInstances(envOr("MEDIA_AGENT_GATEWAY_URL", "http://127.0.0.1:8006"), internalToken)).WithPrompts(promptApplication).WithSkills(skillContent))
 		publisher, err := messagebus.NewTopicPublisher(cfg.GetRabbitmq().GetUrl(), metadataCfg.GetMetadataExchange())
 		if err != nil {
 			log.Fatal("invalid metadata Broker configuration")

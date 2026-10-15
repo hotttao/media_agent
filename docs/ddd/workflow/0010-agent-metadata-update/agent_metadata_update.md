@@ -73,6 +73,7 @@ sequenceDiagram
 
 1. 用户选择由 Agent Configuration Domain 决定。Workflow 协调快照构建、消息与配置拉取，不拥有新的配置事实表；写能力的版本和幂等约束保留在该 Domain。
    Prompt 的不设置、直接填写和库引用互斥：前两者不需要虚构资源引用，直接填写正文随 Release 固定保存；库引用要求恰当的资源读取授权和固定版本。三种方式的确认均要求 Workspace manage，库资源编辑仍不自动触发更新。
+   Skill 引用解析独立的发布内容版本，不把资源 CAS 或草稿当作发布版本；校验当前资源授权、企业和完整入口。不同 Skill 的入口名称冲突时拒绝选择，避免运行时文件覆盖。
 2. Control 发布的是已确认选择对应的运行更新通知，不是把每条资源编辑直接转为运行命令。一个通知只对应一个 Workspace/Agent Configuration 的选定目标；涉及多个 Workspace 时分别路由。
 3. 通知资源列表仅用于说明变化，Agent 不按消息拼装配置。目标查询返回完整、经过授权的有效快照；并发用户更新时由 Control 判断目标是否仍有效，旧通知不得降低实例已应用的选择序号，也不能自动拉取尚未被用户选择的 Catalog 新版本。
 4. Gateway 每次代理查询，保持无控制配置缓存。Platform Prompt 正文在返回链路生成，Configured Prompt 仍是独立内容；秘密不进入消息或正文。

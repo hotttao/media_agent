@@ -40,6 +40,18 @@ GET `/api/v1/workspaces/{id}/agent-metadata` 返回已确认来源、固定正�
 
 ## 后续切片接口范围
 
+### Skill 内容切片
+
+Skill 当前 `version` 是资源 CAS，控制名称、ACL、草稿、Git 来源和发布；`published_version` 是不可变内容版本，供 Agent 选择，两者分别返回。`skills` 增加企业、visibility、description、draft_checksum、published_version、Git 来源和加密访问令牌，`skill_grants` 保存部门权限，`skill_versions` 保存发布内容引用、入口名称、描述和发布者。旧目录历史中有效的 sha256 包引用按原版本迁移，无法推断企业的资源保留为原 owner 的待归属项。
+
+草稿和发布均存储规范化 ZIP（根目录 SKILL.md）；上传接受 ZIP/tar.gz 并去掉单层包裹目录，Git 选定目录也归一化为相同格式。包8MiB、单文件8MiB、展开32MiB、最多1024文件；拒绝逃逸路径和链接。编辑可暂时保存不完整 SKILL.md，发布时完整校验 YAML frontmatter 的 name/description。文件响应采用 bytes/base64，UI 对文本编辑、对二进制预览/下载。规范化包保留脚本可执行标志，Agent 安装后赋予文件所有者执行权限。
+
+创建可提供压缩包或在线编写起始内容；Git 导入指定 HTTP(S) 仓库、分支及子目录，支持写入式可选 access_token。令牌使用 Control 现有认证加密机制保存，只返回 configured 标志；不进入文件包、历史、日志、运行快照或 API 回显。Git 仅手动同步，无后台同步服务；来源和凭据变更要求资源 owner，内容编辑和发布允许 editor。
+
+内容读写由 Skill 内容发布 Workflow 协调，服务层执行聚合 CAS 与权限，文件产物保存和 Git 访问在数据库事务外。上传/同步更新草稿，发布将完整固定草稿保存为新的内容版本；发布不修改任何 Workspace 的选择。Agent 确认选择改为查询 Skill 发布历史与当前资源 ACL，不把编辑中的 catalog CAS 版本当作已发布内容。
+
+资源接口沿用 `/api/v1/skills`（organization_id 创建/列表、name/description 编辑、access 管理、status 启停、archive），新增 `/import-git`、`/{id}/git:sync`、`/{id}/source`、`/{id}/draft`、`/{id}/files`、`/{id}/file`、`/{id}/publish`、`/{id}/versions`、`/{id}/versions/{version}/package`，以及与 Prompt 对称的未归属列表和归属确认。所有写操作使用 expected_version；内容读取和下载执行当前 ACL。
+
 Skill 扩展现有 CRUD 为内容管理与发布 API；MCP 扩展现有 Gateway 目录 API 并实现 Plugin 的绑定及固定配置查询。具体数据契约在对应实现切片前补充，保持以上已确认语义。管理界面使用真实 API，不以编辑内部存储路径作为上传功能，不以模型替身测试作为正式模型可用性证据。
 
 正式使用入口包括企业资源库、Agent 配置（含显式更新）、会话创建、消息发送、流式输出、历史和工具权限确认；Docker 仅负责创建一个可用 Agent。
