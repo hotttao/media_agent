@@ -63,3 +63,7 @@ Gateway Definition 增加不可变 organization_id，空值属于平台目录。
 外部认证支持 none、bearer、api_key、oauth。bearer/API Key 由 Plugin 按 Workspace 加密保存，API 只返回是否配置，用户替换或清除时显式提交，历史快照不得包含明文。API Key 支持指定合法 HTTP Header；拒绝 Host、Cookie、代理身份及逐跳协议 Header。OAuth 由 Auth 负责用户授权、连接与可用 access token，Plugin 代理使用，Agent 不持有凭据。平台 session_context 类型仅限平台维护的可信服务，企业不可注册该类型。
 
 Definition 更新、绑定编辑、OAuth 连接及凭据替换不自动升级 Agent。用户明确确认 MCP 选择后才进入 Control 的不可变配置 Release；旧会话继续引用固定 Definition/Binding 版本。当前目录禁用或权限撤销仍阻止后续调用。
+
+Plugin 管理接口 `/api/v1/workspaces/{workspace_id}/mcp-bindings` 支持列表、创建，`/{binding_id}` 支持读取和 CAS 更新，`/{binding_id}/versions` 返回非秘密固定历史。固定选用从内部同作用域读取 ID/version/checksum；Control 校验 Workspace manage 与目录企业范围后，将 `media_plugin.mcp_binding` 引用纳入 Release。运行解析必须带 Gateway 已验证的 target_context_version/context_version，Plugin 读取该 Control Release，仅返回该固定选择，不回退最新 Binding。
+
+静态凭据每次替换生成新的加密 credential_id；绑定版本引用对应凭据，旧会话保留原固定版本。停用当前 Binding/Definition 是立即撤销所有固定版本调用的入口。OAuth 连接使用 Auth 现有浏览器授权入口，Plugin 通过单独的内部服务凭证取得有效 access token，并仅对已核验的固定目录地址代理。Auth 内部端口不返回 refresh token。

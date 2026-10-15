@@ -25,9 +25,9 @@
 ## F3 · MCP 企业管理与使用
 
 - [x] F3a：Gateway 企业目录与授权、运行调用企业范围校验。
-- [ ] F3b：Plugin 绑定管理和固定配置查询、静态凭据与 OAuth 代理。
-- [ ] 工具发现、连接配置和 Agent 调用链路。
-- [ ] 功能检查、review.md 和 commit。
+- [x] F3b：Plugin 绑定管理和固定配置查询、静态凭据与 OAuth 代理。
+- [x] 工具发现、连接配置和 Agent 调用链路（真实协议服务验证，正式模型验收属 F4）。
+- [x] 功能检查、F3a/F3b review.md 和 commit。
 
 ## F4 · 界面与正式使用
 

@@ -134,3 +134,7 @@ Secret 不进入 manifest，凭据按受控加密版本引用执行时取得。�
 ### 平台模板引用
 
 用户确认的不可变 Metadata Release 固定 Gateway 平台模板版本引用，Control 不渲染或拥有模板正文。已有缺失引用的 release 对应版本1；新确认 release 选择版本2。模板发布本身不自动变更已确认 release、既有 Session 或 queued Turn。
+
+### 固定 MCP Binding 引用
+
+Release 的 resources 接受 `media_plugin.mcp_binding` ID/version/checksum。Control 在 Workspace manage 校验后通过专用服务端口请求 Plugin 校验当前及固定目录准入，保存非秘密引用，不复制 Binding 或凭据事实。Binding 编辑不改变 Release；只有用户明确确认才发布新通知。Gateway/Plugin 在运行时依据 Session 固定 Release 解析引用，不读取最新候选代替。

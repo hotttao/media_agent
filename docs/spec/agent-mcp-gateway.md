@@ -4,7 +4,7 @@
 
 ## 受控目录
 
-目录 API 由 Edge 签名用户身份经 Auth GetMe 取得当前平台 admin 角色，不信任用户请求中的角色。稳定 slug 限制为安全字符；Endpoint 只能使用部署允许的 host，禁止凭据、fragment、重定向和任意上游 URL。支持 streamable_http/sse 与本地 platform Transport；auth 为 session_context/oauth/none。本地 platform 由 Gateway 实现，不访问网络。更新使用 expected_version，retired 不复活，保留不可变定义历史。目录事务同时递增 revision、记录可重试变更事件；通知不自动修改用户已确认配置。
+目录 API 由 Edge 签名用户身份经 Auth GetMe 取得当前平台角色，企业管理另向 Auth 查询当前企业 admin 事实，不信任用户请求中的角色。稳定 slug 限制为安全字符；Endpoint 只能使用部署允许的 host，禁止凭据、fragment、重定向和任意上游 URL。支持 streamable_http/sse 与本地 platform Transport；auth 为 session_context/oauth/none/bearer/api_key。本地 platform 由 Gateway 实现，不访问网络。更新使用 expected_version，retired 不复活，保留不可变定义历史。目录事务同时递增 revision、记录可重试变更事件；通知不自动修改用户已确认配置。
 
 ## 每次请求身份与权限
 
@@ -37,7 +37,7 @@ Gateway 生成正文，Configured Prompt 分开交付。模板 immutable/version
 
 Gateway typed agent_mcp 配置：enabled（默认false）、allowed_upstream_hosts（精确host[:port]列表）、plugin_url、plugin_credential。环境入口为 AGENT_MCP_ENABLED、AGENT_MCP_ALLOWED_UPSTREAM_HOSTS（YAML列表）、MEDIA_PLUGIN_URL、MCP_PLUGIN_GATEWAY_CREDENTIAL。开启依赖 P3 agent_runtime；无 Plugin URL 时只提供内置 platform，配置 Plugin 但不可用时拒绝而不回退。目录发布 topic exchange 为 media.mcp.catalog，事件 schema_version=1/event_type=mcp.catalog.changed/event_id/definition_id/definition_version/occurred_at。
 
-Plugin 服务当前在仓库中尚未实现；idl/media_plugin/mcp_access.proto 定义受控查询，Gateway 使用生成客户端，协议 fixture 验证边界。请求含 user/workspace/config/session/context_version，返回固定 snapshot_version、当前 authorization_revision、带定义版本及 methods/tools/prompts/resources allowlist 的 grants。缺失固定映射必须拒绝。proxy_authorization 是请求作用域后端授权适配；不持久化、不暴露给 Agent。none 允许无凭证受控后端，其他认证类型缺失授权适配即失败。资源权限支持精确 URI 或已批准 RFC6570 模板；目标资源所有者仍执行最终授权。
+Plugin 服务位于 media_plugin；idl/media_plugin/mcp_access.proto 定义受控查询，Gateway 使用生成客户端。请求含 user/workspace/config/session/context_version/target_context_version，返回固定 snapshot_version、当前 authorization_revision、带定义版本及 methods/tools/prompts/resources allowlist 的 grants。缺失固定映射必须拒绝。静态认证通过私有端口返回受限上游 Header，OAuth 返回固定 Binding 引用并由 Gateway 客户端根据部署配置构造 Plugin 代理地址；服务凭据与用户凭据不暴露给 Agent。none 允许无凭证受控后端，其他认证类型缺失授权适配即失败。资源权限支持精确 URI 或已批准 RFC6570 模板；目标资源所有者仍执行最终授权。
 
 Agent MCP 请求头：Authorization（稳定 Agent Bearer）、X-Session-Token、X-Agent-Instance-Credential、X-Agent-Replica-ID、X-Agent-Incarnation-ID、X-Agent-Turn-ID、X-Agent-Execution-Epoch。Gateway 根据权威事实重新授权，不信任客户端 Workspace/owner 声明。后端仅收到 Plugin 适配认证及服务计算的 X-Media-User-ID/Workspace-ID/Session-ID/Agent-Configuration-ID。
 
@@ -50,3 +50,5 @@ Codex/Goose 的托管 ACP 每轮关闭已空闲的连接，用持久 native hand
 旧 CpClient 仅保留 Gateway 元数据适配，不再调用 /_cp，也不拉取/落盘任意后端 MCP 或 provider credentials；生产托管模式使用 GatewayMetadataClient/GatewayInstanceClient。未配置受控身份的本地模式仅用于 mock，本阶段不提供旧 CP 远端兼容服务。
 
 部署顺序：先完成所有 Gateway 的固定版本模板/协议能力部署，再允许 Control 发布模板版本2；已有 release 继续版本1。不能在旧 Gateway 仍忽略模板引用时发布新版本。滚动升级期间不以新二进制重新解释旧 Session 的模板版本。SSE 上游的消息 endpoint 也必须与已批准地址同源，不能利用 endpoint 事件把后端授权发往其他 origin。ACL 向量按集合排序去重，表示顺序变化不会使跨 Gateway cursor 失效。
+
+企业目录及 Workspace 绑定产品契约、静态认证、OAuth 和明确确认的接口与版本细节见 [agent-product.md](agent-product.md)，该规格补充 P4 的早期基础实现。

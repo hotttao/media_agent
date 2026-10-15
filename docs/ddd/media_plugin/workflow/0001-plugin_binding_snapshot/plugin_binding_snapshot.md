@@ -1,63 +1,71 @@
 ---
 name: plugin_binding_snapshot
-description: 将 Workspace Plugin Binding 发布为 Agent MCP 配置快照
-participants: [media_agent_gateway/mcp_catalog, plugin_binding, media_control]
+description: 用户明确确认 Workspace MCP Binding 固定版本后发布 Agent 配置
+participants: [workspace_admin, media_agent_gateway/mcp_catalog, plugin_binding, media_control]
 domains: [media_agent_gateway/mcp_catalog, plugin_binding]
 ---
 
 ## 一句话说明
-Workspace 启用关系变化后，Plugin 校验 MCP Definition 与配置并生成版本化候选快照。用户明确确认选择后，Control 才发布新的 Runtime Context。
+
+Workspace 管理员编辑 Binding 生成不可变候选版本；用户明确确认版本集合后，Control 才创建 Agent 配置 Release 并发送更新通知。
 
 ## 触发与结果
+
 | 项目 | 内容 |
-|:---|:---|
-| 触发 | Binding 创建、更新、禁用或 Definition 变更 |
-| 前置条件 | Definition 已批准，配置通过 schema 校验 |
-| 成功结果 | 发布不可变 snapshot_version |
-| 失败结果 | 保留上一有效快照并报告无效项 |
+| --- | --- |
+| 触发 | Workspace 管理员创建、编辑或停用 Binding，随后明确确认 Agent 配置 |
+| 前置条件 | Control 授予 Workspace manage；Definition 属于平台或 Workspace 同一企业；启用时当前及固定定义均 enabled |
+| 成功结果 | Binding 候选历史已保存；确认后 Control Release 固定 ID/version/checksum |
+| 失败结果 | Binding 与 Control 各自原子回滚；已保存候选不会自动进入 Agent |
 
 ## 执行时间线
+
 ```mermaid
 sequenceDiagram
     participant U as Workspace Admin
-    participant G as Gateway MCP Catalog
-    participant P as media_plugin
-    participant DB as Plugin DB
-    participant C as media_control
-    U->>P: Enable/Update/Disable Binding
-    P->>G: 查询受控 Definition 与当前版本
-    G-->>P: Definition / 不存在 / 禁用
-    P->>DB: TX1: 更新 Binding/version + Outbox
-    P->>DB: 读取有效 Binding 版本
-    P->>G: 查询 Definition 配置与版本
-    G-->>P: 版本化 Definition
-    Note over P,G: 构建后再次核对来源版本；冲突则放弃旧结果并重组
-    P->>P: 校验 schema、endpoint、auth type
-    P->>DB: TX2: 保存不可变 Snapshot + Outbox
-    P-->>U: 返回候选 snapshot_version
-    U->>C: 明确确认固定快照选择
-    C->>P: 校验快照、Workspace 与当前目录权限
-    P-->>C: 不含凭据的固定快照
-    C->>C: 保存不可变 Release 并通知 Agent
+    participant P as Plugin
+    participant C as Control
+    participant G as Gateway Catalog
+    participant D as Plugin DB
+    participant CD as Control DB
+    participant A as Agent
+    U->>P: 编辑 Binding + expected_version + 可选凭据
+    P->>C: 校验当前 Workspace manage 并取得真实企业
+    C-->>P: 允许与真实 Workspace / 拒绝
+    P->>G: 读取当前及固定 Definition
+    G-->>P: 定义、企业、状态与版本
+    P->>P: 校验认证类型、Header、白名单并加密新静态凭据
+    P->>D: TX1: CAS current + immutable binding version + encrypted credential
+    D-->>P: commit / conflict
+    P-->>U: 不含秘密的候选 ID/version/checksum
+    U->>C: 明确确认 resources 中的 Binding ID/version
+    C->>C: 再校验 Workspace manage 与 Agent 配置 CAS
+    C->>P: 专用服务身份 + 用户 + Workspace + 固定 Binding
+    P->>C: 校验当前 Workspace manage
+    P->>G: 再读目录准入与固定版本
+    P-->>C: 验证后的非秘密固定摘要
+    C->>CD: TX2: CAS configuration + immutable Release + update Outbox
+    CD-->>C: commit
+    C-->>U: 新 Release
+    C-->>A: 已确认 metadata update_requested 通知
 ```
 
-### 步骤说明
-Binding 是用户期望，Snapshot 是可重建发布结果。配置无效时保留 Binding 错误和上一有效 Snapshot；Gateway 使用版本化配置解析可访问的 MCP 实现；Agent 只连接 Gateway MCP 入口，由 Gateway 代理目标 MCP。
+### 关键语义
 
-## 关键参数
-`workspace_id` 固定作用域；`snapshot_version` 供 Runtime 检测配置变更。
+Binding 聚合拥有当前启停、不可变配置历史与加密静态凭据引用。MCP 配置快照是 Control Release 内固定引用的集合，不另建自动发布的配置事实源。外部校验和加密在 TX1 之前；TX1 中不调用 Control/Gateway。Control 确认失败不会删除已保存候选，用户可重新确认。
 
-## 状态与不变量
-Binding 的 enabled/disabled 由 Plugin Binding 聚合决定；Snapshot 创建后不可变。同一 Workspace 可保留多个不可变候选版本；Agent 使用 Control 已确认 Release 中的固定选择，不能在运行时直接读取最新候选版本。
+## 生命周期与权限
 
-## 一致性边界
-TX1 原子提交 Binding/version/Outbox；TX2 原子提交 Snapshot/候选指针。Gateway 目录查询、Control 通知均在事务外并允许重复；新配置不原地修改已有 Session 的固定版本。
+编辑不通知 Agent，不修改已有 Session 的固定选择。运行请求由 Gateway 验证 Agent、Session 和执行上下文，再以专用服务凭据请求 Plugin；Plugin 校验当前 Workspace view，读取该 Session 的固定 Control Release，不能读取“最新候选”代替固定引用。旧版本继续保留；当前 Binding 或 Definition 停用/退役立即阻止后续调用。
 
-## 幂等、重试与补偿
-`workspace_id + binding_version_vector` 唯一标识快照。构建失败可在相同向量下重试；版本已变化则放弃旧结果。Outbox 重试不回滚 Binding；非法配置需用户修正。
+静态凭据替换新建加密记录，旧固定版本仍引用原凭据；当前候选清空凭据不改变旧会话。用户要立即撤销所有旧版本调用时停用 Binding。OAuth 用户连接由 Auth 独立维护，断开后旧会话也必须重新授权。
 
-## 权限与失败
-Edge 传递已验证用户身份，Plugin 调 Control 检查 Workspace manage；服务间使用可配置 mTLS。Definition 未批准、schema 不匹配和 endpoint 禁止均不可重试；Gateway/Control 暂时不可用可有限重试，失败时保留上一有效快照，不发布半成品。
+## 一致性、并发与失败
+
+TX1 原子提交 Binding/current、history、credential；TX2 由 Control 提交 Release 与通知 Outbox。跨服务无数据库外键、无分布式事务。创建依赖 Workspace/Definition 唯一约束，重复创建返回409；编辑 expected_version 冲突要求重读。确认沿用 Control idempotency_key 与内容摘要，重复确认不重复发布。
+
+外部目录、Control 或 Auth 不可用时拒绝对应操作，不猜测权限或退回最新配置。CAS 失败不保留新凭据；调用结果不明不得自动重发写工具。API、历史、Release、Agent 文件与日志不包含静态密钥或 OAuth refresh token。
 
 ## 结果事件
-候选快照可产生 `McpConfigurationSnapshotChanged` 供界面提示；不能据此自动升级 Agent。只有用户确认后由 Control 发布已确认配置变更通知。
+
+Binding 编辑只返回候选版本。只有用户确认后的 Control Release 产生既有 `agent.metadata.update_requested`，广播、消息幂等与应用结果沿用元数据协议。

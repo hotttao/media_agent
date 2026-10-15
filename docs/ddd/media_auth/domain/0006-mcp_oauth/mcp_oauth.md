@@ -156,3 +156,7 @@ mcp_oauth 负责外部 MCP 的 OAuth Discovery、授权回调、加密凭据托�
 
 ### 关联术语
 [MCP OAuth Client](../../CONTEXT.md)、[MCP OAuth Token](../../CONTEXT.md)、[Refresh Failure Grace](../../CONTEXT.md)
+
+## Plugin 可用凭据端口
+
+POST `/internal/mcp-oauth/token` 仅接受配置的 `X-MCP-Plugin-Credential`，与浏览器 Session 和其他内部服务令牌隔离。Plugin 在验证固定 Binding、Workspace 与目录来源后提交 user_id 和规范化 server_origin。Auth 返回当前有效 access_token，必要时沿用既有 refresh 流程；不返回 refresh_token，响应 no-store。缺少连接返回 needs_reauth；服务故障返回503且不暴露凭据。OAuth 仓储禁止渲染带凭据参数的 SQL 日志。

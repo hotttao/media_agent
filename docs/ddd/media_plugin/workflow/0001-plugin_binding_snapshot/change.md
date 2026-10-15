@@ -17,3 +17,7 @@
 ## 2026-10-15 · 用户明确确认发布
 
 Binding 变化只构建候选快照；Control 收到用户明确选择后才生成配置 Release。运行时固定选择不跟随最新候选，凭据不进入快照。
+
+## 2026-10-15 · 固定绑定引用实现
+
+候选快照以 Binding 不可变版本集合表达，Control Release 保存引用；不新增自动快照构建器或 Plugin 配置缓存。Binding CAS/history/加密凭据在同一事务保存，只有用户确认后的 Control Release 发布元数据通知。运行每次核对固定 Release 及当前准入。

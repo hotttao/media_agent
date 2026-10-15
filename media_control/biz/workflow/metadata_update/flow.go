@@ -30,6 +30,11 @@ type Flow struct {
 	instances  InstanceReader
 	prompts    PromptLibrary
 	skills     SkillLibrary
+	mcp        MCPBindings
+}
+
+type MCPBindings interface {
+	SelectedBinding(context.Context, string, string, string, int64) (*d.Resource, error)
 }
 
 type PromptLibrary interface {
@@ -46,6 +51,7 @@ func New(s *service.Service, ws WorkspaceAccess, artifacts Artifacts, instances 
 }
 func (f *Flow) WithPrompts(library PromptLibrary) *Flow { f.prompts = library; return f }
 func (f *Flow) WithSkills(library SkillLibrary) *Flow   { f.skills = library; return f }
+func (f *Flow) WithMCP(bindings MCPBindings) *Flow      { f.mcp = bindings; return f }
 func (f *Flow) authorize(ctx context.Context, ws, user, permission string) (*workspace.ConfiguredWorkspace, error) {
 	ok, err := f.workspaces.CheckAccess(ctx, ws, user, permission)
 	if err != nil {
@@ -153,6 +159,20 @@ func (f *Flow) Confirm(ctx context.Context, cmd Confirm) (*d.Release, error) {
 			}
 			ref.Checksum = version.Checksum
 			snapshot.Resources = append(snapshot.Resources, d.Resource{ResourceReference: ref, Name: version.Slug, ContentRef: "sha256/" + version.Checksum})
+			continue
+		}
+		if ref.Kind == "media_plugin.mcp_binding" {
+			if f.mcp == nil {
+				return nil, errors.New("MCP binding authority unavailable")
+			}
+			resource, err := f.mcp.SelectedBinding(ctx, cmd.UserID, cmd.WorkspaceID, ref.ID, ref.Version)
+			if err != nil {
+				return nil, err
+			}
+			if resource.Kind != ref.Kind || resource.ID != ref.ID || resource.Version != ref.Version || ref.Checksum != "" && ref.Checksum != resource.Checksum {
+				return nil, d.ErrConflict
+			}
+			snapshot.Resources = append(snapshot.Resources, *resource)
 			continue
 		}
 		version, err := f.service.Resource(ctx, ref)

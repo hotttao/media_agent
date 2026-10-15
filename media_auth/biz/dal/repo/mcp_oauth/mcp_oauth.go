@@ -15,6 +15,7 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 
 	"media_agent/media_auth/biz/dal"
 	"media_agent/media_auth/biz/dal/model"
@@ -32,7 +33,7 @@ type repo struct {
 }
 
 func (r *repo) q(ctx context.Context) *query.Query {
-	return query.Use(dal.FromContext(ctx, r.db))
+	return query.Use(r.connection(ctx))
 }
 
 // UpsertClient upsert mcp_oauth_clients（按 server_origin）。
@@ -90,7 +91,7 @@ func (r *repo) UpsertToken(ctx context.Context, userID, serverOrigin string, res
 	// ON CONFLICT (user_id, server_origin) DO UPDATE：access/refresh(COALESCE)/type/scope/expires/updated_at + 重置 fail 计数。
 	// 用 raw SQL 表达 COALESCE + 重置（gen OnConflict 的 DoUpdates 不便写 COALESCE）。
 	refreshExpr := "COALESCE(EXCLUDED.refresh_token, mcp_oauth_tokens.refresh_token)"
-	res := dal.FromContext(ctx, r.db).Exec(`
+	res := r.connection(ctx).Exec(`
 		INSERT INTO media_auth.mcp_oauth_tokens
 		  (user_id, server_origin, access_token, refresh_token, token_type, scope, expires_at, refresh_fail_count, refresh_fail_first_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL)
@@ -167,7 +168,7 @@ func (r *repo) DeleteToken(ctx context.Context, userID, serverOrigin string) err
 }
 
 func (r *repo) DeleteTokensForUser(ctx context.Context, userID string) error {
-	return dal.FromContext(ctx, r.db).Where("user_id = ?", userID).Delete(&model.McpOAuthToken{}).Error
+	return r.connection(ctx).Where("user_id = ?", userID).Delete(&model.McpOAuthToken{}).Error
 }
 
 // ── row → domain 转换 ────────────────────────────────────────────────
@@ -212,4 +213,9 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// OAuth SQL contains credentials. Never render bound values in SQL diagnostics.
+func (r *repo) connection(ctx context.Context) *gorm.DB {
+	return dal.FromContext(ctx, r.db).Session(&gorm.Session{Logger: logger.Discard})
 }

@@ -1,0 +1,37 @@
+syntax = "proto3";
+package media_plugin.mcp_binding;
+import "api.proto";
+import "google/api/annotations.proto";
+option go_package = "media_plugin/mcp_binding";
+message BindingCommand {
+ string workspace_id=1 [(api.path)="workspace_id"];
+ string binding_id=2 [(api.path)="binding_id"];
+ string definition_id=3 [(api.body)="definition_id"];
+ int64 definition_version=4 [(api.body)="definition_version"];
+ bool enabled=5 [(api.body)="enabled"];
+ repeated string allowed_methods=6 [(api.body)="allowed_methods"];
+ repeated string allowed_tools=7 [(api.body)="allowed_tools"];
+ repeated string allowed_prompts=8 [(api.body)="allowed_prompts"];
+ repeated string allowed_resources=9 [(api.body)="allowed_resources"];
+ int64 expected_version=10 [(api.body)="expected_version"];
+ optional string credential=11 [(api.body)="credential"];
+ string credential_header=12 [(api.body)="credential_header"];
+}
+message BindingQuery { string workspace_id=1 [(api.path)="workspace_id"]; string binding_id=2 [(api.path)="binding_id"]; int64 version=3 [(api.query)="version"]; }
+message Binding {
+ string binding_id=1; string workspace_id=2; string definition_id=3; int64 definition_version=4; bool enabled=5;
+ repeated string allowed_methods=6; repeated string allowed_tools=7; repeated string allowed_prompts=8; repeated string allowed_resources=9;
+ int64 version=10; string credential_header=11; bool credential_configured=12; string checksum=13; string connection_status=14; string oauth_authorize_url=15;
+}
+message Bindings { repeated Binding bindings=1; }
+message ProxyRequest {string binding_id=1 [(api.path)="binding_id"]; int64 binding_version=2 [(api.path)="binding_version"];}
+message ProxyResponse {}
+service McpBindingService {
+ rpc CreateBinding(BindingCommand) returns(Binding) {option(api.post)="/api/v1/workspaces/:workspace_id/mcp-bindings";option(google.api.http)={post:"/api/v1/workspaces/{workspace_id}/mcp-bindings" body:"*"};}
+ rpc UpdateBinding(BindingCommand) returns(Binding) {option(api.put)="/api/v1/workspaces/:workspace_id/mcp-bindings/:binding_id";option(google.api.http)={put:"/api/v1/workspaces/{workspace_id}/mcp-bindings/{binding_id}" body:"*"};}
+ rpc ListBindings(BindingQuery) returns(Bindings) {option(api.get)="/api/v1/workspaces/:workspace_id/mcp-bindings";option(google.api.http)={get:"/api/v1/workspaces/{workspace_id}/mcp-bindings"};}
+ rpc GetBinding(BindingQuery) returns(Binding) {option(api.get)="/api/v1/workspaces/:workspace_id/mcp-bindings/:binding_id";option(google.api.http)={get:"/api/v1/workspaces/{workspace_id}/mcp-bindings/{binding_id}"};}
+ rpc ListBindingVersions(BindingQuery) returns(Bindings) {option(api.get)="/api/v1/workspaces/:workspace_id/mcp-bindings/:binding_id/versions";option(google.api.http)={get:"/api/v1/workspaces/{workspace_id}/mcp-bindings/{binding_id}/versions"};}
+ rpc GetSelectedBinding(BindingQuery) returns(Binding) {option(api.get)="/internal/workspaces/:workspace_id/mcp-bindings/:binding_id";option(google.api.http)={get:"/internal/workspaces/{workspace_id}/mcp-bindings/{binding_id}"};}
+ rpc ProxyMCP(ProxyRequest) returns(ProxyResponse) {option(api.post)="/internal/mcp/:binding_id/:binding_version";option(api.get)="/internal/mcp/:binding_id/:binding_version";option(api.delete)="/internal/mcp/:binding_id/:binding_version";option(google.api.http)={post:"/internal/mcp/{binding_id}/{binding_version}" body:"*" additional_bindings:{get:"/internal/mcp/{binding_id}/{binding_version}"} additional_bindings:{delete:"/internal/mcp/{binding_id}/{binding_version}"}};}
+}

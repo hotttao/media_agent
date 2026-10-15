@@ -17,6 +17,8 @@ var (
 )
 
 type Client interface {
+	GetUsableToken(context context.Context, req *mcp_oauth.UsableTokenRequest, reqOpt ...config.RequestOption) (resp *mcp_oauth.UsableTokenResponse, rawResponse *protocol.Response, err error)
+
 	DiscoverOAuth(context context.Context, req *mcp_oauth.DiscoverOAuthRequest, reqOpt ...config.RequestOption) (resp *mcp_oauth.DiscoverOAuthResponse, rawResponse *protocol.Response, err error)
 
 	GetConnectionStatus(context context.Context, req *mcp_oauth.GetConnectionStatusRequest, reqOpt ...config.RequestOption) (resp *mcp_oauth.GetConnectionStatusResponse, rawResponse *protocol.Response, err error)
@@ -41,6 +43,28 @@ func NewMcpOAuthServiceClient(hostUrl string, ops ...Option) (Client, error) {
 	return &McpOAuthServiceClient{
 		client: cli,
 	}, nil
+}
+
+func (s *McpOAuthServiceClient) GetUsableToken(context context.Context, req *mcp_oauth.UsableTokenRequest, reqOpt ...config.RequestOption) (resp *mcp_oauth.UsableTokenResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &mcp_oauth.UsableTokenResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/internal/mcp-oauth/token")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
 }
 
 func (s *McpOAuthServiceClient) DiscoverOAuth(context context.Context, req *mcp_oauth.DiscoverOAuthRequest, reqOpt ...config.RequestOption) (resp *mcp_oauth.DiscoverOAuthResponse, rawResponse *protocol.Response, err error) {
@@ -169,6 +193,10 @@ var defaultClient, _ = NewMcpOAuthServiceClient("")
 func ConfigDefaultClient(ops ...Option) (err error) {
 	defaultClient, err = NewMcpOAuthServiceClient("", ops...)
 	return
+}
+
+func GetUsableToken(context context.Context, req *mcp_oauth.UsableTokenRequest, reqOpt ...config.RequestOption) (resp *mcp_oauth.UsableTokenResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.GetUsableToken(context, req, reqOpt...)
 }
 
 func DiscoverOAuth(context context.Context, req *mcp_oauth.DiscoverOAuthRequest, reqOpt ...config.RequestOption) (resp *mcp_oauth.DiscoverOAuthResponse, rawResponse *protocol.Response, err error) {

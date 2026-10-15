@@ -28,4 +28,11 @@ func Register(r *server.Hertz) {
 			_mcp_oauth.GET("/status", append(_getconnectionstatusMw(), mcp_oauth.GetConnectionStatus)...)
 		}
 	}
+	{
+		_internal := root.Group("/internal", _internalMw()...)
+		{
+			_mcp_oauth0 := _internal.Group("/mcp-oauth", _mcp_oauth0Mw()...)
+			_mcp_oauth0.POST("/token", append(_getusabletokenMw(), mcp_oauth.GetUsableToken)...)
+		}
+	}
 }

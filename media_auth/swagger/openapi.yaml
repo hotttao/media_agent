@@ -1769,6 +1769,30 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /internal/mcp-oauth/token:
+        post:
+            tags:
+                - McpOAuthService
+            operationId: McpOAuthService_GetUsableToken
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UsableTokenRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UsableTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /internal/v1/agent-api-tokens:
         post:
             tags:
@@ -2565,6 +2589,20 @@ components:
             properties:
                 success:
                     type: boolean
+        UsableTokenRequest:
+            type: object
+            properties:
+                user_id:
+                    type: string
+                server_origin:
+                    type: string
+        UsableTokenResponse:
+            type: object
+            properties:
+                access_token:
+                    type: string
+                status:
+                    type: string
         UserIdentity:
             type: object
             properties:

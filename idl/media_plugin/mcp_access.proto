@@ -3,7 +3,7 @@ package media_plugin.mcp_access;
 import "api.proto";
 import "google/api/annotations.proto";
 option go_package = "media_plugin/mcp_access";
-message AccessRequest {string workspace_id=1 [(api.path)="workspace_id"];string user_id=2 [(api.body)="user_id"];string agent_config_id=3 [(api.body)="agent_config_id"];int64 context_version=4 [(api.body)="context_version"];string session_id=5 [(api.body)="session_id"];}
-message Grant {string definition_id=1;int64 definition_version=2;repeated string allowed_methods=3;repeated string allowed_tools=4;repeated string allowed_prompts=5;repeated string allowed_resources=6;string proxy_authorization=7;}
+message AccessRequest {string workspace_id=1 [(api.path)="workspace_id"];string user_id=2 [(api.body)="user_id"];string agent_config_id=3 [(api.body)="agent_config_id"];int64 context_version=4 [(api.body)="context_version"];string session_id=5 [(api.body)="session_id"];string target_context_version=6 [(api.body)="target_context_version"];}
+message Grant {string definition_id=1;int64 definition_version=2;repeated string allowed_methods=3;repeated string allowed_tools=4;repeated string allowed_prompts=5;repeated string allowed_resources=6;string proxy_authorization=7;map<string,string> upstream_headers=8;string binding_id=9;int64 binding_version=10;bool oauth_proxy=11;}
 message AccessResponse {string workspace_id=1;string agent_config_id=2;int64 context_version=3;string snapshot_version=4;string authorization_revision=5;repeated Grant grants=6;}
 service McpAccessService {rpc ResolveMCPAccess(AccessRequest) returns(AccessResponse){option(api.post)="/internal/workspaces/:workspace_id/mcp-access";option(google.api.http)={post:"/internal/workspaces/{workspace_id}/mcp-access" body:"*"};}}

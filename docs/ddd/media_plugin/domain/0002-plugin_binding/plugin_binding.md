@@ -18,7 +18,7 @@ Plugin Binding 负责 Workspace 启用了哪些已批准 MCP，以及其非敏�
 ### 做什么
 - 启用、停用和配置 Workspace MCP Binding。
 - 提供 Gateway 构建 MCP Snapshot 所需数据。
-- 发布 Binding 版本变化。
+- 保存不可变 Binding 版本，供用户明确选择。
 
 ### 不做什么
 - Binding 不代表调用接口的授权结果。
@@ -51,7 +51,7 @@ Plugin Binding 负责 Workspace 启用了哪些已批准 MCP，以及其非敏�
 
 ### UUID 生成规则
 
-Binding 使用 ULID；每次变化递增 version 并发布 `PluginBindingChanged`。
+Binding 使用 ULID；每次变化递增 version，原子保存当前与不可变历史；绑定编辑不自动发布 Agent 更新。
 
 ## 能力详细说明
 
@@ -59,4 +59,10 @@ Binding 使用 ULID；每次变化递增 version 并发布 `PluginBindingChanged
 
 1. 验证 Definition 当前 enabled，Workspace 授权由调用链完成。
 2. 对配置应用 Definition schema，禁止写入 Token/Secret。
-3. 原子 upsert Binding 与 Outbox 事件。
+3. 原子 CAS 保存 Binding、历史与新增加密凭据引用。
+
+## 固定选择与凭据
+
+Binding 固定 definition_version、allowed_methods/tools/prompts/resources 与 credential_header。每次编辑形成新的不可变 Binding 历史，Control 通过 `media_plugin.mcp_binding` ID/version 显式选择。版本摘要校验固定内容，绑定变化不发布 Agent 更新通知。当前 disabled 立即禁止旧版本的新调用；旧配置仍保留读取。
+
+静态凭据保存在 Plugin 自有 credential 表，AES-GCM 加密，版本只保存 credential_id，历史和 API 不保存或返回明文。替换新建凭据记录，旧固定 Binding 继续引用原凭据；清除当前凭据的新候选版本不自动改旧会话。禁用 Binding 才立即阻止其所有旧版本调用。API Key 仅允许合法非保留 Header，Bearer 固定 Authorization。OAuth 用户凭据始终归 Auth，Plugin 不持久化 access/refresh token。

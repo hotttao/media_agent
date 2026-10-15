@@ -5,11 +5,11 @@
 ## 业务术语词典
 
 **Workspace Plugin Binding（Workspace Plugin 绑定）**:
-Workspace 对一个已批准 MCP Definition 的启用状态和非敏感配置。
+Workspace 对一个已批准 MCP Definition 的启用状态、固定定义版本、非敏感配置和受控凭据引用。
 _禁用替代词_：ACL、Installation、Deployment
 
 **MCP Configuration Snapshot（MCP 配置快照）**:
-Gateway 根据 Workspace Plugin Binding 构建并下发给 Agent Runtime 的版本化 MCP 配置集合。
+用户明确确认给 Agent 的不可变 Workspace Plugin Binding 版本集合。
 _禁用替代词_：Plugin Binding、Runtime Context
 
 **External MCP Connection（外部 MCP 连接）**:
@@ -23,3 +23,7 @@ _禁用替代词_：Platform MCP、External MCP
 **External OAuth MCP（外部 OAuth MCP）**:
 位于平台信任域外、需要用户 OAuth 凭据的 MCP，仅此类型经 `media_plugin` 代理。
 _禁用替代词_：Internal Business MCP、Unauthenticated MCP
+
+**Workspace MCP Credential（Workspace MCP 凭据）**:
+Workspace 静态外部 MCP 认证信息，仅由 Plugin 保存并向受控代理提供。
+_禁用替代词_：OAuth Credential、Agent Token

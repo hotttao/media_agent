@@ -292,3 +292,23 @@ func (s *Service) buildAuthorizationURL(client domainmcp.McpClient, userID, work
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
+
+// GetUsableToken distinguishes a missing/revoked connection from a temporary
+// refresh failure. Callers must not ask users to reconnect because Auth is down.
+func (s *Service) GetUsableToken(ctx context.Context, userID, origin string) (string, error) {
+	value, err := s.GetValidAccessToken(ctx, userID, origin, false)
+	if err != nil || value != "" {
+		return value, err
+	}
+	connection, err := s.repo.GetToken(ctx, userID, origin)
+	if errors.Is(err, domainmcp.ErrTokenNotFound) {
+		return "", ErrReauthRequired
+	}
+	if err != nil {
+		return "", err
+	}
+	if connection.RefreshToken == "" {
+		return "", ErrReauthRequired
+	}
+	return "", errors.New("MCP OAuth credential temporarily unavailable")
+}

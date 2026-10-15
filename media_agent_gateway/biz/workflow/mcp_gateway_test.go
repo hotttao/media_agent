@@ -157,7 +157,7 @@ func testMCPBackend(t *testing.T, count int, calls *atomic.Int32) *httptest.Serv
 }
 func testMCPFlow(t *testing.T, endpoint string) (*MCPGateway, *mcpMemoryCatalog, *mcpTestAccess, *mcpTestIdentity) {
 	t.Helper()
-	defs := []d.Definition{{ID: "platform", ServiceName: "platform", Endpoint: "platform://builtin", Transport: "platform", AuthenticationType: "session_context", Status: "enabled", Version: 1}, {ID: "alpha", ServiceName: "alpha", Endpoint: endpoint, Transport: "streamable_http", AuthenticationType: "oauth", Status: "enabled", Version: 1}, {ID: "beta", ServiceName: "beta", Endpoint: endpoint, Transport: "streamable_http", AuthenticationType: "oauth", Status: "enabled", Version: 1}}
+	defs := []d.Definition{{ID: "platform", ServiceName: "platform", Endpoint: "platform://builtin", Transport: "platform", AuthenticationType: "session_context", Status: "enabled", Version: 1}, {ID: "alpha", ServiceName: "alpha", Endpoint: endpoint, Transport: "streamable_http", AuthenticationType: "bearer", Status: "enabled", Version: 1}, {ID: "beta", ServiceName: "beta", Endpoint: endpoint, Transport: "streamable_http", AuthenticationType: "bearer", Status: "enabled", Version: 1}}
 	repo := &mcpMemoryCatalog{current: map[string]d.Definition{}, history: map[string]d.Definition{}}
 	for _, v := range defs {
 		repo.Save(context.Background(), &v, 0)

@@ -45,3 +45,18 @@ func _getconnectionstatusMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _internalMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _mcp_oauth0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getusabletokenMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

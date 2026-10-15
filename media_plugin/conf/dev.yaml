@@ -1,0 +1,84 @@
+app:
+  name: media-plugin
+  version: v1
+  env: ${APP_ENV:-dev}
+
+server:
+  max_request_body_bytes: ${MAX_REQUEST_BODY_BYTES:-12582912}
+  enabled: true
+  address: ${SERVER_ADDR:-:8011}
+
+database:
+  enabled: true
+  driver: postgres
+  dsn: ${POSTGRES_DSN:-postgres://media_auth:media_auth@127.0.0.1:5432/media-plugin?sslmode=disable}
+  max_open_conns: 10
+  max_idle_conns: 2
+  migrate_on_start: true
+
+
+consul:
+  enabled: ${CONSUL_ENABLED:-false}
+
+consul_kv:
+  enabled: ${CONSUL_KV_ENABLED:-false}
+
+otel:
+  enabled: ${OTEL_ENABLED:-false}
+
+prometheus:
+  enabled: ${PROMETHEUS_ENABLED:-false}
+
+access_log:
+  enabled: true
+  format: "[${time}] ${status} - ${latency} ${method} ${path}"
+  time_format: "2006-01-02T15:04:05Z"
+
+log:
+  enabled: true
+  level: ${LOG_LEVEL:-debug}
+  dir: ${LOG_DIR:-./log}
+  filename: app.log
+  max_size_mb: 100
+  max_backups: 10
+  max_age_days: 7
+  compress: true
+  console: true
+
+recovery:
+  enabled: true
+  print_stack: true
+
+request_id:
+  enabled: true
+  header: "X-Request-ID"
+
+cors:
+  enabled: true
+  allow_origins: ["*"]
+  allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allow_headers: ["*"]
+  allow_credentials: false
+  max_age_seconds: 600
+
+pprof:
+  enabled: true
+  prefix: "/debug/pprof"
+
+health:
+  enabled: false
+  path: "/health"
+
+client:
+  media-control:
+    enabled: true
+    service_name: media-control
+    base_domain: ${MEDIA_CONTROL_URL:-http://127.0.0.1:8007}
+  media-agent-gateway:
+    enabled: true
+    service_name: media-agent-gateway
+    base_domain: ${MEDIA_AGENT_GATEWAY_URL:-http://127.0.0.1:8006}
+  media-auth:
+    enabled: true
+    service_name: media-auth
+    base_domain: ${MEDIA_AUTH_URL:-http://127.0.0.1:8001}

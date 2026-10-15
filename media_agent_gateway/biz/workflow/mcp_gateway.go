@@ -18,6 +18,7 @@ import (
 	"media_agent/media_agent_gateway/biz/shared/client"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -98,14 +99,27 @@ func (w *MCPGateway) sources(ctx context.Context, scope MCPContext) ([]mcpSource
 		if e != nil || fixed.Status != "enabled" || fixed.Transport == "platform" || fixed.OrganizationID != current.OrganizationID {
 			return nil, "", ErrMCPUnavailable
 		}
-		if fixed.AuthenticationType != "none" && grant.ProxyAuthorization == "" {
+		if fixed.AuthenticationType == "oauth" && grant.ProxyEndpoint == "" || grant.ProxyEndpoint != "" && fixed.AuthenticationType != "oauth" {
 			return nil, "", ErrMCPUnavailable
 		}
-		headers := map[string]string{"X-Media-Workspace-ID": scope.WorkspaceID, "X-Media-Session-ID": scope.SessionID, "X-Media-User-ID": scope.UserID, "X-Media-Agent-Configuration-ID": scope.AgentConfigID}
+		if fixed.AuthenticationType != "none" && grant.ProxyAuthorization == "" && len(grant.UpstreamHeaders) == 0 {
+			return nil, "", ErrMCPUnavailable
+		}
+		headers := map[string]string{}
+		for key, value := range grant.UpstreamHeaders {
+			headers[key] = value
+		}
+		for key, value := range map[string]string{"X-Media-Context-Version": strconv.FormatInt(scope.ContextVersion, 10), "X-Media-Metadata-Target": scope.MetadataTargetContextVersion, "X-Media-Workspace-ID": scope.WorkspaceID, "X-Media-Session-ID": scope.SessionID, "X-Media-User-ID": scope.UserID, "X-Media-Agent-Configuration-ID": scope.AgentConfigID} {
+			headers[key] = value
+		}
 		if grant.ProxyAuthorization != "" {
 			headers["Authorization"] = grant.ProxyAuthorization
 		}
-		sources = append(sources, mcpSource{definitionID: grant.DefinitionID, version: fixed.Version, currentVersion: current.Version, grant: grant, backend: client.MCPBackend{Endpoint: fixed.Endpoint, Transport: fixed.Transport, Headers: headers}})
+		endpoint, transport := fixed.Endpoint, fixed.Transport
+		if grant.ProxyEndpoint != "" {
+			endpoint, transport = grant.ProxyEndpoint, "streamable_http"
+		}
+		sources = append(sources, mcpSource{definitionID: grant.DefinitionID, version: fixed.Version, currentVersion: current.Version, grant: grant, backend: client.MCPBackend{Endpoint: endpoint, Transport: transport, Headers: headers}})
 	}
 	sort.Slice(sources, func(i, j int) bool { return sources[i].definitionID < sources[j].definitionID })
 	vector := access.SnapshotVersion + ":" + access.AuthorizationRevision

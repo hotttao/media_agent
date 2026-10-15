@@ -186,7 +186,7 @@ func main() {
 		middleware.ConfigureMetadataGateway(metadataCfg.GetGatewayCredential())
 		repository := metadatarepo.New(db)
 		workspaceAccess := workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())), teamAccess)
-		metadatahandler.Configure(metadataflow.New(metadataservice.New(repository, dal.NewTxRunner(db)), workspaceAccess, artifacts, sharedclient.NewMetadataInstances(envOr("MEDIA_AGENT_GATEWAY_URL", "http://127.0.0.1:8006"), internalToken)).WithPrompts(promptApplication).WithSkills(skillContent))
+		metadatahandler.Configure(metadataflow.New(metadataservice.New(repository, dal.NewTxRunner(db)), workspaceAccess, artifacts, sharedclient.NewMetadataInstances(envOr("MEDIA_AGENT_GATEWAY_URL", "http://127.0.0.1:8006"), internalToken)).WithPrompts(promptApplication).WithSkills(skillContent).WithMCP(sharedclient.MCPBindings{BaseURL: os.Getenv("MEDIA_PLUGIN_URL"), Credential: os.Getenv("MCP_CONTROL_CREDENTIAL")}))
 		publisher, err := messagebus.NewTopicPublisher(cfg.GetRabbitmq().GetUrl(), metadataCfg.GetMetadataExchange())
 		if err != nil {
 			log.Fatal("invalid metadata Broker configuration")

@@ -59,6 +59,7 @@ func VerifyToken(token string) (*auth.Session, error) {
 // skipAllPaths 是不经过用户 Session 鉴权的端点。
 // internal token 路由在 handler 中单独校验 X-Media-Auth-Internal-Token。
 var skipAllPaths = map[string]bool{
+	"/internal/mcp-oauth/token": true,
 	// spec §3.10 公开业务端点
 	"/api/auth/login":                 true,
 	"/api/auth/register":              true,

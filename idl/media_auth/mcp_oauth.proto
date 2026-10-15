@@ -18,6 +18,11 @@ option go_package = "media_auth/mcp_oauth";
 //
 // 与 oauth.proto(OAuth Provider AS)角色相反,不要混用类型。
 service McpOAuthService {
+ rpc GetUsableToken(UsableTokenRequest) returns(UsableTokenResponse) {
+  option(api.post)="/internal/mcp-oauth/token";
+  option(google.api.http)={post:"/internal/mcp-oauth/token" body:"*"};
+ }
+
   // POST /api/mcp-oauth/discover —— 给定 MCP server URL,探测是否需要 OAuth
   // Body: { "url": "https://mcp.example.com" }
   rpc DiscoverOAuth(DiscoverOAuthRequest) returns(DiscoverOAuthResponse) {
@@ -122,3 +127,5 @@ message DisconnectRequest {
 message DisconnectResponse {
   bool success = 1;
 }
+message UsableTokenRequest { string user_id=1 [(api.body)="user_id"];string server_origin=2 [(api.body)="server_origin"]; }
+message UsableTokenResponse { string access_token=1;string status=2; }

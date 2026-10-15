@@ -247,3 +247,22 @@ func TestGetValidAccessToken_TransientFail(t *testing.T) {
 		t.Errorf("transient fail should NOT delete token, deleteCalled=%d", repo.deleteCalled)
 	}
 }
+
+func TestUsableTokenDoesNotTurnTemporaryRefreshFailureIntoReconnect(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(503) }))
+	defer server.Close()
+	repo := newFakeRepo()
+	past := time.Now().Add(-time.Hour)
+	repo.tokens["user:https://mcp.example.com"] = domainmcp.McpToken{AccessToken: "expired", RefreshToken: "keep-connection", ExpiresAt: &past}
+	repo.clients["https://mcp.example.com"] = domainmcp.McpClient{Metadata: domainmcp.Metadata{TokenEndpoint: server.URL}}
+	svc := newSvc(repo)
+	value, err := svc.GetUsableToken(context.Background(), "user", "https://mcp.example.com")
+	if value != "" || err == nil || errors.Is(err, ErrReauthRequired) || repo.deleteCalled != 0 {
+		t.Fatalf("temporary failure: value=%q err=%v deleted=%d", value, err, repo.deleteCalled)
+	}
+	delete(repo.tokens, "user:https://mcp.example.com")
+	_, err = svc.GetUsableToken(context.Background(), "user", "https://mcp.example.com")
+	if !errors.Is(err, ErrReauthRequired) {
+		t.Fatal("missing connection must request reconnect", err)
+	}
+}

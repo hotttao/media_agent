@@ -12,6 +12,10 @@ package mcp_oauth
 
 import (
 	"context"
+	"crypto/subtle"
+	"errors"
+	"net/url"
+	"os"
 	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -170,4 +174,41 @@ func userIDFromCookie(ctx context.Context, c *app.RequestContext) string {
 // mcpOAuthErrorHTML 返回简易错误 HTML（StartAuthorization 失败用）。
 func mcpOAuthErrorHTML(msg string) string {
 	return "<!DOCTYPE html><html><body><p>" + msg + "</p><p><button onclick=\"window.close()\">Close</button></p></body></html>"
+}
+
+// GetUsableToken .
+// @router /internal/mcp-oauth/token [POST]
+// GetUsableToken is private to the trusted Plugin service; no refresh secret is returned.
+func GetUsableToken(ctx context.Context, c *app.RequestContext) {
+	expected := os.Getenv("MEDIA_AUTH_MCP_PLUGIN_TOKEN")
+	provided := string(c.GetHeader("X-MCP-Plugin-Credential"))
+	c.Response.Header.Set("Cache-Control", "no-store")
+	if expected == "" || provided == "" || subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) != 1 {
+		c.JSON(403, map[string]string{"error": "plugin_identity_required"})
+		return
+	}
+	var req mcppb.UsableTokenRequest
+	if c.BindAndValidate(&req) != nil || req.UserId == "" {
+		c.JSON(400, map[string]string{"error": "invalid_scope"})
+		return
+	}
+	origin, err := url.Parse(req.ServerOrigin)
+	if err != nil || origin.Host == "" || (origin.Scheme != "http" && origin.Scheme != "https") || origin.User != nil || origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" {
+		c.JSON(400, map[string]string{"error": "invalid_origin"})
+		return
+	}
+	if McpOAuthSvc == nil {
+		c.JSON(503, map[string]string{"error": "oauth_unavailable"})
+		return
+	}
+	token, err := McpOAuthSvc.GetUsableToken(ctx, req.UserId, req.ServerOrigin)
+	if errors.Is(err, mcpoauthservice.ErrReauthRequiredVar) || err == nil && token == "" {
+		c.JSON(200, &mcppb.UsableTokenResponse{Status: "needs_reauth"})
+		return
+	}
+	if err != nil {
+		c.JSON(503, map[string]string{"error": "oauth_unavailable"})
+		return
+	}
+	c.JSON(200, &mcppb.UsableTokenResponse{Status: "connected", AccessToken: token})
 }

@@ -1,0 +1,512 @@
+# Generated with protoc-gen-openapi
+# https://github.com/google/gnostic/tree/master/cmd/protoc-gen-openapi
+
+openapi: 3.0.3
+info:
+    title: ""
+    version: 0.0.1
+paths:
+    /api/v1/workspaces/{workspace_id}/mcp-bindings:
+        get:
+            tags:
+                - McpBindingService
+            operationId: McpBindingService_ListBindings
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: binding_id
+                  in: query
+                  schema:
+                    type: string
+                - name: version
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Bindings'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - McpBindingService
+            operationId: McpBindingService_CreateBinding
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BindingCommand'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Binding'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspaces/{workspace_id}/mcp-bindings/{binding_id}:
+        get:
+            tags:
+                - McpBindingService
+            operationId: McpBindingService_GetBinding
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Binding'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - McpBindingService
+            operationId: McpBindingService_UpdateBinding
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BindingCommand'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Binding'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/workspaces/{workspace_id}/mcp-bindings/{binding_id}/versions:
+        get:
+            tags:
+                - McpBindingService
+            operationId: McpBindingService_ListBindingVersions
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Bindings'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/mcp/{binding_id}/{binding_version}:
+        get:
+            tags:
+                - McpBindingService
+            operationId: McpBindingService_ProxyMCP
+            parameters:
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: binding_version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProxyResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - McpBindingService
+            operationId: McpBindingService_ProxyMCP
+            parameters:
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: binding_version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ProxyRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProxyResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - McpBindingService
+            operationId: McpBindingService_ProxyMCP
+            parameters:
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: binding_version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProxyResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/workspaces/{workspace_id}/mcp-access:
+        post:
+            tags:
+                - McpAccessService
+            operationId: McpAccessService_ResolveMCPAccess
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AccessRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccessResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /internal/workspaces/{workspace_id}/mcp-bindings/{binding_id}:
+        get:
+            tags:
+                - McpBindingService
+            operationId: McpBindingService_GetSelectedBinding
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: binding_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Binding'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+components:
+    schemas:
+        AccessRequest:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                user_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                context_version:
+                    type: string
+                session_id:
+                    type: string
+                target_context_version:
+                    type: string
+        AccessResponse:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                agent_config_id:
+                    type: string
+                context_version:
+                    type: string
+                snapshot_version:
+                    type: string
+                authorization_revision:
+                    type: string
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Grant'
+        Binding:
+            type: object
+            properties:
+                binding_id:
+                    type: string
+                workspace_id:
+                    type: string
+                definition_id:
+                    type: string
+                definition_version:
+                    type: string
+                enabled:
+                    type: boolean
+                allowed_methods:
+                    type: array
+                    items:
+                        type: string
+                allowed_tools:
+                    type: array
+                    items:
+                        type: string
+                allowed_prompts:
+                    type: array
+                    items:
+                        type: string
+                allowed_resources:
+                    type: array
+                    items:
+                        type: string
+                version:
+                    type: string
+                credential_header:
+                    type: string
+                credential_configured:
+                    type: boolean
+                checksum:
+                    type: string
+                connection_status:
+                    type: string
+                oauth_authorize_url:
+                    type: string
+        BindingCommand:
+            type: object
+            properties:
+                workspace_id:
+                    type: string
+                binding_id:
+                    type: string
+                definition_id:
+                    type: string
+                definition_version:
+                    type: string
+                enabled:
+                    type: boolean
+                allowed_methods:
+                    type: array
+                    items:
+                        type: string
+                allowed_tools:
+                    type: array
+                    items:
+                        type: string
+                allowed_prompts:
+                    type: array
+                    items:
+                        type: string
+                allowed_resources:
+                    type: array
+                    items:
+                        type: string
+                expected_version:
+                    type: string
+                credential:
+                    type: string
+                credential_header:
+                    type: string
+        Bindings:
+            type: object
+            properties:
+                bindings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Binding'
+        GoogleProtobufAny:
+            type: object
+            properties:
+                '@type':
+                    type: string
+                    description: The type of the serialized message.
+            additionalProperties: true
+            description: Contains an arbitrary serialized message along with a @type that describes the type of the serialized message.
+        Grant:
+            type: object
+            properties:
+                definition_id:
+                    type: string
+                definition_version:
+                    type: string
+                allowed_methods:
+                    type: array
+                    items:
+                        type: string
+                allowed_tools:
+                    type: array
+                    items:
+                        type: string
+                allowed_prompts:
+                    type: array
+                    items:
+                        type: string
+                allowed_resources:
+                    type: array
+                    items:
+                        type: string
+                proxy_authorization:
+                    type: string
+                upstream_headers:
+                    type: object
+                    additionalProperties:
+                        type: string
+                binding_id:
+                    type: string
+                binding_version:
+                    type: string
+                oauth_proxy:
+                    type: boolean
+        ProxyRequest:
+            type: object
+            properties:
+                binding_id:
+                    type: string
+                binding_version:
+                    type: string
+        ProxyResponse:
+            type: object
+            properties: {}
+        Status:
+            type: object
+            properties:
+                code:
+                    type: integer
+                    description: The status code, which should be an enum value of [google.rpc.Code][google.rpc.Code].
+                    format: int32
+                message:
+                    type: string
+                    description: A developer-facing error message, which should be in English. Any user-facing error message should be localized and sent in the [google.rpc.Status.details][google.rpc.Status.details] field, or localized by the client.
+                details:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GoogleProtobufAny'
+                    description: A list of messages that carry the error details.  There is a common set of message types for APIs to use.
+            description: 'The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors).'
+tags:
+    - name: McpAccessService
+    - name: McpBindingService

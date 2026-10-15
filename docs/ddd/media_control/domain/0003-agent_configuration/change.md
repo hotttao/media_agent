@@ -81,3 +81,7 @@ Control 发布记录固定 Gateway 不可变模板引用，正文继续由 Gatew
 ## 2026-10-13 · P5 工作负载落地
 
 - 工作负载创建配置覆盖已接入的 Goose Runtime，Agent 类型统一允许 codex、claude-code、goose；镜像与资源 profile 由部署控制。
+
+## 2026-10-15 · 固定 MCP Binding 选择
+
+确认流程通过 Plugin 权威端口校验同 Workspace 的固定 Binding，Release 保存非秘密 ID/version/checksum。编辑绑定不自动发布 Agent 配置。
