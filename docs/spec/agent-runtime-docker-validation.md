@@ -2,6 +2,10 @@
 
 本机功能验证默认使用 Docker，k3s 保持关闭。Kubernetes 双 Ready/RWX 实测延期到独立存储环境，不阻塞 Docker 后续开发；保留已有严格测试，不把延期记作通过。
 
+## Docker 交付边界
+
+Docker 环境只要求创建单个 Agent 容器并可正常使用。扩缩容不实现；不额外建设 Docker 专属的生命周期管理或执行中崩溃接管机制，也不将此类验证作为后续功能开发的前置条件。现有单实例创建、身份校验及可用性链路保留；已完成的重启测试作为既有证据，不继续扩大 Docker 范围。
+
 ## 当前切片
 
 使用真实 Docker Engine、Runtime Controller HTTP handler/生成 client、Gateway 实例登记/Session Routing/RunTurn/EventStream，以及容器内 Agent 生产 HTTP routes、所有权服务、数据库迁移和事件总线。验证单 Workspace/单 Agent 创建至会话执行的完整链路，不实现 Docker 扩缩容。

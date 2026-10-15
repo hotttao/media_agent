@@ -119,6 +119,10 @@
 
 阶段审查见 [P8/review.md](../review/agent-runtime/p8/review.md)，复现命令见 `harness/tools/agent_ownership_integration/README.md`。
 
+## 后续范围
+
+用户再次明确：Docker 仅保证单个 Agent 容器能创建、能使用。P8 已完成的创建/登记/会话 API 联调满足此基础范围；不新增 Docker 扩缩容或专属崩溃接管阶段。后续开发围绕 Agent 业务功能推进，不以扩大 Docker 容器管理能力作为前置工作。
+
 ## 风险与对策
 
 - 原生 Runtime 读取全局 Prompt/Skill：使用固定版本配置目录/参数并以真实 fixture 验证，不能用可选能力声明绕过隔离。
