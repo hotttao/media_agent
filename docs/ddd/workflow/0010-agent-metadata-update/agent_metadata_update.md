@@ -1,7 +1,7 @@
 ---
 name: agent_metadata_update
 description: 用户确认元数据更新后通知运行实例，经 Gateway 拉取并加载选定配置
-participants: [user, media_control, rabbitmq, media_agents, media_agent_gateway]
+participants: [user, media_control, media_auth, rabbitmq, media_agents, media_agent_gateway]
 domains: [media_control/agent_configuration, media_control/agent_catalog, media_agents/runtime_metadata, media_agent_gateway/agent_instance]
 ---
 
@@ -25,11 +25,22 @@ domains: [media_control/agent_configuration, media_control/agent_catalog, media_
 sequenceDiagram
     participant U as User
     participant C as Control Workflow
+    participant W as Workspace Access
+    participant L as Catalog Resource Access
+    participant H as Auth
     participant DB as Control DB
     participant Q as RabbitMQ
     participant A as Agent Instance
     participant G as Gateway
-    U->>C: 明确确认更新（选定资源版本、expected_version、幂等键）
+    U->>C: 明确确认更新（Prompt 方式/正文/固定引用、选定资源版本、expected_version、幂等键）
+    C->>W: 校验用户对目标 Workspace 的 manage 权限
+    W->>H: 查询企业、部门及有效权限事实
+    H-->>W: 当前授权事实
+    W-->>C: Workspace 真实企业归属及允许/拒绝
+    C->>L: 校验每个 Prompt/Skill 的同企业归属及资源读取权限
+    L->>H: 查询资源授权所需企业与部门成员事实
+    H-->>L: 当前授权事实
+    L-->>C: 固定的已授权资源版本 / 拒绝
     C->>C: 校验权限、固定资源版本并准备不可变快照（事务外）
     C->>DB: TX-CONFIRM: CAS 选择版本、保存目标快照与通知意图
     DB-->>C: selection_revision / target_context_version / event_id
@@ -61,6 +72,7 @@ sequenceDiagram
 ### 步骤说明
 
 1. 用户选择由 Agent Configuration Domain 决定。Workflow 协调快照构建、消息与配置拉取，不拥有新的配置事实表；写能力的版本和幂等约束保留在该 Domain。
+   Prompt 的不设置、直接填写和库引用互斥：前两者不需要虚构资源引用，直接填写正文随 Release 固定保存；库引用要求恰当的资源读取授权和固定版本。三种方式的确认均要求 Workspace manage，库资源编辑仍不自动触发更新。
 2. Control 发布的是已确认选择对应的运行更新通知，不是把每条资源编辑直接转为运行命令。一个通知只对应一个 Workspace/Agent Configuration 的选定目标；涉及多个 Workspace 时分别路由。
 3. 通知资源列表仅用于说明变化，Agent 不按消息拼装配置。目标查询返回完整、经过授权的有效快照；并发用户更新时由 Control 判断目标是否仍有效，旧通知不得降低实例已应用的选择序号，也不能自动拉取尚未被用户选择的 Catalog 新版本。
 4. Gateway 每次代理查询，保持无控制配置缓存。Platform Prompt 正文在返回链路生成，Configured Prompt 仍是独立内容；秘密不进入消息或正文。
@@ -89,7 +101,9 @@ TX-CONFIRM 是用户选择的事实边界，一次提交选择版本、不可变
 
 ## 权限与失败
 
-Control 入口取得真实用户身份并校验 Workspace manage 与资源版本授权。消息生产方使用受限服务身份，Agent 不能发布其他 Workspace 的配置通知。Agent 拉取经 Gateway 验证稳定 Agent 委托及 Workspace 归属，Control 执行最终资源授权；实例 ID/Pod ordinal 不是用户授权主体。专用配置查询不能绕过现有通用 API 代理路由 allowlist，需在 spec 中定义独立受控接入。
+Control 入口取得真实用户身份并校验 Workspace manage 与资源版本授权。Prompt、Skill 属于企业资源库，允许同企业跨 Workspace 复用；选择时读取 Workspace 和资源的真实企业归属并要求一致，同时按资源 owner、visibility、部门 Grant 和 Auth 成员事实判断读取权限。资源可编辑不等于可以管理 Workspace；Workspace 可管理也不等于可以读取任意私有资源。任一授权失败或 Auth 查询失败均拒绝此次确认，不提交半份选择、不发布通知。
+
+消息生产方使用受限服务身份，Agent 不能发布其他 Workspace 的配置通知。Agent 拉取经 Gateway 验证稳定 Agent 委托及 Workspace 归属，Control 执行最终资源授权；实例 ID/Pod ordinal 不是用户授权主体。专用配置查询不能绕过现有通用 API 代理路由 allowlist，需在 spec 中定义独立受控接入。
 
 消息损坏或不支持的封套版本/消息类型/数据版本 进入可观察的协议失败处理，不无限 requeue；临时网络失败延迟重试，授权失效不自动扩大权限。通知不携带 URL、Secret 或可执行脚本；Broker ACK 不等价于配置应用的业务确认。
 

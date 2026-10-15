@@ -23,6 +23,7 @@ Agent Configuration 负责 Workspace 中 Agent 的期望配置，并从控制面
 - 校验所有引用存在且允许用于当前 Workspace。
 - 生成不可变、带版本的 Runtime Context。
 - 保存用户明确确认的元数据版本选择，目录资源编辑不自动推进运行选择。
+- 提供不设置、直接填写和引用资源库固定版本三种互斥 Prompt 配置方式。
 
 ### 不做什么
 - 不保存 Agent Runtime 的当前内存状态。
@@ -95,6 +96,20 @@ Agent Configuration 负责 Workspace 中 Agent 的期望配置，并从控制面
 Control 设置明确提交选定资源版本，校验 Workspace manage、稳定幂等键和 expected_version。选择作为 Agent Configuration 事实保存，Catalog 编辑不自动推进运行配置。每次实际选择变化递增 version，以 selection_revision 表达次序；用户明确选择旧资源版本仍是一项新选择。
 
 发布通过 [agent_metadata_update](../../../workflow/0010-agent-metadata-update/agent_metadata_update.md) 通知实例，Agent 经 Gateway 拉取，Gateway 不缓存配置。实例刷新不修改已有 Session、queued/running Turn 的固定配置；Skill 版本化/旧 Session 隔离为系统必须满足的契约，不建立可选能力登记。
+
+### Configured Prompt 选择
+
+每个 Agent Configuration 同时只有一种 Prompt 配置方式，不组合多份资源库 Prompt：
+
+| 方式 | 用户输入 | 确认后的运行内容 |
+|:---|:---|:---|
+| 不设置 | 不填写正文，也不引用资源 | Configured Prompt 为空；Platform Prompt 仍独立生成 |
+| 直接填写 | 在当前 Agent 配置内编辑正文 | 正文随该次不可变 Metadata Release 保存，不隐式创建资源库条目 |
+| 引用资源库 | 一个 Prompt ID 与明确选定版本 | 校验资源可读、同企业及 Workspace manage，固定该版本正文与引用 |
+
+正文与库引用不能同时作为两个有效来源；确认时拒绝互相冲突的输入。切换方式与正文变更同样需要用户明确确认，产生新的已选配置；删除库引用或清空正文不能被解释成保留旧内容。资源库内容更新不自动改写直接填写内容，也不自动推进固定的库版本。
+
+已有 Session、queued/running Turn 仍使用原快照。Gateway 的 Platform Prompt 与上述内容独立交付，Agent 执行 Runtime 特有加载；直接填写模式不绕过 Workspace manage 权限。
 
 ### Metadata Application Projection
 

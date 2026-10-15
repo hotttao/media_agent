@@ -64,6 +64,18 @@ _禁用替代词_：Platform Prompt、User Message
 可被 Agent Configuration 引用的 Prompt、Agent Template、Skill、Provider、Credential Reference 或 Memory Store 定义。
 _禁用替代词_：Plugin、MCP Definition
 
+**Agent Resource Library（Agent 资源库）**:
+企业内管理和共享 Prompt、Skill 的资源集合；资源具有独立所有者与资源权限，可被同一企业的多个 Workspace 引用。
+_禁用替代词_：Workspace、Platform Prompt、Plugin Catalog
+
+**Skill Draft（Skill 草稿）**:
+Skill 尚未发布的可编辑文件集合，包含入口描述以及脚本、参考资料等资源，不作为 Agent 可选的运行版本。
+_禁用替代词_：Skill Version、Metadata Release、Runtime Directory
+
+**Skill Version（Skill 发布版本）**:
+Skill 一次发布形成的不可变文件集合，具有稳定版本标识，可独立查看、下载并由 Agent Configuration 明确选择。
+_禁用替代词_：Skill Draft、Metadata Selection Revision、Session Version
+
 **Agent Schedule（Agent 计划）**:
 按时间规则代表指定用户在指定 Workspace 发起 Agent Task 的长期离线委托。
 _禁用替代词_：River Job、Cron Job、Agent Task

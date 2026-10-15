@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-10-15 · 企业管理员登记外部 MCP
+
+- 用户允许企业管理员登记本企业的外部 MCP；平台内置定义仍由平台管理员维护。
+- 普通成员按授权查看、选用，配置给 Workspace 仍要求 manage；所有 Agent 调用统一经过 Gateway。
+- Definition 增加不可变企业归属；目录和调用均禁止跨企业使用。现有仅平台 admin 的管理实现需扩展。
+
 ## 2026-10-11 · MCP 注册目录归 Gateway
 
 - 将 MCP Catalog 与 MCP Definition 的权威归属从 media_plugin 移至 media_agent_gateway。

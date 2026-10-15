@@ -44,6 +44,8 @@ Provider API Key 在 Agent Configuration 事务提交后才可被读取。Assemb
 
 Control 持有 Configured Prompt 的内容与版本并提供已授权的运行配置；Agent 收到用户确认更新的通知后经 Gateway 拉取，Gateway 代理 Control 查询并在响应链路中生成独立 Platform Prompt 正文，不缓存控制配置。Agent 分别适配与加载。Control 不承担平台模板渲染，Gateway 不修改控制面的 Prompt 定义。
 
+Configured Prompt 从此次已确认配置的互斥来源解析：不设置返回空正文，直接填写返回 Release 固定的正文，库引用返回选定 ID/版本的正文。不能根据资源库当前版本重新解释历史 Release，也不能将直接填写的正文写回共享资源。Platform Prompt 始终独立生成。
+
 ## 关键参数
 `workspace_id`、`agent_id` 定位配置；`agent_type` 只能为 `codex` 或 `claude-code`；
 `context_version` 供 Session 固定引用和变更检测。

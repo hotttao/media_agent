@@ -1,5 +1,10 @@
 # Runtime Context Assembly 变更
 
+## 2026-10-15 · 解析三种 Prompt 来源
+
+- 组装只使用已确认配置中的不设置、直接填写或固定库版本，不把历史引用解析成 latest。
+- 直接填写不写回资源库；不设置仅清空 Configured Prompt，不停用 Gateway 的 Platform Prompt。
+
 ## 2026-10-11 · 用户确认后通知 Agent，经 Gateway 拉取配置
 
 - 配置通知不限定 Platform Prompt，覆盖选定 Prompt/Skill/Memory/MCP 等元数据。
