@@ -100,9 +100,10 @@ func (s *McpCatalogServiceClient) GetDefinition(context context.Context, req *mc
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{
-			"version":  req.GetVersion(),
-			"limit":    req.GetLimit(),
-			"after_id": req.GetAfterId(),
+			"organization_id": req.GetOrganizationId(),
+			"version":         req.GetVersion(),
+			"limit":           req.GetLimit(),
+			"after_id":        req.GetAfterId(),
 		}).
 		setPathParams(map[string]string{
 			"definition_id": req.GetDefinitionId(),
@@ -128,9 +129,10 @@ func (s *McpCatalogServiceClient) ListDefinitions(context context.Context, req *
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{
-			"version":  req.GetVersion(),
-			"limit":    req.GetLimit(),
-			"after_id": req.GetAfterId(),
+			"organization_id": req.GetOrganizationId(),
+			"version":         req.GetVersion(),
+			"limit":           req.GetLimit(),
+			"after_id":        req.GetAfterId(),
 		}).
 		setPathParams(map[string]string{
 			"definition_id": req.GetDefinitionId(),
@@ -156,9 +158,10 @@ func (s *McpCatalogServiceClient) GetInternalDefinition(context context.Context,
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{
-			"version":  req.GetVersion(),
-			"limit":    req.GetLimit(),
-			"after_id": req.GetAfterId(),
+			"organization_id": req.GetOrganizationId(),
+			"version":         req.GetVersion(),
+			"limit":           req.GetLimit(),
+			"after_id":        req.GetAfterId(),
 		}).
 		setPathParams(map[string]string{
 			"definition_id": req.GetDefinitionId(),
@@ -184,9 +187,10 @@ func (s *McpCatalogServiceClient) ListInternalDefinitions(context context.Contex
 	ret, err := s.client.r().
 		setContext(context).
 		setQueryParams(map[string]interface{}{
-			"version":  req.GetVersion(),
-			"limit":    req.GetLimit(),
-			"after_id": req.GetAfterId(),
+			"organization_id": req.GetOrganizationId(),
+			"version":         req.GetVersion(),
+			"limit":           req.GetLimit(),
+			"after_id":        req.GetAfterId(),
 		}).
 		setPathParams(map[string]string{
 			"definition_id": req.GetDefinitionId(),

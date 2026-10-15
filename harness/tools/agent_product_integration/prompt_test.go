@@ -45,6 +45,9 @@ func must(t *testing.T, err error) {
 	}
 }
 func database(t *testing.T) (*gorm.DB, *cfg.DatabaseConfig) {
+	return databaseWithMigrations(t, "../../../media_control/migrations")
+}
+func databaseWithMigrations(t *testing.T, migrationPath string) (*gorm.DB, *cfg.DatabaseConfig) {
 	t.Helper()
 	dsn := os.Getenv("MEDIA_AGENT_PRODUCT_TEST_DSN")
 	if dsn == "" {
@@ -70,7 +73,7 @@ func database(t *testing.T) (*gorm.DB, *cfg.DatabaseConfig) {
 		}
 		_ = admin.Exec("DROP DATABASE " + name + " WITH (FORCE)").Error
 	})
-	must(t, dal.Migrate("../../../media_control/migrations", config))
+	must(t, dal.Migrate(migrationPath, config))
 	return db, config
 }
 func mount(h *server.Hertz) *httptest.Server {

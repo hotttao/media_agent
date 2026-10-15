@@ -22,8 +22,9 @@ type Team struct {
 	Allowed            bool   `json:"allowed"`
 }
 type Facts struct {
-	Member  bool
-	TeamIDs []string
+	Member           bool
+	OrganizationRole string
+	TeamIDs          []string
 }
 type Client struct {
 	baseURL, token string
@@ -38,7 +39,12 @@ func New(baseURL, token string, client *http.Client) *Client {
 }
 func (c *Client) Resolve(ctx context.Context, user, organization string) (Facts, error) {
 	var organizations struct {
-		IDs []string `json:"organization_ids"`
+		IDs           []string `json:"organization_ids"`
+		Organizations []struct {
+			ID     string `json:"organization_id"`
+			Role   string `json:"role"`
+			Status string `json:"status"`
+		} `json:"organizations"`
 	}
 	if err := c.post(ctx, "/internal/organizations:byUser", map[string]string{"user_id": user}, &organizations); err != nil {
 		return Facts{}, err
@@ -48,6 +54,11 @@ func (c *Client) Resolve(ctx context.Context, user, organization string) (Facts,
 		if id == organization {
 			facts.Member = true
 			break
+		}
+	}
+	for _, row := range organizations.Organizations {
+		if row.ID == organization && row.Status == "active" && facts.Member {
+			facts.OrganizationRole = row.Role
 		}
 	}
 	if !facts.Member {

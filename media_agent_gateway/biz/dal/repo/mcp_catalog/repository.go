@@ -14,7 +14,7 @@ type Repository struct{ db *gorm.DB }
 
 func New(db *gorm.DB) *Repository { return &Repository{db} }
 func value(row model.MCPDefinition) *d.Definition {
-	return &d.Definition{ID: row.ID, ServiceName: row.ServiceName, Endpoint: row.Endpoint, Transport: row.Transport, AuthenticationType: row.AuthenticationType, Status: row.Status, Version: row.Version, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
+	return &d.Definition{ID: row.ID, OrganizationID: row.OrganizationID, ServiceName: row.ServiceName, Endpoint: row.Endpoint, Transport: row.Transport, AuthenticationType: row.AuthenticationType, Status: row.Status, Version: row.Version, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
 }
 func (r *Repository) Get(ctx context.Context, id string, lock bool) (*d.Definition, error) {
 	db := dal.FromContext(ctx, r.db).Where("id=?", id)
@@ -53,7 +53,7 @@ func (r *Repository) List(ctx context.Context, after string, limit int) ([]d.Def
 }
 func (r *Repository) Save(ctx context.Context, v *d.Definition, expected int64) error {
 	db := dal.FromContext(ctx, r.db)
-	row := model.MCPDefinition{ID: v.ID, ServiceName: v.ServiceName, Endpoint: v.Endpoint, Transport: v.Transport, AuthenticationType: v.AuthenticationType, Status: v.Status, Version: v.Version, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
+	row := model.MCPDefinition{ID: v.ID, OrganizationID: v.OrganizationID, ServiceName: v.ServiceName, Endpoint: v.Endpoint, Transport: v.Transport, AuthenticationType: v.AuthenticationType, Status: v.Status, Version: v.Version, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
 	var result *gorm.DB
 	if expected == 0 {
 		result = db.Clauses(clause.OnConflict{DoNothing: true}).Create(&row)
@@ -86,4 +86,20 @@ func (r *Repository) CompleteEvent(ctx context.Context, id string) error {
 }
 func (r *Repository) DeferEvent(ctx context.Context, id string) error {
 	return dal.FromContext(ctx, r.db).Exec("UPDATE media_agent_gateway.mcp_catalog_events SET available_at=now()+interval '5 seconds' WHERE id=? AND delivered_at IS NULL", id).Error
+}
+
+func (r *Repository) ListVisible(ctx context.Context, organization, after string, limit int) ([]d.Definition, error) {
+	var rows []model.MCPDefinition
+	db := dal.FromContext(ctx, r.db).Where("id>?", after)
+	if organization != "" {
+		db = db.Where("organization_id = '' OR organization_id = ?", organization)
+	} else {
+		db = db.Where("organization_id = ''")
+	}
+	err := db.Order("id").Limit(limit).Find(&rows).Error
+	result := make([]d.Definition, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, *value(row))
+	}
+	return result, err
 }

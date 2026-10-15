@@ -72,12 +72,21 @@ func ListUserOrganizations(ctx context.Context, c *app.RequestContext) {
 		c.String(consts.StatusBadRequest, "user_id required")
 		return
 	}
-	ids, err := OrganizationSvc.ListActiveIDs(ctx, req.UserID)
+	rows, err := OrganizationSvc.List(ctx, req.UserID)
 	if err != nil {
 		c.JSON(consts.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	c.JSON(consts.StatusOK, map[string]any{"organization_ids": ids})
+	ids := make([]string, 0, len(rows))
+	organizations := make([]map[string]string, 0, len(rows))
+	for _, row := range rows {
+		if row.Status != "active" {
+			continue
+		}
+		ids = append(ids, row.ID)
+		organizations = append(organizations, map[string]string{"organization_id": row.ID, "role": row.MyRole, "status": row.Status})
+	}
+	c.JSON(consts.StatusOK, map[string]any{"organization_ids": ids, "organizations": organizations})
 }
 
 // AuthorizeTeam POST /internal/team-authorization/check evaluates current facts and,

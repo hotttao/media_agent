@@ -12,9 +12,9 @@ var ErrNotFound = errors.New("MCP definition not found")
 var ErrForbidden = errors.New("MCP management forbidden")
 
 type Definition struct {
-	ID, ServiceName, Endpoint, Transport, AuthenticationType, Status string
-	Version                                                          int64
-	CreatedAt, UpdatedAt                                             time.Time
+	ID, OrganizationID, ServiceName, Endpoint, Transport, AuthenticationType, Status string
+	Version                                                                          int64
+	CreatedAt, UpdatedAt                                                             time.Time
 }
 type Event struct {
 	ID, DefinitionID string

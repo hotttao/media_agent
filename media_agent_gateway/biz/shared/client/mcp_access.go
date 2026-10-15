@@ -13,6 +13,7 @@ var ErrMCPAccess = errors.New("fixed MCP binding access unavailable")
 
 type MCPScope struct {
 	SessionID, UserID, WorkspaceID, AgentConfigID, AgentType, MetadataTargetContextVersion string
+	OrganizationID                                                                         string
 	ContextVersion                                                                         int64
 }
 type MCPGrant struct {

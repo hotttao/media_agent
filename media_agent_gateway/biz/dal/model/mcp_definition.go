@@ -4,6 +4,7 @@ import "time"
 
 type MCPDefinition struct {
 	ID                                                           string `gorm:"primaryKey"`
+	OrganizationID                                               string
 	ServiceName, Endpoint, Transport, AuthenticationType, Status string
 	Version                                                      int64
 	CreatedAt, UpdatedAt                                         time.Time

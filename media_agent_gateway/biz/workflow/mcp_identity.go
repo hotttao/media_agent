@@ -79,5 +79,5 @@ func (w *MCPIdentity) Authorize(ctx context.Context, c MCPCredentials) (MCPConte
 	if target == "" {
 		target = fixed.MetadataTargetContextVersion
 	}
-	return MCPContext{SessionID: s.ID, UserID: s.UserID, WorkspaceID: s.WorkspaceID, AgentConfigID: cfg, AgentType: s.AgentType, MetadataTargetContextVersion: target, ContextVersion: s.ContextVersion}, nil
+	return MCPContext{OrganizationID: facts.OrganizationID, SessionID: s.ID, UserID: s.UserID, WorkspaceID: s.WorkspaceID, AgentConfigID: cfg, AgentType: s.AgentType, MetadataTargetContextVersion: target, ContextVersion: s.ContextVersion}, nil
 }

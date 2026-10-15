@@ -55,3 +55,11 @@ Skill 当前 `version` 是资源 CAS，控制名称、ACL、草稿、Git 来源�
 Skill 扩展现有 CRUD 为内容管理与发布 API；MCP 扩展现有 Gateway 目录 API 并实现 Plugin 的绑定及固定配置查询。具体数据契约在对应实现切片前补充，保持以上已确认语义。管理界面使用真实 API，不以编辑内部存储路径作为上传功能，不以模型替身测试作为正式模型可用性证据。
 
 正式使用入口包括企业资源库、Agent 配置（含显式更新）、会话创建、消息发送、流式输出、历史和工具权限确认；Docker 仅负责创建一个可用 Agent。
+
+## MCP 管理与认证切片
+
+Gateway Definition 增加不可变 organization_id，空值属于平台目录。平台管理员维护平台定义；企业外部定义只允许该企业当前 admin 创建和修改，普通企业成员读取本企业及平台目录。企业停用或移除成员后立即失去企业目录权限。公开查询需要当前身份，内部只读使用服务凭据；Workspace 配置及运行调用还要核对真实 Workspace 企业归属。Definition ID 全局唯一，重名返回版本冲突，禁止通过更新转移企业归属。
+
+外部认证支持 none、bearer、api_key、oauth。bearer/API Key 由 Plugin 按 Workspace 加密保存，API 只返回是否配置，用户替换或清除时显式提交，历史快照不得包含明文。API Key 支持指定合法 HTTP Header；拒绝 Host、Cookie、代理身份及逐跳协议 Header。OAuth 由 Auth 负责用户授权、连接与可用 access token，Plugin 代理使用，Agent 不持有凭据。平台 session_context 类型仅限平台维护的可信服务，企业不可注册该类型。
+
+Definition 更新、绑定编辑、OAuth 连接及凭据替换不自动升级 Agent。用户明确确认 MCP 选择后才进入 Control 的不可变配置 Release；旧会话继续引用固定 Definition/Binding 版本。当前目录禁用或权限撤销仍阻止后续调用。

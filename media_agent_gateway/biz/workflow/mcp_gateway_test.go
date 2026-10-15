@@ -368,3 +368,28 @@ func TestPlatformPromptAndSkillAreFixedToSession(t *testing.T) {
 		t.Fatal("unknown template fell back")
 	}
 }
+
+func TestMCPRejectsForeignEnterpriseEvenWithPluginGrant(t *testing.T) {
+	flow, repo, _, identity := testMCPFlow(t, "https://example.test/mcp")
+	value := repo.current["alpha"]
+	value.OrganizationID = "enterprise"
+	if err := repo.Save(context.Background(), &value, 0); err != nil {
+		t.Fatal(err)
+	}
+	for _, organization := range []string{"", "foreign"} {
+		identity.scope.OrganizationID = organization
+		if _, _, err := flow.sources(context.Background(), identity.scope); !errors.Is(err, ErrMCPUnavailable) {
+			t.Fatalf("foreign grant accepted for %q: %v", organization, err)
+		}
+	}
+	identity.scope.OrganizationID = "enterprise"
+	if _, _, err := flow.sources(context.Background(), identity.scope); err != nil {
+		t.Fatal(err)
+	}
+	// Corrupt or mismatched history cannot move a pinned source across enterprises.
+	value.OrganizationID = "foreign"
+	repo.history["alpha:1"] = value
+	if _, _, err := flow.sources(context.Background(), identity.scope); !errors.Is(err, ErrMCPUnavailable) {
+		t.Fatal(err)
+	}
+}

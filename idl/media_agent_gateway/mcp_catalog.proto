@@ -4,13 +4,14 @@ import "api.proto";
 import "google/api/annotations.proto";
 option go_package = "media_agent_gateway/mcp_catalog";
 message DefinitionCommand {
+ string organization_id=8 [(api.body)="organization_id"];
  string definition_id=1 [(api.path)="definition_id",(api.body)="definition_id"];
  string service_name=2 [(api.body)="service_name"]; string endpoint=3 [(api.body)="endpoint"];
  string transport=4 [(api.body)="transport"]; string authentication_type=5 [(api.body)="authentication_type"];
  string status=6 [(api.body)="status"]; int64 expected_version=7 [(api.body)="expected_version"];
 }
-message DefinitionQuery { int64 version=4 [(api.query)="version"]; string definition_id=1 [(api.path)="definition_id"]; int32 limit=2 [(api.query)="limit"]; string after_id=3 [(api.query)="after_id"]; }
-message Definition { string definition_id=1; string service_name=2; string endpoint=3; string transport=4; string authentication_type=5; string status=6; int64 version=7; }
+message DefinitionQuery { string organization_id=5 [(api.query)="organization_id"]; int64 version=4 [(api.query)="version"]; string definition_id=1 [(api.path)="definition_id"]; int32 limit=2 [(api.query)="limit"]; string after_id=3 [(api.query)="after_id"]; }
+message Definition { string organization_id=8; string definition_id=1; string service_name=2; string endpoint=3; string transport=4; string authentication_type=5; string status=6; int64 version=7; }
 message Definitions { repeated Definition definitions=1; string next_after_id=2; }
 message ProtocolRequest {}
 message ProtocolResponse {}

@@ -8,17 +8,22 @@ import (
 	d "media_agent/media_agent_gateway/biz/domain/mcp_catalog"
 	"media_agent/media_agent_gateway/biz/middleware"
 	service "media_agent/media_agent_gateway/biz/service/mcp_catalog"
+	"media_agent/media_agent_gateway/biz/workflow"
 	"net/http"
 )
 
 var catalog *service.Service
+var management *workflow.MCPCatalogManagement
+
+func ConfigureManagement(value *workflow.MCPCatalogManagement) { management = value }
+
 var protocolHandler http.Handler
 
 func Configure(value *service.Service, protocol http.Handler) {
 	catalog, protocolHandler = value, protocol
 }
 func response(v *d.Definition) *dto.Definition {
-	return &dto.Definition{DefinitionId: v.ID, ServiceName: v.ServiceName, Endpoint: v.Endpoint, Transport: v.Transport, AuthenticationType: v.AuthenticationType, Status: v.Status, Version: v.Version}
+	return &dto.Definition{DefinitionId: v.ID, OrganizationId: v.OrganizationID, ServiceName: v.ServiceName, Endpoint: v.Endpoint, Transport: v.Transport, AuthenticationType: v.AuthenticationType, Status: v.Status, Version: v.Version}
 }
 func ready(c *app.RequestContext) bool {
 	if catalog == nil {
@@ -45,7 +50,11 @@ func put(ctx context.Context, c *app.RequestContext, create bool) {
 		failure(c, d.ErrInvalid)
 		return
 	}
-	v, e := catalog.Put(ctx, d.Definition{ID: req.DefinitionId, ServiceName: req.ServiceName, Endpoint: req.Endpoint, Transport: req.Transport, AuthenticationType: req.AuthenticationType, Status: req.Status}, req.ExpectedVersion, middleware.ManagementUser(ctx).Role == "admin")
+	if management == nil {
+		failure(c, errors.New("catalog management unavailable"))
+		return
+	}
+	v, e := management.Put(ctx, middleware.ManagementUser(ctx), d.Definition{ID: req.DefinitionId, OrganizationID: req.OrganizationId, ServiceName: req.ServiceName, Endpoint: req.Endpoint, Transport: req.Transport, AuthenticationType: req.AuthenticationType, Status: req.Status}, req.ExpectedVersion)
 	if e != nil {
 		failure(c, e)
 		return
@@ -60,11 +69,11 @@ func GetDefinition(ctx context.Context, c *app.RequestContext) {
 	if !ready(c) {
 		return
 	}
-	if middleware.ManagementUser(ctx).Role != "admin" {
-		failure(c, d.ErrForbidden)
+	if management == nil {
+		failure(c, errors.New("catalog management unavailable"))
 		return
 	}
-	v, e := catalog.Get(ctx, c.Param("definition_id"))
+	v, e := management.Get(ctx, middleware.ManagementUser(ctx), c.Param("definition_id"))
 	if e != nil {
 		failure(c, e)
 		return
@@ -75,8 +84,8 @@ func ListDefinitions(ctx context.Context, c *app.RequestContext) {
 	if !ready(c) {
 		return
 	}
-	if middleware.ManagementUser(ctx).Role != "admin" {
-		failure(c, d.ErrForbidden)
+	if management == nil {
+		failure(c, errors.New("catalog management unavailable"))
 		return
 	}
 	var req dto.DefinitionQuery
@@ -88,7 +97,7 @@ func ListDefinitions(ctx context.Context, c *app.RequestContext) {
 	if limit == 0 {
 		limit = 100
 	}
-	rows, e := catalog.List(ctx, req.AfterId, limit)
+	rows, e := management.List(ctx, middleware.ManagementUser(ctx), req.OrganizationId, req.AfterId, limit)
 	if e != nil {
 		failure(c, e)
 		return

@@ -51,3 +51,31 @@ func TestFailureDoesNotBecomeMembership(t *testing.T) {
 		t.Fatal(facts, err)
 	}
 }
+
+func TestOrganizationRoleRequiresCurrentActiveMembership(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		ids                []string
+		status, role, want string
+	}{
+		{"admin", []string{"org"}, "active", "admin", "admin"},
+		{"member", []string{"org"}, "active", "member", "member"},
+		{"removed", nil, "active", "admin", ""},
+		{"disabled", []string{"org"}, "disabled", "admin", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/internal/organizations:byUser" {
+					_ = json.NewEncoder(w).Encode(map[string]any{"organization_ids": tc.ids, "organizations": []map[string]string{{"organization_id": "org", "role": tc.role, "status": tc.status}}})
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"team_ids": []string{}})
+			}))
+			defer server.Close()
+			got, err := New(server.URL, "token", nil).Resolve(context.Background(), "user", "org")
+			if err != nil || got.OrganizationRole != tc.want {
+				t.Fatal(got, err)
+			}
+		})
+	}
+}

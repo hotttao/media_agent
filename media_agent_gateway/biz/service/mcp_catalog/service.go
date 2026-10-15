@@ -31,6 +31,9 @@ func New(repo d.Repository, tx TxRunner, hosts []string) *Service {
 var slug = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,47}$`)
 
 func (s *Service) valid(v d.Definition) bool {
+	if v.OrganizationID != "" && (v.Transport == "platform" || v.AuthenticationType == "session_context") {
+		return false
+	}
 	if v.ID == "platform" && v.Transport != "platform" {
 		return false
 	}
@@ -40,14 +43,23 @@ func (s *Service) valid(v d.Definition) bool {
 	if v.Transport == "platform" {
 		return v.ID == "platform" && v.ServiceName == "platform" && v.Endpoint == "platform://builtin" && v.AuthenticationType == "session_context"
 	}
-	if !slices.Contains([]string{"streamable_http", "sse"}, v.Transport) || !slices.Contains([]string{"session_context", "oauth", "none"}, v.AuthenticationType) {
+	if !slices.Contains([]string{"streamable_http", "sse"}, v.Transport) || !slices.Contains([]string{"session_context", "oauth", "none", "bearer", "api_key"}, v.AuthenticationType) {
 		return false
 	}
 	u, e := url.Parse(v.Endpoint)
 	return e == nil && u.Host != "" && (u.Scheme == "http" || u.Scheme == "https") && u.User == nil && u.Fragment == "" && u.RawQuery == "" && s.hosts[u.Host]
 }
 func (s *Service) Put(ctx context.Context, v d.Definition, expected int64, admin bool) (*d.Definition, error) {
-	if !admin {
+	if !admin || v.OrganizationID != "" {
+		return nil, d.ErrForbidden
+	}
+	return s.PutScoped(ctx, v, expected, "")
+}
+
+// PutScoped accepts an organization authorized by the application workflow.
+// Empty organization is reserved for platform administration.
+func (s *Service) PutScoped(ctx context.Context, v d.Definition, expected int64, organization string) (*d.Definition, error) {
+	if v.OrganizationID != organization {
 		return nil, d.ErrForbidden
 	}
 	if expected < 0 || !s.valid(v) {
@@ -66,6 +78,9 @@ func (s *Service) Put(ctx context.Context, v d.Definition, expected int64, admin
 			}
 			v.CreatedAt = now
 		} else {
+			if previous.OrganizationID != organization {
+				return d.ErrForbidden
+			}
 			if previous.Version != expected || previous.Status == "retired" && v.Status != "retired" {
 				return d.ErrConflict
 			}
@@ -117,4 +132,17 @@ func (s *Service) DeferEvent(ctx context.Context, id string) error {
 		return d.ErrInvalid
 	}
 	return repo.DeferEvent(ctx, id)
+}
+
+func (s *Service) ListVisible(ctx context.Context, organization, after string, limit int) ([]d.Definition, error) {
+	if limit < 1 || limit > 200 {
+		return nil, d.ErrInvalid
+	}
+	repo, ok := s.repo.(interface {
+		ListVisible(context.Context, string, string, int) ([]d.Definition, error)
+	})
+	if !ok {
+		return nil, d.ErrInvalid
+	}
+	return repo.ListVisible(ctx, organization, after, limit)
 }

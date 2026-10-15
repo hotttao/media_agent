@@ -88,11 +88,14 @@ func (w *MCPGateway) sources(ctx context.Context, scope MCPContext) ([]mcpSource
 		if e != nil {
 			return nil, "", ErrMCPUnavailable
 		}
+		if current.OrganizationID != "" && current.OrganizationID != scope.OrganizationID {
+			return nil, "", ErrMCPUnavailable
+		}
 		if current.Status != "enabled" {
 			continue
 		}
 		fixed, e := w.catalog.Version(ctx, grant.DefinitionID, grant.DefinitionVersion)
-		if e != nil || fixed.Status != "enabled" || fixed.Transport == "platform" {
+		if e != nil || fixed.Status != "enabled" || fixed.Transport == "platform" || fixed.OrganizationID != current.OrganizationID {
 			return nil, "", ErrMCPUnavailable
 		}
 		if fixed.AuthenticationType != "none" && grant.ProxyAuthorization == "" {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"media_agent/hertz_infra/authn/internaljwt"
+	"media_agent/hertz_infra/authn/resourceaccess"
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/mcpprotocol"
 	"media_agent/hertz_infra/messagebus"
@@ -197,6 +198,7 @@ func main() {
 
 	catalogApplication := catalogservice.New(catalogrepo.New(db), txRunner, cfg.GetAgentMcp().GetAllowedUpstreamHosts())
 	cataloghandler.Configure(catalogApplication, nil)
+	cataloghandler.ConfigureManagement(&workflow.MCPCatalogManagement{Catalog: catalogApplication, Facts: resourceaccess.New(os.Getenv("MEDIA_AUTH_URL"), os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN"), nil)})
 	if mcpCfg := cfg.GetAgentMcp(); mcpCfg.GetEnabled() {
 		if execution == nil || credentialKeys == nil {
 			log.Fatal("MCP requires Agent Runtime identity configuration")

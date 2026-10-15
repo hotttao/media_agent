@@ -53,7 +53,7 @@ MCP Definition 是聚合根，拥有稳定 ID、Endpoint、服务身份、认证
 | service_name | text | 部署服务身份 |
 | endpoint | text | MCP 内部或外部地址 |
 | transport | text | platform/streamable_http/sse |
-| authentication_type | text | session_context/oauth/none |
+| authentication_type | text | session_context/oauth/none/bearer/api_key |
 | status | text | enabled/disabled/retired |
 | version | bigint | Definition 版本 |
 | created_at | timestamptz | 创建时间 |
@@ -90,3 +90,5 @@ Definition ID 使用1–48字符安全 slug，不能包含命名空间分隔符 
 历史 `mcp_definition_versions` 以 id/version 为键，每次更新只追加；Plugin 固定快照引用该版本。当前 disabled/retired 立即禁止该来源调用；retired 不复活。`mcp_catalog_events` 以 definition_id/version 唯一并保存可重试投递状态，`mcp_catalog_revision` 是目录变更的可重建读版本。目录表位于 Gateway 自有 schema，不与外部服务共表。
 
 内部 GET /internal/mcp-definitions/{id}?version=V 查询固定历史；省略 version 查询当前。内部列表使用 after_id/limit；公开管理查询和写入按定义归属要求当前平台或企业 admin，内部查询使用部署服务凭证，内部入口不提供写命令。内部调用也须以真实 Workspace 企业归属核对企业外部定义，不能因服务身份绕过企业边界。
+
+企业定义不得使用平台 session_context 认证。bearer/api_key 的 Workspace 凭据由 Plugin 加密管理，OAuth 用户凭据由 Auth 管理，目录不保存秘密。企业当前成员可读本企业及平台目录；管理企业定义要求当前企业 admin。所有归属在创建后不可修改。
