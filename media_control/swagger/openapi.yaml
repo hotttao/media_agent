@@ -3135,6 +3135,30 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/v1/workspaces/{workspace_id}/permissions:
+        get:
+            tags:
+                - WorkspaceService
+            operationId: WorkspaceService_GetWorkspacePermissions
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkspacePermissions'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/v1/workspaces/{workspace_id}/placement:
         get:
             tags:
@@ -5187,6 +5211,13 @@ components:
                     type: string
                 after_id:
                     type: string
+        WorkspacePermissions:
+            type: object
+            properties:
+                can_view:
+                    type: boolean
+                can_manage:
+                    type: boolean
         WorkspaceResponse:
             type: object
             properties:

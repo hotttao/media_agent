@@ -29,6 +29,7 @@ func Register(r *server.Hertz) {
 				_workspaces.PUT("/:workspace_id", append(_updateworkspaceMw(), workspace.UpdateWorkspace)...)
 				{
 					_workspace_id := _workspaces.Group("/:workspace_id", _workspace_idMw()...)
+					_workspace_id.GET("/permissions", append(_getworkspacepermissionsMw(), workspace.GetWorkspacePermissions)...)
 					_workspace_id.GET("/runtime-context", append(_getruntimecontextMw(), workspace.GetRuntimeContext)...)
 				}
 			}

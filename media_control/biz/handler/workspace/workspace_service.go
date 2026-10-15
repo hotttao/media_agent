@@ -179,3 +179,28 @@ func CheckWorkspaceAccess(ctx context.Context, c *app.RequestContext) {
 	}
 	c.JSON(consts.StatusOK, map[string]bool{"allowed": allowed})
 }
+
+// GetWorkspacePermissions .
+// @router /api/v1/workspaces/:workspace_id/permissions [GET]
+func GetWorkspacePermissions(ctx context.Context, c *app.RequestContext) {
+	var req workspace.GetWorkspaceRequest
+	if c.BindAndValidate(&req) != nil {
+		c.JSON(400, map[string]string{"error": "invalid_workspace"})
+		return
+	}
+	view, err := workspaceService.CheckAccess(ctx, req.WorkspaceId, middleware.UserID(ctx), "view")
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	if !view {
+		c.JSON(403, map[string]string{"error": "workspace_access_denied"})
+		return
+	}
+	manage, err := workspaceService.CheckAccess(ctx, req.WorkspaceId, middleware.UserID(ctx), "manage")
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	c.JSON(200, &workspace.WorkspacePermissions{CanView: view, CanManage: manage})
+}

@@ -21,11 +21,11 @@ const session: ChatSession = {
 };
 
 describe("isSessionCompatible", () => {
-  it("requires both the fixed context version and Agent type to match", () => {
+  it("keeps pinned metadata sessions usable and requires a new session for a changed runtime type", () => {
     expect(isSessionCompatible(session, workspace)).toBe(true);
     expect(
       isSessionCompatible({ ...session, context_version: 1 }, workspace),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isSessionCompatible({ ...session, agent_type: "codex" }, workspace),
     ).toBe(false);

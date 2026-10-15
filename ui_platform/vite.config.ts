@@ -6,6 +6,7 @@ import { defineConfig } from "vite";
 const analyze = process.env.ANALYZE === "true";
 
 export default defineConfig({
+  base: process.env.AGENT_UI_BASE || "/",
   plugins: [
     react(),
     analyze && visualizer({ filename: "stats.html", sourcemap: true }),
@@ -21,6 +22,19 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      "^/api/v1/workspaces/[^/]+/mcp-bindings": {
+        target: "http://127.0.0.1:8011",
+        changeOrigin: true,
+      },
+      "/api/v1/prompts": {
+        target: "http://127.0.0.1:8007",
+        changeOrigin: true,
+      },
+      "/api/v1/skills": { target: "http://127.0.0.1:8007", changeOrigin: true },
+      "/api/v1/mcp-definitions": {
+        target: "http://127.0.0.1:8006",
+        changeOrigin: true,
+      },
       "/api/v1/workspaces": {
         target: "http://127.0.0.1:8007",
         changeOrigin: true,

@@ -8,6 +8,11 @@ import "google/api/annotations.proto";
 option go_package = "media_control/workspace";
 
 service WorkspaceService {
+ rpc GetWorkspacePermissions(GetWorkspaceRequest) returns(WorkspacePermissions) {
+  option(api.get)="/api/v1/workspaces/:workspace_id/permissions";
+  option(google.api.http)={get:"/api/v1/workspaces/{workspace_id}/permissions"};
+ }
+
   rpc CreateWorkspace(CreateWorkspaceRequest) returns (WorkspaceResponse) {
     option (api.post) = "/api/v1/workspaces";
     option (google.api.http) = { post: "/api/v1/workspaces" body: "*" };
@@ -89,3 +94,5 @@ message RuntimeContextResponse {
  string agent_configuration_id = 6;
  string metadata_target_context_version = 7;
 }
+
+message WorkspacePermissions { bool can_view=1;bool can_manage=2; }

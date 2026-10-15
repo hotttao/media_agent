@@ -3,10 +3,11 @@ import type {
   CreateWorkspaceInput,
   Workspace,
 } from "@/domains/workspace/types";
+import { appPath } from "@/foundation/lib/app-path";
 
 async function checked(response: Response): Promise<Response> {
   if (response.status === 401) {
-    window.location.href = "/login";
+    window.location.href = appPath("/login");
     throw new Error("Session expired");
   }
   if (!response.ok) {

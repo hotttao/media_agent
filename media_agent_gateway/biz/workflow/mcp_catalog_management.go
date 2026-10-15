@@ -63,3 +63,24 @@ func (w *MCPCatalogManagement) List(ctx context.Context, user client.GatewayUser
 	}
 	return w.Catalog.ListVisible(ctx, organization, after, limit)
 }
+
+func (w *MCPCatalogManagement) GetVersion(ctx context.Context, user client.GatewayUser, id string, version int64) (*d.Definition, error) {
+	if version < 0 {
+		return nil, d.ErrInvalid
+	}
+	current, err := w.Get(ctx, user, id)
+	if err != nil {
+		return nil, err
+	}
+	if version == 0 {
+		return current, nil
+	}
+	fixed, err := w.Catalog.Version(ctx, id, version)
+	if err != nil {
+		return nil, err
+	}
+	if fixed.OrganizationID != current.OrganizationID {
+		return nil, d.ErrForbidden
+	}
+	return fixed, nil
+}

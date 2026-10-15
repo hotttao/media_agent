@@ -18,12 +18,40 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("WorkspaceFormDialog", () => {
   it("creates a Claude Code workspace without persisting or echoing the API key", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify(claudeWorkspace), {
-        status: 201,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const path = String(input);
+        const body =
+          path === "/api/organizations"
+            ? {
+                organizations: [
+                  {
+                    id: "org",
+                    name: "Company",
+                    status: "active",
+                    my_role: "member",
+                  },
+                ],
+              }
+            : path === "/api/teams"
+              ? {
+                  teams: [
+                    {
+                      id: "team",
+                      name: "Creative",
+                      organization_id: "org",
+                      status: "active",
+                      my_role: "member",
+                    },
+                  ],
+                }
+              : claudeWorkspace;
+        return new Response(JSON.stringify(body), {
+          status: path === "/api/v1/workspaces" ? 201 : 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
     const onSaved = vi.fn();
     render(
       <WorkspaceFormDialog
@@ -46,14 +74,27 @@ describe("WorkspaceFormDialog", () => {
     fireEvent.change(screen.getByLabelText("API key"), {
       target: { value: "sk-ant-secret" },
     });
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Create workspace",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Create workspace" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(claudeWorkspace));
-    const request = fetchMock.mock.calls[0]?.[1];
+    const request = fetchMock.mock.calls.find(
+      (call) => String(call[0]) === "/api/v1/workspaces",
+    )?.[1];
     expect(JSON.parse(String(request?.body))).toEqual({
       name: "Claude workspace",
       agent_type: "claude-code",
       api_key: "sk-ant-secret",
+      organization_id: "org",
+      team_id: "team",
     });
     expect(onSaved.mock.calls[0]?.[0]).not.toHaveProperty("api_key");
   });
@@ -88,12 +129,38 @@ describe("WorkspaceFormDialog", () => {
   });
 
   it("keeps form values in memory when saving fails", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ error: "configuration rejected" }), {
-        status: 400,
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input);
+      const body =
+        path === "/api/organizations"
+          ? {
+              organizations: [
+                {
+                  id: "org",
+                  name: "Company",
+                  status: "active",
+                  my_role: "member",
+                },
+              ],
+            }
+          : path === "/api/teams"
+            ? {
+                teams: [
+                  {
+                    id: "team",
+                    name: "Creative",
+                    organization_id: "org",
+                    status: "active",
+                    my_role: "member",
+                  },
+                ],
+              }
+            : { error: "configuration rejected" };
+      return new Response(JSON.stringify(body), {
+        status: path === "/api/v1/workspaces" ? 400 : 200,
         headers: { "Content-Type": "application/json" },
-      }),
-    );
+      });
+    });
     render(
       <WorkspaceFormDialog
         mode="create"
@@ -111,6 +178,15 @@ describe("WorkspaceFormDialog", () => {
     fireEvent.change(screen.getByLabelText("API key"), {
       target: { value: "temporary-secret" },
     });
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Create workspace",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Create workspace" }));
 
     expect(await screen.findByText("configuration rejected")).toBeTruthy();

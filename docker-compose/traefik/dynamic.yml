@@ -33,7 +33,7 @@ http:
       priority: 140
       service: oathkeeper-api
     oauth:
-      rule: "PathPrefix(`/api/oauth`) || PathPrefix(`/api/users`) || PathPrefix(`/api/teams`) || PathPrefix(`/api/organizations`) || PathPrefix(`/api/api-tokens`) || PathPrefix(`/api/worker-identities`) || PathPrefix(`/api/service-tokens`)"
+      rule: "PathPrefix(`/api/mcp-oauth`) || PathPrefix(`/api/oauth`) || PathPrefix(`/api/users`) || PathPrefix(`/api/teams`) || PathPrefix(`/api/organizations`) || PathPrefix(`/api/api-tokens`) || PathPrefix(`/api/worker-identities`) || PathPrefix(`/api/service-tokens`)"
       priority: 100
       middlewares: [oathkeeper-forward-auth]
       service: auth
@@ -53,10 +53,20 @@ http:
       middlewares: [oathkeeper-forward-auth]
       service: workflow
     control:
-      rule: "PathPrefix(`/api/v1/workspaces`)"
+      rule: "PathPrefix(`/api/v1/workspaces`) || PathPrefix(`/api/v1/prompts`) || PathPrefix(`/api/v1/skills`)"
       priority: 60
       middlewares: [oathkeeper-forward-auth]
       service: control
+    plugin-bindings:
+      rule: "PathRegexp(`^/api/v1/workspaces/[^/]+/mcp-bindings(/.*)?$`)"
+      priority: 80
+      middlewares: [oathkeeper-forward-auth]
+      service: plugin
+    agent-chat-and-catalog:
+      rule: "PathPrefix(`/api/chat`) || PathPrefix(`/api/v1/mcp-definitions`)"
+      priority: 70
+      middlewares: [oathkeeper-forward-auth]
+      service: agent-api
     agent-proxy:
       # Agent Gateway introspects the API Token and issues its own assertion.
       # No Ory User/Worker mutation applies to this entry point.
@@ -68,6 +78,10 @@ http:
       priority: 60
       middlewares: [oathkeeper-forward-auth]
       service: agent-api
+    agent-frontend:
+      rule: "PathPrefix(`/agent`)"
+      priority: 20
+      service: agent-frontend
     frontend:
       rule: "PathPrefix(`/`)"
       priority: 1
@@ -126,10 +140,18 @@ http:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:8007"
+    agent-frontend:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:5178"
     frontend:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:5173"
+    plugin:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8011"
     agent-api:
       loadBalancer:
         servers:

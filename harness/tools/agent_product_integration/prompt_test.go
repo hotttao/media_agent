@@ -12,6 +12,7 @@ import (
 	cfg "media_agent/hertz_gen/config"
 	metadataPB "media_agent/hertz_gen/model/media_control/agent_metadata"
 	promptPB "media_agent/hertz_gen/model/media_control/prompt"
+	workspacePB "media_agent/hertz_gen/model/media_control/workspace"
 	"media_agent/hertz_infra/authn/resourceaccess"
 	"media_agent/hertz_infra/metadataartifact"
 	"media_agent/media_control/biz/dal"
@@ -20,9 +21,11 @@ import (
 	workspaceRepo "media_agent/media_control/biz/dal/repo/workspace"
 	metadataHandler "media_agent/media_control/biz/handler/agent_metadata"
 	promptHandler "media_agent/media_control/biz/handler/prompt"
+	workspaceHandler "media_agent/media_control/biz/handler/workspace"
 	"media_agent/media_control/biz/middleware"
 	metadataRouter "media_agent/media_control/biz/router/agent_metadata"
 	promptRouter "media_agent/media_control/biz/router/prompt"
+	workspaceRouter "media_agent/media_control/biz/router/workspace"
 	metadataService "media_agent/media_control/biz/service/agent_configuration"
 	promptService "media_agent/media_control/biz/service/prompt"
 	workspaceService "media_agent/media_control/biz/service/workspace"
@@ -169,16 +172,29 @@ func TestPromptLibraryAndExplicitConfiguration(t *testing.T) {
 	must(t, err)
 	flow := metadataFlow.New(metadataService.New(metadataRepo.New(db), dal.NewTxRunner(db)), workspace, artifacts, nil).WithPrompts(prompts)
 	promptHandler.Configure(prompts)
+	workspaceHandler.Configure(workspace, "product-internal")
 	metadataHandler.Configure(flow)
 	middleware.Configure("", "product-internal")
 	h := server.New()
 	promptRouter.Register(h)
+	workspaceRouter.Register(h)
 	metadataRouter.Register(h)
 	httpServer := mount(h)
 	defer httpServer.Close()
 	base := httpServer.URL
 	must(t, db.Exec("INSERT INTO workspaces(id,owner_user_id,created_by,organization_id,team_id,name,desired_state,version,created_at,updated_at) VALUES('workspace','owner','owner','org','workspace-team','Workspace','running',1,now(),now())").Error)
 	must(t, db.Exec("INSERT INTO agent_configurations(id,workspace_id,agent_id,agent_type,version,created_at,updated_at) VALUES('config','workspace','codex','codex',1,now(),now())").Error)
+	for _, check := range []struct {
+		user   string
+		manage bool
+	}{{"owner", true}, {"editor", true}, {"viewer", false}} {
+		var permissions workspacePB.WorkspacePermissions
+		call(t, base, check.user, "GET", "/api/v1/workspaces/workspace/permissions", nil, 200, &permissions)
+		if !permissions.CanView || permissions.CanManage != check.manage {
+			t.Fatalf("incorrect workspace permissions for %s: %v", check.user, &permissions)
+		}
+	}
+	call(t, base, "outsider", "GET", "/api/v1/workspaces/workspace/permissions", nil, 403, nil)
 	var created promptPB.PromptResponse
 	call(t, base, "owner", "POST", "/api/v1/prompts", map[string]any{"organization_id": "org", "name": "Writer", "content": "old", "visibility": "team", "grants": []map[string]string{{"team_id": "editor-team", "permission": "editor"}, {"team_id": "viewer-team", "permission": "viewer"}}}, 201, &created)
 	if created.OrganizationId != "org" || created.MyPermission != "owner" || created.Version != 1 {

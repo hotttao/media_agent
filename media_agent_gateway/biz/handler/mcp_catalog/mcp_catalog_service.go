@@ -73,7 +73,12 @@ func GetDefinition(ctx context.Context, c *app.RequestContext) {
 		failure(c, errors.New("catalog management unavailable"))
 		return
 	}
-	v, e := management.Get(ctx, middleware.ManagementUser(ctx), c.Param("definition_id"))
+	var req dto.DefinitionQuery
+	if c.BindAndValidate(&req) != nil {
+		failure(c, d.ErrInvalid)
+		return
+	}
+	v, e := management.GetVersion(ctx, middleware.ManagementUser(ctx), c.Param("definition_id"), req.Version)
 	if e != nil {
 		failure(c, e)
 		return

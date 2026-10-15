@@ -55,3 +55,8 @@ func _updateworkspaceMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _getworkspacepermissionsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

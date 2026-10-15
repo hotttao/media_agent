@@ -17,6 +17,8 @@ var (
 )
 
 type Client interface {
+	GetWorkspacePermissions(context context.Context, req *workspace.GetWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspacePermissions, rawResponse *protocol.Response, err error)
+
 	CreateWorkspace(context context.Context, req *workspace.CreateWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error)
 
 	ListWorkspaces(context context.Context, req *workspace.ListWorkspacesRequest, reqOpt ...config.RequestOption) (resp *workspace.ListWorkspacesResponse, rawResponse *protocol.Response, err error)
@@ -41,6 +43,30 @@ func NewWorkspaceServiceClient(hostUrl string, ops ...Option) (Client, error) {
 	return &WorkspaceServiceClient{
 		client: cli,
 	}, nil
+}
+
+func (s *WorkspaceServiceClient) GetWorkspacePermissions(context context.Context, req *workspace.GetWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspacePermissions, rawResponse *protocol.Response, err error) {
+	httpResp := &workspace.WorkspacePermissions{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"workspace_id": req.GetWorkspaceId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/v1/workspaces/:workspace_id/permissions")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
 }
 
 func (s *WorkspaceServiceClient) CreateWorkspace(context context.Context, req *workspace.CreateWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error) {
@@ -166,6 +192,10 @@ var defaultClient, _ = NewWorkspaceServiceClient("")
 func ConfigDefaultClient(ops ...Option) (err error) {
 	defaultClient, err = NewWorkspaceServiceClient("", ops...)
 	return
+}
+
+func GetWorkspacePermissions(context context.Context, req *workspace.GetWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspacePermissions, rawResponse *protocol.Response, err error) {
+	return defaultClient.GetWorkspacePermissions(context, req, reqOpt...)
 }
 
 func CreateWorkspace(context context.Context, req *workspace.CreateWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error) {

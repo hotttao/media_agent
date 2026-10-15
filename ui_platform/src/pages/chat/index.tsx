@@ -55,6 +55,7 @@ import { useAuth } from "@/foundation/providers/auth-provider";
 import { SlotProvider, useSlots } from "@/foundation/providers/slot-provider";
 import { createAppRegistry } from "@/foundation/slots/app-registry";
 import type { SlotConfig } from "@/foundation/slots/types";
+import { AgentSettingsPanel } from "./agent-settings-panel";
 
 interface WorkspaceRuntime {
   workspace: Workspace;
@@ -76,6 +77,8 @@ interface WorkspaceRuntime {
     response: Record<string, unknown>,
   ): Promise<void>;
   openSettings(): void;
+  openLibrary(): void;
+  refreshWorkspace(): Promise<void>;
 }
 
 const RuntimeContext = createContext<WorkspaceRuntime | null>(null);
@@ -312,12 +315,16 @@ function ChatApp() {
 }
 
 function SettingsApp() {
-  const { workspace, openSettings } = useRuntime();
+  const { workspace, openSettings, openLibrary, refreshWorkspace } =
+    useRuntime();
+  const { t } = useTranslation();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <HeaderPortal>
         <Settings size={15} className="text-slate-500" />
-        <span className="text-sm font-semibold">Workspace settings</span>
+        <span className="text-sm font-semibold">
+          {t("configuration.workspaceSettings")}
+        </span>
       </HeaderPortal>
       <div
         data-testid="workspace-settings"
@@ -347,7 +354,13 @@ function SettingsApp() {
             </dd>
           </div>
         </dl>
-        <Button onClick={openSettings}>Edit workspace</Button>
+        <AgentSettingsPanel
+          key={workspace.id}
+          workspace={workspace}
+          openLibrary={openLibrary}
+          refresh={refreshWorkspace}
+          editWorkspace={openSettings}
+        />
       </div>
     </div>
   );
@@ -359,6 +372,28 @@ const WORKSPACE_APPS = createAppRegistry([
   { id: "chat", label: "Chat", Component: ChatApp },
 ]);
 
+function WorkspaceAppNavigation({
+  workspaceId,
+  intent,
+}: {
+  workspaceId: string;
+  intent: { workspaceId: string; nonce: number } | null;
+}) {
+  const { ensureInstance } = useSlots();
+  const consumed = useRef<typeof intent>(null);
+  useEffect(() => {
+    if (
+      !intent ||
+      intent.workspaceId !== workspaceId ||
+      consumed.current === intent
+    )
+      return;
+    consumed.current = intent;
+    ensureInstance("workspace-settings", "slot-b");
+  }, [workspaceId, intent, ensureInstance]);
+  return null;
+}
+
 function Menubar({
   workspaces,
   workspace,
@@ -366,6 +401,7 @@ function Menubar({
   onCreate,
   onEdit,
   onManageUsers,
+  onLibrary,
 }: {
   workspaces: Workspace[];
   workspace: Workspace | null;
@@ -373,6 +409,7 @@ function Menubar({
   onCreate(): void;
   onEdit(): void;
   onManageUsers?: () => void;
+  onLibrary(): void;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -479,7 +516,12 @@ function Menubar({
           )}
         </div>
       </div>
-      <SignOutButton />
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="sm" onClick={onLibrary}>
+          {t("catalog.library")}
+        </Button>
+        <SignOutButton />
+      </div>
     </header>
   );
 }
@@ -517,6 +559,10 @@ export function ChatPage() {
   const [requests, setRequests] = useState<AgentRequest[]>([]);
   const [error, setError] = useState("");
   const [dialog, setDialog] = useState<"create" | "edit" | null>(null);
+  const [settingsIntent, setSettingsIntent] = useState<{
+    workspaceId: string;
+    nonce: number;
+  } | null>(null);
   const requestVersion = useRef(0);
   const activeSessionId = useRef("");
   const itemMessageIds = useRef(new Map<string, string>());
@@ -915,19 +961,30 @@ export function ChatPage() {
         requests,
         resolveRequest,
         openSettings: () => setDialog("edit"),
+        openLibrary: () =>
+          navigate(`/library/${workspace.organization_id ?? ""}`),
+        refreshWorkspace: async () => {
+          setWorkspaces(await listWorkspaces());
+        },
       }
     : null;
   return (
     <main
       data-testid="chat-page"
-      className="flex h-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,_#dbeafe_0,_#f8fafc_42%,_#f8fafc_100%)] text-slate-950"
+      className="flex h-screen flex-col overflow-hidden bg-[#f5f4f0] text-slate-950"
     >
       <Menubar
         workspaces={workspaces}
         workspace={workspace}
         onSelect={(id) => navigate(`/w/${id}`)}
         onCreate={() => setDialog("create")}
-        onEdit={() => setDialog("edit")}
+        onEdit={() => {
+          if (workspace)
+            setSettingsIntent({ workspaceId: workspace.id, nonce: Date.now() });
+        }}
+        onLibrary={() =>
+          navigate(`/library/${workspace?.organization_id ?? ""}`)
+        }
         onManageUsers={
           user?.role === "admin" ? () => navigate("/admin/users") : undefined
         }
@@ -940,6 +997,10 @@ export function ChatPage() {
             apps={WORKSPACE_APPS}
             configs={SLOT_CONFIGS}
           >
+            <WorkspaceAppNavigation
+              workspaceId={workspace.id}
+              intent={settingsIntent}
+            />
             <WorkspaceLayout />
             <SegmentedDock />
           </SlotProvider>

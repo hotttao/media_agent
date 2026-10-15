@@ -1,3 +1,4 @@
+import { appPath } from "@/foundation/lib/app-path";
 /**
  * API client for media_auth backend.
  *
@@ -68,10 +69,10 @@ class ApiClient {
       if (
         response.status === 401 &&
         !endpoint.includes("/auth/") &&
-        window.location.pathname !== "/login" &&
-        window.location.pathname !== "/register"
+        window.location.pathname !== appPath("/login") &&
+        window.location.pathname !== appPath("/register")
       ) {
-        window.location.href = "/login";
+        window.location.href = appPath("/login");
         throw new Error("Session expired");
       }
       const body: Record<string, unknown> = await response
@@ -98,7 +99,7 @@ class ApiClient {
   }
 
   async login(username: string, password: string): Promise<User> {
-    const returnTo = new URL("/", window.location.origin).toString();
+    const returnTo = new URL(appPath("/"), window.location.origin).toString();
     const flowResponse = await fetch(
       `/self-service/login/browser?return_to=${encodeURIComponent(returnTo)}`,
       {
@@ -168,7 +169,10 @@ class ApiClient {
   }
 
   async createLogoutURL(): Promise<string> {
-    const returnTo = new URL("/login", window.location.origin).toString();
+    const returnTo = new URL(
+      appPath("/login"),
+      window.location.origin,
+    ).toString();
     const response = await fetch(
       `/self-service/logout/browser?return_to=${encodeURIComponent(returnTo)}`,
       { credentials: "include", headers: { Accept: "application/json" } },

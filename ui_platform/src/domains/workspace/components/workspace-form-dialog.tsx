@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   createWorkspace,
@@ -9,6 +10,11 @@ import {
   type AgentType,
   type Workspace,
 } from "@/domains/workspace/types";
+import {
+  listMyTeams,
+  listOrganizations,
+} from "@/foundation/lib/hierarchy-client";
+import type { Organization, Team } from "@/foundation/types/hierarchy";
 
 export function WorkspaceFormDialog({
   mode,
@@ -23,6 +29,12 @@ export function WorkspaceFormDialog({
   onClose(): void;
   onSaved(value: Workspace): void;
 }) {
+  const { t } = useTranslation();
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [organizationID, setOrganizationID] = useState("");
+  const [teamID, setTeamID] = useState("");
+  const [loadingHierarchy, setLoadingHierarchy] = useState(false);
   const [name, setName] = useState("");
   const [agentType, setAgentType] = useState<AgentType>("codex");
   const [apiKey, setApiKey] = useState("");
@@ -37,11 +49,50 @@ export function WorkspaceFormDialog({
       setError("");
     }
   }, [open, workspace]);
+  useEffect(() => {
+    if (!open) {
+      setApiKey("");
+      return;
+    }
+    if (mode !== "create") return;
+    let active = true;
+    setLoadingHierarchy(true);
+    setOrganizations([]);
+    setTeams([]);
+    setOrganizationID("");
+    setTeamID("");
+    void Promise.all([listOrganizations(), listMyTeams()])
+      .then(([orgs, departments]) => {
+        if (!active) return;
+        setOrganizations(orgs);
+        setTeams(departments);
+        const org = orgs[0]?.id ?? "";
+        setOrganizationID(org);
+        setTeamID(
+          departments.find((team) => team.organization_id === org)?.id ?? "",
+        );
+      })
+      .catch((cause: unknown) => {
+        if (active)
+          setError(cause instanceof Error ? cause.message : "Request failed");
+      })
+      .finally(() => {
+        if (active) setLoadingHierarchy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, mode]);
   if (!open) return null;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!name.trim() || saving) return;
+    if (
+      !name.trim() ||
+      saving ||
+      (mode === "create" && (!organizationID || !teamID))
+    )
+      return;
     setSaving(true);
     setError("");
     try {
@@ -52,7 +103,11 @@ export function WorkspaceFormDialog({
       };
       const value =
         mode === "create"
-          ? await createWorkspace(input)
+          ? await createWorkspace({
+              ...input,
+              organization_id: organizationID,
+              team_id: teamID,
+            })
           : await updateWorkspace(workspace?.id ?? "", input);
       setApiKey("");
       onSaved(value);
@@ -98,6 +153,69 @@ export function WorkspaceFormDialog({
             className="w-full rounded-xl border px-3 py-2.5 text-sm"
           />
         </label>
+        {mode === "create" && (
+          <>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium">
+                {t("catalog.organization")}
+              </span>
+              <select
+                aria-label={t("catalog.organization")}
+                className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm"
+                value={organizationID}
+                disabled={loadingHierarchy}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  setOrganizationID(id);
+                  setTeamID(
+                    teams.find((team) => team.organization_id === id)?.id ?? "",
+                  );
+                }}
+              >
+                <option value="">
+                  {t(
+                    loadingHierarchy
+                      ? "catalog.loading"
+                      : "catalog.chooseOrganization",
+                  )}
+                </option>
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium">{t("catalog.team")}</span>
+              <select
+                aria-label={t("catalog.team")}
+                className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm"
+                value={teamID}
+                onChange={(event) => setTeamID(event.target.value)}
+                disabled={loadingHierarchy || !organizationID}
+              >
+                <option value="">{t("catalog.chooseTeam")}</option>
+                {teams
+                  .filter((team) => team.organization_id === organizationID)
+                  .map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            {!loadingHierarchy &&
+              (!organizations.length ||
+                !teams.some(
+                  (team) => team.organization_id === organizationID,
+                )) && (
+                <p className="text-sm text-amber-800">
+                  {t("catalog.membershipRequired")}
+                </p>
+              )}
+          </>
+        )}
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">Agent</span>
           <select
@@ -138,7 +256,15 @@ export function WorkspaceFormDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={!name.trim() || saving}>
+          <Button
+            type="submit"
+            disabled={
+              !name.trim() ||
+              saving ||
+              (mode === "create" &&
+                (!organizationID || !teamID || loadingHierarchy))
+            }
+          >
             {saving
               ? "Saving…"
               : mode === "create"

@@ -124,6 +124,12 @@ func TestEnterpriseMCPCatalogHTTPAndHistory(t *testing.T) {
 	body["authentication_type"] = "api_key"
 	request("org-admin", "PUT", "/api/v1/mcp-definitions/enterprise-search", body, 200)
 	request("org-admin", "PUT", "/api/v1/mcp-definitions/enterprise-search", body, 409)
+	history := request("member", "GET", "/api/v1/mcp-definitions/enterprise-search?version=1", nil, 200)
+	if history["authentication_type"] != "bearer" {
+		t.Fatal("public fixed definition read returned current authentication", history)
+	}
+	request("foreign-admin", "GET", "/api/v1/mcp-definitions/enterprise-search?version=1", nil, 403)
+	request("member", "GET", "/api/v1/mcp-definitions/enterprise-search?version=-1", nil, 400)
 	first, err := catalog.Version(context.Background(), "enterprise-search", 1)
 	must(t, err)
 	if first.AuthenticationType != "bearer" || first.OrganizationID != "org" {

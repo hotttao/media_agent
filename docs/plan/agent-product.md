@@ -31,7 +31,9 @@
 
 ## F4 · 界面与正式使用
 
-- [ ] 企业资源库与管理、Agent 配置和显式更新交互。
+切为 F4a 企业资源库与配置界面、浏览器认证/Workspace 创建接通；F4b Docker 正式 Agent 与真实使用验收。每个切片各自 review 与 commit。
+
+- [x] F4a：企业资源库与管理、Agent 配置和显式更新交互、浏览器身份与 Workspace 企业/部门创建。
 - [ ] 正式 Agent 对话、流式回复、历史、工具权限确认。
 - [ ] Docker 实际使用入口、功能验收、review.md 和 commit。
 

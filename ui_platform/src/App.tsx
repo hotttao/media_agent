@@ -11,6 +11,7 @@
 
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "@/foundation/components/protected-route";
+import { AgentLibraryPage } from "@/pages/agent-library";
 import { LoginPage } from "@/pages/auth/login";
 import { RegisterPage } from "@/pages/auth/register";
 import { ChatPage } from "@/pages/chat";
@@ -51,6 +52,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <ChatPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/library/:organizationId?"
+        element={
+          <ProtectedRoute>
+            <AgentLibraryPage />
           </ProtectedRoute>
         }
       />

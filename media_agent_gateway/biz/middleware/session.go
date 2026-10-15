@@ -3,7 +3,9 @@ package middleware
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
+	client "media_agent/media_agent_gateway/biz/shared/client"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -27,6 +29,21 @@ func UserID(ctx context.Context) string { value, _ := ctx.Value(sessionKey{}).(s
 
 func Session() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
+		if managementAuthenticator != nil {
+			user, err := managementAuthenticator.Authenticate(ctx, string(c.GetHeader("Authorization")), string(c.GetHeader("Cookie")))
+			if err != nil || user.UserID == "" {
+				status := 503
+				if errors.Is(err, client.ErrAgentTokenUnauthorized) || err == nil {
+					status = 401
+				}
+				c.JSON(status, map[string]string{"error": "user_identity_unavailable"})
+				c.Abort()
+				return
+			}
+			verified := context.WithValue(ctx, managementUserKey{}, user)
+			c.Next(context.WithValue(verified, sessionKey{}, user.UserID))
+			return
+		}
 		token := string(c.Cookie("token"))
 		claims := &Claims{}
 		parsed, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
