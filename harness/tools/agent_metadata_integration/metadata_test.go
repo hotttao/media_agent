@@ -15,6 +15,7 @@ import (
 	"io"
 	cfg "media_agent/hertz_gen/config"
 	"media_agent/hertz_infra/authn/internaljwt"
+	"media_agent/hertz_infra/authn/resourceaccess"
 	"media_agent/hertz_infra/messagebus"
 	"media_agent/hertz_infra/metadataartifact"
 	gwDal "media_agent/media_agent_gateway/biz/dal"
@@ -26,6 +27,7 @@ import (
 	gwFlow "media_agent/media_agent_gateway/biz/workflow"
 	ctrlDal "media_agent/media_control/biz/dal"
 	ctrlRepo "media_agent/media_control/biz/dal/repo/agent_configuration"
+	promptRepo "media_agent/media_control/biz/dal/repo/prompt"
 	ctrlWorkspaceRepo "media_agent/media_control/biz/dal/repo/workspace"
 	ctrlDomain "media_agent/media_control/biz/domain/agent_configuration"
 	workspaceDomain "media_agent/media_control/biz/domain/workspace"
@@ -33,6 +35,7 @@ import (
 	ctrlMiddleware "media_agent/media_control/biz/middleware"
 	ctrlRouter "media_agent/media_control/biz/router/agent_metadata"
 	ctrlService "media_agent/media_control/biz/service/agent_configuration"
+	promptService "media_agent/media_control/biz/service/prompt"
 	ctrlWorkspace "media_agent/media_control/biz/service/workspace"
 	"media_agent/media_control/biz/shared/secret"
 	ctrlFlow "media_agent/media_control/biz/workflow/metadata_update"
@@ -47,6 +50,15 @@ import (
 )
 
 type teams struct{}
+
+type catalogAccess struct{}
+
+func (catalogAccess) Resolve(_ context.Context, user, org string) (resourceaccess.Facts, error) {
+	return resourceaccess.Facts{Member: user == "user" && org == "org"}, nil
+}
+func (catalogAccess) Team(context.Context, string, string) (resourceaccess.Team, error) {
+	return resourceaccess.Team{}, errors.New("no fixture grants")
+}
 
 func (teams) ListTeams(context.Context, string) ([]string, error) { return []string{"team"}, nil }
 func (teams) Authorize(_ context.Context, user, team, permission string) (workspaceDomain.TeamAuthorization, error) {
@@ -159,7 +171,8 @@ func TestConfirmedMetadataPipeline(t *testing.T) {
 	repository := ctrlRepo.New(db)
 	service := ctrlService.New(repository, ctrlDal.NewTxRunner(db))
 	workspace := ctrlWorkspace.New(ctrlWorkspaceRepo.New(db), ctrlDal.NewTxRunner(db), secret.New("integration-secret"), teams{})
-	ctrlHandler.Configure(ctrlFlow.New(service, workspace, artifacts, roster{}))
+	prompts := promptService.New(promptRepo.New(db), ctrlDal.NewTxRunner(db), catalogAccess{})
+	ctrlHandler.Configure(ctrlFlow.New(service, workspace, artifacts, roster{}).WithPrompts(prompts))
 	ctrlMiddleware.Configure("integration-secret", "internal-test-token")
 	ctrlMiddleware.ConfigureMetadataGateway("metadata-gateway-test")
 	controlHertz := server.New()
@@ -174,7 +187,7 @@ func TestConfirmedMetadataPipeline(t *testing.T) {
 	gateway := mount(gatewayHertz)
 	defer gateway.Close()
 	// A mutable Catalog edit creates history, never an update notification.
-	must(t, db.Exec("INSERT INTO prompts(id,owner_user_id,name,content,status,version,created_at,updated_at) VALUES('prompt','user','Prompt','old','active',1,now(),now())").Error)
+	must(t, db.Exec("INSERT INTO prompts(id,organization_id,owner_user_id,name,content,status,version,created_at,updated_at) VALUES('prompt','org','user','Prompt','old','active',1,now(),now())").Error)
 	must(t, db.Exec("UPDATE prompts SET content='new',version=2 WHERE id='prompt'").Error)
 	var count int64
 	must(t, db.Table("metadata_notification_outbox").Count(&count).Error)
@@ -317,7 +330,7 @@ func TestConfirmedMetadataPipeline(t *testing.T) {
 
 	// Two confirmations of the same expected version must commit exactly one release.
 	competing := make(chan error, 2)
-	flow := ctrlFlow.New(service, workspace, artifacts, roster{})
+	flow := ctrlFlow.New(service, workspace, artifacts, roster{}).WithPrompts(prompts)
 	for _, key := range []string{"competing-a", "competing-b"} {
 		go func(key string) {
 			_, err := flow.Confirm(ctx, ctrlFlow.Confirm{WorkspaceID: "workspace", AgentConfigID: "config", UserID: "user", IdempotencyKey: key, ExpectedVersion: 4, Resources: []ctrlDomain.ResourceReference{{Kind: "media_control.configured_prompt", ID: "prompt", Version: 2}}})

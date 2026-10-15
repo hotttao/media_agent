@@ -8,6 +8,14 @@ import "google/api/annotations.proto";
 option go_package = "media_control/prompt";
 
 service PromptService {
+  rpc ListUnassignedPrompts(ListUnassignedPromptsRequest) returns (ListPromptsResponse) {
+    option (api.get) = "/api/v1/prompts/unassigned";
+    option (google.api.http) = { get: "/api/v1/prompts/unassigned" };
+  }
+  rpc AssignPromptOrganization(AssignPromptOrganizationRequest) returns (PromptResponse) {
+    option (api.post) = "/api/v1/prompts/:prompt_id/assign-organization";
+    option (google.api.http) = { post: "/api/v1/prompts/{prompt_id}/assign-organization" body: "*" };
+  }
   rpc CreatePrompt(CreatePromptRequest) returns (PromptResponse) {
     option (api.post) = "/api/v1/prompts";
     option (google.api.http) = { post: "/api/v1/prompts" body: "*" };
@@ -32,16 +40,36 @@ service PromptService {
     option (api.post) = "/api/v1/prompts/:prompt_id/archive";
     option (google.api.http) = { post: "/api/v1/prompts/{prompt_id}/archive" body: "*" };
   }
+  rpc SetPromptAccess(SetPromptAccessRequest) returns (PromptResponse) {
+    option (api.put) = "/api/v1/prompts/:prompt_id/access";
+    option (google.api.http) = { put: "/api/v1/prompts/{prompt_id}/access" body: "*" };
+  }
+  rpc ListPromptVersions(GetPromptRequest) returns (ListPromptVersionsResponse) {
+    option (api.get) = "/api/v1/prompts/:prompt_id/versions";
+    option (google.api.http) = { get: "/api/v1/prompts/{prompt_id}/versions" };
+  }
+  rpc GetPromptVersion(GetPromptVersionRequest) returns (PromptVersion) {
+    option (api.get) = "/api/v1/prompts/:prompt_id/versions/:version";
+    option (google.api.http) = { get: "/api/v1/prompts/{prompt_id}/versions/{version}" };
+  }
+  rpc RollbackPrompt(RollbackPromptRequest) returns (PromptResponse) {
+    option (api.post) = "/api/v1/prompts/:prompt_id/rollback";
+    option (google.api.http) = { post: "/api/v1/prompts/{prompt_id}/rollback" body: "*" };
+  }
 }
 
 message CreatePromptRequest {
-  string workspace_id = 1 [(api.body) = "workspace_id"];
+  string workspace_id = 1 [deprecated = true, (api.body) = "workspace_id"];
   string name = 2 [(api.body) = "name"];
   string content = 3 [(api.body) = "content"];
+  string organization_id = 4 [(api.body) = "organization_id"];
+  string visibility = 5 [(api.body) = "visibility"];
+  repeated PromptGrant grants = 6 [(api.body) = "grants"];
 }
 
 message ListPromptsRequest {
-  string workspace_id = 1 [(api.query) = "workspace_id"];
+  string workspace_id = 1 [deprecated = true, (api.query) = "workspace_id"];
+  string organization_id = 2 [(api.query) = "organization_id"];
 }
 
 message GetPromptRequest {
@@ -62,15 +90,45 @@ message ArchivePromptRequest {
 
 message PromptResponse {
   string id = 1;
-  string workspace_id = 2;
+  string workspace_id = 2 [deprecated = true];
   string name = 3;
   string content = 4;
   string status = 5;
   int64 version = 6;
   int64 created_at = 7;
   int64 updated_at = 8;
+  string organization_id = 9;
+  string owner_user_id = 10;
+  string visibility = 11;
+  string my_permission = 12;
+  repeated PromptGrant grants = 13;
 }
 
 message ListPromptsResponse {
   repeated PromptResponse prompts = 1;
+}
+
+message PromptGrant { string team_id = 1; string permission = 2; }
+message ListUnassignedPromptsRequest {}
+message AssignPromptOrganizationRequest {
+  string prompt_id = 1 [(api.path) = "prompt_id"];
+  string organization_id = 2 [(api.body) = "organization_id"];
+  int64 expected_version = 3 [(api.body) = "expected_version"];
+}
+message SetPromptAccessRequest {
+  string prompt_id = 1 [(api.path) = "prompt_id"];
+  string visibility = 2 [(api.body) = "visibility"];
+  repeated PromptGrant grants = 3 [(api.body) = "grants"];
+  int64 expected_version = 4 [(api.body) = "expected_version"];
+}
+message GetPromptVersionRequest {
+  string prompt_id = 1 [(api.path) = "prompt_id"];
+  int64 version = 2 [(api.path) = "version"];
+}
+message PromptVersion { int64 version = 1; string name = 2; string content = 3; int64 created_at = 4; }
+message ListPromptVersionsResponse { repeated PromptVersion versions = 1; }
+message RollbackPromptRequest {
+  string prompt_id = 1 [(api.path) = "prompt_id"];
+  int64 target_version = 2 [(api.body) = "target_version"];
+  int64 expected_version = 3 [(api.body) = "expected_version"];
 }

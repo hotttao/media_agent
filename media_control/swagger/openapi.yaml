@@ -859,6 +859,10 @@ paths:
                   in: query
                   schema:
                     type: string
+                - name: organization_id
+                  in: query
+                  schema:
+                    type: string
             responses:
                 "200":
                     description: OK
@@ -889,6 +893,24 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/prompts/unassigned:
+        get:
+            tags:
+                - PromptService
+            operationId: PromptService_ListUnassignedPrompts
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPromptsResponse'
                 default:
                     description: Default error response
                     content:
@@ -948,6 +970,36 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/v1/prompts/{prompt_id}/access:
+        put:
+            tags:
+                - PromptService
+            operationId: PromptService_SetPromptAccess
+            parameters:
+                - name: prompt_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetPromptAccessRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/v1/prompts/{prompt_id}/archive:
         post:
             tags:
@@ -972,6 +1024,119 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/prompts/{prompt_id}/assign-organization:
+        post:
+            tags:
+                - PromptService
+            operationId: PromptService_AssignPromptOrganization
+            parameters:
+                - name: prompt_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AssignPromptOrganizationRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/prompts/{prompt_id}/rollback:
+        post:
+            tags:
+                - PromptService
+            operationId: PromptService_RollbackPrompt
+            parameters:
+                - name: prompt_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RollbackPromptRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/prompts/{prompt_id}/versions:
+        get:
+            tags:
+                - PromptService
+            operationId: PromptService_ListPromptVersions
+            parameters:
+                - name: prompt_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPromptVersionsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/prompts/{prompt_id}/versions/{version}:
+        get:
+            tags:
+                - PromptService
+            operationId: PromptService_GetPromptVersion
+            parameters:
+                - name: prompt_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: version
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PromptVersion'
                 default:
                     description: Default error response
                     content:
@@ -2394,6 +2559,30 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/v1/workspaces/{workspace_id}/agent-metadata:
+        get:
+            tags:
+                - AgentMetadataService
+            operationId: AgentMetadataService_GetMetadataSelection
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MetadataSelection'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/v1/workspaces/{workspace_id}/agent-metadata/artifacts/{checksum}:
         put:
             tags:
@@ -2987,6 +3176,15 @@ components:
                     format: bytes
                 checksum:
                     type: string
+        AssignPromptOrganizationRequest:
+            type: object
+            properties:
+                prompt_id:
+                    type: string
+                organization_id:
+                    type: string
+                expected_version:
+                    type: string
         AttachTagRequest:
             type: object
             properties:
@@ -3050,6 +3248,8 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ResourceReference'
+                prompt:
+                    $ref: '#/components/schemas/PromptSelection'
         CreateAgentTemplateRequest:
             type: object
             properties:
@@ -3139,6 +3339,14 @@ components:
                     type: string
                 content:
                     type: string
+                organization_id:
+                    type: string
+                visibility:
+                    type: string
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptGrant'
         CreateProviderRequest:
             type: object
             properties:
@@ -3495,6 +3703,13 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/PlatformStatisticResponse'
+        ListPromptVersionsResponse:
+            type: object
+            properties:
+                versions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptVersion'
         ListPromptsResponse:
             type: object
             properties:
@@ -3643,6 +3858,23 @@ components:
                     type: string
                 content:
                     type: string
+        MetadataSelection:
+            type: object
+            properties:
+                agent_config_id:
+                    type: string
+                version:
+                    type: string
+                target_context_version:
+                    type: string
+                prompt:
+                    $ref: '#/components/schemas/PromptSelection'
+                resources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResourceReference'
+                configured_prompt:
+                    type: string
         PlacementResponse:
             type: object
             properties:
@@ -3705,6 +3937,13 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/InstanceView'
+        PromptGrant:
+            type: object
+            properties:
+                team_id:
+                    type: string
+                permission:
+                    type: string
         PromptResponse:
             type: object
             properties:
@@ -3723,6 +3962,40 @@ components:
                 created_at:
                     type: string
                 updated_at:
+                    type: string
+                organization_id:
+                    type: string
+                owner_user_id:
+                    type: string
+                visibility:
+                    type: string
+                my_permission:
+                    type: string
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptGrant'
+        PromptSelection:
+            type: object
+            properties:
+                mode:
+                    type: string
+                content:
+                    type: string
+                resource_id:
+                    type: string
+                resource_version:
+                    type: string
+        PromptVersion:
+            type: object
+            properties:
+                version:
+                    type: string
+                name:
+                    type: string
+                content:
+                    type: string
+                created_at:
                     type: string
         ProviderResponse:
             type: object
@@ -3861,6 +4134,15 @@ components:
             properties:
                 share_id:
                     type: string
+        RollbackPromptRequest:
+            type: object
+            properties:
+                prompt_id:
+                    type: string
+                target_version:
+                    type: string
+                expected_version:
+                    type: string
         RunNowRequest:
             type: object
             properties:
@@ -3920,6 +4202,19 @@ components:
                     type: string
                 status:
                     type: string
+                expected_version:
+                    type: string
+        SetPromptAccessRequest:
+            type: object
+            properties:
+                prompt_id:
+                    type: string
+                visibility:
+                    type: string
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptGrant'
                 expected_version:
                     type: string
         SetProviderStatusRequest:

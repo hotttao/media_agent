@@ -5,6 +5,8 @@ import "time"
 type Prompt struct {
 	ID, OwnerUserID, Name, Content, Status string
 	WorkspaceID                            *string
+	OrganizationID                         *string
+	Visibility                             string
 	Version                                int64
 	CreatedAt, UpdatedAt                   time.Time
 }

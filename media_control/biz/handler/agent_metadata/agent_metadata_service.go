@@ -42,7 +42,11 @@ func ConfirmMetadataSelection(ctx context.Context, c *app.RequestContext) {
 		}
 		refs = append(refs, d.ResourceReference{Kind: ref.Kind, ID: ref.Id, Version: ref.Version, Checksum: ref.Checksum})
 	}
-	value, err := application.Confirm(ctx, flow.Confirm{WorkspaceID: req.WorkspaceId, AgentConfigID: req.AgentConfigId, UserID: middleware.UserID(ctx), IdempotencyKey: req.IdempotencyKey, ExpectedVersion: req.ExpectedVersion, Resources: refs})
+	var selection *d.PromptSelection
+	if req.Prompt != nil {
+		selection = &d.PromptSelection{Mode: req.Prompt.Mode, Content: req.Prompt.Content, ResourceID: req.Prompt.ResourceId, ResourceVersion: req.Prompt.ResourceVersion}
+	}
+	value, err := application.Confirm(ctx, flow.Confirm{WorkspaceID: req.WorkspaceId, AgentConfigID: req.AgentConfigId, UserID: middleware.UserID(ctx), IdempotencyKey: req.IdempotencyKey, ExpectedVersion: req.ExpectedVersion, Resources: refs, Prompt: selection})
 	if err != nil {
 		writeError(c, err)
 		return
@@ -204,4 +208,41 @@ func writeError(c *app.RequestContext, err error) {
 		code = err.Error()
 	}
 	c.JSON(status, map[string]string{"error": code})
+}
+
+// GetMetadataSelection .
+// @router /api/v1/workspaces/:workspace_id/agent-metadata [GET]
+func GetMetadataSelection(ctx context.Context, c *app.RequestContext) {
+	if application == nil {
+		c.JSON(503, map[string]string{"error": "metadata_unavailable"})
+		return
+	}
+	var err error
+	var req agent_metadata.ProgressRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	v, currentVersion, err := application.Selection(ctx, req.WorkspaceId, middleware.UserID(ctx))
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	selection := v.Prompt
+	if selection == nil {
+		selection = &d.PromptSelection{Mode: "none"}
+		for _, resource := range v.Resources {
+			if resource.Kind == "media_control.configured_prompt" {
+				selection = &d.PromptSelection{Mode: "library", ResourceID: resource.ID, ResourceVersion: resource.Version}
+				break
+			}
+		}
+	}
+	resp := &agent_metadata.MetadataSelection{AgentConfigId: v.AgentConfigID, Version: currentVersion, TargetContextVersion: v.TargetContextVersion, ConfiguredPrompt: v.ConfiguredPrompt, Prompt: &agent_metadata.PromptSelection{Mode: selection.Mode, Content: selection.Content, ResourceId: selection.ResourceID, ResourceVersion: selection.ResourceVersion}, Resources: make([]*agent_metadata.ResourceReference, 0, len(v.Resources))}
+	for _, r := range v.Resources {
+		resp.Resources = append(resp.Resources, &agent_metadata.ResourceReference{Kind: r.Kind, Id: r.ID, Version: r.Version, Checksum: r.Checksum})
+	}
+	c.JSON(200, resp)
 }

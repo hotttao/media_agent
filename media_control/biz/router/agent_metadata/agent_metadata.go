@@ -25,6 +25,7 @@ func Register(r *server.Hertz) {
 				_workspaces := _v1.Group("/workspaces", _workspacesMw()...)
 				{
 					_workspace_id := _workspaces.Group("/:workspace_id", _workspace_idMw()...)
+					_workspace_id.GET("/agent-metadata", append(_getmetadataselectionMw(), agent_metadata.GetMetadataSelection)...)
 					_workspace_id.POST("/agent-metadata:confirm", append(_confirmmetadataselectionMw(), agent_metadata.ConfirmMetadataSelection)...)
 					{
 						_agent_metadata := _workspace_id.Group("/agent-metadata", _agent_metadataMw()...)

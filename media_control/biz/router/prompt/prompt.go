@@ -27,9 +27,18 @@ func Register(r *server.Hertz) {
 				_prompts := _v1.Group("/prompts", _promptsMw()...)
 				_prompts.GET("/:prompt_id", append(_getpromptMw(), prompt.GetPrompt)...)
 				_prompts.PUT("/:prompt_id", append(_updatepromptMw(), prompt.UpdatePrompt)...)
+				_prompts.GET("/unassigned", append(_listunassignedpromptsMw(), prompt.ListUnassignedPrompts)...)
 				{
 					_prompt_id := _prompts.Group("/:prompt_id", _prompt_idMw()...)
+					_prompt_id.PUT("/access", append(_setpromptaccessMw(), prompt.SetPromptAccess)...)
 					_prompt_id.POST("/archive", append(_archivepromptMw(), prompt.ArchivePrompt)...)
+					_prompt_id.POST("/assign-organization", append(_assignpromptorganizationMw(), prompt.AssignPromptOrganization)...)
+					_prompt_id.POST("/rollback", append(_rollbackpromptMw(), prompt.RollbackPrompt)...)
+					_prompt_id.GET("/versions", append(_listpromptversionsMw(), prompt.ListPromptVersions)...)
+					{
+						_versions := _prompt_id.Group("/versions", _versionsMw()...)
+						_versions.GET("/:version", append(_getpromptversionMw(), prompt.GetPromptVersion)...)
+					}
 				}
 			}
 		}

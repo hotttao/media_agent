@@ -10,7 +10,9 @@ message ApplicationResult { string report_id = 1; string workspace_id = 2; strin
 message ResultResponse { bool accepted = 1; }
 message ArtifactResponse { bytes content = 1; string checksum = 2; }
 message InstanceView { string workspace_id = 1; string agent_config_id = 2; string replica_id = 3; string incarnation_id = 4; string admission = 5; }
-message ConfirmRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; string agent_config_id = 2; int64 expected_version = 3; string idempotency_key = 4; repeated ResourceReference resources = 5; }
+message PromptSelection { string mode = 1; string content = 2; string resource_id = 3; int64 resource_version = 4; }
+message ConfirmRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; string agent_config_id = 2; int64 expected_version = 3; string idempotency_key = 4; repeated ResourceReference resources = 5; PromptSelection prompt = 6; }
+message MetadataSelection { string agent_config_id = 1; int64 version = 2; string target_context_version = 3; PromptSelection prompt = 4; repeated ResourceReference resources = 5; string configured_prompt = 6; }
 message ContextRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; string agent_config_id = 2 [(api.query) = "agent_config_id"]; int64 selection_revision = 3 [(api.query) = "selection_revision"]; string target_context_version = 4 [(api.query) = "target_context_version"]; bool for_session = 5 [(api.query) = "for_session"]; }
 message ReportRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; ApplicationResult result = 2; }
 message UploadArtifactRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; string checksum = 2 [(api.path) = "checksum"]; bytes content = 3; }
@@ -18,6 +20,7 @@ message GetArtifactRequest { string workspace_id = 1 [(api.path) = "workspace_id
 message ProgressRequest { string workspace_id = 1 [(api.path) = "workspace_id"]; }
 message ProgressResponse { string status = 1; int64 selection_revision = 2; string target_context_version = 3; bool timed_out = 4; repeated ApplicationResult results = 5; repeated InstanceView instances = 6; }
 service AgentMetadataService {
+ rpc GetMetadataSelection(ProgressRequest) returns (MetadataSelection) { option (api.get) = "/api/v1/workspaces/:workspace_id/agent-metadata"; option (google.api.http) = { get: "/api/v1/workspaces/{workspace_id}/agent-metadata" }; }
  rpc ConfirmMetadataSelection(ConfirmRequest) returns (MetadataContext) { option (api.post) = "/api/v1/workspaces/:workspace_id/agent-metadata:confirm"; option (google.api.http) = { post: "/api/v1/workspaces/{workspace_id}/agent-metadata:confirm" body: "*" }; }
  rpc GetConfirmedMetadata(ContextRequest) returns (MetadataContext) { option (api.get) = "/internal/workspaces/:workspace_id/agent-metadata"; option (google.api.http) = { get: "/internal/workspaces/{workspace_id}/agent-metadata" }; }
  rpc ReportMetadataApplication(ReportRequest) returns (ResultResponse) { option (api.post) = "/internal/workspaces/:workspace_id/agent-metadata/results"; option (google.api.http) = { post: "/internal/workspaces/{workspace_id}/agent-metadata/results" body: "*" }; }

@@ -17,6 +17,8 @@ var (
 )
 
 type Client interface {
+	GetMetadataSelection(context context.Context, req *agent_metadata.ProgressRequest, reqOpt ...config.RequestOption) (resp *agent_metadata.MetadataSelection, rawResponse *protocol.Response, err error)
+
 	ConfirmMetadataSelection(context context.Context, req *agent_metadata.ConfirmRequest, reqOpt ...config.RequestOption) (resp *agent_metadata.MetadataContext, rawResponse *protocol.Response, err error)
 
 	GetConfirmedMetadata(context context.Context, req *agent_metadata.ContextRequest, reqOpt ...config.RequestOption) (resp *agent_metadata.MetadataContext, rawResponse *protocol.Response, err error)
@@ -43,6 +45,30 @@ func NewAgentMetadataServiceClient(hostUrl string, ops ...Option) (Client, error
 	return &AgentMetadataServiceClient{
 		client: cli,
 	}, nil
+}
+
+func (s *AgentMetadataServiceClient) GetMetadataSelection(context context.Context, req *agent_metadata.ProgressRequest, reqOpt ...config.RequestOption) (resp *agent_metadata.MetadataSelection, rawResponse *protocol.Response, err error) {
+	httpResp := &agent_metadata.MetadataSelection{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"workspace_id": req.GetWorkspaceId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/api/v1/workspaces/:workspace_id/agent-metadata")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
 }
 
 func (s *AgentMetadataServiceClient) ConfirmMetadataSelection(context context.Context, req *agent_metadata.ConfirmRequest, reqOpt ...config.RequestOption) (resp *agent_metadata.MetadataContext, rawResponse *protocol.Response, err error) {
@@ -204,6 +230,10 @@ var defaultClient, _ = NewAgentMetadataServiceClient("")
 func ConfigDefaultClient(ops ...Option) (err error) {
 	defaultClient, err = NewAgentMetadataServiceClient("", ops...)
 	return
+}
+
+func GetMetadataSelection(context context.Context, req *agent_metadata.ProgressRequest, reqOpt ...config.RequestOption) (resp *agent_metadata.MetadataSelection, rawResponse *protocol.Response, err error) {
+	return defaultClient.GetMetadataSelection(context, req, reqOpt...)
 }
 
 func ConfirmMetadataSelection(context context.Context, req *agent_metadata.ConfirmRequest, reqOpt ...config.RequestOption) (resp *agent_metadata.MetadataContext, rawResponse *protocol.Response, err error) {

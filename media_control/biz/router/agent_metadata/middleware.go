@@ -94,3 +94,8 @@ func _getmetadataartifactMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _getmetadataselectionMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

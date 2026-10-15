@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"media_agent/hertz_infra/authn/internaljwt"
+	"media_agent/hertz_infra/authn/resourceaccess"
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/messagebus"
 	"media_agent/hertz_infra/metadataartifact"
@@ -126,7 +127,8 @@ func main() {
 	agentidentityhandler.Configure(agentidentityservice.New(repo.New(db), teamAccess))
 	workspaceApplication := workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())), teamAccess)
 	workspacehandler.Configure(workspaceApplication, internalToken)
-	prompthandler.Configure(promptservice.New(promptrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
+	promptApplication := promptservice.New(promptrepo.New(db), dal.NewTxRunner(db), resourceaccess.New(mediaAuthURL, mediaAuthInternalToken, nil))
+	prompthandler.Configure(promptApplication)
 	templatehandler.Configure(templateservice.New(templaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	skillhandler.Configure(skillservice.New(skillrepo.New(db), dal.NewTxRunner(db), repo.New(db)))
 	providerhandler.Configure(providerservice.New(providerrepo.New(db), dal.NewTxRunner(db)))
@@ -176,7 +178,7 @@ func main() {
 		}
 		repository := metadatarepo.New(db)
 		workspaceAccess := workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())), teamAccess)
-		metadatahandler.Configure(metadataflow.New(metadataservice.New(repository, dal.NewTxRunner(db)), workspaceAccess, artifacts, sharedclient.NewMetadataInstances(envOr("MEDIA_AGENT_GATEWAY_URL", "http://127.0.0.1:8006"), internalToken)))
+		metadatahandler.Configure(metadataflow.New(metadataservice.New(repository, dal.NewTxRunner(db)), workspaceAccess, artifacts, sharedclient.NewMetadataInstances(envOr("MEDIA_AGENT_GATEWAY_URL", "http://127.0.0.1:8006"), internalToken)).WithPrompts(promptApplication))
 		publisher, err := messagebus.NewTopicPublisher(cfg.GetRabbitmq().GetUrl(), metadataCfg.GetMetadataExchange())
 		if err != nil {
 			log.Fatal("invalid metadata Broker configuration")

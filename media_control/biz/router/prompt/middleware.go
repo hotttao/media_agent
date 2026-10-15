@@ -55,3 +55,38 @@ func _archivepromptMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _setpromptaccessMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _rollbackpromptMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listpromptversionsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _versionsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getpromptversionMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listunassignedpromptsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _assignpromptorganizationMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	d "media_agent/media_control/biz/domain/agent_configuration"
+	prompt "media_agent/media_control/biz/domain/prompt"
 	workspace "media_agent/media_control/biz/domain/workspace"
 	service "media_agent/media_control/biz/service/agent_configuration"
 	"sort"
@@ -26,11 +27,18 @@ type Flow struct {
 	workspaces WorkspaceAccess
 	artifacts  Artifacts
 	instances  InstanceReader
+	prompts    PromptLibrary
+}
+
+type PromptLibrary interface {
+	SelectedVersion(context.Context, string, string, string, int64) (*prompt.Version, error)
+	ReadableVersion(context.Context, string, string, string, int64) (*prompt.Version, error)
 }
 
 func New(s *service.Service, ws WorkspaceAccess, artifacts Artifacts, instances InstanceReader) *Flow {
-	return &Flow{s, ws, artifacts, instances}
+	return &Flow{service: s, workspaces: ws, artifacts: artifacts, instances: instances}
 }
+func (f *Flow) WithPrompts(library PromptLibrary) *Flow { f.prompts = library; return f }
 func (f *Flow) authorize(ctx context.Context, ws, user, permission string) (*workspace.ConfiguredWorkspace, error) {
 	ok, err := f.workspaces.CheckAccess(ctx, ws, user, permission)
 	if err != nil {
@@ -46,6 +54,7 @@ type Confirm struct {
 	WorkspaceID, AgentConfigID, UserID, IdempotencyKey string
 	ExpectedVersion                                    int64
 	Resources                                          []d.ResourceReference
+	Prompt                                             *d.PromptSelection
 }
 
 func (f *Flow) Confirm(ctx context.Context, cmd Confirm) (*d.Release, error) {
@@ -60,6 +69,13 @@ func (f *Flow) Confirm(ctx context.Context, cmd Confirm) (*d.Release, error) {
 		return nil, d.ErrForbidden
 	}
 	refs := append([]d.ResourceReference(nil), cmd.Resources...)
+	selection, refs, err := normalizePrompt(cmd.Prompt, refs)
+	if err != nil {
+		return nil, err
+	}
+	if len(refs) > 128 {
+		return nil, d.ErrInvalid
+	}
 	sort.Slice(refs, func(i, j int) bool {
 		if refs[i].Kind == refs[j].Kind {
 			return refs[i].ID < refs[j].ID
@@ -70,7 +86,8 @@ func (f *Flow) Confirm(ctx context.Context, cmd Confirm) (*d.Release, error) {
 		ID      string
 		Version int64
 		Refs    []d.ResourceReference
-	}{cmd.AgentConfigID, cmd.ExpectedVersion, refs})
+		Prompt  *d.PromptSelection `json:",omitempty"`
+	}{cmd.AgentConfigID, cmd.ExpectedVersion, refs, cmd.Prompt})
 	hash := service.Hash(encoded)
 	if previous, err := f.service.Existing(ctx, cmd.AgentConfigID, cmd.IdempotencyKey, hash); err == nil {
 		return previous, nil
@@ -81,10 +98,35 @@ func (f *Flow) Confirm(ctx context.Context, cmd Confirm) (*d.Release, error) {
 		return nil, d.ErrConflict
 	}
 	snapshot := d.Snapshot{PlatformPromptTemplateVersion: "2", WorkspaceID: cmd.WorkspaceID, AgentConfigID: cmd.AgentConfigID, AgentType: configured.AgentType, Resources: []d.Resource{}}
+	snapshot.Prompt = &selection
+	if selection.Mode == "custom" {
+		snapshot.ConfiguredPrompt = selection.Content
+	}
 	promptSet := false
 	for i, ref := range refs {
 		if ref.Version <= 0 || ref.ID == "" || i > 0 && refs[i-1].Kind == ref.Kind && refs[i-1].ID == ref.ID {
 			return nil, d.ErrInvalid
+		}
+		if ref.Kind == "media_control.configured_prompt" {
+			if promptSet {
+				return nil, d.ErrInvalid
+			}
+			if f.prompts == nil {
+				return nil, prompt.ErrUnavailable
+			}
+			promptSet = true
+			version, err := f.prompts.SelectedVersion(ctx, ref.ID, cmd.UserID, configured.OrganizationID, ref.Version)
+			if err != nil {
+				return nil, promptError(err)
+			}
+			checksum := service.Hash([]byte(version.Content))
+			if ref.Checksum != "" && ref.Checksum != checksum {
+				return nil, d.ErrConflict
+			}
+			ref.Checksum = checksum
+			snapshot.ConfiguredPrompt = version.Content
+			snapshot.Resources = append(snapshot.Resources, d.Resource{ResourceReference: ref, Name: version.Name})
+			continue
 		}
 		version, err := f.service.Resource(ctx, ref)
 		if err != nil {
@@ -108,13 +150,6 @@ func (f *Flow) Confirm(ctx context.Context, cmd Confirm) (*d.Release, error) {
 		}
 		resource := d.Resource{ResourceReference: ref, Name: payload.Name}
 		switch ref.Kind {
-		case "media_control.configured_prompt":
-			if promptSet {
-				return nil, d.ErrInvalid
-			}
-			promptSet = true
-			resource.Checksum = service.Hash([]byte(payload.Content))
-			snapshot.ConfiguredPrompt = payload.Content
 		case "media_control.skill":
 			if payload.ContentPath != "sha256/"+payload.Checksum {
 				return nil, d.ErrInvalid
@@ -140,6 +175,78 @@ func (f *Flow) Confirm(ctx context.Context, cmd Confirm) (*d.Release, error) {
 		snapshot.Resources = append(snapshot.Resources, resource)
 	}
 	return f.service.Confirm(ctx, snapshot, cmd.UserID, cmd.IdempotencyKey, hash, cmd.ExpectedVersion)
+}
+
+func normalizePrompt(input *d.PromptSelection, refs []d.ResourceReference) (d.PromptSelection, []d.ResourceReference, error) {
+	selection := d.PromptSelection{Mode: "none"}
+	var selected *d.ResourceReference
+	for i := range refs {
+		if refs[i].Kind == "media_control.configured_prompt" {
+			if selected != nil {
+				return selection, nil, d.ErrInvalid
+			}
+			selected = &refs[i]
+		}
+	}
+	if input == nil {
+		if selected != nil {
+			selection = d.PromptSelection{Mode: "library", ResourceID: selected.ID, ResourceVersion: selected.Version}
+		}
+		return selection, refs, nil
+	}
+	selection = *input
+	switch selection.Mode {
+	case "none":
+		if selected != nil || selection.Content != "" || selection.ResourceID != "" || selection.ResourceVersion != 0 {
+			return selection, nil, d.ErrInvalid
+		}
+	case "custom":
+		if selected != nil || selection.ResourceID != "" || selection.ResourceVersion != 0 || len(selection.Content) > 1<<20 {
+			return selection, nil, d.ErrInvalid
+		}
+	case "library":
+		if selection.Content != "" || selection.ResourceID == "" || selection.ResourceVersion <= 0 {
+			return selection, nil, d.ErrInvalid
+		}
+		if selected == nil {
+			refs = append(refs, d.ResourceReference{Kind: "media_control.configured_prompt", ID: selection.ResourceID, Version: selection.ResourceVersion})
+		} else if selected.ID != selection.ResourceID || selected.Version != selection.ResourceVersion {
+			return selection, nil, d.ErrInvalid
+		}
+	default:
+		return selection, nil, d.ErrInvalid
+	}
+	return selection, refs, nil
+}
+func promptError(err error) error {
+	switch {
+	case errors.Is(err, prompt.ErrNotFound), errors.Is(err, prompt.ErrForbidden):
+		return d.ErrForbidden
+	case errors.Is(err, prompt.ErrInvalid), errors.Is(err, prompt.ErrArchived):
+		return d.ErrInvalid
+	default:
+		return err
+	}
+}
+func (f *Flow) Selection(ctx context.Context, ws, user string) (*d.Release, int64, error) {
+	v, err := f.authorize(ctx, ws, user, "view")
+	if err != nil {
+		return nil, 0, err
+	}
+	release, _, err := f.service.Get(ctx, ws, v.AgentConfiguration.ID, "", 0, false)
+	if err == nil {
+		for _, ref := range release.Resources {
+			if ref.Kind == "media_control.configured_prompt" {
+				if f.prompts == nil {
+					return nil, 0, prompt.ErrUnavailable
+				}
+				if _, err := f.prompts.ReadableVersion(ctx, ref.ID, user, v.OrganizationID, ref.Version); err != nil {
+					return nil, 0, promptError(err)
+				}
+			}
+		}
+	}
+	return release, v.AgentConfiguration.Version, err
 }
 func (f *Flow) Get(ctx context.Context, ws, id, user, target string, revision int64, forSession bool) (*d.Release, bool, error) {
 	v, err := f.authorize(ctx, ws, user, "view")

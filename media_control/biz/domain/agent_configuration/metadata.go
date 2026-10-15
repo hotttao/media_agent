@@ -24,7 +24,12 @@ type Resource struct {
 	ResourceReference
 	Name, ContentRef, Content string
 }
+type PromptSelection struct {
+	Mode, Content, ResourceID string
+	ResourceVersion           int64
+}
 type Snapshot struct {
+	Prompt                                                                        *PromptSelection `json:",omitempty"`
 	PlatformPromptTemplateVersion                                                 string
 	WorkspaceID, AgentConfigID, TargetContextVersion, AgentType, ConfiguredPrompt string
 	SelectionRevision, ContextVersion                                             int64
