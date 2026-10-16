@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tomllib
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -88,6 +89,15 @@ async def test_codex_acp_child_and_resume_keep_fixed_metadata(tmp_path: Path) ->
         assert [v["configured"] for v in records] == ["Old 👋", "New", "Old 👋"]
         assert [v["skill"].splitlines()[-1] for v in records] == ["old", "new", "old"]
         assert all(v["cwd"] == str(tmp_path) for v in records)
+        native = tomllib.loads(
+            (tmp_path / ".metadata/sessions/new-session/codex/config.toml").read_text()
+        )
+        assert native["features"] == {
+            "apps": False,
+            "plugins": False,
+            "remote_plugin": False,
+            "skill_mcp_dependency_install": False,
+        }
     finally:
         for handle in handles:
             server._destroy(handle)

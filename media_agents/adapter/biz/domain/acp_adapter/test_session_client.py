@@ -143,3 +143,41 @@ async def test_session_stream_reconnect_preserves_queued_event_order() -> None:
     assert await anext(reader) == 'event: message\ndata: {"n":1}\n\n'
     assert await anext(reader) == 'event: message\ndata: {"n":2}\n\n'
     await reader.aclose()
+
+
+@pytest.mark.asyncio
+async def test_resumed_history_is_not_persisted_as_new_turn_output() -> None:
+    from adapter.biz.domain.acp_adapter.entity import PromptResult, StopReason
+
+    class ResumedBridge(_Bridge):
+        async def prompt(
+            self, session_id: str, message: str, images: list[Any] | None = None
+        ) -> Any:
+            await session.session_update(
+                session_id,
+                AgentMessageChunk(
+                    session_update="agent_message_chunk",
+                    content=TextContentBlock(type="text", text="new reply"),
+                ),
+            )
+            return PromptResult(stop_reason=StopReason.END_TURN)
+
+    session = AcpSession("resumed", ResumedBridge())
+    await session.session_update(
+        "resumed",
+        AgentMessageChunk(
+            session_update="agent_message_chunk",
+            content=TextContentBlock(type="text", text="old history"),
+        ),
+    )
+    events: list[dict[str, object]] = []
+
+    async def collect(event: dict[str, object]) -> None:
+        events.append(event)
+
+    session.set_event_observer(collect)
+    await session.run_turn("next question")
+    completed = [event for event in events if event["type"] == "item.completed"]
+    assert len(completed) == 1
+    assert "new reply" in json.dumps(completed)
+    assert "old history" not in json.dumps(events)

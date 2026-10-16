@@ -31,3 +31,5 @@ Edge 路由通过既有动态配置挂载加载；Oathkeeper rules 修改后需�
 此启动方式只覆盖本机既有部署；数据库地址/网络、Linux UID/GID 和 Docker socket group 由准备命令按当前环境生成。其他主机应使用其部署配置。扩缩容和后台凭据轮换不在当前功能范围。
 
 模型服务需要出网代理时，在私有 product.env 设置 AGENT_HTTP_PROXY、AGENT_HTTPS_PROXY、AGENT_NO_PROXY，重新执行准备命令并重启创建服务后，新建 Agent 容器才会使用。代理地址必须从容器可达；宿主127.0.0.1不是容器宿主地址。NO_PROXY 应包含 Gateway、Broker、数据库及内部域名。不要把带凭据的代理地址提交仓库。
+
+Control、Gateway 与 Agent 必须使用 product.env 中同一 MEDIA_AGENTS_RABBITMQ_URL（product-broker 内网地址）。Compose 允许显式覆盖旧部署的 host Broker 默认值；只检查历史回放不能证明实时 delta 与元数据通知已接通。

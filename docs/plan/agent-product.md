@@ -35,7 +35,7 @@
 
 - [x] F4a：企业资源库与管理、Agent 配置和显式更新交互、浏览器身份与 Workspace 企业/部门创建。
 - [x] F4b1：Docker 部署、自动凭据、默认配置原子创建、真实登录与 Session 注册。
-- [ ] F4b2：正式 Agent 对话、流式回复、历史、工具权限确认。
-- [ ] Docker 实际使用入口、功能验收、review.md 和 commit。
+- [x] F4b2：正式 Agent 对话、流式回复、历史、工具权限确认。
+- [x] Docker 实际使用入口、功能验收、review.md 和 commit。
 
 后续可发现并补充阻塞产品使用的功能缺口；不能以当前仅有 API 或 fixture 联通宣布完整产品完成。SRE、隔离扩展和扩缩容不作为本计划阶段。

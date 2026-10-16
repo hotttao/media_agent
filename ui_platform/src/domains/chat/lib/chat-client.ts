@@ -67,18 +67,57 @@ export async function listMessages(sessionId: string): Promise<ChatMessage[]> {
   return body.messages ?? [];
 }
 
+interface AgentRequestDTO {
+  request_id: string;
+  turn_id: string;
+  request_type: string;
+  payload_json: string;
+  status: string;
+  response_json?: string;
+  created_at: number;
+  resolved_at?: number;
+}
+function decodeRequest(
+  value: AgentRequestDTO,
+  sessionId: string,
+): AgentRequest {
+  function objectJSON(raw: string): Record<string, unknown> {
+    const result: unknown = JSON.parse(raw);
+    if (!result || typeof result !== "object" || Array.isArray(result))
+      throw new Error("Invalid Agent Request payload");
+    return result as Record<string, unknown>;
+  }
+  return {
+    request_id: value.request_id,
+    session_id: sessionId,
+    turn_id: value.turn_id,
+    request_type: value.request_type,
+    payload: objectJSON(value.payload_json),
+    status: value.status,
+    response:
+      value.response_json && value.response_json !== "null"
+        ? objectJSON(value.response_json)
+        : null,
+    created_at: String(value.created_at),
+    resolved_at: value.resolved_at ? String(value.resolved_at) : null,
+  };
+}
+
 export async function listAgentRequests(
   sessionId: string,
   turnId?: string,
 ): Promise<AgentRequest[]> {
   const query = turnId ? `?turn_id=${encodeURIComponent(turnId)}` : "";
   const response = await checked(
-    await fetch(`/api/chat/sessions/${sessionId}/requests${query}`, {
-      credentials: "include",
-    }),
+    await fetch(
+      `/api/chat/sessions/${encodeURIComponent(sessionId)}/requests${query}`,
+      {
+        credentials: "include",
+      },
+    ),
   );
-  const body = (await response.json()) as { requests?: AgentRequest[] };
-  return body.requests ?? [];
+  const body = (await response.json()) as { requests?: AgentRequestDTO[] };
+  return (body.requests ?? []).map((value) => decodeRequest(value, sessionId));
 }
 
 export async function resolveAgentRequest(
@@ -89,7 +128,7 @@ export async function resolveAgentRequest(
 ): Promise<AgentRequest> {
   return checked(
     await fetch(
-      `/api/chat/sessions/${sessionId}/turns/${turnId}/requests/${requestId}/resolve`,
+      `/api/chat/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/requests/${encodeURIComponent(requestId)}/resolve`,
       {
         method: "POST",
         credentials: "include",
@@ -97,7 +136,7 @@ export async function resolveAgentRequest(
         body: JSON.stringify({ response_json: JSON.stringify(response) }),
       },
     ),
-  ).then((value) => value.json());
+  ).then(async (value) => decodeRequest(await value.json(), sessionId));
 }
 
 export async function runTurn(

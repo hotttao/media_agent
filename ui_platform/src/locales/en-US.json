@@ -245,5 +245,15 @@
 		"popupBlocked": "Allow pop-up windows, then try authorization again.",
 		"editWorkspace": "Edit workspace",
 		"startingAgent": "Starting Agent… The first session may take a few seconds."
+	},
+	"agentRequest": {
+		"permission": "The agent requests permission",
+		"input": "The agent needs your input",
+		"failed": "Request failed",
+		"confirm": "Confirm",
+		"cancel": "Cancel",
+		"inputLabel": "Agent input",
+		"send": "Send",
+		"command": "Command to approve"
 	}
 }

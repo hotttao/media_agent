@@ -125,7 +125,7 @@ services:
       INTERNAL_JWKS_URL: http://oathkeeper:4456/.well-known/jwks.json
       INTERNAL_JWT_ISSUER: ${INTERNAL_JWT_ISSUER:-http://oathkeeper:4456/}
       CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
-      MEDIA_AGENTS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-media_agent}:${RABBITMQ_PASSWORD:-media_agent}@host.docker.internal:5672/
+      MEDIA_AGENTS_RABBITMQ_URL: ${MEDIA_AGENTS_RABBITMQ_URL:-amqp://${RABBITMQ_USER:-media_agent}:${RABBITMQ_PASSWORD:-media_agent}@host.docker.internal:5672/}
       AGENT_MCP_ENABLED: ${AGENT_MCP_ENABLED:-false}
       AGENT_MCP_ALLOWED_UPSTREAM_HOSTS: ${AGENT_MCP_ALLOWED_UPSTREAM_HOSTS:-[]}
       MEDIA_PLUGIN_URL: ${MEDIA_PLUGIN_URL:-}

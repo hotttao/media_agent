@@ -74,3 +74,11 @@
 ## 2026-10-13 · P6 ACP 边界与类型验收
 
 ACP 会话仅依赖 prompt/cancel/is_alive 结构契约；Clock 与 draft ID 纯辅助能力归入 ACP 自有包，消除 Domain 对外层 shared 的反向依赖。流队列通过内部 typed Queue 提供只读快照，维持唯一 FIFO 与重连顺序。SDK 回调、MCP server union 和测试替身签名按现有 SDK 契约补齐，不调整执行规则。
+
+## 2026-10-16 · 原生账号扩展
+
+真实 OAuth 模型验收发现 Codex 默认连接账号 Apps/MCP 并同步远端 Plugin。固定元数据原生配置显式关闭这些自动装配及 Skill MCP 依赖安装，确保扩展事实仍来自 Control/Gateway，保留本地固定 Skill 与模型认证。
+
+真实第二轮模型验收发现 ACP load_session 历史片段被拼入新消息。每轮 prompt 前重建翻译器，隔离加载历史与新输出；回归覆盖旧消息/工具状态不进入新完成项。
+
+真实 MCP 配置验收补齐 Agent 对 media_plugin.mcp_binding 固定引用的 schema 支持；沿用 ID/版本/校验和校验，不把上游地址或凭据写入原生配置。

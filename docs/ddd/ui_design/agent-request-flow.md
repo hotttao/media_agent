@@ -22,8 +22,10 @@ stateDiagram-v2
 
 ## 交互形式
 
-- `permission`：显示服务端提供的 option 列表，提交 `{ option_id }`。
+- `permission`：显示服务端提供的工具标题与 option 列表，提交 `{ option_id }`。优先采用 question/prompt，缺少时使用原生 tool_call/toolCall 的 title；仅额外展示 shell 工具待批准的 command 字符串/argv，支持换行和滚动，避免原生标题为空时盲批；不展示整份原始调用参数或私有环境。确认、输入、默认标题与失败提示支持中英翻译。
 - `confirm`：提交 `{ confirmed: true|false }`。
 - `input` 及未知类型：显示文本输入，提交 `{ value }`。
 
-窄屏下卡片和选项按钮垂直或换行排列；API key、请求原始凭据和 Runtime 路径不展示、不写入 URL 或本地存储。
+窄屏下卡片和选项按钮垂直或换行排列；API key、请求原始凭据和内部 Runtime 配置路径不展示（用户审批命令中实际涉及的文件路径除外）、不写入 URL 或本地存储。
+
+Gateway 公共 HTTP 使用 IDL 的 payload_json/response_json 字符串与毫秒时间戳；L2 chat-client 在列表和 resolve 响应处统一解码为 AgentRequest，不能把 HTTP DTO 直接强转为组件模型。无效 JSON/非对象载荷显示请求错误，不进行推测授权。

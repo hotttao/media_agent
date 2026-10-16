@@ -546,3 +546,54 @@ test("first Agent startup prevents duplicate Session creation", async ({
     0,
   );
 });
+
+test("native permission HTTP payload renders options and resolves the chosen action", async ({
+  page,
+}) => {
+  await fixture(page);
+  let resolved = false;
+  let response: unknown;
+  const request = {
+    request_id: "permission",
+    turn_id: "turn",
+    request_type: "permission",
+    payload_json: JSON.stringify({
+      tool_call: { title: "Read project instructions" },
+      options: [
+        { option_id: "allow_once", name: "Allow Once", kind: "allow_once" },
+      ],
+    }),
+    status: "pending",
+    created_at: 100,
+  };
+  await page.route("**/api/chat/sessions/session/requests", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        requests: [{ ...request, status: resolved ? "resolved" : "pending" }],
+      }),
+    }),
+  );
+  await page.route(
+    "**/api/chat/sessions/session/turns/turn/requests/permission/resolve",
+    async (route) => {
+      response = JSON.parse(route.request().postDataJSON().response_json);
+      resolved = true;
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...request,
+          status: "resolved",
+          response_json: JSON.stringify(response),
+          resolved_at: 200,
+        }),
+      });
+    },
+  );
+  await page.goto("/w/workspace");
+  const card = page.getByLabel("permission request", { exact: true });
+  await expect(card).toContainText("Read project instructions");
+  await card.getByRole("button", { name: "Allow Once", exact: true }).click();
+  await expect(card).toHaveCount(0);
+  expect(response).toEqual({ option_id: "allow_once" });
+});

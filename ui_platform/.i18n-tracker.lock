@@ -33,7 +33,7 @@
   "src/domains/user/lib/user-status.ts": "1c931a9823e4d961b4e2ea99efc02be0",
   "src/domains/chat/types.ts": "001cb62910a764b9955cd6b732173395",
   "src/domains/chat/lib/chat-client.ts": "4d624b4e27eb66e1ea58124bda020614",
-  "src/domains/chat/components/agent-request-card.tsx": "78a4046eb87f023d8d9db6db6bf91f6d",
+  "src/domains/chat/components/agent-request-card.tsx": "dd176699f8e3476682f16eb499463878",
   "src/domains/chat/components/message-bubble.tsx": "85bd519421ffb6183e330eb03a60a96b",
   "src/components/ui/alert.tsx": "777dce31e45ccec8c6eaaf70aa1ef684",
   "src/components/ui/button.tsx": "02dd274447cdff89ccd17ad4daffdabd",

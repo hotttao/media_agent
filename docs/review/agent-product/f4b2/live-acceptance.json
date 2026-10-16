@@ -1,0 +1,23 @@
+{
+  "realNetwork": true,
+  "skillHistory": true,
+  "replyHistoryRestored": true,
+  "marker": "stream-history-1792118680871",
+  "approvedRequests": 0,
+  "eventTypes": [
+    "turn.queued",
+    "turn.started",
+    "item.completed",
+    "agent.requested",
+    "agent.request.resolved",
+    "session.ended",
+    "turn.completed",
+    "item.started",
+    "item.delta"
+  ],
+  "sequenced": 32,
+  "errors": [],
+  "resolvedPermissionRequests": 2,
+  "copiedOAuthFilesRemaining": 0,
+  "historyAvailableAfterCredentialCleanup": true
+}

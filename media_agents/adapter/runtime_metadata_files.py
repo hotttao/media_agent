@@ -25,6 +25,11 @@ def codex_home(bundle: Path, session_id: str, workspace: Path, auth_source: Path
     configured = (bundle / "configured_prompt.md").read_text()
     (target / "config.toml").write_text(
         "developer_instructions = " + json.dumps(configured, ensure_ascii=False) + "\n"
+        "[features]\n"
+        "apps = false\n"
+        "plugins = false\n"
+        "remote_plugin = false\n"
+        "skill_mcp_dependency_install = false\n"
     )
     if (bundle / "skills").exists():
         shutil.copytree(bundle / "skills", target / "skills", dirs_exist_ok=True)

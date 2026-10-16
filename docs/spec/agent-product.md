@@ -75,3 +75,5 @@ Gateway 使用持久 credential ring 和私有 bootstrap 目录保管 Auth 签�
 启用 Agent 元数据时，新建 Workspace 的本地事务同时创建 none/空资源初始 Release 与 Outbox，返回配置版本2。创建授权在事务外完成；初始 Release 失败回滚整个创建。用户无资源选择也可直接开始具备系统 Prompt 的会话，不要求先保存一个空配置。
 
 Docker 创建策略可配置 HTTPProxy、HTTPSProxy、NoProxy，仅部署侧设置并传入容器环境；用户的 Workspace 配置不能覆盖。需要出网代理时必须保留内部服务的直连规则。模型登录不进入准备工具或运行 Spec。
+
+启用固定元数据的 Codex 原生配置关闭账号 Apps、远端 Plugin 自动装配及 Skill 自动安装 MCP 依赖。用户选择的 Skill 由系统版本发布加载，MCP 仅通过 Gateway 声明；不能因复制 OAuth 登录而隐式引入账号插件或外部 MCP。

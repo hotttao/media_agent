@@ -278,3 +278,34 @@ async def test_notice_rejects_boolean_versions_and_accepts_unknown_change_hints(
         json.loads((bundle / "metadata.json").read_text())["platform_prompt_template_version"]
         == value.platform_prompt_template_version
     )
+
+
+def test_mcp_binding_reference_is_supported_but_unknown_resources_are_not() -> None:
+    from adapter.clients.metadata import decode_snapshot
+
+    value = {
+        "metadata_schema_version": 1,
+        "workspace_id": "workspace",
+        "agent_config_id": "config",
+        "selection_revision": 2,
+        "target_context_version": "release",
+        "context_version": 2,
+        "agent_type": "codex",
+        "platform_prompt_template_version": "2",
+        "resources": [
+            {
+                "kind": "media_plugin.mcp_binding",
+                "id": "binding",
+                "version": 1,
+                "checksum": "a" * 64,
+            }
+        ],
+    }
+    decoded = decode_snapshot(value)
+    assert decoded.resources[0].kind == "media_plugin.mcp_binding"
+    assert decoded.resources[0].content == ""
+    resources = value["resources"]
+    assert isinstance(resources, list)
+    resources[0]["kind"] = "unknown.required_resource"
+    with pytest.raises(InvalidMetadata):
+        decode_snapshot(value)

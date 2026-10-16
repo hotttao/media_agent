@@ -198,5 +198,15 @@
 		"popupBlocked": "请允许弹出窗口后重新授权。",
 		"editWorkspace": "编辑工作空间",
 		"startingAgent": "正在启动 Agent… 首次创建会话需要几秒钟。"
+	},
+	"agentRequest": {
+		"permission": "Agent 请求操作权限",
+		"input": "Agent 需要你的回复",
+		"failed": "请求失败",
+		"confirm": "确认",
+		"cancel": "取消",
+		"inputLabel": "回复 Agent",
+		"send": "发送",
+		"command": "待批准的命令"
 	}
 }

@@ -69,22 +69,71 @@ describe("interruptTurn", () => {
 
 describe("Agent Requests", () => {
   it("lists requests and resolves through the Gateway API", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch")
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ requests: [] }), { status: 200 }),
+        new Response(
+          JSON.stringify({
+            requests: [
+              {
+                request_id: "pending-1",
+                turn_id: "turn/1",
+                request_type: "permission",
+                payload_json: JSON.stringify({
+                  tool_call: { title: "Read project instructions" },
+                  options: [{ option_id: "allow", name: "Allow Once" }],
+                }),
+                status: "pending",
+                created_at: 100,
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ request_id: "request-1", status: "resolved" }), {
-          status: 200,
-        }),
+        new Response(
+          JSON.stringify({
+            request_id: "request-1",
+            turn_id: "turn/1",
+            request_type: "permission",
+            payload_json: JSON.stringify({
+              options: [{ option_id: "allow", name: "Allow Once" }],
+            }),
+            response_json: JSON.stringify({ option_id: "allow" }),
+            status: "resolved",
+            created_at: 100,
+            resolved_at: 200,
+          }),
+          {
+            status: 200,
+          },
+        ),
       );
 
-    await expect(listAgentRequests("session/1", "turn/1")).resolves.toEqual([]);
     await expect(
-      resolveAgentRequest("session/1", "turn/1", "request/1", { option_id: "allow" }),
-    ).resolves.toMatchObject({ request_id: "request-1", status: "resolved" });
+      listAgentRequests("session/1", "turn/1"),
+    ).resolves.toMatchObject([
+      {
+        request_id: "pending-1",
+        payload: { tool_call: { title: "Read project instructions" } },
+        response: null,
+        session_id: "session/1",
+      },
+    ]);
+    await expect(
+      resolveAgentRequest("session/1", "turn/1", "request/1", {
+        option_id: "allow",
+      }),
+    ).resolves.toMatchObject({
+      request_id: "request-1",
+      status: "resolved",
+      payload: { options: [{ option_id: "allow", name: "Allow Once" }] },
+      response: { option_id: "allow" },
+      session_id: "session/1",
+    });
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "/api/chat/sessions/session/1/requests?turn_id=turn%2F1",
+      "/api/chat/sessions/session%2F1/requests?turn_id=turn%2F1",
     );
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "POST" });
     expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({

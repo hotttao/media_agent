@@ -40,6 +40,7 @@ def _decode_snapshot_v1(value: object) -> Snapshot:
             "media_control.skill",
             "media_control.configured_prompt",
             "media_control.memory_store",
+            "media_plugin.mcp_binding",
         }:
             raise InvalidMetadata("unknown_required_resource")
         checksum = _text(raw.get("checksum"))

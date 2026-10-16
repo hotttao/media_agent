@@ -179,3 +179,11 @@ Gateway 先完成 Web 用户与 Session Registration 的资源授权，再以 mT
 Gateway 先保存 transferring 意图，再执行 Quiesce/Transfer，查询 Agent 的 last_transfer_id 与 owner/epoch 后完成 binding CAS。目标不可用时，只有已查询事实仍在源 epoch（或确认执行聚合不存在）才允许保持同 transfer_id 更新目标；迟到目标已完成的转移以 Agent 实际 owner 为准。执行聚合尚不存在时，新目标在 epoch+1 创建，唯一主键与旧源迟到创建互斥；不能把查询超时当成不存在。
 
 新原生代次启动时使用已验证的 Gateway 登记 admission 初始化本库屏障：登记仍 draining 时保留对应 operation；登记 active 且 incarnation 已变化（已退休序号恢复运行）时清除旧屏障。相同 incarnation 的重复启动不清除本库 draining，未提供可信登记状态时保持保守的既有规则。
+
+### 原生账号扩展边界
+
+固定元数据模式的 Codex Session 关闭账号 Apps、Plugin/remote_plugin 自动装配及 Skill MCP 依赖自动安装。Workspace 选定的本地 Skill 继续按固定版本加载；OAuth 登录只提供模型认证，不能带入另一套扩展目录或绕过 Gateway 的 MCP 入口。
+
+ACP load_session 可以回放原生历史，但新 Turn 开始前必须清空翻译器的消息累积、工具状态与用量。原生恢复回放不作为新 Turn 的回复重新持久化；历史查询仍以 Agent 本库为准。
+
+原生元数据解析接受固定的 media_plugin.mcp_binding 引用（ID、版本、校验和）；它是 Gateway 运行授权上下文，不下载或生成上游凭据。其他未知必需资源仍拒绝应用。

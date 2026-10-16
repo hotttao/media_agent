@@ -1,3 +1,4 @@
+import "@/foundation/lib/i18n";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentRequest } from "@/domains/chat/types";
@@ -19,6 +20,25 @@ const request: AgentRequest = {
 };
 
 describe("AgentRequestCard", () => {
+  it("shows native ACP tool title before permission is granted", () => {
+    render(
+      <AgentRequestCard
+        request={{
+          ...request,
+          payload: {
+            tool_call: {
+              title: "Read project instructions",
+              raw_input: { private: "must-not-render" },
+            },
+            options: [{ option_id: "allow", name: "Allow once" }],
+          },
+        }}
+        onResolve={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Read project instructions")).toBeTruthy();
+    expect(screen.queryByText("must-not-render")).toBeNull();
+  });
   it("resolves a permission option without persisting UI state", async () => {
     const onResolve = vi.fn().mockResolvedValue(undefined);
     render(<AgentRequestCard request={request} onResolve={onResolve} />);
@@ -30,11 +50,40 @@ describe("AgentRequestCard", () => {
     );
   });
 
+  it("shows the requested command when the native title is absent", () => {
+    render(
+      <AgentRequestCard
+        request={{
+          ...request,
+          payload: {
+            tool_call: {
+              title: null,
+              raw_input: {
+                command: ["printf", "approved"],
+                private: "must-not-render",
+              },
+            },
+            options: [],
+          },
+        }}
+        onResolve={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Command to approve").textContent).toContain(
+      "approved",
+    );
+    expect(screen.queryByText("must-not-render")).toBeNull();
+  });
+
   it("submits input responses", async () => {
     const onResolve = vi.fn().mockResolvedValue(undefined);
     render(
       <AgentRequestCard
-        request={{ ...request, request_type: "input", payload: { prompt: "Value?" } }}
+        request={{
+          ...request,
+          request_type: "input",
+          payload: { prompt: "Value?" },
+        }}
         onResolve={onResolve}
       />,
     );
@@ -44,6 +93,8 @@ describe("AgentRequestCard", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(onResolve).toHaveBeenCalledWith({ value: "answer" }));
+    await waitFor(() =>
+      expect(onResolve).toHaveBeenCalledWith({ value: "answer" }),
+    );
   });
 });

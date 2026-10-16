@@ -319,6 +319,9 @@ class AcpSession:
         busy_turns 用于 /reload-config 与 LRU 驱逐时避免销毁正在执行 turn 的
         bridge（见 entity.py 原 AcpSession dataclass 注释）。
         """
+        # load_session may replay historical chunks before execution starts.
+        # Their translator state must not become this Turn's new persisted output.
+        self.translator = AcpEventTranslator(self.session_id)
         self.busy_turns += 1
         try:
             result = await self.bridge.prompt(self.session_id, message, images)
