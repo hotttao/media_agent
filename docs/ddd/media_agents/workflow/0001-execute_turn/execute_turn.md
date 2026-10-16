@@ -187,3 +187,5 @@ Gateway 先保存 transferring 意图，再执行 Quiesce/Transfer，查询 Agen
 ACP load_session 可以回放原生历史，但新 Turn 开始前必须清空翻译器的消息累积、工具状态与用量。原生恢复回放不作为新 Turn 的回复重新持久化；历史查询仍以 Agent 本库为准。
 
 原生元数据解析接受固定的 media_plugin.mcp_binding 引用（ID、版本、校验和）；它是 Gateway 运行授权上下文，不下载或生成上游凭据。其他未知必需资源仍拒绝应用。
+
+ACP 返回标准 Authentication required 时，转换为安全的 model_authentication_required 错误分类，Turn failed 并维持暂停语义；不向浏览器回显原生错误详情或认证数据。

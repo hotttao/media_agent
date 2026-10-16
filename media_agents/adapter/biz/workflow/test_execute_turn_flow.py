@@ -55,6 +55,7 @@ class ScriptService:
         self.turns = [_turn("turn-1", 1, TurnStatus.RUNNING), _turn("turn-2", 2, TurnStatus.QUEUED)]
         self.session = replace(self.session, active_turn_id="turn-1")
         self.finalized: list[tuple[str, TurnStatus]] = []
+        self.terminal_turns: list[Turn] = []
         self.request_opened = asyncio.Event()
         self.agent_request: AgentRequest | None = None
 
@@ -86,6 +87,7 @@ class ScriptService:
         self.finalized.append((turn_id, status))
         terminal = next(turn for turn in self.turns if turn.turn_id == turn_id)
         terminal = replace(terminal, status=status, error_class=error_class)
+        self.terminal_turns.append(terminal)
         if turn_id == "turn-1" and status is TurnStatus.COMPLETED:
             self.turns[1] = replace(self.turns[1], status=TurnStatus.RUNNING)
             self.session = replace(self.session, active_turn_id="turn-2")
@@ -332,3 +334,24 @@ async def test_interrupt_during_credential_retry_never_starts_native_execution()
     await asyncio.wait_for(flow.wait("session-1"), 1)
     assert runtime.calls == []
     assert service.finalized == [("turn-1", TurnStatus.INTERRUPTED)]
+
+
+@pytest.mark.asyncio
+async def test_model_authentication_failure_pauses_without_running_the_queue() -> None:
+    from adapter.biz.domain.acp_adapter.errors import AuthenticationRequired
+
+    class UnauthenticatedRuntime(ScriptRuntime):
+        async def prepare(
+            self, session: RuntimeSession, turn: Turn, credentials: RuntimeCredentials
+        ) -> RuntimePreparation:
+            raise AuthenticationRequired("Model authentication is required")
+
+    service = ScriptService()
+    bus = InMemorySessionEventBus()
+    flow = ExecuteTurnFlow(
+        service, UnauthenticatedRuntime([]), lambda sid, tid: TurnEventSink(service, bus, sid, tid)
+    )
+    await flow.submit(SubmitTurn("session-1", "one", 1, {"message": "one"}))
+    await flow.wait("session-1")
+    assert service.finalized == [("turn-1", TurnStatus.FAILED)]
+    assert service.terminal_turns[0].error_class == "model_authentication_required"

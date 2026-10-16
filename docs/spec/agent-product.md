@@ -79,3 +79,5 @@ Docker 创建策略可配置 HTTPProxy、HTTPSProxy、NoProxy，仅部署侧设�
 启用固定元数据的 Codex 原生配置关闭账号 Apps、远端 Plugin 自动装配及 Skill 自动安装 MCP 依赖。用户选择的 Skill 由系统版本发布加载，MCP 仅通过 Gateway 声明；不能因复制 OAuth 登录而隐式引入账号插件或外部 MCP。
 
 Agent 浏览器登录/登出通过当前同源 Edge 调用 Kratos。允许 Kratos 返回同协议、同 hostname 的其他端口地址，仅保留预期 self-service 路径及查询参数并归一为当前 origin；跨主机、跨协议、URL 用户信息、fragment 和错误路径均拒绝。模型/API 凭据不参与浏览器登录。
+
+Chat Session 响应附带 Agent runtime_status 与 execution_epoch，失败/中断暂停后由用户显式 Resume；安全模型认证错误分类为 model_authentication_required。暂停提交返回409，其他 Agent 参数错误返回400，不泄漏上游响应体。

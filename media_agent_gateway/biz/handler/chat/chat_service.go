@@ -40,7 +40,7 @@ func GetDefaultSession(ctx context.Context, c *app.RequestContext) {
 		writeError(c, err)
 		return
 	}
-	c.JSON(consts.StatusOK, toSessionResponse(value, state.ChatStatus))
+	c.JSON(consts.StatusOK, toSessionResponse(value, state))
 }
 
 func CreateSession(ctx context.Context, c *app.RequestContext) {
@@ -62,7 +62,7 @@ func CreateSession(ctx context.Context, c *app.RequestContext) {
 		writeError(c, err)
 		return
 	}
-	c.JSON(consts.StatusCreated, toSessionResponse(value, state.ChatStatus))
+	c.JSON(consts.StatusCreated, toSessionResponse(value, state))
 }
 
 func ListSessions(ctx context.Context, c *app.RequestContext) {
@@ -78,11 +78,11 @@ func ListSessions(ctx context.Context, c *app.RequestContext) {
 	}
 	resp := &chatpb.ListSessionsResponse{Sessions: make([]*chatpb.SessionResponse, 0, len(values))}
 	for i := range values {
-		chatStatus := domain.ChatStatusHuman
-		if state, stateErr := runTurn.State(ctx, values[i].ID, middleware.UserID(ctx)); stateErr == nil {
-			chatStatus = state.ChatStatus
+		state := &client.RuntimeSession{ChatStatus: domain.ChatStatusHuman}
+		if current, stateErr := runTurn.State(ctx, values[i].ID, middleware.UserID(ctx)); stateErr == nil {
+			state = current
 		}
-		resp.Sessions = append(resp.Sessions, toSessionResponse(&values[i], chatStatus))
+		resp.Sessions = append(resp.Sessions, toSessionResponse(&values[i], state))
 	}
 	c.JSON(consts.StatusOK, resp)
 }
@@ -140,12 +140,28 @@ func InterruptTurn(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusAccepted, &chatpb.InterruptTurnResponse{TurnId: turn.TurnID, Status: "interrupting"})
 }
 
-func toSessionResponse(value *domain.Session, chatStatus string) *chatpb.SessionResponse {
-	return &chatpb.SessionResponse{Id: value.ID, WorkspaceId: value.WorkspaceID, AgentId: value.AgentID, AgentType: value.AgentType, Title: value.Title, Status: value.Status, ChatStatus: chatStatus, ContextVersion: value.ContextVersion, CreatedAt: value.CreatedAt.UnixMilli(), UpdatedAt: value.UpdatedAt.UnixMilli()}
+func toSessionResponse(value *domain.Session, state *client.RuntimeSession) *chatpb.SessionResponse {
+	return &chatpb.SessionResponse{Id: value.ID, WorkspaceId: value.WorkspaceID, AgentId: value.AgentID, AgentType: value.AgentType, Title: value.Title, Status: value.Status, ChatStatus: state.ChatStatus, RuntimeStatus: state.Status, ExecutionEpoch: state.ExecutionEpoch, ContextVersion: value.ContextVersion, CreatedAt: value.CreatedAt.UnixMilli(), UpdatedAt: value.UpdatedAt.UnixMilli()}
 }
 
 func writeError(c *app.RequestContext, err error) {
 	status := consts.StatusInternalServerError
+	var upstream *client.APIError
+	if errors.As(err, &upstream) {
+		status = consts.StatusBadGateway
+		if upstream.StatusCode == 400 || upstream.StatusCode == 422 {
+			status = consts.StatusBadRequest
+		}
+		if upstream.StatusCode == 409 {
+			status = consts.StatusConflict
+		}
+		c.JSON(status, map[string]string{"error": "Agent rejected the request. Check the Session state and configuration."})
+		return
+	}
+	if errors.Is(err, workflow.ErrSessionPaused) {
+		c.JSON(consts.StatusConflict, map[string]string{"error": err.Error(), "code": "session_paused"})
+		return
+	}
 	if errors.Is(err, workflow.ErrRuntimeWaiting) {
 		status = consts.StatusServiceUnavailable
 		c.Header("Retry-After", "2")

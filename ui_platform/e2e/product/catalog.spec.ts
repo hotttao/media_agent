@@ -597,3 +597,59 @@ test("native permission HTTP payload renders options and resolves the chosen act
   await expect(card).toHaveCount(0);
   expect(response).toEqual({ option_id: "allow_once" });
 });
+
+test("paused Session requires explicit resume before sending", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  let resumed = false;
+  let resumeBody: Record<string, unknown> = {};
+  await page.route(/\/api\/chat\/sessions(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: {
+        sessions: [
+          {
+            id: "session",
+            workspace_id: "workspace",
+            agent_id: "codex",
+            agent_type: "codex",
+            title: "Paused session",
+            status: "active",
+            chat_status: "human",
+            context_version: 4,
+            runtime_status: resumed ? "active" : "paused",
+            execution_epoch: 3,
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/v1/sessions/session/resume", async (route) => {
+    resumeBody = route.request().postDataJSON();
+    resumed = true;
+    return route.fulfill({
+      json: { session_id: "session", status: "active", execution_epoch: 3 },
+    });
+  });
+  await page.goto("/w/workspace");
+  await expect(
+    page.getByRole("button", { name: "Resume session", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Send message", exact: true }),
+  ).toHaveCount(0);
+  expect(state.requests.filter((r) => r.path.endsWith("/turns"))).toHaveLength(
+    0,
+  );
+  await page
+    .getByRole("button", { name: "Resume session", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Send message", exact: true }),
+  ).toBeVisible();
+  expect(resumeBody.expected_epoch).toBe(3);
+  expect(typeof resumeBody.operation_id).toBe("string");
+  expect(state.requests.filter((r) => r.path.endsWith("/turns"))).toHaveLength(
+    0,
+  );
+});

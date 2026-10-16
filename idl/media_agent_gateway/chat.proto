@@ -89,6 +89,8 @@ message SessionResponse {
   string agent_type = 8;
   string chat_status = 9;
   int64 context_version = 10;
+  string runtime_status = 11;
+  int64 execution_epoch = 12;
 }
 
 message ListMessagesRequest {

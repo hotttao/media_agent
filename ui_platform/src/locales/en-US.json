@@ -255,5 +255,13 @@
 		"inputLabel": "Agent input",
 		"send": "Send",
 		"command": "Command to approve"
+	},
+	"chatRecovery": {
+		"paused": "This session paused after a failure or interruption. Check credentials and configuration, then resume. Failed input will not be replayed.",
+		"resume": "Resume session",
+		"resuming": "Resuming…",
+		"authentication": "Model authentication is missing or expired. Configure model credentials in Workspace settings before resuming.",
+		"failed": "The Agent stopped before completing this turn. Check configuration and resume the session.",
+		"resumeFailed": "Unable to resume the session."
 	}
 }

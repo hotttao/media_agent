@@ -34,6 +34,7 @@ import {
   listMessages,
   listSessions,
   resolveAgentRequest,
+  resumeSession,
   runTurn,
   subscribeSessionEvents,
 } from "@/domains/chat/lib/chat-client";
@@ -66,6 +67,8 @@ interface WorkspaceRuntime {
   creatingSession: boolean;
   streaming: boolean;
   interrupting: boolean;
+  resuming: boolean;
+  resume(): Promise<void>;
   error: string;
   setError(value: string): void;
   selectSession(id: string): Promise<void>;
@@ -157,6 +160,7 @@ function SessionsApp() {
 }
 
 function ChatApp() {
+  const { t } = useTranslation();
   const {
     workspace,
     sessions,
@@ -165,6 +169,8 @@ function ChatApp() {
     loading,
     streaming,
     interrupting,
+    resuming,
+    resume,
     error,
     setError,
     selectSession,
@@ -186,7 +192,13 @@ function ChatApp() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     const text = input.trim();
-    if (!text || !sessionId || streaming) return;
+    if (
+      !text ||
+      !sessionId ||
+      streaming ||
+      activeSession?.runtime_status === "paused"
+    )
+      return;
     setInput("");
     await send(text);
   }
@@ -277,6 +289,21 @@ function ChatApp() {
           </span>
           <Button type="button" onClick={() => void addSession()}>
             Start new session
+          </Button>
+        </div>
+      ) : activeSession?.runtime_status === "paused" ? (
+        <div
+          role="status"
+          className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+        >
+          <p>{t("chatRecovery.paused")}</p>
+          <Button
+            className="mt-3"
+            type="button"
+            disabled={resuming || !activeSession.execution_epoch}
+            onClick={() => void resume()}
+          >
+            {resuming ? t("chatRecovery.resuming") : t("chatRecovery.resume")}
           </Button>
         </div>
       ) : (
@@ -552,6 +579,7 @@ function seedCompletedItems(
 }
 
 export function ChatPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const params = useParams<{ workspaceId?: string }>();
   const workspaceId = params.workspaceId ?? "";
@@ -571,6 +599,8 @@ export function ChatPage() {
   currentWorkspaceRef.current = workspaceId;
   const [streaming, setStreaming] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
+  const [resuming, setResuming] = useState(false);
+  const resumeOperation = useRef<{ session: string; id: string } | null>(null);
   const [requests, setRequests] = useState<AgentRequest[]>([]);
   const [error, setError] = useState("");
   const [dialog, setDialog] = useState<"create" | "edit" | null>(null);
@@ -741,6 +771,26 @@ export function ChatPage() {
         setStreaming(false);
         setInterrupting(false);
       }
+      if (event.type === "turn.failed" || event.type === "turn.interrupted") {
+        void listSessions(workspaceId)
+          .then((values) => {
+            if (targetSession !== activeSessionId.current) return;
+            setSessions(values);
+            if (
+              values.find((s) => s.id === targetSession)?.runtime_status ===
+              "paused"
+            ) {
+              setStreaming(false);
+              setInterrupting(false);
+              setError(
+                event.error_class === "model_authentication_required"
+                  ? t("chatRecovery.authentication")
+                  : t("chatRecovery.failed"),
+              );
+            }
+          })
+          .catch(() => {});
+      }
       const delta = event.delta?.text;
       if (event.type === "item.delta" && delta) {
         const itemId = event.item_id ?? "assistant-current";
@@ -809,7 +859,7 @@ export function ChatPage() {
         });
       }
     },
-    [],
+    [workspaceId, t],
   );
 
   useEffect(() => {
@@ -876,6 +926,7 @@ export function ChatPage() {
       await runTurn(targetSession, text);
     } catch (cause) {
       if (targetSession === activeSessionId.current) {
+        setMessages((current) => current.filter((m) => m.id !== user.id));
         setError(cause instanceof Error ? cause.message : "Chat failed");
         setStreaming(false);
         setSessions((current) =>
@@ -886,6 +937,41 @@ export function ChatPage() {
           ),
         );
       }
+    }
+  }
+  async function resume() {
+    const target = activeSessionId.current;
+    const selected = sessions.find((s) => s.id === target);
+    if (
+      !selected?.execution_epoch ||
+      selected.runtime_status !== "paused" ||
+      resuming
+    )
+      return;
+    if (resumeOperation.current?.session !== target)
+      resumeOperation.current = { session: target, id: createClientId() };
+    setResuming(true);
+    try {
+      await resumeSession(
+        target,
+        selected.execution_epoch,
+        resumeOperation.current.id,
+      );
+      const current = await listSessions(workspaceId);
+      if (target === activeSessionId.current) {
+        setSessions(current);
+        setError("");
+      }
+      resumeOperation.current = null;
+    } catch (cause) {
+      if (target === activeSessionId.current)
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : t("chatRecovery.resumeFailed"),
+        );
+    } finally {
+      setResuming(false);
     }
   }
   async function interrupt() {
@@ -977,6 +1063,8 @@ export function ChatPage() {
         creatingSession,
         streaming,
         interrupting,
+        resuming,
+        resume,
         error,
         setError,
         selectSession,

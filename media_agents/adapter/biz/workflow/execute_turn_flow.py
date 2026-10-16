@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from adapter.biz.domain.acp_adapter.errors import AuthenticationRequired
 from adapter.biz.domain.runtime_session.entity import (
     AgentRequest,
     RuntimeSession,
@@ -416,6 +417,8 @@ class ExecuteTurnFlow:
 
 
 def _stable_error_class(error: Exception) -> str:
+    if isinstance(error, AuthenticationRequired):
+        return "model_authentication_required"
     if isinstance(error, ExecutionCredentialsRejected):
         return "execution_credentials_rejected"
     if isinstance(error, InvalidTurn):

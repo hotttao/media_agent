@@ -29,3 +29,9 @@ stateDiagram-v2
 窄屏下卡片和选项按钮垂直或换行排列；API key、请求原始凭据和内部 Runtime 配置路径不展示（用户审批命令中实际涉及的文件路径除外）、不写入 URL 或本地存储。
 
 Gateway 公共 HTTP 使用 IDL 的 payload_json/response_json 字符串与毫秒时间戳；L2 chat-client 在列表和 resolve 响应处统一解码为 AgentRequest，不能把 HTTP DTO 直接强转为组件模型。无效 JSON/非对象载荷显示请求错误，不进行推测授权。
+
+## 执行失败与显式恢复
+
+会话列表分别返回 Gateway 登记 status 和 Agent 的 runtime_status、execution_epoch；不可把登记 active 等同于可提交。failed/interrupted 后 runtime_status=paused，Chat 禁止发送并展示暂停原因和“恢复会话”。用户点击后使用稳定 operation_id 与当前 execution_epoch 调用既有 Resume API，成功后重新查询服务端；不自动重放失败输入，原 queued 按既有 FIFO 规则处理。恢复中禁止重复点击，失败保留暂停提示；切换 Session 后忽略旧请求结果。
+
+turn.failed 的安全 error_class 在 UI 显示可读原因，模型认证缺失或失效提示配置凭据。历史回放中的失败事件不得覆盖较新的完成状态。Gateway 对暂停提交返回409，Agent 的400参数错误不得包装为500或回显私有响应。

@@ -63,7 +63,7 @@ http:
       middlewares: [oathkeeper-forward-auth]
       service: plugin
     agent-chat-and-catalog:
-      rule: "PathPrefix(`/api/chat`) || PathPrefix(`/api/v1/mcp-definitions`)"
+      rule: "PathPrefix(`/api/chat`) || PathPrefix(`/api/v1/mcp-definitions`) || PathRegexp(`^/api/v1/sessions/[^/]+/resume$`)"
       priority: 70
       middlewares: [oathkeeper-forward-auth]
       service: agent-api

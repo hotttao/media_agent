@@ -155,6 +155,24 @@ export async function runTurn(
   ).then((response) => response.json());
 }
 
+export async function resumeSession(
+  sessionId: string,
+  epoch: number,
+  operationId: string,
+): Promise<void> {
+  await checked(
+    await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        expected_epoch: epoch,
+        operation_id: operationId,
+      }),
+    }),
+  );
+}
+
 export async function interruptTurn(
   sessionId: string,
 ): Promise<{ turn_id: string; status: string }> {

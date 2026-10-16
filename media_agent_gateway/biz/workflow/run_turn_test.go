@@ -284,3 +284,12 @@ func TestRegisterWaitsForNativeStartupWithoutCreatingAnotherSession(t *testing.T
 		t.Fatal("cancelled startup lost recoverable session")
 	}
 }
+
+func TestStartRejectsPausedAgentWithoutSubmittingAnotherTurn(t *testing.T) {
+	flow, _, runtime := newWorkflowFixture(domain.StatusActive)
+	runtime.registerState.Status = "paused"
+	_, err := flow.Start(context.Background(), "session", "user", "", "key", "hello")
+	if !errors.Is(err, ErrSessionPaused) || runtime.submitInput.SessionID != "" {
+		t.Fatalf("err=%v; input=%+v", err, runtime.submitInput)
+	}
+}

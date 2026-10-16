@@ -14,6 +14,8 @@ import (
 	"media_agent/media_agent_gateway/biz/shared/client"
 )
 
+var ErrSessionPaused = errors.New("Session is paused. Resume it before sending another message.")
+
 // RunTurn authorizes Gateway registrations and delegates all execution facts to Agent.
 type RunTurn struct {
 	sessions *service.Service
@@ -96,8 +98,12 @@ func (w *RunTurn) Start(ctx context.Context, sessionID, userID, authToken, key, 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := w.Register(ctx, session, authToken); err != nil {
+	state, err := w.Register(ctx, session, authToken)
+	if err != nil {
 		return nil, err
+	}
+	if state.Status == "paused" {
+		return nil, ErrSessionPaused
 	}
 	if session.Status != domain.StatusActive {
 		return nil, domain.ErrInactive

@@ -11,7 +11,7 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
-from acp import PROTOCOL_VERSION, connect_to_agent, image_block, text_block
+from acp import PROTOCOL_VERSION, RequestError, connect_to_agent, image_block, text_block
 from acp.schema import (
     AcpMcpServer,
     AudioContentBlock,
@@ -30,7 +30,7 @@ from acp.schema import (
 
 from adapter.biz.domain.acp_adapter.client import AcpClientAdapter
 from adapter.biz.domain.acp_adapter.entity import PromptResult, StopReason
-from adapter.biz.domain.acp_adapter.errors import LoadSessionFailed
+from adapter.biz.domain.acp_adapter.errors import AuthenticationRequired, LoadSessionFailed
 from adapter.biz.domain.acp_adapter.llm_event import ChatImageAttachment
 from adapter.biz.domain.acp_adapter.session import AcpSession
 
@@ -101,10 +101,15 @@ class AcpBridge:
         self, *, mcp_servers: list[McpServerConfig] | None = None
     ) -> AcpSession:
         assert self.conn is not None and self.session is not None, "bridge not started"
-        resp: NewSessionResponse = await self.conn.new_session(
-            cwd=self.cwd,
-            mcp_servers=mcp_servers or [],
-        )
+        try:
+            resp: NewSessionResponse = await self.conn.new_session(
+                cwd=self.cwd,
+                mcp_servers=mcp_servers or [],
+            )
+        except RequestError as error:
+            if error.code == -32000:
+                raise AuthenticationRequired("Model authentication is required") from error
+            raise
         self.session.set_session_id(resp.session_id)
         self.session_id = resp.session_id
         return self.session
@@ -119,6 +124,10 @@ class AcpBridge:
                 session_id=session_id,
                 mcp_servers=mcp_servers or [],
             )
+        except RequestError as error:
+            if error.code == -32000:
+                raise AuthenticationRequired("Model authentication is required") from error
+            raise LoadSessionFailed(session_id, str(error)) from error
         except Exception as err:
             raise LoadSessionFailed(session_id, str(err)) from err
         if resp is not None and getattr(resp, "modes", None):
@@ -150,7 +159,12 @@ class AcpBridge:
                 if data and media_type:
                     prompt.append(image_block(data, media_type))
 
-        resp = await self.conn.prompt(session_id=session_id, prompt=prompt)
+        try:
+            resp = await self.conn.prompt(session_id=session_id, prompt=prompt)
+        except RequestError as error:
+            if error.code == -32000:
+                raise AuthenticationRequired("Model authentication is required") from error
+            raise
         raw_stop = getattr(resp, "stop_reason", None)
         stop = StopReason(raw_stop) if raw_stop else StopReason.END_TURN
         return PromptResult(stop_reason=stop, usage=getattr(resp, "usage", None))

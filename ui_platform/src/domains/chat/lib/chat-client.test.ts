@@ -141,3 +141,24 @@ describe("Agent Requests", () => {
     });
   });
 });
+
+describe("Session resume", () => {
+  it("uses the current execution epoch and caller operation id", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    const { resumeSession } = await import("./chat-client");
+    await resumeSession("session/1", 3, "operation-1");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/sessions/session%2F1/resume",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({
+          expected_epoch: 3,
+          operation_id: "operation-1",
+        }),
+      }),
+    );
+  });
+});

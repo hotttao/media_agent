@@ -82,3 +82,7 @@ ACP 会话仅依赖 prompt/cancel/is_alive 结构契约；Clock 与 draft ID 纯
 真实第二轮模型验收发现 ACP load_session 历史片段被拼入新消息。每轮 prompt 前重建翻译器，隔离加载历史与新输出；回归覆盖旧消息/工具状态不进入新完成项。
 
 真实 MCP 配置验收补齐 Agent 对 media_plugin.mcp_binding 固定引用的 schema 支持；沿用 ID/版本/校验和校验，不把上游地址或凭据写入原生配置。
+
+## 2026-10-16 · 模型认证失败可见性
+
+模型登录缺失的 ACP 标准错误分类为 model_authentication_required；保留失败后暂停与显式恢复，前端显示原因并消费既有 Resume 接口。

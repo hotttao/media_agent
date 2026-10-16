@@ -9,6 +9,8 @@ export interface ChatSession {
   agent_type: string;
   chat_status: "human" | "agent";
   context_version: number;
+  runtime_status?: string;
+  execution_epoch?: number;
 }
 
 export interface ChatMessage {
@@ -38,6 +40,7 @@ export interface UniversalEvent {
   type: string;
   item_id?: string;
   message?: string;
+  error_class?: string;
   item?: {
     item_id?: string;
     role?: string | number;

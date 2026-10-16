@@ -31,3 +31,7 @@ class LoadSessionFailed(AcpError):
         )
         self.session_id = session_id
         self.detail = detail
+
+
+class AuthenticationRequired(AcpError):
+    """The native model runtime requires authentication; details stay private."""
