@@ -23,6 +23,8 @@ stateDiagram-v2
 ## 交互形式
 
 - `permission`：显示服务端提供的工具标题与 option 列表，提交 `{ option_id }`。优先采用 question/prompt，缺少时使用原生 tool_call/toolCall 的 title；仅额外展示 shell 工具待批准的 command 字符串/argv，支持换行和滚动，避免原生标题为空时盲批；不展示整份原始调用参数或私有环境。确认、输入、默认标题与失败提示支持中英翻译。
+原生权限选项名称为 `allow_once/allow_always/reject_once/reject_always` 时展示中英文标签；提交保留原始 option_id，未知名称不推断许可。
+
 - `confirm`：提交 `{ confirmed: true|false }`。
 - `input` 及未知类型：显示文本输入，提交 `{ value }`。
 

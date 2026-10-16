@@ -86,3 +86,9 @@ ACP 会话仅依赖 prompt/cancel/is_alive 结构契约；Clock 与 draft ID 纯
 ## 2026-10-16 · 模型认证失败可见性
 
 模型登录缺失的 ACP 标准错误分类为 model_authentication_required；保留失败后暂停与显式恢复，前端显示原因并消费既有 Resume 接口。
+
+## 2026-10-16 · ACP 完成与消息通知顺序
+
+- 真实 Goose MCP 验收发现完成响应可抢先于 SDK 异步通知落地，导致最终 Message 截断。
+- 适配器按顺序处理通知，并在 new/load/prompt 响应后等待此前通知排空，再重置回放状态或收尾；保持权限请求并发。
+- 不改变 delta 不落库、Session 串行执行及既有终态规则。

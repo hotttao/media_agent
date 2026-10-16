@@ -75,6 +75,25 @@ describe("AgentRequestCard", () => {
     expect(screen.queryByText("must-not-render")).toBeNull();
   });
 
+  it("labels Goose permission identifiers without changing the response ID", async () => {
+    const onResolve = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AgentRequestCard
+        request={{
+          ...request,
+          payload: {
+            options: [{ option_id: "native-choice", name: "allow_once" }],
+          },
+        }}
+        onResolve={onResolve}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    await waitFor(() =>
+      expect(onResolve).toHaveBeenCalledWith({ option_id: "native-choice" }),
+    );
+  });
+
   it("submits input responses", async () => {
     const onResolve = vi.fn().mockResolvedValue(undefined);
     render(

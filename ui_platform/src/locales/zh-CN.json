@@ -200,6 +200,10 @@
 		"startingAgent": "正在启动 Agent… 首次创建会话需要几秒钟。"
 	},
 	"agentRequest": {
+		"allowOnce": "允许本次",
+		"allowAlways": "始终允许",
+		"rejectOnce": "拒绝本次",
+		"rejectAlways": "始终拒绝",
 		"permission": "Agent 请求操作权限",
 		"input": "Agent 需要你的回复",
 		"failed": "请求失败",

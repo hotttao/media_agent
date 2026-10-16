@@ -13,5 +13,11 @@ def test_load_claude_code_config_has_agent_specific_section() -> None:
     assert isinstance(cfg, ClaudeCodeConfig)
     assert cfg.agent_type == "claude-code"
     assert cfg.agent.port == 3003
-    assert cfg.skills.enabled is False
+    assert cfg.skills.enabled is True
+    assert cfg.capabilities.system_prompt is True
+    assert cfg.capabilities.skills is True
+    assert cfg.capabilities.permissions is True
+    assert cfg.capabilities.questions is True
+    assert cfg.capabilities.reconnect is True
+    assert cfg.capabilities.mcp is True
     assert cfg.claude_code.bin == "claude"

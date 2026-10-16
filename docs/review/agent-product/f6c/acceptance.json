@@ -1,0 +1,115 @@
+{
+  "date": "2026-10-16",
+  "modelService": {
+    "provider": "SiliconFlow",
+    "model": "deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  "runtimes": [
+    {
+      "runtime": "claude",
+      "finalSession": {
+        "kind": "claude",
+        "workspaceId": "276465cd-705e-4175-bd32-7bf09e1411e8",
+        "sessionId": "3f14c327-c562-4f59-b5a8-af6f85154532",
+        "previousSessionId": "81709569-3e36-41ea-ac7b-4e8582d666c5",
+        "url": "http://192.168.2.41:18080/agent/w/276465cd-705e-4175-bd32-7bf09e1411e8?session=3f14c327-c562-4f59-b5a8-af6f85154532"
+      },
+      "twoTurnConversation": {
+        "kind": "claude",
+        "workspaceId": "276465cd-705e-4175-bd32-7bf09e1411e8",
+        "sessionId": "81709569-3e36-41ea-ac7b-4e8582d666c5",
+        "realReply": true,
+        "secondTurnMemory": true,
+        "historyAfterReload": true,
+        "pageErrors": 0,
+        "url": "http://192.168.2.41:18080/agent/w/276465cd-705e-4175-bd32-7bf09e1411e8?session=81709569-3e36-41ea-ac7b-4e8582d666c5"
+      },
+      "mcp": {
+        "kind": "claude",
+        "actualGatewayMCP": true,
+        "workspaceIdentityMatches": true,
+        "toolRecorded": true,
+        "approved": 1
+      },
+      "nativeSkill": {
+        "runtime": "claude",
+        "skillBodyApplied": true,
+        "terminal": "completed",
+        "eventCount": 25
+      }
+    },
+    {
+      "runtime": "goose",
+      "finalSession": {
+        "kind": "goose",
+        "workspaceId": "8c7189b0-7cd3-4c8d-927f-4ace400a2ebc",
+        "sessionId": "9f60cf40-7cf8-4e83-8124-c3b81d614284",
+        "previousSessionId": "75e15258-5fb0-4a35-ae00-74000697a030",
+        "url": "http://192.168.2.41:18080/agent/w/8c7189b0-7cd3-4c8d-927f-4ace400a2ebc?session=9f60cf40-7cf8-4e83-8124-c3b81d614284"
+      },
+      "twoTurnConversation": {
+        "kind": "goose",
+        "workspaceId": "8c7189b0-7cd3-4c8d-927f-4ace400a2ebc",
+        "sessionId": "75e15258-5fb0-4a35-ae00-74000697a030",
+        "realReply": true,
+        "secondTurnMemory": true,
+        "historyAfterReload": true,
+        "pageErrors": 0,
+        "url": "http://192.168.2.41:18080/agent/w/8c7189b0-7cd3-4c8d-927f-4ace400a2ebc?session=75e15258-5fb0-4a35-ae00-74000697a030"
+      },
+      "mcp": {
+        "kind": "goose",
+        "actualGatewayMCP": true,
+        "workspaceIdentityMatches": true,
+        "toolRecorded": true,
+        "approved": 1
+      },
+      "nativeSkill": {
+        "runtime": "goose",
+        "skillBodyApplied": true,
+        "eventCount": 57
+      }
+    }
+  ],
+  "deployment": [
+    {
+      "runtime": "claude",
+      "image": "media-agent-claude-code:local",
+      "imageID": "sha256:23163352961bd3b4929865a01a34bc6cba381fd6848a67036a5ecbe58c306a20",
+      "runningFinalImage": true,
+      "approvedToolFileMatches": true
+    },
+    {
+      "runtime": "goose",
+      "image": "media-agent-goose:local",
+      "imageID": "sha256:c085b2568e8735de0c1ebe8440baca6ec7812f8dc7b1677bedd4c45b1992d4c4",
+      "runningFinalImage": true,
+      "approvedToolFileMatches": true
+    }
+  ],
+  "workspaceSettings": [
+    {
+      "kind": "claude",
+      "savedModelSettings": true,
+      "apiKeyNotReturned": true,
+      "editKeyEmpty": true,
+      "dialogFitsViewport": true
+    },
+    {
+      "kind": "goose",
+      "savedModelSettings": true,
+      "apiKeyNotReturned": true,
+      "editKeyEmpty": true,
+      "dialogFitsViewport": true
+    }
+  ],
+  "checks": {
+    "pythonPassed": 120,
+    "pythonSkipped": 12,
+    "relatedRuntimeTestsPassed": 40,
+    "uiTestsPassed": 9,
+    "postgresIntegrationPassed": true,
+    "k3s": "inactive / disabled",
+    "dockerScaling": "excluded"
+  }
+}

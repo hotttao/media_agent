@@ -107,3 +107,5 @@ Workspace创建/更新/读取及内部固定版本上下文新增model_protocol�
 Gateway执行上下文透传固定版本设置。Claude通过独立子进程环境使用ANTHROPIC_API_KEY/ANTHROPIC_BASE_URL/ANTHROPIC_MODEL；Goose每个ACP bridge配置GOOSE_PROVIDER/GOOSE_MODEL与对应key/host/path，不修改进程全局认证。缺少认证不借用宿主登录。Settings编辑Workspace提供协议/模型/兼容API地址，新Goose配置需模型名；选择变化创建新Session。镜像及启动文档覆盖两个Runtime。
 
 Claude Code原生交互使用固定版本CLI的stream-json/stdio control通道：can_use_tool转为持久化权限请求，AskUserQuestion逐题转为input请求，回答后返回原生allow/deny，不自动批准。启用partial messages，文本增量实时发布，assistant完成快照只保存一次。原生错误分类后返回安全消息，不把供应商原始响应或stderr外发。
+
+ACP 原生消息通知按接收顺序完成翻译和下游写入，不能由 SDK 的 detached 通知任务提前确认处理完成。new/load/prompt 响应之后，适配器等待此前通知队列排空，再重置历史回放状态或生成最终消息快照；权限请求保持并发，等待用户不会阻塞通知处理。避免完成响应抢先引起文本截断或终态后写入。

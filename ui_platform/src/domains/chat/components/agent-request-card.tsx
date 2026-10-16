@@ -35,6 +35,12 @@ export function AgentRequestCard({
   onResolve(response: Record<string, unknown>): Promise<void>;
 }) {
   const { t } = useTranslation();
+  const permissionLabels: Record<string, string> = {
+    allow_once: t("agentRequest.allowOnce"),
+    allow_always: t("agentRequest.allowAlways"),
+    reject_once: t("agentRequest.rejectOnce"),
+    reject_always: t("agentRequest.rejectAlways"),
+  };
   const tool = request.payload.tool_call ?? request.payload.toolCall;
   const toolTitle =
     tool && typeof tool === "object"
@@ -100,7 +106,7 @@ export function AgentRequestCard({
               disabled={busy}
               onClick={() => void resolve({ option_id: option.id })}
             >
-              {option.label}
+              {permissionLabels[option.label] ?? option.label}
             </Button>
           ))}
         </div>

@@ -101,6 +101,8 @@ sequenceDiagram
 6. 重复 Submit、Runtime 重放和总线重复投递都以业务 ID/sequence 收敛，消息中间件的 offset 不属于业务幂等键。
 7. 底层 Runtime 会话 ID 由 Runtime adapter 返回并持久化，不得从业务 Session ID 推导。Gateway 把已授权的 API key/Session Token 放在 SubmitTurn 的 write-only 执行信封中；Agent 只在对应 Turn 执行前以内存暂存，禁止写入 input、Message、事件或数据库。进程丢失后的凭据重取由恢复阶段按 `context_ref` 协调。
 
+8. ACP Runtime 的完成响应不能直接触发消息收尾：适配器先按接收顺序处理完成该响应之前的全部通知及下游写入，再生成最终 Message 快照。new/load 的历史回放通知同样先排空，随后执行新 Turn；权限请求继续并发等待用户，不能阻塞通知处理。
+
 ## 状态与不变量
 
 - Turn 状态由 Runtime Session Domain 决定，Gateway 和 RabbitMQ 不得直接修改。

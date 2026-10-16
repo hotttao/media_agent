@@ -3,16 +3,16 @@ agent:
   port: ${oc.env:PORT,3003}
 
 capabilities:
-  system_prompt: false
-  mcp: false
-  skills: false
-  questions: false
-  reconnect: false
-  permissions: false
+  system_prompt: true
+  mcp: true
+  skills: true
+  questions: true
+  reconnect: true
+  permissions: true
   streaming_deltas: true
 
 skills:
-  enabled: false
+  enabled: true
 
 claude_code:
   bin: ${oc.env:CLAUDE_CODE_BIN,claude}

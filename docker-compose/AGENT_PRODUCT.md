@@ -12,6 +12,8 @@ export COMPOSE_PARALLEL_LIMIT=1
 agent_product_env=docker-compose/.agent-product/product.env
 docker compose --env-file "$agent_product_env" -f docker-compose/docker-compose.agent-product.yml build
 docker build -f media_agents/codex/Dockerfile -t media-agent-codex:local media_agents
+docker build -f media_agents/claude_code/Dockerfile -t media-agent-claude-code:local media_agents
+docker build -f media_agents/goose/Dockerfile -t media-agent-goose:local media_agents
 docker compose --env-file "$agent_product_env" -f media_auth/docker-compose.yml up -d --no-deps --build media_auth
 docker compose --env-file "$agent_product_env" -f docker-compose/docker-compose.agent-product.yml up -d product-broker media_plugin runtime-controller agent-ui
 docker compose --env-file "$agent_product_env" -f media_control/docker-compose.yml up -d --no-deps --build media_control
@@ -43,3 +45,11 @@ docker compose --env-file docker-compose/.agent-product/product.env -f docker-co
 ```
 
 在私有 product.env 配置 AGENT_HTTP_PROXY/AGENT_HTTPS_PROXY 为 http://172.27.0.1:17897，AGENT_NO_PROXY 包含内部服务与数据库地址，执行准备命令并重启 Controller。既有 Agent 需在空闲时重建以使用新部署配置；连接 auth.json 的上传和替换无需重建容器。
+
+## Claude Code / Goose
+
+创建或编辑 Workspace，Agent 选择 Claude Code 或 Goose，在模型服务里填写协议、模型名称、API 基础地址，再填写 API key。Claude Code 使用 Anthropic 兼容接口；Goose 支持 OpenAI / Anthropic 兼容接口。密钥加密保存且不回显；模型设置随 Session 固定，更新 Workspace 后新建 Session 使用新设置。
+
+SiliconFlow 示例：模型名 `deepseek-ai/DeepSeek-V4.1-Flash`，Claude Code 使用 Anthropic 兼容协议、基础地址 `https://api.siliconflow.cn`；Goose 使用 OpenAI 兼容协议、基础地址 `https://api.siliconflow.cn/v1`。不要把 `/messages` 或 `/chat/completions` 填入基础地址。其他服务请使用其兼容协议及基础地址，不以运行客户端名称推断模型厂商。
+
+两个 Runtime 使用 Control 已确认的 Prompt、Skill 固定版本，并仅通过 Gateway 发现和调用 Workspace 授权 MCP。工具请求在对话中等待用户选择，选择只允许本次时不会扩大到后续调用。Claude Code 原生用户提问映射为对话输入请求。网络断开不会隐式终止后端执行，刷新可读取持久历史。

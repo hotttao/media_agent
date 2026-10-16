@@ -27,8 +27,10 @@ from acp.schema import (
     SseMcpServer,
     TextContentBlock,
 )
+from acp.task import InMemoryMessageQueue
 
 from adapter.biz.domain.acp_adapter.client import AcpClientAdapter
+from adapter.biz.domain.acp_adapter.dispatch import ordered_dispatcher
 from adapter.biz.domain.acp_adapter.entity import PromptResult, StopReason
 from adapter.biz.domain.acp_adapter.errors import AuthenticationRequired, LoadSessionFailed
 from adapter.biz.domain.acp_adapter.llm_event import ChatImageAttachment
@@ -63,6 +65,7 @@ class AcpBridge:
         self.conn: ClientSideConnection | None = None
         self.session: AcpSession | None = None
         self.client: AcpClientAdapter | None = None
+        self._message_queue = InMemoryMessageQueue()
 
     async def start(self) -> None:
         """Start the child process and complete the ACP initialize handshake."""
@@ -82,6 +85,8 @@ class AcpBridge:
             client=self.client,
             input_stream=self.proc.stdin,
             output_stream=self.proc.stdout,
+            queue=self._message_queue,
+            dispatcher_factory=ordered_dispatcher,
         )
         await self.conn.initialize(
             protocol_version=PROTOCOL_VERSION,
@@ -110,6 +115,7 @@ class AcpBridge:
             if error.code == -32000:
                 raise AuthenticationRequired("Model authentication is required") from error
             raise
+        await self._message_queue.join()
         self.session.set_session_id(resp.session_id)
         self.session_id = resp.session_id
         return self.session
@@ -130,6 +136,7 @@ class AcpBridge:
             raise LoadSessionFailed(session_id, str(error)) from error
         except Exception as err:
             raise LoadSessionFailed(session_id, str(err)) from err
+        await self._message_queue.join()
         if resp is not None and getattr(resp, "modes", None):
             logger.debug("acp session loaded: session=%s modes=%s", session_id, resp.modes)
         return self.session
@@ -165,6 +172,10 @@ class AcpBridge:
             if error.code == -32000:
                 raise AuthenticationRequired("Model authentication is required") from error
             raise
+        finally:
+            # Responses bypass SDK notification dispatch. Drain earlier native updates
+            # before the caller finalizes snapshots, including failed requests.
+            await self._message_queue.join()
         raw_stop = getattr(resp, "stop_reason", None)
         stop = StopReason(raw_stop) if raw_stop else StopReason.END_TURN
         return PromptResult(stop_reason=stop, usage=getattr(resp, "usage", None))

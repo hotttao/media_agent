@@ -5,7 +5,7 @@ agent:
 capabilities:
   system_prompt: true
   mcp: true
-  skills: false
+  skills: true
   questions: false
   reconnect: true
   permissions: true

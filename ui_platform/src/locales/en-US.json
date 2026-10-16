@@ -247,6 +247,10 @@
 		"startingAgent": "Starting Agent… The first session may take a few seconds."
 	},
 	"agentRequest": {
+		"allowOnce": "Allow once",
+		"allowAlways": "Always allow",
+		"rejectOnce": "Deny once",
+		"rejectAlways": "Always deny",
 		"permission": "The agent requests permission",
 		"input": "The agent needs your input",
 		"failed": "Request failed",
