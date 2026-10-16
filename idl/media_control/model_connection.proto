@@ -1,0 +1,13 @@
+syntax="proto3";
+package media_control.model_connection;
+import "api.proto";import "google/api/annotations.proto";
+option go_package="media_control/model_connection";
+message Connection {string id=1;string name=2;string kind=3;string status=4;int64 version=5;int64 created_at=6;int64 updated_at=7;}
+message Connections {repeated Connection connections=1;}
+message Query {}
+message Command {string connection_id=1 [(api.path)="connection_id"];string name=2 [(api.body)="name"];string auth_json=3 [(api.body)="auth_json"];int64 expected_version=4 [(api.body)="expected_version"];}
+service ModelConnectionService {
+rpc CreateConnection(Command)returns(Connection){option(api.post)="/api/v1/model-connections";option(google.api.http)={post:"/api/v1/model-connections" body:"*"};}
+rpc ListConnections(Query)returns(Connections){option(api.get)="/api/v1/model-connections";option(google.api.http)={get:"/api/v1/model-connections"};}
+rpc UpdateConnection(Command)returns(Connection){option(api.put)="/api/v1/model-connections/:connection_id";option(google.api.http)={put:"/api/v1/model-connections/{connection_id}" body:"*"};}
+rpc RevokeConnection(Command)returns(Connection){option(api.post)="/api/v1/model-connections/:connection_id/revoke";option(google.api.http)={post:"/api/v1/model-connections/{connection_id}/revoke" body:"*"};}}

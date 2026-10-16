@@ -3,7 +3,7 @@
 ## 限界上下文
 
 - [认证上下文](media_auth/CONTEXT.md) — 用户身份、企业、部门、成员关系、API Token 与 OAuth 凭据
-- [控制上下文](media_control/CONTEXT.md) — 部门所属 Workspace、运行环境、Agent 配置、定时计划与 Teamwork 拓扑
+- [控制上下文](media_control/CONTEXT.md) — 部门所属 Workspace、个人模型连接、运行环境、Agent 配置、定时计划与 Teamwork 拓扑
 - [Agent 网关上下文](media_agent_gateway/CONTEXT.md) — Agent Session 注册、访问控制、执行任务接入、SSE 协议适配、MCP 服务注册目录与统一 MCP 入口
 - [Agent 执行上下文](media_agents/CONTEXT.md) — Runtime Session、Turn 队列、模型/工具执行、交互记录与可恢复事件
 - [Plugin 上下文](media_plugin/CONTEXT.md) — 具体 Plugin 能力、Workspace 启用关系与外部 OAuth MCP 连接

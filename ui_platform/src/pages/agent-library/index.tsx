@@ -78,6 +78,9 @@ export function AgentLibraryPage() {
           >
             {i18n.language.startsWith("zh") ? "English" : "中文"}
           </Button>
+          <Link to="/model-connections" className="text-sm">
+            {t("modelConnections.title")}
+          </Link>
           <SignOutButton />
         </div>
       </header>

@@ -1,8 +1,10 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   createWorkspace,
+  listAvailableModelConnections,
   updateWorkspace,
 } from "@/domains/workspace/lib/workspace-client";
 import {
@@ -15,6 +17,7 @@ import {
   listOrganizations,
 } from "@/foundation/lib/hierarchy-client";
 import type { Organization, Team } from "@/foundation/types/hierarchy";
+import type { ModelConnectionChoice } from "@/foundation/types/model-connection";
 
 export function WorkspaceFormDialog({
   mode,
@@ -38,6 +41,9 @@ export function WorkspaceFormDialog({
   const [name, setName] = useState("");
   const [agentType, setAgentType] = useState<AgentType>("codex");
   const [apiKey, setApiKey] = useState("");
+  const [authMode, setAuthMode] = useState("api_key");
+  const [connectionID, setConnectionID] = useState("");
+  const [connections, setConnections] = useState<ModelConnectionChoice[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -46,6 +52,8 @@ export function WorkspaceFormDialog({
       setName(workspace?.name ?? "");
       setAgentType(workspace?.agent_type ?? "codex");
       setApiKey("");
+      setAuthMode(workspace?.model_connection_id ? "connection" : "api_key");
+      setConnectionID(workspace?.model_connection_id ?? "");
       setError("");
     }
   }, [open, workspace]);
@@ -83,6 +91,20 @@ export function WorkspaceFormDialog({
       active = false;
     };
   }, [open, mode]);
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    listAvailableModelConnections()
+      .then((v) => {
+        if (active) setConnections(v.filter((c) => c.status === "active"));
+      })
+      .catch(() => {
+        if (active) setConnections([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open]);
   if (!open) return null;
 
   async function submit(event: FormEvent) {
@@ -90,6 +112,7 @@ export function WorkspaceFormDialog({
     if (
       !name.trim() ||
       saving ||
+      (authMode === "connection" && !connectionID) ||
       (mode === "create" && (!organizationID || !teamID))
     )
       return;
@@ -99,7 +122,8 @@ export function WorkspaceFormDialog({
       const input = {
         name: name.trim(),
         agent_type: agentType,
-        api_key: apiKey.trim(),
+        api_key: authMode === "api_key" ? apiKey.trim() : "",
+        model_connection_id: authMode === "connection" ? connectionID : "",
       };
       const value =
         mode === "create"
@@ -221,7 +245,11 @@ export function WorkspaceFormDialog({
           <select
             aria-label="Agent"
             value={agentType}
-            onChange={(event) => setAgentType(event.target.value as AgentType)}
+            onChange={(event) => {
+              setAgentType(event.target.value as AgentType);
+              setAuthMode("api_key");
+              setConnectionID("");
+            }}
             className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm"
           >
             {AGENT_TYPE_OPTIONS.map((option) => (
@@ -231,22 +259,77 @@ export function WorkspaceFormDialog({
             ))}
           </select>
         </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">API key</span>
-          <input
-            aria-label={mode === "create" ? "API key" : "Settings API key"}
-            type="password"
-            autoComplete="off"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder={
-              workspace?.api_key_configured
-                ? "Configured — leave blank to keep"
-                : "Optional"
-            }
-            className="w-full rounded-xl border px-3 py-2.5 text-sm"
-          />
-        </label>
+        {agentType === "codex" && (
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium">
+              {t("modelConnections.authentication")}
+            </span>
+            <select
+              aria-label={t("modelConnections.authentication")}
+              className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm"
+              value={authMode}
+              onChange={(e) => {
+                setAuthMode(e.target.value);
+                setApiKey("");
+              }}
+            >
+              <option value="api_key">API Key</option>
+              <option value="connection">
+                {t("modelConnections.personal")}
+              </option>
+            </select>
+          </label>
+        )}
+        {agentType === "codex" && authMode === "connection" ? (
+          <div className="space-y-2">
+            <label className="block text-sm">
+              {t("modelConnections.select")}
+              <select
+                className="mt-2 w-full rounded-xl border bg-white px-3 py-2.5"
+                aria-label={t("modelConnections.select")}
+                value={connectionID}
+                onChange={(e) => setConnectionID(e.target.value)}
+                required
+              >
+                <option value="">{t("modelConnections.choose")}</option>
+                {connectionID &&
+                  !connections.some((c) => c.id === connectionID) && (
+                    <option value={connectionID}>
+                      {t("modelConnections.configured")}
+                    </option>
+                  )}
+                {connections.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-xs text-slate-500">
+              {t("modelConnections.workspaceAccess")}
+            </p>
+            <Link className="text-sm underline" to="/model-connections">
+              {t("modelConnections.manage")}
+            </Link>
+          </div>
+        ) : (
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium">API key</span>
+            <input
+              aria-label={mode === "create" ? "API key" : "Settings API key"}
+              type="password"
+              autoComplete="off"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder={
+                workspace?.api_key_configured
+                  ? "Configured — leave blank to keep"
+                  : "Optional"
+              }
+              className="w-full rounded-xl border px-3 py-2.5 text-sm"
+            />
+          </label>
+        )}
         {error && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
             {error}
@@ -260,6 +343,7 @@ export function WorkspaceFormDialog({
             type="submit"
             disabled={
               !name.trim() ||
+              (authMode === "connection" && !connectionID) ||
               saving ||
               (mode === "create" &&
                 (!organizationID || !teamID || loadingHierarchy))

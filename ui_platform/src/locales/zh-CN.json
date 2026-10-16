@@ -216,5 +216,31 @@
 		"authentication": "模型登录缺失或已失效，请先在工作空间设置中配置模型凭据，再恢复会话。",
 		"failed": "Agent 未能完成本轮执行。请检查配置后恢复会话。",
 		"resumeFailed": "恢复会话失败。"
+	},
+	"modelConnections": {
+		"title": "模型连接",
+		"back": "返回工作台",
+		"description": "个人 Codex 登录连接，可供多个工作空间明确选择复用。认证文件加密保存，不回显。",
+		"empty": "尚无模型连接，请导入 auth.json。",
+		"name": "连接名称",
+		"import": "导入 auth.json",
+		"edit": "编辑连接",
+		"save": "保存连接",
+		"saving": "正在保存…",
+		"cancel": "取消",
+		"revoke": "撤销",
+		"confirmRevoke": "确定撤销该连接？引用它的工作空间后续执行将被阻止。",
+		"active": "可用",
+		"revoked": "已撤销",
+		"failed": "保存模型连接失败。",
+		"tooLarge": "auth.json 不能超过64 KiB。",
+		"writeOnly": "选择 Codex 登录生成的 auth.json。仅修改名称时无需重新选文件。凭据不回显，不保存到浏览器存储。",
+		"authentication": "模型认证方式",
+		"personal": "个人 Codex 连接",
+		"select": "模型连接",
+		"choose": "请选择连接",
+		"manage": "管理模型连接",
+		"workspaceAccess": "有权执行此工作空间的成员可通过 Agent 使用该模型连接，但无法查看凭据。",
+		"configured": "已配置个人模型连接"
 	}
 }

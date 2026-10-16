@@ -45,6 +45,7 @@ message CreateWorkspaceRequest {
   string api_key = 3 [(api.body) = "api_key"];
   string organization_id = 4 [(api.body) = "organization_id"];
   string team_id = 5 [(api.body) = "team_id"];
+  string model_connection_id = 6 [(api.body) = "model_connection_id"];
 }
 
 message ListWorkspacesRequest {}
@@ -58,6 +59,7 @@ message UpdateWorkspaceRequest {
   string name = 2 [(api.body) = "name"];
   string agent_type = 3 [(api.body) = "agent_type"];
   string api_key = 4 [(api.body) = "api_key"];
+  optional string model_connection_id = 5 [(api.body) = "model_connection_id"];
 }
 
 message GetRuntimeContextRequest {
@@ -79,6 +81,7 @@ message WorkspaceResponse {
   string team_id = 11;
   string created_by = 12;
   string desired_state = 13;
+  string model_connection_id = 14;
 }
 
 message ListWorkspacesResponse {
@@ -93,6 +96,9 @@ message RuntimeContextResponse {
   int64 context_version = 5;
  string agent_configuration_id = 6;
  string metadata_target_context_version = 7;
+ string codex_auth_json = 8;
+ string model_connection_id = 9;
+ int64 model_connection_version = 10;
 }
 
 message WorkspacePermissions { bool can_view=1;bool can_manage=2; }

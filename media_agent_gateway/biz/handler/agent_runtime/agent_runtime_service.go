@@ -82,7 +82,7 @@ func GetExecutionContext(ctx context.Context, c *app.RequestContext) {
 		fail(c, err)
 		return
 	}
-	c.JSON(200, &dto.ExecutionContext{ApiKey: value.APIKey, SessionToken: value.SessionToken, ExecutionEpoch: value.ExecutionEpoch, ContextVersion: value.ContextVersion})
+	c.JSON(200, &dto.ExecutionContext{ApiKey: value.APIKey, CodexAuthJson: value.CodexAuthJSON, ModelConnectionId: value.ModelConnectionID, ModelConnectionVersion: value.ModelConnectionVersion, SessionToken: value.SessionToken, ExecutionEpoch: value.ExecutionEpoch, ContextVersion: value.ContextVersion})
 }
 func ResumeSession(ctx context.Context, c *app.RequestContext) {
 	if !ready(c) {
@@ -103,6 +103,8 @@ func ResumeSession(ctx context.Context, c *app.RequestContext) {
 func fail(c *app.RequestContext, err error) {
 	status, code := 503, "runtime_unavailable"
 	switch {
+	case errors.Is(err, client.ErrModelAuthenticationRequired):
+		status, code = 409, "model_authentication_required"
 	case errors.Is(err, client.ErrAgentCredentialRejected):
 		status, code = 401, "agent_credential_rejected"
 	case errors.Is(err, workflow.ErrMetadataForbidden), errors.Is(err, session.ErrForbidden), errors.Is(err, client.ErrNativeIdentity):

@@ -15,8 +15,10 @@ from adapter.agent_environment import read_runtime_config
 from adapter.agent_lifespan import agent_lifespan
 from adapter.biz.api.v1.routes.usage.router import build_usage_router
 from adapter.biz.shared.managed_process import ManagedProcessSpec
+from adapter.biz.workflow.execute_turn_flow import RuntimeCredentials
 from adapter.clients.cp import CpClient
 from adapter.runtime_metadata_files import codex_home
+from codex.authentication import configure_authentication
 from codex.bridge import CodexAcpBridge
 from codex.config import CodexHooks, load_codex_config
 
@@ -51,6 +53,11 @@ def create_app() -> FastAPI:
             )
         )
 
+    def credential_bridge_setup(
+        bridge: object, credentials: RuntimeCredentials, session_id: str
+    ) -> None:
+        configure_authentication(bridge, credentials, session_id, Path(cfg.workspace.dir))
+
     @asynccontextmanager
     async def codex_lifespan(app: FastAPI) -> AsyncIterator[None]:
         auxiliary = os.environ.get("CODEX_AUX_PROCESSES", "false").lower() in {
@@ -70,6 +77,7 @@ def create_app() -> FastAPI:
         bridge_factory=bridge_factory,
         extra_lifespan=codex_lifespan,
         metadata_bridge_setup=metadata_bridge_setup,
+        credential_bridge_setup=credential_bridge_setup,
     )
     app.include_router(
         build_usage_router(

@@ -1,4 +1,6 @@
+import "@/foundation/lib/i18n";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Workspace } from "@/domains/workspace/types";
 import { WorkspaceFormDialog } from "./workspace-form-dialog";
@@ -93,6 +95,7 @@ describe("WorkspaceFormDialog", () => {
       name: "Claude workspace",
       agent_type: "claude-code",
       api_key: "sk-ant-secret",
+      model_connection_id: "",
       organization_id: "org",
       team_id: "team",
     });
@@ -196,5 +199,77 @@ describe("WorkspaceFormDialog", () => {
     expect((screen.getByLabelText("API key") as HTMLInputElement).value).toBe(
       "temporary-secret",
     );
+  });
+});
+
+it("requires explicit personal connection selection and clears the API key alternative", async () => {
+  const workspace = {
+    ...claudeWorkspace,
+    name: "Codex workspace",
+    agent_id: "codex",
+    agent_type: "codex" as const,
+  };
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+    async (input) =>
+      new Response(
+        JSON.stringify(
+          String(input) === "/api/v1/model-connections"
+            ? {
+                connections: [
+                  {
+                    id: "connection",
+                    name: "本机 Codex",
+                    kind: "codex_auth_json",
+                    status: "active",
+                    version: 1,
+                  },
+                ],
+              }
+            : {
+                ...workspace,
+                model_connection_id: "connection",
+                api_key_configured: false,
+              },
+        ),
+        { status: 200 },
+      ),
+  );
+  const onSaved = vi.fn();
+  render(
+    <MemoryRouter>
+      <WorkspaceFormDialog
+        mode="edit"
+        workspace={workspace}
+        open
+        onClose={vi.fn()}
+        onSaved={onSaved}
+      />
+    </MemoryRouter>,
+  );
+  fireEvent.change(screen.getByLabelText("Settings API key"), {
+    target: { value: "discarded-key" },
+  });
+  fireEvent.change(screen.getByLabelText("Model authentication"), {
+    target: { value: "connection" },
+  });
+  await screen.findByRole("option", { name: "本机 Codex" });
+  expect(
+    (screen.getByLabelText("Model connection") as HTMLSelectElement).value,
+  ).toBe("");
+  expect(
+    (screen.getByRole("button", { name: "Save changes" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  fireEvent.change(screen.getByLabelText("Model connection"), {
+    target: { value: "connection" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  const call = fetchMock.mock.calls.find((c) => c[1]?.method === "PUT");
+  expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+    name: "Codex workspace",
+    agent_type: "codex",
+    api_key: "",
+    model_connection_id: "connection",
   });
 });

@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"log"
+	modelconnectionrepo "media_agent/media_control/biz/dal/repo/model_connection"
+	modelconnectionhandler "media_agent/media_control/biz/handler/model_connection"
+	modelconnectionservice "media_agent/media_control/biz/service/model_connection"
 	"os"
 	"path/filepath"
 	"time"
@@ -129,6 +132,10 @@ func main() {
 	teamAccess := mediaauthclient.New(mediaAuthURL, mediaAuthInternalToken, nil)
 	agentidentityhandler.Configure(agentidentityservice.New(repo.New(db), teamAccess))
 	workspaceApplication := workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())), teamAccess)
+	modelConnections := modelconnectionservice.New(modelconnectionrepo.New(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())))
+	modelconnectionhandler.Configure(modelConnections)
+	workspaceApplication.WithModelConnections(modelConnections)
+	workspacehandler.ConfigureModelConnections(modelConnections)
 	workspacehandler.Configure(workspaceApplication, internalToken)
 	if cfg.GetAgentMetadata().GetEnabled() {
 		workspacehandler.ConfigureCreation(&workspacecreation.Flow{Workspaces: workspaceApplication, Metadata: metadataservice.New(metadatarepo.New(db), dal.NewTxRunner(db)), Tx: dal.NewTxRunner(db)})

@@ -18,7 +18,7 @@ docker compose --env-file "$agent_product_env" -f media_control/docker-compose.y
 docker compose --env-file "$agent_product_env" -f media_agent_gateway/docker-compose.yml up -d --no-deps --build media_agent_gateway
 ```
 
-Edge 路由通过既有动态配置挂载加载；Oathkeeper rules 修改后需重启既有 Oathkeeper 服务。不要启动旧 Gateway Compose 中的固定 Codex/Claude 服务或其 host Broker；本产品 Broker 在 media-auth 网络中，由创建服务按 Workspace 启动 Agent。
+Edge 路由使用既有动态配置挂载，当前 watch=false，修改后需执行 `docker restart media-agent-gateway` 加载；Oathkeeper rules 修改后需重启既有 Oathkeeper 服务。不要启动旧 Gateway Compose 中的固定 Codex/Claude 服务或其 host Broker；本产品 Broker 在 media-auth 网络中，由创建服务按 Workspace 启动 Agent。
 
 `.agent-product/` 和 `media_agent_gateway/.secrets/` 为忽略提交的私有部署材料，product.env/策略/私钥0600，目录0700。Gateway 的 runtime_bootstrap volume 保管加密后的 Agent 凭据。保留这些目录、volume和密钥以支持正常重启；不要输出 env 或 Docker inspect Env 到 review/log。Auth 继续拥有凭据授权事实，Controller 只负责创建，Agent 配置仍来自 Control。
 
@@ -33,3 +33,13 @@ Edge 路由通过既有动态配置挂载加载；Oathkeeper rules 修改后需�
 模型服务需要出网代理时，在私有 product.env 设置 AGENT_HTTP_PROXY、AGENT_HTTPS_PROXY、AGENT_NO_PROXY，重新执行准备命令并重启创建服务后，新建 Agent 容器才会使用。代理地址必须从容器可达；宿主127.0.0.1不是容器宿主地址。NO_PROXY 应包含 Gateway、Broker、数据库及内部域名。不要把带凭据的代理地址提交仓库。
 
 Control、Gateway 与 Agent 必须使用 product.env 中同一 MEDIA_AGENTS_RABBITMQ_URL（product-broker 内网地址）。Compose 允许显式覆盖旧部署的 host Broker 默认值；只检查历史回放不能证明实时 delta 与元数据通知已接通。
+
+个人 Codex 登录可在“模型连接”页上传 auth.json，按用户加密存储并作为可选连接，不自动绑定 Workspace。创建或编辑 Workspace 时选择“个人 Codex 连接”。更新文件使用连接编辑入口；撤销后停止后续 claim。工作台不会读取开发者主目录作为隐式默认账号。
+
+宿主代理仅监听127.0.0.1:7897时，可使用可选的正式本机转发服务（只监听Docker宿主内网地址，不读取凭据）：
+
+```bash
+docker compose --env-file docker-compose/.agent-product/product.env -f docker-compose/docker-compose.agent-product.yml --profile model-proxy up -d agent-model-proxy
+```
+
+在私有 product.env 配置 AGENT_HTTP_PROXY/AGENT_HTTPS_PROXY 为 http://172.27.0.1:17897，AGENT_NO_PROXY 包含内部服务与数据库地址，执行准备命令并重启 Controller。既有 Agent 需在空闲时重建以使用新部署配置；连接 auth.json 的上传和替换无需重建容器。

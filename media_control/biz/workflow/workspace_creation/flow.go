@@ -2,6 +2,8 @@ package workspace_creation
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	config "media_agent/media_control/biz/domain/agent_configuration"
 	domain "media_agent/media_control/biz/domain/workspace"
 	metadata "media_agent/media_control/biz/service/agent_configuration"
@@ -42,4 +44,44 @@ func (f *Flow) Create(ctx context.Context, cmd workspace.CreateCommand) (*domain
 		return nil, err
 	}
 	return value, nil
+}
+
+// Update keeps the selected metadata content while confirming an explicit credential change.
+func (f *Flow) Update(ctx context.Context, cmd workspace.UpdateCommand) (*domain.ConfiguredWorkspace, error) {
+	w := f.Workspaces.(interface {
+		PrepareUpdate(context.Context, workspace.UpdateCommand) (*domain.ConfiguredWorkspace, error)
+		StoreUpdate(context.Context, *domain.ConfiguredWorkspace) error
+	})
+	v, e := w.PrepareUpdate(ctx, cmd)
+	if e != nil {
+		return nil, e
+	}
+	reader := f.Metadata.(interface {
+		Get(context.Context, string, string, string, int64, bool) (*config.Release, bool, error)
+	})
+	previous, _, e := reader.Get(ctx, v.Workspace.ID, v.AgentConfiguration.ID, "", 0, false)
+	if e != nil && !errors.Is(e, config.ErrNotFound) {
+		return nil, e
+	}
+	confirm := v.ModelConnectionID != "" || cmd.ModelConnectionID != nil
+	e = f.Tx.RunInTx(ctx, func(tx context.Context) error {
+		if e := w.StoreUpdate(tx, v); e != nil {
+			return e
+		}
+		if !confirm || (previous != nil && previous.SelectionRevision == v.AgentConfiguration.Version) {
+			return nil
+		}
+		snapshot := config.Snapshot{WorkspaceID: v.Workspace.ID, AgentConfigID: v.AgentConfiguration.ID, AgentType: v.AgentType, PlatformPromptTemplateVersion: "2", Prompt: &config.PromptSelection{Mode: "none"}, Resources: []config.Resource{}}
+		if previous != nil {
+			snapshot = previous.Snapshot
+			snapshot.AgentType = v.AgentType
+		}
+		release, e := f.Metadata.ConfirmInTransaction(tx, snapshot, cmd.UserID, fmt.Sprintf("model-binding-%d", v.AgentConfiguration.Version), fmt.Sprintf("model-binding-%d", v.AgentConfiguration.Version), v.AgentConfiguration.Version)
+		if e != nil {
+			return e
+		}
+		v.AgentConfiguration.Version = release.SelectionRevision
+		return nil
+	})
+	return v, e
 }

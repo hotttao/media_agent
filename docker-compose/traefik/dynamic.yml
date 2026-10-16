@@ -53,7 +53,7 @@ http:
       middlewares: [oathkeeper-forward-auth]
       service: workflow
     control:
-      rule: "PathPrefix(`/api/v1/workspaces`) || PathPrefix(`/api/v1/prompts`) || PathPrefix(`/api/v1/skills`)"
+      rule: "PathPrefix(`/api/v1/workspaces`) || PathPrefix(`/api/v1/model-connections`) || PathPrefix(`/api/v1/prompts`) || PathPrefix(`/api/v1/skills`)"
       priority: 60
       middlewares: [oathkeeper-forward-auth]
       service: control

@@ -16,6 +16,8 @@ import (
 type AgentContext struct {
 	WorkspaceID, AgentID, AgentType, APIKey, AgentConfigID, MetadataTargetContextVersion string
 	ContextVersion                                                                       int64
+	CodexAuthJSON, ModelConnectionID                                                     string
+	ModelConnectionVersion                                                               int64
 }
 
 type ContextProvider interface {

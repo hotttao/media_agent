@@ -36,10 +36,10 @@ type Workspace struct {
 }
 
 type AgentConfiguration struct {
-	ID, WorkspaceID, AgentID, AgentType string
-	EncryptedAPIKey                     []byte
-	Version                             int64
-	CreatedAt, UpdatedAt                time.Time
+	ID, WorkspaceID, AgentID, AgentType, ModelConnectionID string
+	EncryptedAPIKey                                        []byte
+	Version                                                int64
+	CreatedAt, UpdatedAt                                   time.Time
 }
 
 type ConfiguredWorkspace struct {

@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	session "media_agent/media_agent_gateway/biz/domain/agent_session"
 	sessions "media_agent/media_agent_gateway/biz/service/agent_session"
 	"media_agent/media_agent_gateway/biz/shared/client"
@@ -18,8 +19,10 @@ type ExecutionContextCommand struct {
 	ExecutionEpoch                                                          int64
 }
 type ExecutionCredentials struct {
-	APIKey, SessionToken           string
-	ExecutionEpoch, ContextVersion int64
+	APIKey, SessionToken             string
+	CodexAuthJSON, ModelConnectionID string
+	ModelConnectionVersion           int64
+	ExecutionEpoch, ContextVersion   int64
 }
 
 func NewExecutionContext(reg *InstanceRegistration, repo session.BindingRepository, sessions *sessions.Service, routing *SessionRouting) *ExecutionContext {
@@ -67,6 +70,9 @@ func (w *ExecutionContext) Get(ctx context.Context, token, credential string, cm
 	}
 	fixed, err := w.sessions.RuntimeContext(ctx, s, "")
 	if err != nil {
+		if errors.Is(err, client.ErrModelAuthenticationRequired) {
+			return ExecutionCredentials{}, err
+		}
 		return ExecutionCredentials{}, ErrMetadataUnavailable
 	}
 	if fixed.ContextVersion != s.ContextVersion || fixed.AgentConfigID != s.AgentConfigID {
@@ -76,7 +82,7 @@ func (w *ExecutionContext) Get(ctx context.Context, token, credential string, cm
 	if err != nil || sessionToken == "" {
 		return ExecutionCredentials{}, ErrMetadataUnavailable
 	}
-	return ExecutionCredentials{fixed.APIKey, sessionToken, cmd.ExecutionEpoch, s.ContextVersion}, nil
+	return ExecutionCredentials{APIKey: fixed.APIKey, SessionToken: sessionToken, ExecutionEpoch: cmd.ExecutionEpoch, ContextVersion: s.ContextVersion, CodexAuthJSON: fixed.CodexAuthJSON, ModelConnectionID: fixed.ModelConnectionID, ModelConnectionVersion: fixed.ModelConnectionVersion}, nil
 }
 func (w *ExecutionContext) Resume(ctx context.Context, id, user, operation string, epoch int64) (*client.RuntimeSession, error) {
 	s, err := w.sessions.Authorize(ctx, id, user)

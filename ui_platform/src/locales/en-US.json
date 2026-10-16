@@ -263,5 +263,31 @@
 		"authentication": "Model authentication is missing or expired. Configure model credentials in Workspace settings before resuming.",
 		"failed": "The Agent stopped before completing this turn. Check configuration and resume the session.",
 		"resumeFailed": "Unable to resume the session."
+	},
+	"modelConnections": {
+		"title": "Model connections",
+		"back": "Back to workbench",
+		"description": "Personal Codex connections, reusable across your workspaces. Authentication files are encrypted and never shown again.",
+		"empty": "No model connections yet. Import auth.json to begin.",
+		"name": "Connection name",
+		"import": "Import auth.json",
+		"edit": "Edit connection",
+		"save": "Save connection",
+		"saving": "Saving…",
+		"cancel": "Cancel",
+		"revoke": "Revoke",
+		"confirmRevoke": "Revoke this connection? Future executions in bound workspaces will be blocked.",
+		"active": "Active",
+		"revoked": "Revoked",
+		"failed": "Unable to save the model connection.",
+		"tooLarge": "auth.json must be at most 64 KiB.",
+		"writeOnly": "Select the auth.json produced by your Codex login. Leave the file empty when renaming. Secrets are never displayed or stored in browser storage.",
+		"authentication": "Model authentication",
+		"personal": "Personal Codex connection",
+		"select": "Model connection",
+		"choose": "Choose a connection",
+		"manage": "Manage model connections",
+		"workspaceAccess": "People authorized to run this workspace can use the selected model connection through the Agent. They cannot view its credentials.",
+		"configured": "Personal model connection configured"
 	}
 }

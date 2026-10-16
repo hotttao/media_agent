@@ -81,3 +81,15 @@ Docker 创建策略可配置 HTTPProxy、HTTPSProxy、NoProxy，仅部署侧设�
 Agent 浏览器登录/登出通过当前同源 Edge 调用 Kratos。允许 Kratos 返回同协议、同 hostname 的其他端口地址，仅保留预期 self-service 路径及查询参数并归一为当前 origin；跨主机、跨协议、URL 用户信息、fragment 和错误路径均拒绝。模型/API 凭据不参与浏览器登录。
 
 Chat Session 响应附带 Agent runtime_status 与 execution_epoch，失败/中断暂停后由用户显式 Resume；安全模型认证错误分类为 model_authentication_required。暂停提交返回409，其他 Agent 参数错误返回400，不泄漏上游响应体。
+
+## F5 个人模型连接
+
+Control 提供 /api/v1/model-connections 的创建、本人列表、按 ID 更新与 revoke；请求可提交 auth_json，响应仅返回 ID/name/kind/status/version。Workspace Create/Update 支持 model_connection_id（更新可选、空值断开），当前配置和历史同时保存引用，与 API Key 互斥。内部 runtime-context 和 execution-context 新增 codex_auth_json、model_connection_id、model_connection_version；仅已校验执行者获得。
+
+UI 增加“模型连接”管理入口、auth.json 文件导入/替换、重命名与撤销确认；无凭据预览。Workspace 表单明确选择 API Key 或个人连接，提交连接前提示授权 Workspace 使用者可通过 Agent 使用连接。用户已授权本机导入默认候选“本机 Codex”，不自动绑定其他 Workspace。Agent 负责600私有文件与原生适配，按连接版本更新，API Key/其他连接切换清理旧运行认证。
+
+个人连接表 model_connections：ID/owner_user_id/name/kind/status/version/encrypted_auth/created_at/updated_at。密文为包含连接ID、owner、认证revision和原生认证正文的 AES-GCM envelope；读取校验作用域。公开version用于CAS，仅替换认证时改变私有认证revision，重命名保留原生刷新状态。当前和历史 agent configuration 新增 model_connection_id；数据库约束与 API Key 互斥，版本触发器记录完整引用。
+
+创建请求 `{name,auth_json}`；更新请求 `{name,auth_json?,expected_version}`，空/省略认证保留原文；撤销请求 `{expected_version}` 并擦除密文。列表响应 `{connections:[{id,name,kind,status,version,created_at,updated_at}]}`。格式不合法400、其他owner404、CAS冲突409。auth_json 最大64KiB对象，接受原生tokens.access_token/refresh_token或OPENAI_API_KEY，响应不包含正文。
+
+Workspace明确修改连接时在同一事务保存引用、配置历史及沿用现有固定内容的新Release/Outbox；已有Session仍固定旧身份。运行上下文中的model_connection_version是私有认证revision，不等于管理列表CAS version。内部上下文遭撤销时以 model_authentication_required 拒绝执行，不作为可无限重试的网络故障。Agent保留同一认证revision的原生刷新结果，显式替换才覆盖auth.json。

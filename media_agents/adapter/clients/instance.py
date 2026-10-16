@@ -12,6 +12,7 @@ from pydantic import SecretStr
 from adapter.biz.domain.runtime_session.errors import (
     ExecutionCredentialsDeferred,
     ExecutionCredentialsRejected,
+    ModelAuthenticationRequired,
 )
 from adapter.biz.domain.runtime_session.ownership import InstanceScope
 from adapter.biz.workflow.execute_turn_flow import RuntimeCredentials
@@ -135,6 +136,11 @@ class GatewayInstanceClient:
                     "turn_id": turn_id,
                 },
             )
+            if (
+                response.status_code == 409
+                and response.json().get("error") == "model_authentication_required"
+            ):
+                raise ModelAuthenticationRequired("Model authentication is required")
             if response.status_code >= 500 or response.status_code == 429:
                 raise ExecutionCredentialsDeferred()
             if response.status_code != 200:
@@ -144,6 +150,9 @@ class GatewayInstanceClient:
                 raise ExecutionCredentialsRejected()
             return RuntimeCredentials(
                 api_key=value.get("api_key") or None,
+                codex_auth_json=value.get("codex_auth_json") or None,
+                model_connection_id=value.get("model_connection_id") or "",
+                model_connection_version=value.get("model_connection_version") or 0,
                 session_token=value["session_token"],
                 mcp_url=cfg.gateway_url.rstrip("/") + "/mcp",
                 mcp_headers={

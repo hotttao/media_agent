@@ -54,3 +54,7 @@ class ExecutionCredentialsDeferred(RuntimeSessionError):
 class ExecutionCredentialsRejected(RuntimeSessionError):
     def __init__(self) -> None:
         super().__init__("execution_credentials_rejected")
+
+
+class ModelAuthenticationRequired(RuntimeSessionError):
+    """The selected model connection is unavailable or revoked."""

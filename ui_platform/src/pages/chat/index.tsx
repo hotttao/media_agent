@@ -52,6 +52,7 @@ import { useAppHeaderSlot } from "@/foundation/components/app-window";
 import { SegmentedDock } from "@/foundation/components/segmented-dock";
 import { SignOutButton } from "@/foundation/components/sign-out-button";
 import { WorkspaceLayout } from "@/foundation/components/workspace-layout";
+import { appPath } from "@/foundation/lib/app-path";
 import { useAuth } from "@/foundation/providers/auth-provider";
 import { SlotProvider, useSlots } from "@/foundation/providers/slot-provider";
 import { createAppRegistry } from "@/foundation/slots/app-registry";
@@ -385,10 +386,14 @@ function SettingsApp() {
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-slate-500">
-              API key
+              {t("modelConnections.authentication")}
             </dt>
             <dd className="mt-1 font-medium">
-              {workspace.api_key_configured ? "Configured" : "Not configured"}
+              {workspace.model_connection_id
+                ? t("modelConnections.configured")
+                : workspace.api_key_configured
+                  ? "Configured"
+                  : "Not configured"}
             </dd>
           </div>
         </dl>
@@ -557,6 +562,15 @@ function Menubar({
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" onClick={onLibrary}>
           {t("catalog.library")}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            window.location.href = appPath("/model-connections");
+          }}
+        >
+          {t("modelConnections.title")}
         </Button>
         <SignOutButton />
       </div>

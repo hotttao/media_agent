@@ -107,3 +107,7 @@ _禁用替代词_：Workspace Configuration、Runtime Environment
 **Agent Workload Target（Agent 工作负载目标）**：
 Control 保存的 Agent 承载资源期望，关联配置与 Placement，并确定目标副本数和资源配置；与环境实际资源及执行实例状态分别建模。
 _禁用替代词_：Pod 状态、Session Binding、Gateway 配置缓存
+
+**Model Connection（个人模型连接）**:
+用户拥有的可复用模型认证配置，Workspace 通过明确选择引用。
+_禁用替代词_：企业资源、CredentialReference、模型本身。

@@ -45,7 +45,12 @@ export async function createWorkspace(
 
 export async function updateWorkspace(
   workspaceId: string,
-  input: { name: string; agent_type: AgentType; api_key: string },
+  input: {
+    name: string;
+    agent_type: AgentType;
+    api_key: string;
+    model_connection_id?: string;
+  },
 ): Promise<Workspace> {
   const response = await checked(
     await fetch(`/api/v1/workspaces/${workspaceId}`, {
@@ -56,4 +61,19 @@ export async function updateWorkspace(
     }),
   );
   return response.json();
+}
+
+export async function listAvailableModelConnections(): Promise<
+  import("@/foundation/types/model-connection").ModelConnectionChoice[]
+> {
+  const response = await checked(
+    await fetch("/api/v1/model-connections", { credentials: "include" }),
+  );
+  return (
+    (
+      (await response.json()) as {
+        connections?: import("@/foundation/types/model-connection").ModelConnectionChoice[];
+      }
+    ).connections ?? []
+  );
 }

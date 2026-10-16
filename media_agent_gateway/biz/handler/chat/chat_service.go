@@ -146,6 +146,10 @@ func toSessionResponse(value *domain.Session, state *client.RuntimeSession) *cha
 
 func writeError(c *app.RequestContext, err error) {
 	status := consts.StatusInternalServerError
+	if errors.Is(err, client.ErrModelAuthenticationRequired) {
+		c.JSON(409, map[string]string{"error": err.Error(), "code": "model_authentication_required"})
+		return
+	}
 	var upstream *client.APIError
 	if errors.As(err, &upstream) {
 		status = consts.StatusBadGateway

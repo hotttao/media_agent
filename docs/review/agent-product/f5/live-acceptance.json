@@ -1,0 +1,23 @@
+{
+  "realBrowser": true,
+  "realNetwork": true,
+  "importedViaUI": true,
+  "workspaceSelectedViaUI": true,
+  "newFixedSession": true,
+  "realModelReply": true,
+  "historyRestored": true,
+  "publicResponseContainsCredential": false,
+  "scriptErrors": 0,
+  "nativeAuthFileMode": "0600",
+  "profileStoredEncrypted": true,
+  "originalLoginNotModified": true,
+  "freshLogin": true,
+  "finalImage": true,
+  "exactConnectionSelector": true,
+  "selectedConnectionRetained": true,
+  "secondRealModelTurn": true,
+  "historyRetainedAfterSecondTurn": true,
+  "explicitResumeVerified": true,
+  "k3sInactive": true,
+  "k3sAutostartDisabled": true
+}

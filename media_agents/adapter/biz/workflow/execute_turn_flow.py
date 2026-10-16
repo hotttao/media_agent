@@ -20,6 +20,7 @@ from adapter.biz.domain.runtime_session.errors import (
     ExecutionCredentialsDeferred,
     ExecutionCredentialsRejected,
     InvalidTurn,
+    ModelAuthenticationRequired,
     StaleExecutionOwner,
 )
 from adapter.biz.service.runtime_session.command import SubmitTurn
@@ -44,6 +45,9 @@ class RuntimePreparation:
 class RuntimeCredentials:
     api_key: str | None = field(default=None, repr=False)
     session_token: str | None = field(default=None, repr=False)
+    codex_auth_json: str | None = field(default=None, repr=False)
+    model_connection_id: str = ""
+    model_connection_version: int = 0
     mcp_url: str | None = field(default=None, repr=False)
     mcp_headers: dict[str, str] = field(default_factory=dict, repr=False)
 
@@ -417,7 +421,7 @@ class ExecuteTurnFlow:
 
 
 def _stable_error_class(error: Exception) -> str:
-    if isinstance(error, AuthenticationRequired):
+    if isinstance(error, (AuthenticationRequired, ModelAuthenticationRequired)):
         return "model_authentication_required"
     if isinstance(error, ExecutionCredentialsRejected):
         return "execution_credentials_rejected"

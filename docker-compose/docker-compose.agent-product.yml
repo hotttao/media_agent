@@ -1,5 +1,18 @@
 # Complements the existing Auth, Control and Gateway Compose projects.
 services:
+  agent-model-proxy:
+    image: media-agent-codex:local
+    profiles: [model-proxy]
+    network_mode: host
+    healthcheck: {disable: true}
+    command: [python, /run/agent-model-proxy.py]
+    volumes: [./agent-model-proxy.py:/run/agent-model-proxy.py:ro]
+    environment:
+      MODEL_PROXY_BIND: ${MODEL_PROXY_BIND:-172.27.0.1}
+      MODEL_PROXY_PORT: ${MODEL_PROXY_PORT:-7897}
+    cap_drop: [ALL]
+    restart: unless-stopped
+    mem_limit: 64m
   product-broker:
     image: rabbitmq:4.3-management-alpine
     hostname: product-broker

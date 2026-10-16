@@ -15,6 +15,7 @@ import { AgentLibraryPage } from "@/pages/agent-library";
 import { LoginPage } from "@/pages/auth/login";
 import { RegisterPage } from "@/pages/auth/register";
 import { ChatPage } from "@/pages/chat";
+import { ModelConnectionsPage } from "@/pages/model-connections";
 import { OAuthAuthorizePage } from "@/pages/oauth/authorize";
 import { UsersListPage } from "@/pages/users/list";
 
@@ -60,6 +61,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <AgentLibraryPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/model-connections"
+        element={
+          <ProtectedRoute>
+            <ModelConnectionsPage />
           </ProtectedRoute>
         }
       />

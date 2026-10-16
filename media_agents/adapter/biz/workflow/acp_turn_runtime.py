@@ -28,10 +28,12 @@ class AcpTurnRuntime:
         server: AcpServer,
         versions: VersionLoader | None = None,
         configure: Callable[[object, Path, str], None] | None = None,
+        configure_credentials: Callable[[object, RuntimeCredentials, str], None] | None = None,
     ) -> None:
         self._server = server
         self._versions = versions
         self._configure = configure
+        self._configure_credentials = configure_credentials
 
     async def prepare(
         self, session: RuntimeSession, turn: Turn, credentials: RuntimeCredentials
@@ -43,14 +45,16 @@ class AcpTurnRuntime:
             if self._versions is not None
             else None
         )
-        setup = None
-        if directory is not None:
-            if self._configure is None:
-                raise InvalidTurn("versioned runtime configuration unavailable")
-            configure = self._configure
 
-            def setup(bridge: AcpBridge) -> None:
-                configure(bridge, directory, session.session_id)
+        def setup(bridge: AcpBridge) -> None:
+            if directory is not None:
+                if self._configure is None:
+                    raise InvalidTurn("versioned runtime configuration unavailable")
+                self._configure(bridge, directory, session.session_id)
+            if self._configure_credentials is not None:
+                self._configure_credentials(bridge, credentials, session.session_id)
+            elif credentials.codex_auth_json:
+                raise InvalidTurn("native authentication configuration unavailable")
 
         servers: list[McpServerConfig] | None = None
         if credentials.mcp_url:

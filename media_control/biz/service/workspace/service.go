@@ -14,23 +14,41 @@ import (
 	"media_agent/media_control/biz/shared/secret"
 )
 
-type CreateCommand struct{ UserID, OrganizationID, TeamID, Name, AgentType, APIKey string }
-type UpdateCommand struct{ WorkspaceID, UserID, Name, AgentType, APIKey string }
+type CreateCommand struct{ UserID, OrganizationID, TeamID, Name, AgentType, APIKey, ModelConnectionID string }
+type UpdateCommand struct {
+	WorkspaceID, UserID, Name, AgentType, APIKey string
+	ModelConnectionID                            *string
+}
 
 var ErrForbidden = errors.New("workspace access denied")
 var ErrInvalidAction = errors.New("invalid workspace action")
 
+type ModelConnections interface {
+	ValidateBinding(context.Context, string, string, string) error
+}
+
 type Service struct {
-	repo   domain.AccessRepository
-	tx     dal.TxRunner
-	cipher *secret.Cipher
-	teams  domain.TeamAccess
+	connections ModelConnections
+	repo        domain.AccessRepository
+	tx          dal.TxRunner
+	cipher      *secret.Cipher
+	teams       domain.TeamAccess
 }
 
 func New(repo domain.AccessRepository, tx dal.TxRunner, cipher *secret.Cipher, teams domain.TeamAccess) *Service {
 	return &Service{repo: repo, tx: tx, cipher: cipher, teams: teams}
 }
 
+func (s *Service) WithModelConnections(c ModelConnections) *Service { s.connections = c; return s }
+func (s *Service) validateModelConnection(ctx context.Context, id, owner, agent, key string) error {
+	if id == "" {
+		return nil
+	}
+	if key != "" || s.connections == nil {
+		return fmt.Errorf("choose one model authentication source")
+	}
+	return s.connections.ValidateBinding(ctx, id, owner, agent)
+}
 func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.ConfiguredWorkspace, error) {
 	value, err := s.PrepareCreate(ctx, cmd)
 	if err != nil {
@@ -63,6 +81,9 @@ func (s *Service) PrepareCreate(ctx context.Context, cmd CreateCommand) (*domain
 	if err != nil {
 		return nil, err
 	}
+	if err := s.validateModelConnection(ctx, cmd.ModelConnectionID, cmd.UserID, string(agentType), strings.TrimSpace(cmd.APIKey)); err != nil {
+		return nil, err
+	}
 	encrypted, err := s.cipher.Encrypt(strings.TrimSpace(cmd.APIKey))
 	if err != nil {
 		return nil, err
@@ -70,7 +91,7 @@ func (s *Service) PrepareCreate(ctx context.Context, cmd CreateCommand) (*domain
 	now := time.Now().UTC()
 	workspaceID := uuid.NewString()
 	w := &domain.Workspace{ID: workspaceID, OrganizationID: cmd.OrganizationID, TeamID: cmd.TeamID, CreatedBy: cmd.UserID, OwnerUserID: cmd.UserID, Name: cmd.Name, DesiredState: "running", Version: 1, CreatedAt: now, UpdatedAt: now}
-	a := &domain.AgentConfiguration{ID: uuid.NewString(), WorkspaceID: workspaceID, AgentID: string(agentType), AgentType: string(agentType), EncryptedAPIKey: encrypted, Version: 1, CreatedAt: now, UpdatedAt: now}
+	a := &domain.AgentConfiguration{ID: uuid.NewString(), WorkspaceID: workspaceID, AgentID: string(agentType), AgentType: string(agentType), EncryptedAPIKey: encrypted, ModelConnectionID: cmd.ModelConnectionID, Version: 1, CreatedAt: now, UpdatedAt: now}
 	return &domain.ConfiguredWorkspace{Workspace: *w, AgentConfiguration: *a}, nil
 }
 
@@ -98,7 +119,7 @@ func (s *Service) Get(ctx context.Context, id, userID string) (*domain.Configure
 	}
 	return value, nil
 }
-func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.ConfiguredWorkspace, error) {
+func (s *Service) PrepareUpdate(ctx context.Context, cmd UpdateCommand) (*domain.ConfiguredWorkspace, error) {
 	cmd.Name = strings.TrimSpace(cmd.Name)
 	if cmd.WorkspaceID == "" || cmd.UserID == "" || cmd.Name == "" {
 		return nil, fmt.Errorf("workspace, user and name are required")
@@ -137,6 +158,30 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Config
 			}
 		}
 	}
+
+	connectionID := value.ModelConnectionID
+	if cmd.ModelConnectionID != nil {
+		connectionID = strings.TrimSpace(*cmd.ModelConnectionID)
+		if connectionID != "" {
+			if newAPIKey != "" {
+				return nil, fmt.Errorf("choose one model authentication source")
+			}
+			if connectionID != value.ModelConnectionID {
+				if err := s.validateModelConnection(ctx, connectionID, cmd.UserID, string(agentType), newAPIKey); err != nil {
+					return nil, err
+				}
+			}
+			secretValue = nil
+		}
+	}
+	if newAPIKey != "" {
+		connectionID = ""
+	}
+	if connectionID != "" && string(agentType) != "codex" {
+		return nil, fmt.Errorf("Codex connection requires Codex runtime")
+	}
+	configurationChanged = configurationChanged || connectionID != value.ModelConnectionID
+	value.ModelConnectionID = connectionID
 	now := time.Now().UTC()
 	if value.Name != cmd.Name {
 		value.Workspace.Version++
@@ -150,13 +195,20 @@ func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.Config
 		value.AgentConfiguration.Version++
 		value.AgentConfiguration.UpdatedAt = now
 	}
-	if err := s.tx.RunInTx(ctx, func(txCtx context.Context) error {
-		return s.repo.Update(txCtx, &value.Workspace, &value.AgentConfiguration)
-	}); err != nil {
-		return nil, err
-	}
 	return value, nil
 }
+func (s *Service) StoreUpdate(ctx context.Context, v *domain.ConfiguredWorkspace) error {
+	return s.repo.Update(ctx, &v.Workspace, &v.AgentConfiguration)
+}
+func (s *Service) Update(ctx context.Context, cmd UpdateCommand) (*domain.ConfiguredWorkspace, error) {
+	v, e := s.PrepareUpdate(ctx, cmd)
+	if e != nil {
+		return nil, e
+	}
+	e = s.tx.RunInTx(ctx, func(ctx context.Context) error { return s.StoreUpdate(ctx, v) })
+	return v, e
+}
+
 func (s *Service) RuntimeContext(ctx context.Context, id, userID string) (*domain.ConfiguredWorkspace, string, error) {
 	value, err := s.repo.Get(ctx, id)
 	if err != nil {

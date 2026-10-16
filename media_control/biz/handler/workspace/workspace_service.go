@@ -5,6 +5,7 @@ package workspace
 import (
 	"context"
 	"errors"
+	modelconnection "media_agent/media_control/biz/service/model_connection"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -17,13 +18,19 @@ import (
 
 var workspaceService *service.Service
 var runtimeContextToken string
+var connections *modelconnection.Service
+
+func ConfigureModelConnections(v *modelconnection.Service) { connections = v }
+
 var creation interface {
 	Create(context.Context, service.CreateCommand) (*domain.ConfiguredWorkspace, error)
 }
 
 func ConfigureCreation(value interface {
 	Create(context.Context, service.CreateCommand) (*domain.ConfiguredWorkspace, error)
-}) { creation = value }
+}) {
+	creation = value
+}
 
 func Configure(value *service.Service, serviceToken string) {
 	workspaceService = value
@@ -47,7 +54,7 @@ func CreateWorkspace(ctx context.Context, c *app.RequestContext) {
 	if creation != nil {
 		creator = creation
 	}
-	value, err := creator.Create(ctx, service.CreateCommand{UserID: middleware.UserID(ctx), OrganizationID: req.OrganizationId, TeamID: req.TeamId, Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey})
+	value, err := creator.Create(ctx, service.CreateCommand{UserID: middleware.UserID(ctx), OrganizationID: req.OrganizationId, TeamID: req.TeamId, Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey, ModelConnectionID: req.ModelConnectionId})
 	if err != nil {
 		writeError(c, err)
 		return
@@ -117,11 +124,26 @@ func GetRuntimeContext(ctx context.Context, c *app.RequestContext) {
 		writeError(c, err)
 		return
 	}
-	c.JSON(consts.StatusOK, &workspace.RuntimeContextResponse{WorkspaceId: value.Workspace.ID, AgentId: value.AgentID, AgentType: value.AgentType, ApiKey: apiKey, ContextVersion: value.AgentConfiguration.Version, AgentConfigurationId: value.AgentConfiguration.ID, MetadataTargetContextVersion: target})
+	output := &workspace.RuntimeContextResponse{WorkspaceId: value.Workspace.ID, AgentId: value.AgentID, AgentType: value.AgentType, ApiKey: apiKey, ContextVersion: value.AgentConfiguration.Version, AgentConfigurationId: value.AgentConfiguration.ID, MetadataTargetContextVersion: target}
+	if value.ModelConnectionID != "" {
+		if connections == nil {
+			c.JSON(503, map[string]string{"error": "model connection unavailable"})
+			return
+		}
+		credential, e := connections.Resolve(ctx, value.ModelConnectionID)
+		if e != nil {
+			c.JSON(409, map[string]string{"error": "model connection unavailable or revoked"})
+			return
+		}
+		output.CodexAuthJson = credential.AuthJSON
+		output.ModelConnectionId = credential.ID
+		output.ModelConnectionVersion = credential.Version
+	}
+	c.JSON(consts.StatusOK, output)
 }
 
 func toResponse(value *domain.ConfiguredWorkspace) *workspace.WorkspaceResponse {
-	return &workspace.WorkspaceResponse{Id: value.Workspace.ID, Name: value.Workspace.Name, AgentId: value.AgentID, AgentType: value.AgentType, ApiKeyConfigured: len(value.EncryptedAPIKey) > 0, ConfigurationVersion: value.AgentConfiguration.Version, CreatedAt: value.Workspace.CreatedAt.UnixMilli(), UpdatedAt: value.Workspace.UpdatedAt.UnixMilli(), AgentConfigurationId: value.AgentConfiguration.ID, OrganizationId: value.OrganizationID, TeamId: value.TeamID, CreatedBy: value.CreatedBy, DesiredState: value.DesiredState}
+	return &workspace.WorkspaceResponse{Id: value.Workspace.ID, Name: value.Workspace.Name, AgentId: value.AgentID, AgentType: value.AgentType, ApiKeyConfigured: len(value.EncryptedAPIKey) > 0, ModelConnectionId: value.ModelConnectionID, ConfigurationVersion: value.AgentConfiguration.Version, CreatedAt: value.Workspace.CreatedAt.UnixMilli(), UpdatedAt: value.Workspace.UpdatedAt.UnixMilli(), AgentConfigurationId: value.AgentConfiguration.ID, OrganizationId: value.OrganizationID, TeamId: value.TeamID, CreatedBy: value.CreatedBy, DesiredState: value.DesiredState}
 }
 func writeError(c *app.RequestContext, err error) {
 	if errors.Is(err, domain.ErrConflict) {
@@ -150,7 +172,15 @@ func UpdateWorkspace(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	value, err := workspaceService.Update(ctx, service.UpdateCommand{WorkspaceID: req.WorkspaceId, UserID: middleware.UserID(ctx), Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey})
+	cmd := service.UpdateCommand{WorkspaceID: req.WorkspaceId, UserID: middleware.UserID(ctx), Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey, ModelConnectionID: req.ModelConnectionId}
+	var value *domain.ConfiguredWorkspace
+	if updater, ok := creation.(interface {
+		Update(context.Context, service.UpdateCommand) (*domain.ConfiguredWorkspace, error)
+	}); ok {
+		value, err = updater.Update(ctx, cmd)
+	} else {
+		value, err = workspaceService.Update(ctx, cmd)
+	}
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			writeError(c, err)

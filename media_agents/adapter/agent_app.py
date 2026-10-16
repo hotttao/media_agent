@@ -33,7 +33,7 @@ from adapter.biz.domain.runtime_session.errors import (
 from adapter.biz.middleware.runtime_auth import RuntimeAuthMiddleware
 from adapter.biz.service.runtime_session.service import RuntimeSessionService
 from adapter.biz.workflow.acp_turn_runtime import AcpTurnRuntime
-from adapter.biz.workflow.execute_turn_flow import ExecuteTurnFlow, TurnRuntime
+from adapter.biz.workflow.execute_turn_flow import ExecuteTurnFlow, RuntimeCredentials, TurnRuntime
 from adapter.biz.workflow.metadata_update_flow import MetadataUpdateFlow
 from adapter.biz.workflow.turn_event_sink import TurnEventSink
 from adapter.clients.instance import GatewayInstanceClient, InstanceClientSettings
@@ -262,6 +262,7 @@ def build_app(
     bridge_factory: BridgeFactory,
     extra_lifespan: ExtraLifespan | None = None,
     metadata_bridge_setup: Callable[[object, Path, str], None] | None = None,
+    credential_bridge_setup: Callable[[object, RuntimeCredentials, str], None] | None = None,
 ) -> FastAPI:
     """Build the shared FastAPI app with ACP routes.
 
@@ -314,7 +315,9 @@ def build_app(
         app.state.execute_turn_flow, app.state.session_event_bus = _execute_turn_flow(
             cfg,
             app.state.runtime_session_service,
-            AcpTurnRuntime(acp_server, metadata_flow, metadata_bridge_setup),
+            AcpTurnRuntime(
+                acp_server, metadata_flow, metadata_bridge_setup, credential_bridge_setup
+            ),
             instance_client,
         )
         await app.state.execute_turn_flow.recover()

@@ -39,3 +39,10 @@
 - [x] Docker 实际使用入口、功能验收、review.md 和 commit。
 
 后续可发现并补充阻塞产品使用的功能缺口；不能以当前仅有 API 或 fixture 联通宣布完整产品完成。SRE、隔离扩展和扩缩容不作为本计划阶段。
+
+## F5 · Codex auth.json 与个人模型连接
+
+- [x] 个人连接加密持久化、本人 ACL、版本替换/撤销与回归。
+- [x] Workspace 明确绑定、配置历史、内部执行凭据链路与原生文件装配。
+- [x] 管理界面、Workspace 选择、正式导入本机 Codex 并完成真实对话验收。
+- [x] 清理手工临时文件，review.md 与 commit。
