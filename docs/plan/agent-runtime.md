@@ -123,12 +123,12 @@
 
 优先完成实际使用链路；不新增运维或隔离验证阶段，不以模型替身的协议测试代替可用交付。
 
-- [ ] 接通现有界面、Gateway 和正式 Agent 入口，补齐阻塞使用的配置与功能。
-- [ ] 用户可创建会话、发送消息、查看流式回复和会话历史。
-- [ ] 工具权限请求在界面可见，用户确认后执行可继续；接通已有 MCP 功能。
-- [ ] 提供连接实际模型的 Docker 启动方式，说明必要配置，完成相关功能验证与 P9/review.md、commit。
+- [x] 接通现有界面、Gateway 和正式 Agent 入口，补齐阻塞使用的配置与功能。
+- [x] 用户可创建会话、发送消息、查看流式回复和会话历史。
+- [x] 工具权限请求在界面可见，用户确认后执行可继续；接通已有 MCP 功能。
+- [x] 提供连接实际模型的 Docker 启动方式，说明必要配置，完成相关功能验证与 P9/review.md、commit。
 
-首个可用交付之后再处理用户确认的 Prompt、Skill 等配置更新体验。已有版本规则与接口保留，不扩展隔离机制或专门建设隔离验收。
+P9 由后续 F4a/F4b1/F4b2 与 F5 分切片完成，并补齐登录、旧会话恢复和 Settings 统一。各切片已有真实验收与提交；本次不伪造独立于这些切片之外的实现。见 [P9 收口](../review/agent-runtime/p9/review.md) 和 [当前范围总审查](../review/agent-product/completion/review.md)。
 
 ## 后续范围
 
@@ -140,4 +140,4 @@
 - 跨库迁移：persist transfer intent + Agent epoch +查询恢复，保留 queued原ID/顺序。
 - Broker故障：事件replay、配置Outbox/对账、独立结果重试。
 - 环境状态未知：不把NotReady当旧执行停止，现有unknown outcome不重放原则保留；Controller不承接业务判断。
-- 外部Plugin服务当前未落地：保持受控契约和最终授权，Gateway不复制其Binding/OAuth事实；实际协议测试覆盖代理边界。
+- 外部Plugin服务已由F3b实现并接入：Binding/凭据归Plugin、OAuth归Auth，Gateway不复制业务事实；真实提供商的生产账号授权仍需部署时逐项验收。

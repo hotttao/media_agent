@@ -1,5 +1,7 @@
 # Agent Session 配置切换落地计划
 
+> 本文保留原切片验收记录。后续元数据与产品阶段已细化规则：同Agent的旧Session继续固定原配置；仅Agent类型不兼容时阻止新发送。模型凭据更新不隐式升级旧Session，Settings提供明确的新建入口。当前规则见 agent-product.md、agent-product-flow 与 pinned-auth-recovery/review.md，不能用下述历史“旧版本只读”条目推翻当前行为。
+
 ## P1 契约与 Gateway
 
 - [x] SessionResponse 公开固定 `context_version` 并重新生成 model/client/OpenAPI。
