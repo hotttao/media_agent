@@ -95,3 +95,7 @@ UI 增加“模型连接”管理入口、auth.json 文件导入/替换、重命
 Workspace明确修改连接时在同一事务保存引用、配置历史及沿用现有固定内容的新Release/Outbox；已有Session仍固定旧身份。运行上下文中的model_connection_version是私有认证revision，不等于管理列表CAS version。内部上下文遭撤销时以 model_authentication_required 拒绝执行，不作为可无限重试的网络故障。Agent保留同一认证revision的原生刷新结果，显式替换才覆盖auth.json。
 
 旧会话恢复交互：context_version 小于 Workspace configuration_version 且 Agent 类型兼容时，展示固定/当前版本与“使用当前配置新建会话”按钮。按钮调用现有创建接口，不传认证、不更改旧 Session；新建或流式执行期间禁用。模型认证报错说明恢复不升级固定配置。
+
+## Settings 统一导航
+
+Settings组合L2企业资源管理、个人模型连接管理和Workspace配置组件，移除顶部独立入口。右侧视口flex-1/min-w-0/min-h-0滚动，内部容器控制阅读宽度；容器断点适配狭窄Slot。Workspace分区存query settings，保留session；无Workspace和旧管理URL展示相同导航，仍执行原权限及范围校验。

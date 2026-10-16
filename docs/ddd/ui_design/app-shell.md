@@ -17,3 +17,5 @@ Shell 不保存 API Key，不负责发起 Chat turn，也不直接修改 Slot �
 Shell Context 是 App 与宿主的唯一导航边界。App 可以读取当前层级 ID、请求 route intent、向 App Header Portal 注入局部动作；App 不得渲染或直接控制全局 Menubar。插件模式下全局导航由 Agent Platform Host 渲染，standalone 模式由本仓库 Shell 渲染。
 
 Menubar 必须展示当前业务 User，并提供 Sign out。Sign out 由 Shell 发起 Kratos browser logout flow；业务 App 不清 Cookie、不持有 logout token。
+
+Agent 产品的资源库和个人模型连接统一由 Settings 导航访问，不再作为 Menubar 并列入口。无 Workspace 时统一 Settings 页面提供企业/个人管理；有 Workspace 时打开既有 Settings Slot 并保留活动 Session。

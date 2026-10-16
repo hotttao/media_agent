@@ -25,7 +25,9 @@ export function WorkspaceFormDialog({
   open,
   onClose,
   onSaved,
+  modelConnectionsHref = "/settings/models",
 }: {
+  modelConnectionsHref?: string;
   mode: "create" | "edit";
   workspace?: Workspace;
   open: boolean;
@@ -308,7 +310,11 @@ export function WorkspaceFormDialog({
             <p className="text-xs text-slate-500">
               {t("modelConnections.workspaceAccess")}
             </p>
-            <Link className="text-sm underline" to="/model-connections">
+            <Link
+              className="text-sm underline"
+              to={modelConnectionsHref}
+              onClick={onClose}
+            >
               {t("modelConnections.manage")}
             </Link>
           </div>

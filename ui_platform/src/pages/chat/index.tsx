@@ -21,7 +21,12 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { AgentRequestCard } from "@/domains/chat/components/agent-request-card";
 import { MessageBubble } from "@/domains/chat/components/message-bubble";
@@ -52,12 +57,15 @@ import { useAppHeaderSlot } from "@/foundation/components/app-window";
 import { SegmentedDock } from "@/foundation/components/segmented-dock";
 import { SignOutButton } from "@/foundation/components/sign-out-button";
 import { WorkspaceLayout } from "@/foundation/components/workspace-layout";
-import { appPath } from "@/foundation/lib/app-path";
 import { useAuth } from "@/foundation/providers/auth-provider";
 import { SlotProvider, useSlots } from "@/foundation/providers/slot-provider";
 import { createAppRegistry } from "@/foundation/slots/app-registry";
 import type { SlotConfig } from "@/foundation/slots/types";
-import { AgentSettingsPanel } from "./agent-settings-panel";
+import {
+  SettingsPanel,
+  type SettingsSection,
+  settingsSection,
+} from "./settings-panel";
 
 interface WorkspaceRuntime {
   workspace: Workspace;
@@ -82,8 +90,9 @@ interface WorkspaceRuntime {
     response: Record<string, unknown>,
   ): Promise<void>;
   openSettings(): void;
-  openLibrary(): void;
   refreshWorkspace(): Promise<void>;
+  settingsSection: SettingsSection;
+  selectSettings(value: SettingsSection): void;
 }
 
 const RuntimeContext = createContext<WorkspaceRuntime | null>(null);
@@ -379,58 +388,30 @@ function ChatApp() {
 }
 
 function SettingsApp() {
-  const { workspace, openSettings, openLibrary, refreshWorkspace } =
-    useRuntime();
+  const {
+    workspace,
+    openSettings,
+    refreshWorkspace,
+    settingsSection: section,
+    selectSettings,
+  } = useRuntime();
   const { t } = useTranslation();
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <>
       <HeaderPortal>
-        <Settings size={15} className="text-slate-500" />
+        <Settings size={15} className="text-stone-500" />
         <span className="text-sm font-semibold">
           {t("configuration.workspaceSettings")}
         </span>
       </HeaderPortal>
-      <div
-        data-testid="workspace-settings"
-        className="mx-auto w-full max-w-xl space-y-5 overflow-y-auto p-6 sm:p-8"
-      >
-        <div>
-          <h2 className="text-xl font-semibold">{workspace.name}</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Agent configuration for this workspace.
-          </p>
-        </div>
-        <dl className="grid gap-4 rounded-2xl bg-slate-50 p-4 text-sm">
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">
-              Agent
-            </dt>
-            <dd className="mt-1 font-medium capitalize">
-              {workspace.agent_type}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">
-              {t("modelConnections.authentication")}
-            </dt>
-            <dd className="mt-1 font-medium">
-              {workspace.model_connection_id
-                ? t("modelConnections.configured")
-                : workspace.api_key_configured
-                  ? "Configured"
-                  : "Not configured"}
-            </dd>
-          </div>
-        </dl>
-        <AgentSettingsPanel
-          key={workspace.id}
-          workspace={workspace}
-          openLibrary={openLibrary}
-          refresh={refreshWorkspace}
-          editWorkspace={openSettings}
-        />
-      </div>
-    </div>
+      <SettingsPanel
+        workspace={workspace}
+        section={section}
+        onSection={selectSettings}
+        refresh={refreshWorkspace}
+        editWorkspace={openSettings}
+      />
+    </>
   );
 }
 
@@ -448,15 +429,15 @@ function WorkspaceAppNavigation({
   intent: { workspaceId: string; nonce: number } | null;
 }) {
   const { ensureInstance } = useSlots();
-  const consumed = useRef<typeof intent>(null);
+  const consumed = useRef("");
   useEffect(() => {
     if (
       !intent ||
       intent.workspaceId !== workspaceId ||
-      consumed.current === intent
+      consumed.current === `${intent.workspaceId}:${intent.nonce}`
     )
       return;
-    consumed.current = intent;
+    consumed.current = `${intent.workspaceId}:${intent.nonce}`;
     ensureInstance("workspace-settings", "slot-b");
   }, [workspaceId, intent, ensureInstance]);
   return null;
@@ -469,7 +450,7 @@ function Menubar({
   onCreate,
   onEdit,
   onManageUsers,
-  onLibrary,
+  onSettings,
 }: {
   workspaces: Workspace[];
   workspace: Workspace | null;
@@ -477,7 +458,7 @@ function Menubar({
   onCreate(): void;
   onEdit(): void;
   onManageUsers?: () => void;
-  onLibrary(): void;
+  onSettings(): void;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -495,8 +476,14 @@ function Menubar({
   );
   return (
     <header className="relative z-40 flex h-12 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/60 px-3 backdrop-blur-xl">
-      <div className="flex items-center gap-2">
-        <Bot size={18} />
+      <div className="flex min-w-0 items-center gap-2">
+        <Link
+          to="/"
+          aria-label={t("modelConnections.back")}
+          className="rounded p-1 text-stone-600 hover:bg-stone-100"
+        >
+          <Bot size={18} />
+        </Link>
         <span className="h-4 w-px bg-slate-200" />
         <div ref={root} className="relative">
           <button
@@ -505,7 +492,7 @@ function Menubar({
             onClick={() => setOpen((value) => !value)}
             className="flex items-center gap-2 rounded-full border bg-white/70 px-3 py-1.5 text-sm font-medium hover:bg-white"
           >
-            <span className="max-w-52 truncate">
+            <span className="max-w-28 truncate sm:max-w-52">
               {workspace?.name ?? "All workspaces"}
             </span>
             <ChevronDown size={13} />
@@ -585,17 +572,16 @@ function Menubar({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={onLibrary}>
-          {t("catalog.library")}
-        </Button>
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => {
-            window.location.href = appPath("/model-connections");
-          }}
+          onClick={onSettings}
+          aria-label={t("settingsNavigation.title")}
         >
-          {t("modelConnections.title")}
+          <Settings size={15} />
+          <span className="hidden sm:inline">
+            {t("settingsNavigation.title")}
+          </span>
         </Button>
         <SignOutButton />
       </div>
@@ -617,14 +603,27 @@ function seedCompletedItems(
   }
 }
 
-export function ChatPage() {
+export function ChatPage({
+  settingsPage = false,
+  initialSettings,
+}: {
+  settingsPage?: boolean;
+  initialSettings?: SettingsSection;
+} = {}) {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const params = useParams<{ workspaceId?: string }>();
+  const params = useParams<{
+    workspaceId?: string;
+    section?: string;
+    organizationId?: string;
+  }>();
+  const { section: sectionParam, organizationId } = params;
   const workspaceId = params.workspaceId ?? "";
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSessionId = searchParams.get("session");
+  const queryNavigation = useRef(setSearchParams);
+  queryNavigation.current = setSearchParams;
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -696,7 +695,14 @@ export function ChatPage() {
         setStreaming(selected?.chat_status === "agent");
         if (selected) {
           if (requestedSessionId !== selected.id)
-            setSearchParams({ session: selected.id }, { replace: true });
+            queryNavigation.current(
+              (current) => {
+                const next = new URLSearchParams(current);
+                next.set("session", selected.id);
+                return next;
+              },
+              { replace: true },
+            );
           const history = await listMessages(selected.id);
           if (version === requestVersion.current) {
             seedCompletedItems(history, itemMessageIds.current);
@@ -707,7 +713,15 @@ export function ChatPage() {
           }
         } else {
           setRequests([]);
-          setSearchParams({}, { replace: true });
+          queryNavigation.current(
+            (current) => {
+              if (!current.has("session")) return current;
+              const next = new URLSearchParams(current);
+              next.delete("session");
+              return next;
+            },
+            { replace: true },
+          );
         }
       })
       .catch((cause: Error) => {
@@ -722,7 +736,6 @@ export function ChatPage() {
     workspacesLoaded,
     navigate,
     requestedSessionId,
-    setSearchParams,
   ]);
 
   const selectSession = useCallback(
@@ -736,7 +749,14 @@ export function ChatPage() {
       );
       setInterrupting(false);
       setRequests([]);
-      setSearchParams({ session: nextId }, { replace: true });
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.set("session", nextId);
+          return next;
+        },
+        { replace: true },
+      );
       const values = await listMessages(nextId);
       if (version === requestVersion.current) {
         itemMessageIds.current.clear();
@@ -1092,6 +1112,19 @@ export function ChatPage() {
       }
     }
   }
+  const selectedSettings = settingsSection(
+    searchParams.get("settings") ?? sectionParam ?? initialSettings,
+    workspace ? "general" : "models",
+  );
+  function selectSettings(section: SettingsSection) {
+    if (workspace)
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.set("settings", section);
+        return next;
+      });
+    else navigate(`/settings/${section}`);
+  }
   const runtime = workspace
     ? {
         workspace,
@@ -1113,8 +1146,8 @@ export function ChatPage() {
         requests,
         resolveRequest,
         openSettings: () => setDialog("edit"),
-        openLibrary: () =>
-          navigate(`/library/${workspace.organization_id ?? ""}`),
+        settingsSection: selectedSettings,
+        selectSettings,
         refreshWorkspace: async () => {
           setWorkspaces(await listWorkspaces());
         },
@@ -1134,9 +1167,12 @@ export function ChatPage() {
           if (workspace)
             setSettingsIntent({ workspaceId: workspace.id, nonce: Date.now() });
         }}
-        onLibrary={() =>
-          navigate(`/library/${workspace?.organization_id ?? ""}`)
-        }
+        onSettings={() => {
+          if (workspace) {
+            setSettingsIntent({ workspaceId: workspace.id, nonce: Date.now() });
+            selectSettings(selectedSettings);
+          } else navigate("/settings/models");
+        }}
         onManageUsers={
           user?.role === "admin" ? () => navigate("/admin/users") : undefined
         }
@@ -1151,12 +1187,29 @@ export function ChatPage() {
           >
             <WorkspaceAppNavigation
               workspaceId={workspace.id}
-              intent={settingsIntent}
+              intent={
+                settingsIntent ??
+                (searchParams.has("settings")
+                  ? { workspaceId: workspace.id, nonce: 0 }
+                  : null)
+              }
             />
             <WorkspaceLayout />
             <SegmentedDock />
           </SlotProvider>
         </RuntimeContext.Provider>
+      ) : settingsPage ? (
+        <div className="flex min-h-0 flex-1 p-3">
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-white">
+            <SettingsPanel
+              section={selectedSettings}
+              onSection={selectSettings}
+              organizationId={organizationId}
+              refresh={async () => {}}
+              editWorkspace={() => {}}
+            />
+          </div>
+        </div>
       ) : (
         <div className="grid min-h-0 flex-1 place-items-center p-6">
           <div className="max-w-md text-center">
@@ -1181,6 +1234,11 @@ export function ChatPage() {
         open={dialog !== null}
         onClose={() => setDialog(null)}
         onSaved={saved}
+        modelConnectionsHref={
+          workspace
+            ? `/w/${workspace.id}?settings=models${sessionId ? `&session=${sessionId}` : ""}`
+            : "/settings/models"
+        }
       />
     </main>
   );

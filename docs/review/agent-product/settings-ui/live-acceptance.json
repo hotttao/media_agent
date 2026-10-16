@@ -1,0 +1,15 @@
+{
+  "realLogin": true,
+  "realServices": true,
+  "slotRightEdge": true,
+  "desktopSidebar": true,
+  "filledSlot": true,
+  "resourceLibraryInsideSettings": true,
+  "modelConnectionsInsideSettings": true,
+  "narrowSelector": true,
+  "noHorizontalOverflow": true,
+  "activeSessionRetained": true,
+  "mobileAccountActionsVisible": true,
+  "legacyModelLink": true,
+  "scriptErrors": 0
+}

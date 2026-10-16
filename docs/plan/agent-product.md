@@ -51,3 +51,9 @@
 
 - [x] 固定版本提示、明确新建入口、保持旧会话执行与历史语义。
 - [x] 浏览器回归、真实 Docker 对话、review.md 与 commit。
+
+## Settings UI 统一
+
+- [x] 对齐agent-platform左侧导航，统一企业资源/个人连接管理与旧链接。
+- [x] 修复滚动视口和窄Slot布局，保留权限与原业务功能。
+- [x] 回归、部署、review.md与commit。

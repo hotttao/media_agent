@@ -244,5 +244,21 @@
 		"manage": "管理模型连接",
 		"workspaceAccess": "有权执行此工作空间的成员可通过 Agent 使用该模型连接，但无法查看凭据。",
 		"configured": "已配置个人模型连接"
+	},
+	"settingsNavigation": {
+		"title": "设置",
+		"navigation": "设置导航",
+		"general": "概览",
+		"configuration": "Agent 配置",
+		"mcpCatalog": "MCP 目录",
+		"workspace": "工作空间",
+		"organization": "企业资源",
+		"personal": "个人",
+		"organizationScope": "企业共享资源",
+		"generalDescription": "管理工作空间，并选择新会话使用的模型认证。",
+		"agent": "Agent",
+		"configured": "已配置",
+		"notConfigured": "未配置",
+		"chooseWorkspace": "请先选择工作空间，再管理其配置。"
 	}
 }

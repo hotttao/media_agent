@@ -11,11 +11,9 @@
 
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "@/foundation/components/protected-route";
-import { AgentLibraryPage } from "@/pages/agent-library";
 import { LoginPage } from "@/pages/auth/login";
 import { RegisterPage } from "@/pages/auth/register";
 import { ChatPage } from "@/pages/chat";
-import { ModelConnectionsPage } from "@/pages/model-connections";
 import { OAuthAuthorizePage } from "@/pages/oauth/authorize";
 import { UsersListPage } from "@/pages/users/list";
 
@@ -60,7 +58,7 @@ export default function App() {
         path="/library/:organizationId?"
         element={
           <ProtectedRoute>
-            <AgentLibraryPage />
+            <ChatPage settingsPage initialSettings="prompts" />
           </ProtectedRoute>
         }
       />
@@ -68,7 +66,15 @@ export default function App() {
         path="/model-connections"
         element={
           <ProtectedRoute>
-            <ModelConnectionsPage />
+            <ChatPage settingsPage initialSettings="models" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/:section?"
+        element={
+          <ProtectedRoute>
+            <ChatPage settingsPage />
           </ProtectedRoute>
         }
       />

@@ -291,5 +291,21 @@
 		"manage": "Manage model connections",
 		"workspaceAccess": "People authorized to run this workspace can use the selected model connection through the Agent. They cannot view its credentials.",
 		"configured": "Personal model connection configured"
+	},
+	"settingsNavigation": {
+		"title": "Settings",
+		"navigation": "Settings navigation",
+		"general": "Overview",
+		"configuration": "Agent configuration",
+		"mcpCatalog": "MCP catalog",
+		"workspace": "Workspace",
+		"organization": "Organization resources",
+		"personal": "Personal",
+		"organizationScope": "Shared organization resources",
+		"generalDescription": "Manage this workspace and choose the model authentication used by new sessions.",
+		"agent": "Agent",
+		"configured": "Configured",
+		"notConfigured": "Not configured",
+		"chooseWorkspace": "Choose a workspace to manage its configuration."
 	}
 }

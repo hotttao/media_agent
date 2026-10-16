@@ -59,7 +59,7 @@ function ResourceDetail({
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Button
-            className="mb-3 md:hidden"
+            className="settings-resource-back mb-3"
             variant="ghost"
             size="sm"
             onClick={back}
@@ -175,8 +175,8 @@ export function ResourceLibrary({
     item.name.toLowerCase().includes(search.toLowerCase()),
   );
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between gap-3 border-b bg-white px-5 py-4">
+    <div className="settings-resource-library flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-white px-5 py-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
             {t(`catalog.${kind}`)}
@@ -194,9 +194,9 @@ export function ResourceLibrary({
           </Button>
         </div>
       </div>
-      <div className="grid min-h-0 flex-1 md:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="settings-resource-grid grid min-h-0 flex-1">
         <aside
-          className={`${selected ? "hidden md:block" : ""} overflow-y-auto border-r bg-stone-50/70 p-4`}
+          className={`settings-resource-list ${selected ? "resource-selected" : ""} overflow-y-auto border-r bg-stone-50/70 p-4`}
         >
           <input
             aria-label={t("catalog.search")}
@@ -247,7 +247,7 @@ export function ResourceLibrary({
           </div>
         </aside>
         <div
-          className={`${!selected ? "hidden md:grid" : ""} min-w-0 overflow-y-auto bg-white`}
+          className={`settings-resource-detail ${!selected ? "resource-empty" : ""} min-w-0 overflow-y-auto bg-white`}
         >
           {selected ? (
             <ResourceDetail

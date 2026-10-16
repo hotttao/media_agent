@@ -29,3 +29,5 @@ localStorage key 必须带版本与 Workspace ID。Profile 包含 `layoutId`、`
 P0 继续使用 localStorage，但访问必须通过 Profile Backend 接口，避免 UI 组件直接依赖存储。后续服务端 backend 加载时必须设置加载门，禁止默认 Layout 闪烁。
 
 Prompt/Skill 库、版本与 ACL 由 Control 保存；MCP 目录归 Gateway，Workspace 绑定及加密凭据归 Plugin，OAuth 连接归 Auth。资源编辑草稿仅在组件内存，Agent 固定选择及配置版本仍由 Control Release 决定；不在 localStorage 缓存资源权限或秘密。
+
+Settings 当前分区由页面URL表示；企业选择和资源编辑/秘密草稿属于当前Settings视图内存。管理入口移入Slot不改变企业资源ACL、个人连接owner或Workspace的固定配置事实。

@@ -9,3 +9,5 @@
 窄屏强制使用单栏 Canvas，同一时间只展示一个活动 App。用户通过同一个 Dock 激活 Sessions、Settings 或 Chat；选择 Session 后激活 Chat。Workspace 选择使用 Menubar popover，创建/更新使用 Dialog，不永久占据内容宽度。
 
 响应式变化不得销毁 Profile 中另一个 Slot 的状态。键盘焦点必须跟随用户主动切换，不能因断点变化自动抢占输入焦点。
+
+Settings 根据自身容器宽度切换左侧导航/紧凑选择器，不能仅按viewport判断。右侧滚动视口铺满剩余空间，表单max-width只作用于内部内容。

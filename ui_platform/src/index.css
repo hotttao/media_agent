@@ -77,3 +77,45 @@
 			"calt" 1;
 	}
 }
+
+/* Settings responds to its Slot width, including when other Slots are open. */
+.agent-settings {
+	container-type: inline-size;
+}
+.settings-compact-nav {
+	display: none;
+}
+.settings-resource-library {
+	container-type: inline-size;
+}
+.settings-resource-grid {
+	grid-template-columns: minmax(10rem, 0.8fr) minmax(0, 1.7fr);
+}
+.settings-resource-back {
+	display: none;
+}
+@container (max-width: 36rem) {
+	.settings-resource-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.settings-resource-list.resource-selected,
+	.settings-resource-detail.resource-empty {
+		display: none;
+	}
+	.settings-resource-back {
+		display: inline-flex;
+	}
+}
+@container (max-width: 28rem) {
+	.settings-sidebar {
+		display: none;
+	}
+	.settings-compact-nav {
+		display: block;
+	}
+}
+@container (min-width: 60rem) {
+	.settings-model-columns {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	}
+}

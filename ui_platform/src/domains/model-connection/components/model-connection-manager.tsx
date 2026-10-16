@@ -1,6 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   listModelConnections,
@@ -9,7 +8,7 @@ import {
 } from "@/domains/model-connection/lib/client";
 import type { ModelConnectionChoice } from "@/foundation/types/model-connection";
 
-export function ModelConnectionsPage() {
+export function ModelConnectionManager() {
   const { t } = useTranslation();
   const [items, setItems] = useState<ModelConnectionChoice[]>([]);
   const [name, setName] = useState("本机 Codex");
@@ -71,14 +70,11 @@ export function ModelConnectionsPage() {
     }
   }
   return (
-    <main className="min-h-screen bg-[#f5f4f0] text-slate-950">
-      <header className="flex items-center justify-between border-b bg-white px-6 py-4">
-        <h1 className="text-lg font-semibold">{t("modelConnections.title")}</h1>
-        <Link to="/">{t("modelConnections.back")}</Link>
-      </header>
-      <div className="mx-auto grid max-w-5xl gap-8 p-6 md:grid-cols-2">
+    <div className="settings-model-grid grid gap-6">
+      <h2 className="text-xl font-semibold">{t("modelConnections.title")}</h2>
+      <div className="settings-model-columns grid gap-6">
         <section>
-          <p className="mb-6 text-sm leading-6 text-slate-600">
+          <p className="mb-6 text-sm leading-6 text-stone-600">
             {t("modelConnections.description")}
           </p>
           {loading && <p>{t("catalog.loading")}</p>}
@@ -87,7 +83,7 @@ export function ModelConnectionsPage() {
             {items.map((item) => (
               <li key={item.id} className="rounded-xl border bg-white p-4">
                 <h2 className="font-medium">{item.name}</h2>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-stone-500">
                   Codex · auth.json · v{item.version} ·{" "}
                   {t(
                     item.status === "active"
@@ -147,7 +143,7 @@ export function ModelConnectionsPage() {
               type="file"
               accept=".json,application/json"
               disabled={busy}
-              className="mt-2 block w-full text-sm"
+              className="mt-2 block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-stone-200 file:bg-stone-50 file:px-3 file:py-2 file:text-xs file:font-medium"
               onChange={async (e) => {
                 setAuth("");
                 setError("");
@@ -166,7 +162,7 @@ export function ModelConnectionsPage() {
               }}
             />
           </label>
-          <p className="text-xs leading-5 text-slate-500">
+          <p className="text-xs leading-5 text-stone-500">
             {t("modelConnections.writeOnly")}
           </p>
           {error && (
@@ -197,6 +193,6 @@ export function ModelConnectionsPage() {
           </div>
         </form>
       </div>
-    </main>
+    </div>
   );
 }

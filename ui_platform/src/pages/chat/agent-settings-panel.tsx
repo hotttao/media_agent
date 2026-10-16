@@ -21,11 +21,13 @@ export function AgentSettingsPanel({
   openLibrary,
   refresh,
   editWorkspace,
+  section = "configuration",
 }: {
   workspace: Workspace;
   openLibrary(): void;
   refresh(): Promise<void>;
   editWorkspace(): void;
+  section?: "general" | "configuration";
 }) {
   const { t } = useTranslation();
   const [success, setSuccess] = useState(false);
@@ -87,6 +89,17 @@ export function AgentSettingsPanel({
     return { choices, definitions };
   }, [workspace.id, workspace.organization_id]);
   const options = useCatalogLoad(loadChoices);
+  if (section === "general")
+    return (
+      <>
+        <CatalogError error={permissions.error} retry={permissions.reload} />
+        {permissions.data?.can_manage && (
+          <Button size="sm" variant="outline" onClick={editWorkspace}>
+            {t("configuration.editWorkspace")}
+          </Button>
+        )}
+      </>
+    );
   return (
     <div className="space-y-5">
       {permissions.data?.can_manage && (

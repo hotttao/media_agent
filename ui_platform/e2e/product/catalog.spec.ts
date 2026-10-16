@@ -412,6 +412,9 @@ test("Workspace MCP credential stays write-only and configuration confirmation p
   const state = await fixture(page);
   await page.goto("/w/workspace");
   const settings = page.getByTestId("slot-slot-b");
+  await settings
+    .getByRole("button", { name: "Agent configuration", exact: true })
+    .click();
   await expect(
     settings.getByText("Workspace MCP connections", { exact: true }),
   ).toBeVisible();
@@ -741,3 +744,65 @@ for (const runtimeStatus of ["paused", "active"]) {
     expect(writes).toHaveLength(1);
   });
 }
+
+test("Settings owns management navigation and scrolls at the slot edge", async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("tos-language", "en-US"));
+  await fixture(page);
+  await page.setViewportSize({ width: 1920, height: 720 });
+  await page.goto("/w/workspace?settings=configuration&session=session");
+  const panel = page.getByTestId("workspace-settings");
+  const nav = panel.getByRole("navigation", {
+    name: "Settings navigation",
+    exact: true,
+  });
+  await expect(nav).toBeVisible();
+  await expect(
+    nav.getByRole("button", { name: "Agent configuration", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  const scroller = panel.getByTestId("settings-content");
+  const panelBox = await panel.boundingBox(),
+    contentBox = await scroller.boundingBox();
+  if (!panelBox || !contentBox) throw new Error("Settings bounds unavailable");
+  expect(
+    Math.abs(panelBox.x + panelBox.width - contentBox.x - contentBox.width),
+  ).toBeLessThan(2);
+  const navTop = (await nav.boundingBox())?.y;
+  expect(await scroller.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(
+    true,
+  );
+  await scroller.evaluate((e) => (e.scrollTop = e.scrollHeight));
+  expect(await scroller.evaluate((e) => e.scrollTop)).toBeGreaterThan(0);
+  expect((await nav.boundingBox())?.y).toBe(navTop);
+  const menubar = page.getByTestId("chat-page").locator(":scope > header");
+  await expect(
+    menubar.getByRole("button", { name: "Resource library", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    menubar.getByRole("button", { name: "Model connections", exact: true }),
+  ).toHaveCount(0);
+  await nav
+    .getByRole("button", { name: "Model connections", exact: true })
+    .click();
+  await expect(panel.getByLabel("auth.json", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/settings=models/);
+  expect(new URL(page.url()).searchParams.get("session")).toBe("session");
+  await page.reload();
+  await expect(panel.getByLabel("auth.json", { exact: true })).toBeVisible();
+  await nav.getByRole("button", { name: "Prompts", exact: true }).click();
+  await expect(
+    panel.getByRole("button", { name: "New prompt", exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(nav).toBeHidden();
+  await panel
+    .getByRole("combobox", { name: "Settings navigation", exact: true })
+    .selectOption("models");
+  await expect(panel.getByLabel("auth.json", { exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});

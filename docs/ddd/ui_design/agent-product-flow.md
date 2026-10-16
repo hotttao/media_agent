@@ -2,7 +2,7 @@
 
 ## 入口与边界
 
-企业资源库是受保护的企业级管理页 `/library/:organizationId?`，通过 Menubar 进入，不占用 Workspace Slot。企业选择来自 Auth 当前有效成员列表；Prompt、Skill、MCP 分别显示真实可见目录。Workspace Settings 继续作为既有单实例 App，承载 Agent 配置与 Workspace MCP 绑定，不另建 Shell 或绕过 Slot 状态。
+企业资源库与个人模型连接由 Settings 左侧导航访问。企业选择来自 Auth 当前有效成员列表；Prompt、Skill、MCP 分别显示真实可见目录。Workspace Settings 继续作为既有单实例 App，统一承载配置及管理内容；无 Workspace 时使用同一 Settings 视图，旧 `/library/:organizationId?` 和 `/model-connections` 兼容访问。
 
 资源库和 Settings 沿用已确认 Penpot Agent 项目及 Workflow 的暖浅背景、白色面板、深色主按钮与黄色重点。资源列表与内容编辑器并列，窄屏通过返回列表切换；表单和历史使用可滚动区域，主要操作始终可达。界面称系统默认指引，不暴露 Platform Prompt 模板装配细节。
 
@@ -36,8 +36,16 @@ Prompt 不设置、直接填写、引用资源库三种方式互斥；库选择�
 
 ## 个人模型连接
 
-工作台和资源库提供“模型连接”入口。个人连接列表与企业目录分离，只能查看本人连接；导入 auth.json 文件后显示名称、类型、状态和版本，无原文预览、下载或复制。编辑可仅改名称或上传新文件，写请求 expected_version 防止覆盖；撤销须确认，失败保留输入，完成清空文件内容。新用户默认名称“本机 Codex”，不自动读取浏览器或服务器文件。
+Settings 的个人分区提供“模型连接”入口。个人连接列表与企业目录分离，只能查看本人连接；导入 auth.json 文件后显示名称、类型、状态和版本，无原文预览、下载或复制。编辑可仅改名称或上传新文件，写请求 expected_version 防止覆盖；撤销须确认，失败保留输入，完成清空文件内容。新用户默认名称“本机 Codex”，不自动读取浏览器或服务器文件。
 
-Workspace 创建/编辑可选择 API Key 或个人 Codex 连接；后者需明确选择，提示绑定后 Workspace 执行者可使用模型但无法查看凭据。保留未修改的选择；切换 Agent 类型后清空不适用的连接。保存连接变更生成新执行配置，沿用现有固定元数据；原 Session 保持原连接，界面进入新会话。连接管理不属于 Workspace Slot。
+Workspace 创建/编辑可选择 API Key 或个人 Codex 连接；后者需明确选择，提示绑定后 Workspace 执行者可使用模型但无法查看凭据。保留未修改的选择；切换 Agent 类型后清空不适用的连接。保存连接变更生成新执行配置，沿用现有固定元数据；原 Session 保持原连接，界面进入新会话。连接管理在 Settings 内展示，个人归属不随 Workspace 切换改变。
 
 旧 Session 固定配置版本落后于当前 Workspace 时，聊天区显示两个版本及明确的新建会话入口；不因版本落后禁止旧会话继续执行。恢复仅解除暂停，不替换原模型连接、元数据或重放失败输入。新建成功后切换新 Session，旧历史保持可访问；创建期间禁用重复提交，失败保留旧 Session 并显示错误。模型认证提示明确针对会话固定配置，不能让用户误以为当前 Workspace 的有效连接失效。
+
+## Settings 导航与滚动
+
+Settings 左侧分为工作空间（概览、Agent配置）、企业资源（Prompt、Skill、MCP目录）、个人（模型连接）。选择企业资源时显示有效企业选择器与企业范围；个人连接明确为当前用户所有。顶部 Menubar 只提供统一 Settings 入口，不再并列资源库/模型连接。Workspace Agent配置里的资源库操作在同一Settings内部切换，保持当前Workspace和Session。
+
+`?settings=` 表示Workspace内活动分区，保留 `?session=`。无Workspace时 `/settings/:section?` 使用同一视图，工作空间分区不可用；旧 `/library/:organizationId?` 与 `/model-connections` 兼容进入统一导航。切换Workspace清理分区和资源草稿，不复制秘密到路由或持久化状态。
+
+Settings 根容器占满Slot，导航固定，内容视口位于右侧外缘。仅内部阅读容器限制宽度；表单长内容不会让滚动条停在Slot中央。狭窄Slot以容器断点切换分区选择器；资源列表/详情也按可用容器宽度适配。切分区会卸载原表单并清空未保存秘密，服务端已保存数据重新加载；不自动提交或丢弃已保存配置。保留加载、空态、失败重试、只读权限和确认操作。

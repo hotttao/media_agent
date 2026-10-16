@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -62,7 +63,10 @@ export function SlotProvider({
   );
   const [profile, setProfile] = useState(initial);
   const [filledSlot, setFilledSlot] = useState<string | null>(null);
+  const loadedInitial = useRef(initial);
   useEffect(() => {
+    if (loadedInitial.current === initial) return;
+    loadedInitial.current = initial;
     setProfile(initial);
     setFilledSlot(null);
   }, [initial]);
