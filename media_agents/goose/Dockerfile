@@ -6,9 +6,12 @@ ARG GOOSE_VERSION=1.52.0
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl bzip2 \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -fsSL "https://raw.githubusercontent.com/aaif-goose/goose/v${GOOSE_VERSION}/download_cli.sh" -o /tmp/install-goose.sh \
-    && GOOSE_VERSION="${GOOSE_VERSION}" GOOSE_BIN_DIR=/usr/local/bin GOOSE_LINUX_VARIANT=musl CONFIGURE=false bash /tmp/install-goose.sh \
-    && rm /tmp/install-goose.sh
+RUN curl --retry 5 --retry-all-errors --retry-delay 1 -fsSL \
+    "https://github.com/aaif-goose/goose/releases/download/v${GOOSE_VERSION}/goose-$(uname -m)-unknown-linux-musl.tar.bz2" \
+    -o /tmp/goose.tar.bz2 \
+    && tar -xjf /tmp/goose.tar.bz2 -C /usr/local/bin \
+    && chmod 755 /usr/local/bin/goose \
+    && rm /tmp/goose.tar.bz2
 COPY pip.conf /etc/pip.conf
 RUN pip install --no-cache-dir "uv==${UV_VERSION}"
 WORKDIR /app/media_agents

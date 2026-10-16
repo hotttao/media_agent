@@ -174,7 +174,7 @@ export function WorkspaceFormDialog({
         aria-modal="true"
         aria-label={mode === "create" ? "Create workspace" : "Edit workspace"}
         onSubmit={submit}
-        className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md space-y-4 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
       >
         <div>
           <h2 className="text-xl font-semibold">

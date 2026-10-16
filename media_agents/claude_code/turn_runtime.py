@@ -78,10 +78,11 @@ class ClaudeCodeTurnRuntime:
             base_url=credentials.model_base_url,
             resume=not preparation.is_new,
             metadata_args=args or None,
+            request_handler=request_handler,
         ):
             await event_handler(event)
             if event.get("type") == "error":
-                error_class = "provider_error"
+                error_class = str(event.get("error_class") or "provider_error")
             if event.get("type") == "session.ended":
                 reason = event.get("reason")
                 if reason == "completed":
