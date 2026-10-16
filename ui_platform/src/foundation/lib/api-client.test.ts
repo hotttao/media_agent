@@ -8,7 +8,10 @@ describe("ApiClient", () => {
     vi.unstubAllGlobals();
   });
 
-  it("logs in through a Kratos browser flow and resolves the business user", async () => {
+  it.each([
+    "",
+    ":5173",
+  ])("logs in through Kratos with advertised port %s using the current origin", async (port) => {
     const user: User = {
       id: "u_1",
       username: "alice",
@@ -17,7 +20,9 @@ describe("ApiClient", () => {
       default_prompt_id: null,
       auto_evolution: false,
     };
-    const action = `${window.location.origin}/self-service/login?flow=flow-1`;
+    const advertised = new URL(window.location.origin);
+    if (port) advertised.port = port.slice(1);
+    const action = `${advertised.origin}/self-service/login?flow=flow-1`;
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -48,7 +53,7 @@ describe("ApiClient", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      action,
+      `${window.location.origin}/self-service/login?flow=flow-1`,
       expect.objectContaining({
         method: "POST",
         credentials: "include",
@@ -66,8 +71,13 @@ describe("ApiClient", () => {
     );
   });
 
-  it("creates a same-origin Kratos logout URL", async () => {
-    const logoutURL = `${window.location.origin}/self-service/logout?token=once`;
+  it.each([
+    "",
+    ":5173",
+  ])("creates a same-origin Kratos logout URL with advertised port %s", async (port) => {
+    const advertised = new URL(window.location.origin);
+    if (port) advertised.port = port.slice(1);
+    const logoutURL = `${advertised.origin}/self-service/logout?token=once`;
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ logout_url: logoutURL }), {
         status: 200,
@@ -76,11 +86,36 @@ describe("ApiClient", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(api.createLogoutURL()).resolves.toBe(logoutURL);
+    await expect(api.createLogoutURL()).resolves.toBe(
+      `${window.location.origin}/self-service/logout?token=once`,
+    );
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/^\/self-service\/logout\/browser\?return_to=/),
       expect.objectContaining({ credentials: "include" }),
     );
+  });
+
+  it.each([
+    "https://evil.example/self-service/login?flow=once",
+    `${window.location.origin}/api/elsewhere?flow=once`,
+    `${window.location.origin.replace("http:", "https:")}/self-service/login?flow=once`,
+  ])("rejects invalid login action %s before posting credentials", async (action) => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ui: {
+            action,
+            nodes: [{ attributes: { name: "csrf_token", value: "csrf-1" } }],
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(api.login("alice", "secret")).rejects.toThrow(
+      "invalid login action",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a cross-origin Kratos logout URL", async () => {

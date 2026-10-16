@@ -37,9 +37,13 @@ sequenceDiagram
 - 密码及其显示状态不得写入 URL、日志、localStorage 或其他浏览器持久化存储。
 - 提交期间输入框与显示/隐藏按钮一并禁用，防止表单状态产生歧义。
 
+## Agent 入口的认证地址
+
+Agent UI 通过当前同源 Edge 创建并提交 Kratos browser flow。Kratos 的 public base URL 可能沿用同主机 Workflow 的5173端口，而 Agent 入口为18080。前端只接受同协议、同 hostname、无 URL 用户信息且符合预期 self-service 路径的地址；端口不同时保留 flow/token 查询参数，将提交或导航地址归一到当前 origin。跨主机、跨协议及其他路径拒绝，密码与一次性 token 不提交到另一个端口。CSRF 与 Session 仍由 Kratos 校验。
+
 ## 登出
 
-Kratos browser logout 是两步协议：Shell 先请求 `/self-service/logout/browser` 获得一次性 `logout_url`，校验 URL 与当前 origin 相同且 path 为 `/self-service/logout`，再由浏览器导航执行。成功后回到 `/login`；仅清理旧 `mw_token` 或前端内存不算登出。
+Kratos browser logout 是两步协议：Shell 先请求 `/self-service/logout/browser` 获得一次性 `logout_url`，校验 URL 并按上述 Agent 入口规则归一为当前同源的 `/self-service/logout` 地址，再由浏览器导航执行。成功后回到 `/login`；仅清理旧 `mw_token` 或前端内存不算登出。
 
 ## 恢复与错误状态
 

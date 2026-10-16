@@ -39,6 +39,24 @@ function kratosErrorMessage(body: Record<string, unknown>): string | undefined {
     .find((message): message is string => Boolean(message));
 }
 
+// Kratos can advertise the Workflow port while this UI uses the same host's Edge.
+// Only rebase a known self-service endpoint; credentials always stay on this origin.
+function kratosAction(raw: string, path: string, error: string): URL {
+  const action = new URL(raw, window.location.origin);
+  const current = new URL(window.location.origin);
+  if (
+    action.protocol !== current.protocol ||
+    action.hostname !== current.hostname ||
+    action.username ||
+    action.password ||
+    action.pathname !== path ||
+    action.hash
+  ) {
+    throw new Error(error);
+  }
+  return new URL(action.pathname + action.search, current.origin);
+}
+
 export class ApiClientError extends Error {
   readonly status: number;
   readonly body: Record<string, unknown>;
@@ -116,13 +134,11 @@ class ApiClient {
     }
 
     const flow = (await flowResponse.json()) as KratosLoginFlow;
-    const action = new URL(flow.ui.action, window.location.origin);
-    if (
-      action.origin !== window.location.origin ||
-      action.pathname !== "/self-service/login"
-    ) {
-      throw new Error("Kratos returned an invalid login action");
-    }
+    const action = kratosAction(
+      flow.ui.action,
+      "/self-service/login",
+      "Kratos returned an invalid login action",
+    );
     const csrfToken = flow.ui.nodes.find(
       (node) => node.attributes.name === "csrf_token",
     )?.attributes.value;
@@ -179,13 +195,11 @@ class ApiClient {
     );
     if (!response.ok) throw new Error("Unable to create logout flow");
     const body = (await response.json()) as { logout_url?: string };
-    const logoutURL = new URL(body.logout_url ?? "", window.location.origin);
-    if (
-      logoutURL.origin !== window.location.origin ||
-      logoutURL.pathname !== "/self-service/logout"
-    ) {
-      throw new Error("Kratos returned an invalid logout URL");
-    }
+    const logoutURL = kratosAction(
+      body.logout_url ?? "",
+      "/self-service/logout",
+      "Kratos returned an invalid logout URL",
+    );
     return logoutURL.toString();
   }
 

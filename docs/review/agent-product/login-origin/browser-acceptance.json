@@ -1,0 +1,10 @@
+{
+  "realBrowser": true,
+  "freshContext": true,
+  "login": true,
+  "logout": true,
+  "relogin": true,
+  "businessSession": true,
+  "sameOriginLoginPosts": 2,
+  "scriptErrors": 0
+}

@@ -77,3 +77,5 @@ Gateway 使用持久 credential ring 和私有 bootstrap 目录保管 Auth 签�
 Docker 创建策略可配置 HTTPProxy、HTTPSProxy、NoProxy，仅部署侧设置并传入容器环境；用户的 Workspace 配置不能覆盖。需要出网代理时必须保留内部服务的直连规则。模型登录不进入准备工具或运行 Spec。
 
 启用固定元数据的 Codex 原生配置关闭账号 Apps、远端 Plugin 自动装配及 Skill 自动安装 MCP 依赖。用户选择的 Skill 由系统版本发布加载，MCP 仅通过 Gateway 声明；不能因复制 OAuth 登录而隐式引入账号插件或外部 MCP。
+
+Agent 浏览器登录/登出通过当前同源 Edge 调用 Kratos。允许 Kratos 返回同协议、同 hostname 的其他端口地址，仅保留预期 self-service 路径及查询参数并归一为当前 origin；跨主机、跨协议、URL 用户信息、fragment 和错误路径均拒绝。模型/API 凭据不参与浏览器登录。
