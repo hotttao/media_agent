@@ -213,8 +213,10 @@
 		"paused": "会话因失败或中断而暂停。请检查凭据和配置后恢复；失败输入不会自动重放。",
 		"resume": "恢复会话",
 		"resuming": "正在恢复…",
-		"authentication": "模型登录缺失或已失效，请先在工作空间设置中配置模型凭据，再恢复会话。",
+		"authentication": "此会话使用的模型登录缺失、已撤销或已失效，请检查工作空间设置中的模型凭据。恢复会话仍会沿用它的原配置。",
 		"failed": "Agent 未能完成本轮执行。请检查配置后恢复会话。",
+		"pinnedConfiguration": "此会话固定使用配置版本 {{sessionVersion}}，工作空间当前为版本 {{workspaceVersion}}。更新后的模型凭据和资源用于新会话；恢复会话不会升级原配置。",
+		"useCurrentConfiguration": "使用当前配置新建会话",
 		"resumeFailed": "恢复会话失败。"
 	},
 	"modelConnections": {

@@ -93,3 +93,5 @@ UI 增加“模型连接”管理入口、auth.json 文件导入/替换、重命
 创建请求 `{name,auth_json}`；更新请求 `{name,auth_json?,expected_version}`，空/省略认证保留原文；撤销请求 `{expected_version}` 并擦除密文。列表响应 `{connections:[{id,name,kind,status,version,created_at,updated_at}]}`。格式不合法400、其他owner404、CAS冲突409。auth_json 最大64KiB对象，接受原生tokens.access_token/refresh_token或OPENAI_API_KEY，响应不包含正文。
 
 Workspace明确修改连接时在同一事务保存引用、配置历史及沿用现有固定内容的新Release/Outbox；已有Session仍固定旧身份。运行上下文中的model_connection_version是私有认证revision，不等于管理列表CAS version。内部上下文遭撤销时以 model_authentication_required 拒绝执行，不作为可无限重试的网络故障。Agent保留同一认证revision的原生刷新结果，显式替换才覆盖auth.json。
+
+旧会话恢复交互：context_version 小于 Workspace configuration_version 且 Agent 类型兼容时，展示固定/当前版本与“使用当前配置新建会话”按钮。按钮调用现有创建接口，不传认证、不更改旧 Session；新建或流式执行期间禁用。模型认证报错说明恢复不升级固定配置。

@@ -653,3 +653,91 @@ test("paused Session requires explicit resume before sending", async ({
     0,
   );
 });
+
+for (const runtimeStatus of ["paused", "active"]) {
+  test(`older ${runtimeStatus} session offers current configuration without upgrading or replaying it`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() =>
+      localStorage.setItem("tos-language", "en-US"),
+    );
+    await fixture(page);
+    const oldSession = {
+      id: "old-session",
+      workspace_id: "workspace",
+      agent_id: "codex",
+      agent_type: "codex",
+      title: "Original session",
+      status: "active",
+      chat_status: "human",
+      context_version: 1,
+      runtime_status: runtimeStatus,
+      execution_epoch: 2,
+    };
+    let newSession: typeof oldSession | undefined;
+    const writes: string[] = [];
+    await page.route(/\/api\/chat\/sessions(?:\?.*)?$/, async (route) => {
+      if (route.request().method() === "POST") {
+        writes.push(route.request().url());
+        expect(route.request().postDataJSON()).toEqual({
+          workspace_id: "workspace",
+          title: "Session 2",
+        });
+        newSession = {
+          ...oldSession,
+          id: "new-session",
+          title: "Session 2",
+          context_version: 4,
+          runtime_status: "active",
+        };
+        return route.fulfill({ json: newSession, status: 201 });
+      }
+      return route.fulfill({
+        json: {
+          sessions: newSession ? [newSession, oldSession] : [oldSession],
+        },
+      });
+    });
+    await page.route("**/api/v1/sessions/*/resume", (route) => {
+      writes.push(route.request().url());
+      return route.abort();
+    });
+    await page.route("**/api/chat/sessions/*/turns", (route) => {
+      writes.push(route.request().url());
+      return route.abort();
+    });
+    await page.goto("/w/workspace?session=old-session");
+    const notice = page.getByTestId("session-configuration-notice");
+    await expect(notice).toContainText(
+      "configuration 1; the workspace now uses 4",
+    );
+    if (runtimeStatus === "active")
+      await expect(
+        page.getByRole("button", { name: "Send message", exact: true }),
+      ).toBeVisible();
+    else
+      await expect(
+        page.getByRole("button", { name: "Resume session", exact: true }),
+      ).toBeVisible();
+    expect(writes).toHaveLength(0);
+    await notice
+      .getByRole("button", {
+        name: "New session with current configuration",
+        exact: true,
+      })
+      .click();
+    await expect(page).toHaveURL(/session=new-session/);
+    await expect(notice).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Send message", exact: true }),
+    ).toBeVisible();
+    expect(writes).toHaveLength(1);
+    await page
+      .getByTestId("session-list")
+      .getByRole("button", { name: /Original session/ })
+      .click();
+    await expect(notice).toContainText("configuration 1");
+    expect(oldSession.context_version).toBe(1);
+    expect(writes).toHaveLength(1);
+  });
+}

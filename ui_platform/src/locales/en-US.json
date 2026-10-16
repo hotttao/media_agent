@@ -260,8 +260,10 @@
 		"paused": "This session paused after a failure or interruption. Check credentials and configuration, then resume. Failed input will not be replayed.",
 		"resume": "Resume session",
 		"resuming": "Resuming…",
-		"authentication": "Model authentication is missing or expired. Configure model credentials in Workspace settings before resuming.",
+		"authentication": "Model authentication for this session is missing, revoked or expired. Check its credentials in Workspace settings. Resuming keeps the session’s original configuration.",
 		"failed": "The Agent stopped before completing this turn. Check configuration and resume the session.",
+		"pinnedConfiguration": "This session uses configuration {{sessionVersion}}; the workspace now uses {{workspaceVersion}}. Updated model credentials and resources apply to new sessions. Resuming keeps this session’s original configuration.",
+		"useCurrentConfiguration": "New session with current configuration",
 		"resumeFailed": "Unable to resume the session."
 	},
 	"modelConnections": {

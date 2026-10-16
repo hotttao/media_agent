@@ -257,6 +257,31 @@ function ChatApp() {
         ))}
         <div ref={bottom} />
       </section>
+      {compatible &&
+        activeSession &&
+        activeSession.context_version > 0 &&
+        activeSession.context_version < workspace.configuration_version && (
+          <div
+            role="status"
+            data-testid="session-configuration-notice"
+            className="mb-3 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p>
+              {t("chatRecovery.pinnedConfiguration", {
+                sessionVersion: activeSession.context_version,
+                workspaceVersion: workspace.configuration_version,
+              })}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={creatingSession || streaming}
+              onClick={() => void addSession()}
+            >
+              {t("chatRecovery.useCurrentConfiguration")}
+            </Button>
+          </div>
+        )}
       {error && (
         <div className="mb-3 flex justify-between rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           <span>{error}</span>
