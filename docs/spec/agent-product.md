@@ -67,3 +67,11 @@ Definition 更新、绑定编辑、OAuth 连接及凭据替换不自动升级 Ag
 Plugin 管理接口 `/api/v1/workspaces/{workspace_id}/mcp-bindings` 支持列表、创建，`/{binding_id}` 支持读取和 CAS 更新，`/{binding_id}/versions` 返回非秘密固定历史。固定选用从内部同作用域读取 ID/version/checksum；Control 校验 Workspace manage 与目录企业范围后，将 `media_plugin.mcp_binding` 引用纳入 Release。运行解析必须带 Gateway 已验证的 target_context_version/context_version，Plugin 读取该 Control Release，仅返回该固定选择，不回退最新 Binding。
 
 静态凭据每次替换生成新的加密 credential_id；绑定版本引用对应凭据，旧会话保留原固定版本。停用当前 Binding/Definition 是立即撤销所有固定版本调用的入口。OAuth 连接使用 Auth 现有浏览器授权入口，Plugin 通过单独的内部服务凭证取得有效 access token，并仅对已核验的固定目录地址代理。Auth 内部端口不返回 refresh token。
+
+### Docker 首次启动
+
+Gateway 使用持久 credential ring 和私有 bootstrap 目录保管 Auth 签发的 agent.gateway 秘密，当前 Control 稳定身份校验后复用。容器创建私有请求的 agent_api_token 字段只用于注入，不属于 Spec/响应。首次创建自动签发，用户无需逐 Workspace 配置 Controller AgentTokens。部署应持久挂载 bootstrap 目录与密钥，普通界面不持有该秘密。
+
+启用 Agent 元数据时，新建 Workspace 的本地事务同时创建 none/空资源初始 Release 与 Outbox，返回配置版本2。创建授权在事务外完成；初始 Release 失败回滚整个创建。用户无资源选择也可直接开始具备系统 Prompt 的会话，不要求先保存一个空配置。
+
+Docker 创建策略可配置 HTTPProxy、HTTPSProxy、NoProxy，仅部署侧设置并传入容器环境；用户的 Workspace 配置不能覆盖。需要出网代理时必须保留内部服务的直连规则。模型登录不进入准备工具或运行 Spec。

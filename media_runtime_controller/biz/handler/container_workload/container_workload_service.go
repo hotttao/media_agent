@@ -33,7 +33,7 @@ func EnsureContainer(ctx context.Context, c *app.RequestContext) {
 		c.JSON(501, map[string]string{"error": "not_implemented"})
 		return
 	}
-	v, e := application.Ensure(ctx, native.State{Spec: spec, Version: q.TargetVersion}, q.ExpectedRevision, "", q.Observation)
+	v, e := application.Ensure(ctx, native.State{Spec: spec, Version: q.TargetVersion}, q.ExpectedRevision, q.AgentApiToken, q.Observation)
 	if e != nil {
 		status := 503
 		code := "container_request_failed"

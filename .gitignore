@@ -52,3 +52,6 @@ media_auth/.env.platform-token.local
 
 # Runtime bootstrap material is supplied by the creation adapter.
 media_agent_gateway/.runtime-identities/
+
+# Private local Agent product deployment material.
+docker-compose/.agent-product/

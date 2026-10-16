@@ -32,3 +32,7 @@
 - Gateway 继续拥有 Session 身份、访问控制与 Token Hash；Agent 新增同 ID 的 Runtime Session。
 - Agent Runtime Session 注册成功后 Gateway Registration 才进入 active。
 - 两侧通过幂等接口和稳定 session_id 协调，不共享数据库或跨库事务。
+
+## 2026-10-16 · Docker 首次启动
+
+新容器正常启动期间按原 Session ID 等待注册，最长45秒；取消或超时保留 starting 并返回503重试提示。Controller 职责不变。对应 RunTurn.registrationRuntime、等待/取消回归测试与创建中界面状态。

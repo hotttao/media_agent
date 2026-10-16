@@ -186,7 +186,8 @@ func main() {
 			if kube, ok := native.(*sharedclient.KubernetesIdentity); ok {
 				resources = sharedclient.KubernetesWorkloads{API: kube.Dynamic, Native: kube.API, EnvironmentID: kube.EnvironmentID, Namespace: kube.Namespace}
 			} else {
-				resources = sharedclient.DockerWorkloads{EnvironmentID: runtimeCfg.GetEnvironmentId(), BaseURL: runtimeCfg.GetDockerIdentityUrl(), ServiceToken: runtimeCfg.GetDockerInternalCredential()}
+				bootstrap := workflow.DockerBootstrap{Authority: agentAuthority, Issuer: agentAuthority, Store: sharedclient.BootstrapFiles{Root: envOr("AGENT_RUNTIME_BOOTSTRAP_ROOT", "/data/runtime-bootstrap"), Keys: keys}}
+				resources = sharedclient.DockerWorkloads{EnvironmentID: runtimeCfg.GetEnvironmentId(), BaseURL: runtimeCfg.GetDockerIdentityUrl(), ServiceToken: runtimeCfg.GetDockerInternalCredential(), Bootstrap: bootstrap.Get}
 			}
 			provisioning = &workflow.WorkloadProvisioning{Control: sharedclient.WorkloadControl{BaseURL: control.BaseURL, ServiceToken: internalToken}, Resources: resources, EnvironmentID: runtimeCfg.GetEnvironmentId(), Instances: instances, Bindings: store, Routing: routing, Factory: sharedclient.ScopedRuntimeFactory{Signer: signer}, Native: native}
 			workloadhandler.Configure(provisioning)

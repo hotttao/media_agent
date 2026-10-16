@@ -10,7 +10,10 @@ import (
 	"net/http"
 )
 
-type DockerWorkloads struct{ EnvironmentID, BaseURL, ServiceToken string }
+type DockerWorkloads struct {
+	EnvironmentID, BaseURL, ServiceToken string
+	Bootstrap                            func(context.Context, contract.Spec) (string, error)
+}
 
 func (d DockerWorkloads) request(ctx context.Context, s *NativeWorkload, observe bool) (*pb.ContainerResponse, error) {
 	if s.Spec.Driver != "docker" || s.Spec.EnvironmentID != d.EnvironmentID || d.ServiceToken == "" {
@@ -31,8 +34,15 @@ func (d DockerWorkloads) request(ctx context.Context, s *NativeWorkload, observe
 	if e != nil {
 		return nil, e
 	}
+	bootstrap := ""
+	if !observe && d.Bootstrap != nil {
+		bootstrap, e = d.Bootstrap(ctx, s.Spec)
+		if e != nil {
+			return nil, e
+		}
+	}
 	body, _ := json.Marshal(s.Spec)
-	v, raw, e := api.EnsureContainer(ctx, &pb.ContainerRequest{WorkspaceId: s.Spec.WorkspaceID, SpecJson: string(body), TargetVersion: s.Version, Observation: observe, ExpectedRevision: s.Revision})
+	v, raw, e := api.EnsureContainer(ctx, &pb.ContainerRequest{WorkspaceId: s.Spec.WorkspaceID, SpecJson: string(body), TargetVersion: s.Version, Observation: observe, ExpectedRevision: s.Revision, AgentApiToken: bootstrap})
 	if raw != nil {
 		observedStatus = raw.StatusCode()
 	}

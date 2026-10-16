@@ -245,3 +245,42 @@ func contains(value, needle string) bool {
 	}
 	return false
 }
+
+type startingRouter struct {
+	peer          client.Runtime
+	calls         int
+	alwaysWaiting bool
+}
+
+func (r *startingRouter) Resolve(context.Context, *domain.Session) (client.Runtime, error) {
+	r.calls++
+	if r.alwaysWaiting || r.calls == 1 {
+		return nil, ErrRuntimeWaiting
+	}
+	return r.peer, nil
+}
+func (r *startingRouter) Facts(context.Context, *domain.Session) (client.Runtime, error) {
+	return r.peer, nil
+}
+func (r *startingRouter) Owner(context.Context, *domain.Session) (client.Runtime, error) {
+	return r.peer, nil
+}
+func TestRegisterWaitsForNativeStartupWithoutCreatingAnotherSession(t *testing.T) {
+	flow, repo, peer := newWorkflowFixture(domain.StatusStarting)
+	router := &startingRouter{peer: peer}
+	flow.WithRouting(router)
+	if _, err := flow.Register(context.Background(), repo.session, ""); err != nil {
+		t.Fatal(err)
+	}
+	if router.calls != 2 || repo.session.ID != "session" || repo.session.Status != domain.StatusActive {
+		t.Fatal("startup retry changed session identity")
+	}
+	flow, repo, peer = newWorkflowFixture(domain.StatusStarting)
+	router = &startingRouter{peer: peer, alwaysWaiting: true}
+	flow.WithRouting(router)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if _, err := flow.Register(ctx, repo.session, ""); !errors.Is(err, ErrRuntimeWaiting) || repo.session.Status != domain.StatusStarting {
+		t.Fatal("cancelled startup lost recoverable session")
+	}
+}

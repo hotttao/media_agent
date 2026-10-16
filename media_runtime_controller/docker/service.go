@@ -22,6 +22,7 @@ const digestLabel = contract.Group + "/spec-digest"
 const proofLabel = contract.Group + "/bootstrap-hash"
 
 type Policy struct {
+	HTTPProxy, HTTPSProxy, NoProxy                                                     string
 	EnvironmentID, Network, Root, PublicKeysFile, DatabaseURL, RabbitURL, SharedSecret string
 	Images                                                                             map[string]string
 	AgentTokens                                                                        map[string]string
@@ -262,6 +263,15 @@ func (s *Service) createBody(spec contract.Spec, proof []byte, workspace, token,
 	hash := sha256.Sum256(proof)
 	labels[proofLabel] = hex.EncodeToString(hash[:])
 	env := []string{"PORT=" + fmt.Sprint(spec.Port), "WORKSPACE_DIR=/workspace", "RUNTIME_WORKSPACE_ID=" + spec.WorkspaceID, "AGENT_INSTANCE_ENABLED=true", "AGENT_METADATA_ENABLED=true", "AGENT_CONFIG_ID=" + spec.AgentConfigID, "AGENT_GATEWAY_URL=" + spec.GatewayURL, "AGENT_ENVIRONMENT_ID=" + spec.EnvironmentID, "AGENT_REPLICA_ID=0", "POD_NAME=" + contract.Name(spec.EnvironmentID, spec.WorkspaceID), "AGENT_BOOTSTRAP_PROOF_FILE=/var/run/secrets/media-agent/identity-token", "RUNTIME_PUBLIC_KEYS_FILE=/run/secrets/runtime-public-keys.json", "AGENT_API_TOKEN=" + apiToken, "MEDIA_AGENTS_DB_URL=" + s.Policy.DatabaseURL, "MEDIA_AGENTS_RABBITMQ_URL=" + s.Policy.RabbitURL}
+	for _, proxy := range []struct{ upper, lower, value string }{
+		{"HTTP_PROXY", "http_proxy", s.Policy.HTTPProxy},
+		{"HTTPS_PROXY", "https_proxy", s.Policy.HTTPSProxy},
+		{"NO_PROXY", "no_proxy", s.Policy.NoProxy},
+	} {
+		if proxy.value != "" {
+			env = append(env, proxy.upper+"="+proxy.value, proxy.lower+"="+proxy.value)
+		}
+	}
 	if spec.SessionExchange != "" {
 		env = append(env, "MEDIA_AGENTS_SESSION_EXCHANGE="+spec.SessionExchange)
 	}

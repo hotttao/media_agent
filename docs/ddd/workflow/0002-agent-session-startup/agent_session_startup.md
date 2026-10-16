@@ -119,3 +119,7 @@ Web 身份来自 Gateway 验证后的 Web Session 或用户 API Token Internal J
 - `AgentSessionRegistered`：Gateway Registration 提交。
 - `RuntimeSessionRegistered`：Agent Runtime Session 提交。
 - `AgentSessionActivated`：两侧协调成功，Gateway Registration 进入 active。
+
+## 本机 Docker 首次启动等待
+
+首次创建容器后，Gateway 最多等待45秒使同一 Session 完成实例路由注册，仅对尚未就绪的结果每秒协调一次，不生成新的 Session ID。取消或超时保留 starting；HTTP 返回503及 Retry-After: 2。确定性授权或配置错误立即返回。等待由 Gateway 协调，Docker Controller 仍只负责创建，不承担探活或执行结束判定。

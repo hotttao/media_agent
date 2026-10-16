@@ -481,3 +481,68 @@ test("Workspace MCP credential stays write-only and configuration confirmation p
     path: "/tmp/agent-product-configuration-desktop.png",
   });
 });
+
+test("first Agent startup prevents duplicate Session creation", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  let release: (() => void) | undefined;
+  let started: (() => void) | undefined;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let created = false;
+  const requested = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  await page.route(/\/api\/chat\/sessions(?:\?.*)?$/, async (route) => {
+    if (route.request().method() !== "POST") {
+      if (!created) return route.fallback();
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          sessions: [
+            {
+              id: "second-session",
+              workspace_id: "workspace",
+              agent_id: "codex",
+              agent_type: "codex",
+              title: "Session 2",
+              status: "active",
+              context_version: 4,
+            },
+          ],
+        }),
+      });
+    }
+    started?.();
+    await pending;
+    created = true;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "second-session",
+        workspace_id: "workspace",
+        agent_id: "codex",
+        agent_type: "codex",
+        title: "Session 2",
+        status: "active",
+        context_version: 4,
+      }),
+    });
+  });
+  await page.goto("/w/workspace");
+  const create = page.getByRole("button", { name: "New session", exact: true });
+  await create.click();
+  await requested;
+  await expect(create).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Create session", exact: true }),
+  ).toBeDisabled();
+  release?.();
+  await expect(create).toBeEnabled();
+  await expect(page.getByTestId("session-list")).toContainText("Session 2");
+  expect(state.requests.filter((r) => r.path.endsWith("/turns"))).toHaveLength(
+    0,
+  );
+});

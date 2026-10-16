@@ -17,6 +17,13 @@ import (
 
 var workspaceService *service.Service
 var runtimeContextToken string
+var creation interface {
+	Create(context.Context, service.CreateCommand) (*domain.ConfiguredWorkspace, error)
+}
+
+func ConfigureCreation(value interface {
+	Create(context.Context, service.CreateCommand) (*domain.ConfiguredWorkspace, error)
+}) { creation = value }
 
 func Configure(value *service.Service, serviceToken string) {
 	workspaceService = value
@@ -34,7 +41,13 @@ func CreateWorkspace(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	value, err := workspaceService.Create(ctx, service.CreateCommand{UserID: middleware.UserID(ctx), OrganizationID: req.OrganizationId, TeamID: req.TeamId, Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey})
+	creator := interface {
+		Create(context.Context, service.CreateCommand) (*domain.ConfiguredWorkspace, error)
+	}(workspaceService)
+	if creation != nil {
+		creator = creation
+	}
+	value, err := creator.Create(ctx, service.CreateCommand{UserID: middleware.UserID(ctx), OrganizationID: req.OrganizationId, TeamID: req.TeamId, Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey})
 	if err != nil {
 		writeError(c, err)
 		return

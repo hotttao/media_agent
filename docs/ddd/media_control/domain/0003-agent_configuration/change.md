@@ -85,3 +85,7 @@ Control 发布记录固定 Gateway 不可变模板引用，正文继续由 Gatew
 ## 2026-10-15 · 固定 MCP Binding 选择
 
 确认流程通过 Plugin 权威端口校验同 Workspace 的固定 Binding，Release 保存非秘密 ID/version/checksum。编辑绑定不自动发布 Agent 配置。
+
+## 2026-10-16 · 新建即具备默认运行配置
+
+创建授权在事务外校验，Workspace、稳定 Agent 配置和初始 none/空选择 Release 在同一事务提交，失败整体回滚；用户不需要先保存空配置。资源升级仍要求显式确认。

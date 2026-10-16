@@ -32,6 +32,14 @@ func (s *Service) Existing(ctx context.Context, id, key, hash string) (*d.Releas
 	return v, err
 }
 func (s *Service) Confirm(ctx context.Context, snapshot d.Snapshot, user, key, hash string, expected int64) (*d.Release, error) {
+	return s.confirm(ctx, snapshot, user, key, hash, expected, s.tx.RunInTx)
+}
+
+// ConfirmInTransaction participates in an existing creation transaction.
+func (s *Service) ConfirmInTransaction(ctx context.Context, snapshot d.Snapshot, user, key, hash string, expected int64) (*d.Release, error) {
+	return s.confirm(ctx, snapshot, user, key, hash, expected, func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) })
+}
+func (s *Service) confirm(ctx context.Context, snapshot d.Snapshot, user, key, hash string, expected int64, run func(context.Context, func(context.Context) error) error) (*d.Release, error) {
 	if expected <= 0 || key == "" || len(key) > 128 {
 		return nil, d.ErrInvalid
 	}
@@ -49,7 +57,7 @@ func (s *Service) Confirm(ctx context.Context, snapshot d.Snapshot, user, key, h
 	if err != nil {
 		return nil, err
 	}
-	if err := s.tx.RunInTx(ctx, func(ctx context.Context) error {
+	if err := run(ctx, func(ctx context.Context) error {
 		return s.repo.SaveSelection(ctx, release, expected, d.Notice{EventID: eventID, Payload: payload})
 	}); err != nil {
 		return nil, err

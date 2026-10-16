@@ -77,6 +77,7 @@ import (
 	skillflow "media_agent/media_control/biz/workflow/skill_content"
 	teamworkchange "media_agent/media_control/biz/workflow/teamwork_change"
 	workloadflow "media_agent/media_control/biz/workflow/workload_target"
+	workspacecreation "media_agent/media_control/biz/workflow/workspace_creation"
 )
 
 func main() {
@@ -129,6 +130,9 @@ func main() {
 	agentidentityhandler.Configure(agentidentityservice.New(repo.New(db), teamAccess))
 	workspaceApplication := workspaceservice.New(repo.New(db), dal.NewTxRunner(db), secret.New(envOr("CONTROL_SECRET_KEY", cfg.GetAuth().GetJwtSecret())), teamAccess)
 	workspacehandler.Configure(workspaceApplication, internalToken)
+	if cfg.GetAgentMetadata().GetEnabled() {
+		workspacehandler.ConfigureCreation(&workspacecreation.Flow{Workspaces: workspaceApplication, Metadata: metadataservice.New(metadatarepo.New(db), dal.NewTxRunner(db)), Tx: dal.NewTxRunner(db)})
+	}
 	promptApplication := promptservice.New(promptrepo.New(db), dal.NewTxRunner(db), resourceaccess.New(mediaAuthURL, mediaAuthInternalToken, nil))
 	prompthandler.Configure(promptApplication)
 	templatehandler.Configure(templateservice.New(templaterepo.New(db), dal.NewTxRunner(db), repo.New(db)))

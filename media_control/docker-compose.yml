@@ -24,6 +24,14 @@ services:
       AGENT_METADATA_ARTIFACT_ROOT: /data/metadata
       AGENT_METADATA_EXCHANGE: ${AGENT_METADATA_EXCHANGE:-media.agent.metadata.v1}
       MEDIA_AGENTS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-media_agent}:${RABBITMQ_PASSWORD:-media_agent}@host.docker.internal:5672/
+      MEDIA_PLUGIN_URL: ${MEDIA_PLUGIN_URL:-http://host.docker.internal:8011}
+      MCP_CONTROL_CREDENTIAL: ${MCP_CONTROL_CREDENTIAL:-}
+      AGENT_WORKLOAD_ENABLED: ${AGENT_WORKLOAD_ENABLED:-false}
+      AGENT_WORKLOAD_DRIVER: ${AGENT_WORKLOAD_DRIVER:-docker}
+      AGENT_GATEWAY_URL: ${AGENT_GATEWAY_URL:-http://media_agent_gateway:8006}
+      AGENT_CODEX_IMAGE: ${AGENT_CODEX_IMAGE:-media-agent-codex:local}
+      AGENT_CLAUDE_IMAGE: ${AGENT_CLAUDE_IMAGE:-media-agent-claude-code:local}
+      AGENT_GOOSE_IMAGE: ${AGENT_GOOSE_IMAGE:-media-agent-goose:local}
       LOG_DIR: /media_logs/media-control
     volumes:
       - ../media_logs/media-control:/media_logs/media-control

@@ -15,3 +15,7 @@
 ## 2026-10-13 · P7 Docker 最后收尾并精简
 
 按用户要求将 Docker 收尾移到最后，仅保留单实例创建/查询/原生身份、私有目录与稳定幂等。删除 Docker pending/drain 状态与后台 start/stop 协调循环；多副本、缩容到0及排空请求统一返回明确未实现（HTTP 501），接口字段保留以兼容但不承诺能力。创建结果不明用相同 Ensure 查询/启动恢复，Docker restart policy 承担普通进程重启。
+
+## 2026-10-16 · Docker 自动 bootstrap
+
+新 Workspace 首次创建通过 Gateway 校验稳定身份后自动向 Auth 签发并加密保管 bootstrap 凭据，经受认证创建端口注入，替代产品使用路径对静态 AgentTokens 映射的依赖。

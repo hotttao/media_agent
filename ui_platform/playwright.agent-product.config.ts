@@ -7,7 +7,7 @@ export default defineConfig({
   outputDir: "e2e/test-results/agent-product",
   webServer: {
     command:
-      "node_modules/.bin/vite --host 127.0.0.1 --port 15178 --strictPort",
+      "node_modules/.bin/vite build --outDir /tmp/media-agent-product-e2e && node_modules/.bin/vite preview --outDir /tmp/media-agent-product-e2e --host 127.0.0.1 --port 15178 --strictPort",
     url: "http://127.0.0.1:15178",
     reuseExistingServer: false,
   },

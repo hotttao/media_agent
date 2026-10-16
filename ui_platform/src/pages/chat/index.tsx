@@ -63,6 +63,7 @@ interface WorkspaceRuntime {
   sessionId: string;
   messages: ChatMessage[];
   loading: boolean;
+  creatingSession: boolean;
   streaming: boolean;
   interrupting: boolean;
   error: string;
@@ -99,7 +100,9 @@ function HeaderPortal({ children }: { children: React.ReactNode }) {
 }
 
 function SessionsApp() {
-  const { sessions, sessionId, selectSession, addSession } = useRuntime();
+  const { sessions, sessionId, selectSession, addSession, creatingSession } =
+    useRuntime();
+  const { t } = useTranslation();
   const { ensureInstance } = useSlots();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -109,6 +112,7 @@ function SessionsApp() {
         <button
           type="button"
           aria-label="Create session"
+          disabled={creatingSession}
           onClick={addSession}
           className="ml-auto rounded-lg p-1.5 text-slate-500 hover:bg-white"
         >
@@ -116,6 +120,11 @@ function SessionsApp() {
         </button>
       </HeaderPortal>
       <div className="space-y-1 overflow-y-auto p-2" data-testid="session-list">
+        {creatingSession && (
+          <p role="status" className="px-3 py-2 text-xs text-stone-500">
+            {t("configuration.startingAgent")}
+          </p>
+        )}
         {sessions.map((session) => (
           <button
             key={session.id}
@@ -160,6 +169,7 @@ function ChatApp() {
     setError,
     selectSession,
     addSession,
+    creatingSession,
     send,
     interrupt,
     requests,
@@ -201,6 +211,7 @@ function ChatApp() {
         <button
           type="button"
           aria-label="New session"
+          disabled={creatingSession}
           onClick={addSession}
           className="rounded-lg p-1.5 text-slate-500 hover:bg-white"
         >
@@ -554,6 +565,10 @@ export function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyReadySessionId, setHistoryReadySessionId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [creatingSession, setCreatingSession] = useState(false);
+  const creatingSessionRef = useRef(false);
+  const currentWorkspaceRef = useRef(workspaceId);
+  currentWorkspaceRef.current = workspaceId;
   const [streaming, setStreaming] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
   const [requests, setRequests] = useState<AgentRequest[]>([]);
@@ -667,22 +682,31 @@ export function ChatPage() {
     [sessions, setSearchParams],
   );
   async function addSession() {
-    if (!workspaceId) return;
+    if (!workspaceId || creatingSessionRef.current) return;
+    creatingSessionRef.current = true;
+    setCreatingSession(true);
+    const requestedWorkspace = workspaceId;
     setError("");
     try {
       const value = await createSession(
         workspaceId,
         `Session ${sessions.length + 1}`,
       );
+      if (currentWorkspaceRef.current !== requestedWorkspace) return;
       setSessions((current) => [
         value,
         ...current.filter((session) => session.id !== value.id),
       ]);
       await selectSession(value.id);
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Session creation failed",
-      );
+      if (currentWorkspaceRef.current === requestedWorkspace) {
+        setError(
+          cause instanceof Error ? cause.message : "Session creation failed",
+        );
+      }
+    } finally {
+      creatingSessionRef.current = false;
+      setCreatingSession(false);
     }
   }
 
@@ -950,6 +974,7 @@ export function ChatPage() {
         sessionId,
         messages,
         loading,
+        creatingSession,
         streaming,
         interrupting,
         error,

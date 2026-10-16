@@ -2,6 +2,7 @@ FROM golang:1.26-alpine AS builder
 RUN apk add --no-cache git ca-certificates
 ENV GOPROXY=https://goproxy.cn,direct
 ENV GOSUMDB=off
+ENV GOMAXPROCS=2
 WORKDIR /workspace
 COPY hertz_gen/go.mod hertz_gen/go.sum hertz_gen/
 COPY hertz_infra/go.mod hertz_infra/go.sum hertz_infra/
@@ -18,6 +19,6 @@ WORKDIR /app
 COPY --from=builder /out/media_agent_gateway /app/media_agent_gateway
 COPY media_agent_gateway/migrations/ /app/migrations/
 COPY media_agent_gateway/conf/ /app/conf/
-COPY media_agent_gateway/.env /app/.env
+ENV APP_ENV=local
 EXPOSE 8006
 ENTRYPOINT ["/app/media_agent_gateway"]

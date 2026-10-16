@@ -23,3 +23,7 @@
 | 按 Team/Organization 查询 Workspace | media_control | workspace | Workspace Read Model | 无：纯查询 | covered |
 | 资源服务检查 Workspace action | media_control | workspace | Workspace Access Decision | authorization_projection（上游 Team 判定） | covered |
 | Team 停用前检查活动 Workspace | media_control | workspace | Workspace Reference Query | team_decommission | missing |
+
+## 2026-10-16 · 新建即具备默认运行配置
+
+创建授权在事务外校验，Workspace、稳定 Agent 配置和初始 none/空选择 Release 在同一事务提交，失败整体回滚；用户不需要先保存空配置。资源升级仍要求显式确认。

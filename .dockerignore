@@ -16,3 +16,5 @@ media_worker/.fixture*.json
 media_workflow/.migration_reports
 **/node_modules
 **/.worker-state
+
+docker-compose/.agent-product

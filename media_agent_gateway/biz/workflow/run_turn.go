@@ -2,8 +2,10 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -29,7 +31,7 @@ func (w *RunTurn) Register(ctx context.Context, session *domain.Session, authTok
 	if session.Status != domain.StatusStarting && session.Status != domain.StatusActive {
 		return nil, domain.ErrInactive
 	}
-	_, runtime, err := w.runtime(ctx, session, authToken)
+	runtime, err := w.registrationRuntime(ctx, session, authToken)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +65,26 @@ func (w *RunTurn) Register(ctx context.Context, session *domain.Session, authTok
 		}
 	}
 	return state, nil
+}
+
+// A new Docker instance normally needs a few seconds to register and become
+// Ready. Reconcile the same Session while waiting, rather than failing creation.
+func (w *RunTurn) registrationRuntime(ctx context.Context, session *domain.Session, token string) (client.Runtime, error) {
+	waiting, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	for {
+		_, runtime, err := w.runtime(waiting, session, token)
+		if !errors.Is(err, ErrRuntimeWaiting) {
+			return runtime, err
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-waiting.Done():
+			timer.Stop()
+			return nil, ErrRuntimeWaiting
+		case <-timer.C:
+		}
+	}
 }
 
 func (w *RunTurn) Start(ctx context.Context, sessionID, userID, authToken, key, message string) (*client.Turn, error) {

@@ -88,6 +88,8 @@ components:
                     format: int32
                 pending_version:
                     type: string
+                agent_api_token:
+                    type: string
         ContainerResponse:
             type: object
             properties:

@@ -146,6 +146,10 @@ func toSessionResponse(value *domain.Session, chatStatus string) *chatpb.Session
 
 func writeError(c *app.RequestContext, err error) {
 	status := consts.StatusInternalServerError
+	if errors.Is(err, workflow.ErrRuntimeWaiting) {
+		status = consts.StatusServiceUnavailable
+		c.Header("Retry-After", "2")
+	}
 	if errors.Is(err, domain.ErrNotFound) {
 		status = consts.StatusNotFound
 	}

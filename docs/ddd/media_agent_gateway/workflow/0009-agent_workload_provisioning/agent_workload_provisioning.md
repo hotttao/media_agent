@@ -42,7 +42,9 @@ sequenceDiagram
         G->>K: 查询原生资源状态与 Pod 身份
         K-->>G: 当前资源状态、Ready 副本、逐副本地址信息
     else Docker
-        G->>D: 幂等创建 Workspace 单实例容器
+        G->>C: 校验稳定 Agent 身份及当前 owner 授权
+        G->>G: 读取加密 bootstrap 凭据，首次由 Auth 签发
+        G->>D: 幂等创建 Workspace 单实例容器（私有传输凭据）
         D->>D: 使用 Docker 权限创建并挂载持久目录
         D-->>G: 容器引用与连接地址
     end
@@ -99,3 +101,11 @@ Control 保存版本化 Workload Target；Gateway 接口仅携带期望版本/�
 CR 的 resourceVersion 与 Control target version 同时检查；已开始排空的目标先完成，后续目标随后重读协调，不用新操作编号覆盖正在执行的屏障。降低副本数后继续保留操作标记，等待 StatefulSet 已采纳且被移除 Pod 实际退出资源集合，再清除操作，避免立即扩容复用已退休的原生代次。多个 Gateway 可重复执行同一排空 operation。缩容提交后移出成员的登记标记 retired，后续同一序号的新原生代次可重新 active；尚在排空的原生代次重启不得清除屏障。Secret 引用不含明文凭据。RWX PVC 不挂删除 ownerReference，采用不触发自动重建丢数据的 Retain 策略；缺少支持 RWX 的 StorageClass 显示 Pending，不退回 RWO。
 
 缩容到0前逐个读取绑定 Session 的 Agent 本库事实，不能仅依据当前实例的 running_count 忽略旧 incarnation 的运行。原生代次已变化且替代实例仍 active 时，先按 P3 规则恢复绑定，再施加实例排空屏障；旧运行仍未知或缺少可安全查询/转移的实例时保留承载数量。Docker 容器使用与创建服务文件一致的 UID/GID，以保证禁用额外 capabilities 后仍能读取自身启动证明和写入 Workspace。
+
+## Docker 自动凭据注入
+
+新建 Workspace 不需要操作员预填 AgentTokens。Gateway 在创建资源前从 Control 校验当前 Agent 配置、Workspace、owner 与企业；只为授权有效且处于 running 的稳定 Agent 身份调用 Auth 签发 agent.gateway 凭据。首次秘密通过 Gateway 私有持久目录加密保存，后续创建重试复用；该目录仅持有部署凭据，不复制配置事实，每次使用仍重新检查 Control 当前授权。加密密钥从已有持久 credential ring 用独立用途与身份范围派生。
+
+创建服务受既有服务凭据保护；bootstrap token 仅从私有创建请求注入 Agent 环境，不进入 Spec、创建响应、普通 API 或日志。已有容器读取不请求签发。Docker 原生状态丢失或创建请求结果不明时仍先查询资源，再按相同名字创建。Auth 一次性签发若响应丢失则不假设可取回；后续缺少私有已保存凭据时使用新的命令键签发，旧凭据按 Auth 现有管理/过期机制收敛。此路径不引入扩缩容、配置缓存或凭据后台轮换服务。
+
+Docker Controller 的部署策略可注入出网 HTTP/HTTPS 代理及 NO_PROXY；它不改变 Control 的业务配置或 Gateway 的身份授权。内部 Gateway、数据库、Broker 地址应直连。代理环境不来自用户提交的运行 Spec。

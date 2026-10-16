@@ -243,6 +243,7 @@
 		"disconnectConfirm": "Disconnect your account? This affects your calls from existing sessions too.",
 		"confirmDisconnect": "Confirm disconnect",
 		"popupBlocked": "Allow pop-up windows, then try authorization again.",
-		"editWorkspace": "Edit workspace"
+		"editWorkspace": "Edit workspace",
+		"startingAgent": "Starting Agent… The first session may take a few seconds."
 	}
 }

@@ -81,3 +81,5 @@ Organization/Team 查询失败时 fail closed。Workspace 创建时验证 Team �
 - `GET /api/v1/workspaces` 只返回调用者当前可见 Team 下的 Workspace；平台管理员也不能用普通用户接口绕过 Organization/Team 范围。
 - `GET/PUT /api/v1/workspaces/{workspace_id}` 先从 Workspace 读取不可变 Team，再分别检查 `view`/`manage`，禁止用请求中的 Team ID 替代真实归属。
 - 内部 `POST /internal/workspaces:check` 按 Workspace 真实归属执行相同判定，供资源服务验证 Workspace 边界；必须使用内部服务凭证。
+
+启用元数据时，Workspace 创建 Workflow 在同一事务内发布 none/空资源初始 Release；配置版本从1推进至2并返回当前版本。初始配置不读取库最新版本，已有配置和会话不受此初始化行为影响。

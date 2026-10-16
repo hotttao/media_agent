@@ -32,6 +32,22 @@ func New(repo domain.AccessRepository, tx dal.TxRunner, cipher *secret.Cipher, t
 }
 
 func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.ConfiguredWorkspace, error) {
+	value, err := s.PrepareCreate(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	err = s.tx.RunInTx(ctx, func(tx context.Context) error { return s.StorePrepared(tx, value) })
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+// StorePrepared persists a prepared creation in the caller's transaction.
+func (s *Service) StorePrepared(ctx context.Context, value *domain.ConfiguredWorkspace) error {
+	return s.repo.Create(ctx, &value.Workspace, &value.AgentConfiguration)
+}
+func (s *Service) PrepareCreate(ctx context.Context, cmd CreateCommand) (*domain.ConfiguredWorkspace, error) {
 	cmd.Name = strings.TrimSpace(cmd.Name)
 	if cmd.UserID == "" || cmd.OrganizationID == "" || cmd.TeamID == "" || cmd.Name == "" {
 		return nil, fmt.Errorf("user, organization_id, team_id and name are required")
@@ -55,9 +71,6 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Config
 	workspaceID := uuid.NewString()
 	w := &domain.Workspace{ID: workspaceID, OrganizationID: cmd.OrganizationID, TeamID: cmd.TeamID, CreatedBy: cmd.UserID, OwnerUserID: cmd.UserID, Name: cmd.Name, DesiredState: "running", Version: 1, CreatedAt: now, UpdatedAt: now}
 	a := &domain.AgentConfiguration{ID: uuid.NewString(), WorkspaceID: workspaceID, AgentID: string(agentType), AgentType: string(agentType), EncryptedAPIKey: encrypted, Version: 1, CreatedAt: now, UpdatedAt: now}
-	if err := s.tx.RunInTx(ctx, func(txCtx context.Context) error { return s.repo.Create(txCtx, w, a) }); err != nil {
-		return nil, err
-	}
 	return &domain.ConfiguredWorkspace{Workspace: *w, AgentConfiguration: *a}, nil
 }
 

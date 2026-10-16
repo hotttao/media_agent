@@ -138,3 +138,5 @@ Secret 不进入 manifest，凭据按受控加密版本引用执行时取得。�
 ### 固定 MCP Binding 引用
 
 Release 的 resources 接受 `media_plugin.mcp_binding` ID/version/checksum。Control 在 Workspace manage 校验后通过专用服务端口请求 Plugin 校验当前及固定目录准入，保存非秘密引用，不复制 Binding 或凭据事实。Binding 编辑不改变 Release；只有用户明确确认才发布新通知。Gateway/Plugin 在运行时依据 Session 固定 Release 解析引用，不读取最新候选代替。
+
+启用元数据时，Workspace 创建 Workflow 在同一事务内发布 none/空资源初始 Release；配置版本从1推进至2并返回当前版本。初始配置不读取库最新版本，已有配置和会话不受此初始化行为影响。

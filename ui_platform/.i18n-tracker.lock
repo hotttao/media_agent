@@ -8,7 +8,7 @@
   "src/pages/dashboard.tsx": "03de766ea273e0aa05b60f12e87b5184",
   "src/pages/users/list.tsx": "492d7a989c89b2bf21e56ce6cd6e6653",
   "src/pages/oauth/authorize.tsx": "2189ee6363566474a1fbe504a3b2adec",
-  "src/pages/chat/index.tsx": "6572b5f399db2ec3f24e8a959d7edb26",
+  "src/pages/chat/index.tsx": "28eac52352dd345951de315c311d5844",
   "src/pages/auth/login.tsx": "1a967c3fc1597bc4dfb4df868344a4e0",
   "src/pages/auth/register.tsx": "3969b34c06d4eba4e89acb908d13b222",
   "src/foundation/types/auth.ts": "01e82b847f6e265ed449aaacc1121ad7",

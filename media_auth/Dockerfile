@@ -12,6 +12,7 @@ RUN apk add --no-cache git ca-certificates
 ENV GOPROXY=https://goproxy.cn,direct
 ENV GOSUMDB=off
 
+ENV GOMAXPROCS=2
 WORKDIR /workspace
 
 # 先 copy go.mod/go.sum（利用 layer cache：代码变了不重新下载依赖）。

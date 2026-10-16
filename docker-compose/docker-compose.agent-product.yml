@@ -1,0 +1,64 @@
+# Complements the existing Auth, Control and Gateway Compose projects.
+services:
+  product-broker:
+    image: rabbitmq:4.3-management-alpine
+    hostname: product-broker
+    environment:
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "+S 2:2"
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?required}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?required}
+    volumes: [product_broker:/var/lib/rabbitmq]
+    mem_limit: 384m
+    cpus: 0.5
+    networks: [auth]
+    restart: unless-stopped
+  media_plugin:
+    build:
+      context: ..
+      dockerfile: media_plugin/Dockerfile
+    ports: ['8011:8011']
+    env_file: [.agent-product/product.env]
+    environment:
+      APP_ENV: dev
+      POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-plugin?sslmode=disable
+      MEDIA_CONTROL_URL: http://host.docker.internal:8007
+      MEDIA_AGENT_GATEWAY_URL: http://host.docker.internal:8006
+      MEDIA_AUTH_URL: http://media_auth:8001
+      MCP_GATEWAY_CREDENTIAL: ${MCP_PLUGIN_GATEWAY_CREDENTIAL:?required}
+      LOG_LEVEL: info
+    extra_hosts: ['host.docker.internal:host-gateway']
+    networks: [auth]
+    restart: unless-stopped
+  runtime-controller:
+    image: media-runtime-controller:local
+    build:
+      context: ..
+      dockerfile: media_runtime_controller/Dockerfile
+      target: docker
+    user: '${RUNTIME_UID:-1000}:${RUNTIME_GID:-1000}'
+    group_add: ['${DOCKER_GID:?required}']
+    entrypoint: [/runtime-controller-docker]
+    environment:
+      RUNTIME_CREATION_ADDRESS: ':8010'
+      RUNTIME_CREATION_CREDENTIAL: ${AGENT_RUNTIME_DOCKER_INTERNAL_CREDENTIAL:?required}
+      RUNTIME_DOCKER_POLICY_FILE: /run/config/runtime-policy.json
+    ports: ['127.0.0.1:8010:8010']
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./.agent-product/runtime-policy.json:/run/config/runtime-policy.json:ro
+      - ${RUNTIME_PRODUCT_ROOT:?required}:${RUNTIME_PRODUCT_ROOT}
+      - ${RUNTIME_PUBLIC_KEYS_HOST_FILE:?required}:${RUNTIME_PUBLIC_KEYS_HOST_FILE}:ro
+    networks: [auth]
+    restart: unless-stopped
+  agent-ui:
+    build:
+      context: ../ui_platform
+    ports: ['5178:80']
+    networks: [auth]
+    restart: unless-stopped
+networks:
+  auth:
+    external: true
+    name: media-auth
+volumes:
+  product_broker:

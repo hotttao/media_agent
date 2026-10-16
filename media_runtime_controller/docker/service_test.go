@@ -268,3 +268,22 @@ func TestLiveDockerCreation(t *testing.T) {
 	}
 	t.Logf("real Engine creation/idempotency/proof/unsupported scaling/external stop/retry/native generation/persistence verified (full Docker health=%t)", fullHealth)
 }
+
+func TestCreationProxyBypassesInternalServices(t *testing.T) {
+	policy, spec := testPolicy(t)
+	policy.HTTPSProxy = "http://proxy.internal:7897"
+	policy.NoProxy = "media_agent_gateway,product-broker,172.27.0.1"
+	service := Service{Policy: policy}
+	body := service.createBody(spec, []byte("proof"), "/workspace", "/proof", "private-bootstrap")
+	values := map[string]string{}
+	for _, entry := range body["Env"].([]string) {
+		key, value, _ := strings.Cut(entry, "=")
+		values[key] = value
+	}
+	if values["HTTPS_PROXY"] != policy.HTTPSProxy || values["https_proxy"] != policy.HTTPSProxy || values["NO_PROXY"] != policy.NoProxy || values["no_proxy"] != policy.NoProxy || values["HTTP_PROXY"] != "" {
+		t.Fatal("proxy policy not applied consistently")
+	}
+	if values["AGENT_GATEWAY_URL"] != spec.GatewayURL || values["AGENT_API_TOKEN"] != "private-bootstrap" {
+		t.Fatal("proxy policy replaced runtime identity")
+	}
+}

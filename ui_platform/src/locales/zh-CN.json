@@ -196,6 +196,7 @@
 		"disconnectConfirm": "断开你的账户连接？已有会话的后续调用也会受影响。",
 		"confirmDisconnect": "确认断开",
 		"popupBlocked": "请允许弹出窗口后重新授权。",
-		"editWorkspace": "编辑工作空间"
+		"editWorkspace": "编辑工作空间",
+		"startingAgent": "正在启动 Agent… 首次创建会话需要几秒钟。"
 	}
 }

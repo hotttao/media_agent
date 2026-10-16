@@ -138,10 +138,13 @@ services:
       AGENT_RUNTIME_DOCKER_INTERNAL_CREDENTIAL: ${AGENT_RUNTIME_DOCKER_INTERNAL_CREDENTIAL:-}
       AGENT_METADATA_ENABLED: ${AGENT_METADATA_ENABLED:-false}
       AGENT_METADATA_GATEWAY_CREDENTIAL: ${AGENT_METADATA_GATEWAY_CREDENTIAL:-}
+      AGENT_WORKLOAD_ENABLED: ${AGENT_WORKLOAD_ENABLED:-false}
+      AGENT_RUNTIME_BOOTSTRAP_ROOT: /data/runtime-bootstrap
       LOG_DIR: /media_logs/media-agent-gateway
     volumes:
       - ../media_logs/media-agent-gateway:/media_logs/media-agent-gateway
       - ./.secrets:/run/secrets/agent-gateway:ro
+      - runtime_bootstrap:/data/runtime-bootstrap
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks: [default, auth]
@@ -158,3 +161,6 @@ networks:
   auth:
     external: true
     name: media-auth
+
+volumes:
+  runtime_bootstrap:

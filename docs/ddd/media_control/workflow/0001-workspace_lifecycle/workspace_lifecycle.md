@@ -1,8 +1,8 @@
 ---
 name: workspace_lifecycle
 description: 保存 Workspace 生命周期目标，并委托 Gateway 落地 Agent 运行资源
-participants: [workspace, runtime_environment, afs_binding, media_agent_gateway, afs_controller]
-domains: [workspace, runtime_environment, afs_binding]
+participants: [workspace, agent_configuration, runtime_environment, afs_binding, media_auth, media_agent_gateway, afs_controller]
+domains: [workspace, agent_configuration, runtime_environment, afs_binding]
 ---
 
 ## 一句话说明
@@ -78,3 +78,25 @@ Control 校验 Workspace manage 与环境授权后，以受信服务身份请求
 Control 的 biz/workflow 协调业务生命周期，domain 保存 Workspace/Placement。Gateway 的 biz/workflow 落地 Agent 资源并管理 Session 路由，Kubernetes/Docker 客户端属于其基础设施适配。自定义控制器不访问 Agent 执行数据库或调用业务状态接口。
 
 受控 Agent 类型包含 codex、claude-code 与 goose；所选类型必须在部署提供的工作负载 profile 中有对应镜像与资源配置。
+
+## 新建 Workspace 的初始配置
+
+创建时先在事务外验证企业/部门权限与 Agent 类型，再在一个本地事务内提交 Workspace、稳定 Agent 配置及空选择的初始 Release（Prompt none，无 Skill/MCP）。初始 Release 包含系统 Prompt 模板版本，确保用户未选择任何资源也能创建具备系统指引的会话。初始配置与 Workspace 一起提交，失败整体回滚，不留下需要用户手工激活的半成品。该首次初始化不选择库最新版本，也不更新任何已有 Session。后续资源升级仍必须用户明确确认。
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant W as Workspace Creation Workflow
+    participant A as Auth
+    participant DB as Control DB
+    U->>W: 创建 Workspace（企业、部门、Agent）
+    W->>A: 检查当前 create_workspace 权限
+    A-->>W: 企业/部门事实
+    W->>DB: BEGIN
+    W->>DB: 创建 Workspace 与 AgentConfiguration v1
+    W->>DB: 发布 none/空资源初始 Release，配置 v2 与通知 Outbox
+    W->>DB: COMMIT（任一步失败 ROLLBACK）
+    W-->>U: Workspace 及当前配置版本
+```
+
+创建接口仍无客户端幂等键；事务已提交而响应丢失时由用户查询 Workspace 列表确认结果，不自动重发新建命令。
