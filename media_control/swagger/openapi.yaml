@@ -849,6 +849,107 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/v1/model-connections:
+        get:
+            tags:
+                - ModelConnectionService
+            operationId: ModelConnectionService_ListConnections
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Connections'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - ModelConnectionService
+            operationId: ModelConnectionService_CreateConnection
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Command'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Connection'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/model-connections/{connection_id}:
+        put:
+            tags:
+                - ModelConnectionService
+            operationId: ModelConnectionService_UpdateConnection
+            parameters:
+                - name: connection_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Command'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Connection'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/model-connections/{connection_id}/revoke:
+        post:
+            tags:
+                - ModelConnectionService
+            operationId: ModelConnectionService_RevokeConnection
+            parameters:
+                - name: connection_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Command'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Connection'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/v1/prompts:
         get:
             tags:
@@ -3699,6 +3800,17 @@ components:
                     type: string
                 observed_at:
                     type: string
+        Command:
+            type: object
+            properties:
+                connection_id:
+                    type: string
+                name:
+                    type: string
+                auth_json:
+                    type: string
+                expected_version:
+                    type: string
         ConfirmRequest:
             type: object
             properties:
@@ -3716,6 +3828,30 @@ components:
                         $ref: '#/components/schemas/ResourceReference'
                 prompt:
                     $ref: '#/components/schemas/PromptSelection'
+        Connection:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                kind:
+                    type: string
+                status:
+                    type: string
+                version:
+                    type: string
+                created_at:
+                    type: string
+                updated_at:
+                    type: string
+        Connections:
+            type: object
+            properties:
+                connections:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Connection'
         CreateAgentTemplateRequest:
             type: object
             properties:
@@ -3906,6 +4042,14 @@ components:
                 organization_id:
                     type: string
                 team_id:
+                    type: string
+                model_connection_id:
+                    type: string
+                model_protocol:
+                    type: string
+                model_name:
+                    type: string
+                model_base_url:
                     type: string
         CredentialReferenceResponse:
             type: object
@@ -5184,6 +5328,14 @@ components:
                     type: string
                 api_key:
                     type: string
+                model_connection_id:
+                    type: string
+                model_protocol:
+                    type: string
+                model_name:
+                    type: string
+                model_base_url:
+                    type: string
         UploadArtifactRequest:
             type: object
             properties:
@@ -5247,6 +5399,14 @@ components:
                     type: string
                 desired_state:
                     type: string
+                model_connection_id:
+                    type: string
+                model_protocol:
+                    type: string
+                model_name:
+                    type: string
+                model_base_url:
+                    type: string
 tags:
     - name: AfsBindingService
     - name: AgentIdentityService
@@ -5258,6 +5418,7 @@ tags:
     - name: EnvironmentGrantService
     - name: HealthService
     - name: MemoryStoreService
+    - name: ModelConnectionService
     - name: PlatformAdministrationService
     - name: PromptService
     - name: ProviderService

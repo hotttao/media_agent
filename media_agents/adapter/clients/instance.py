@@ -153,6 +153,9 @@ class GatewayInstanceClient:
                 codex_auth_json=value.get("codex_auth_json") or None,
                 model_connection_id=value.get("model_connection_id") or "",
                 model_connection_version=value.get("model_connection_version") or 0,
+                model_protocol=value.get("model_protocol") or "",
+                model_name=value.get("model_name") or "",
+                model_base_url=value.get("model_base_url") or "",
                 session_token=value["session_token"],
                 mcp_url=cfg.gateway_url.rstrip("/") + "/mcp",
                 mcp_headers={

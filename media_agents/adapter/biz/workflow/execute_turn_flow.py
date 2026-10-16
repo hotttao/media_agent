@@ -48,6 +48,9 @@ class RuntimeCredentials:
     codex_auth_json: str | None = field(default=None, repr=False)
     model_connection_id: str = ""
     model_connection_version: int = 0
+    model_protocol: str = ""
+    model_name: str = ""
+    model_base_url: str = ""
     mcp_url: str | None = field(default=None, repr=False)
     mcp_headers: dict[str, str] = field(default_factory=dict, repr=False)
 

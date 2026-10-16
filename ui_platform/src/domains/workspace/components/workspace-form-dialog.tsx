@@ -43,6 +43,9 @@ export function WorkspaceFormDialog({
   const [name, setName] = useState("");
   const [agentType, setAgentType] = useState<AgentType>("codex");
   const [apiKey, setApiKey] = useState("");
+  const [modelProtocol, setModelProtocol] = useState("anthropic");
+  const [modelName, setModelName] = useState("");
+  const [modelBaseURL, setModelBaseURL] = useState("");
   const [authMode, setAuthMode] = useState("api_key");
   const [connectionID, setConnectionID] = useState("");
   const [connections, setConnections] = useState<ModelConnectionChoice[]>([]);
@@ -54,6 +57,12 @@ export function WorkspaceFormDialog({
       setName(workspace?.name ?? "");
       setAgentType(workspace?.agent_type ?? "codex");
       setApiKey("");
+      setModelProtocol(
+        workspace?.model_protocol ||
+          (workspace?.agent_type === "goose" ? "openai" : "anthropic"),
+      );
+      setModelName(workspace?.model_name ?? "");
+      setModelBaseURL(workspace?.model_base_url ?? "");
       setAuthMode(workspace?.model_connection_id ? "connection" : "api_key");
       setConnectionID(workspace?.model_connection_id ?? "");
       setError("");
@@ -126,6 +135,13 @@ export function WorkspaceFormDialog({
         agent_type: agentType,
         api_key: authMode === "api_key" ? apiKey.trim() : "",
         model_connection_id: authMode === "connection" ? connectionID : "",
+        ...(agentType !== "codex"
+          ? {
+              model_protocol: modelProtocol,
+              model_name: modelName.trim(),
+              model_base_url: modelBaseURL.trim(),
+            }
+          : {}),
       };
       const value =
         mode === "create"
@@ -251,6 +267,12 @@ export function WorkspaceFormDialog({
               setAgentType(event.target.value as AgentType);
               setAuthMode("api_key");
               setConnectionID("");
+              setApiKey("");
+              setModelProtocol(
+                event.target.value === "goose" ? "openai" : "anthropic",
+              );
+              setModelName("");
+              setModelBaseURL("");
             }}
             className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm"
           >
@@ -261,6 +283,63 @@ export function WorkspaceFormDialog({
             ))}
           </select>
         </label>
+        {agentType !== "codex" && (
+          <fieldset className="space-y-4 rounded-xl border border-stone-200 p-4">
+            <legend className="px-1 text-sm font-medium">
+              {t("runtimeModels.title")}
+            </legend>
+            <label className="block space-y-1.5 text-sm">
+              <span>{t("runtimeModels.protocol")}</span>
+              <select
+                aria-label={t("runtimeModels.protocol")}
+                value={modelProtocol}
+                onChange={(e) => {
+                  setModelProtocol(e.target.value);
+                  setApiKey("");
+                }}
+                className="w-full rounded-lg border bg-white px-3 py-2"
+              >
+                <option value="anthropic">
+                  {t("runtimeModels.anthropic")}
+                </option>
+                {agentType === "goose" && (
+                  <option value="openai">{t("runtimeModels.openai")}</option>
+                )}
+              </select>
+            </label>
+            <label className="block space-y-1.5 text-sm">
+              <span>{t("runtimeModels.model")}</span>
+              <input
+                aria-label={t("runtimeModels.model")}
+                value={modelName}
+                maxLength={256}
+                onChange={(e) => setModelName(e.target.value)}
+                required={agentType === "goose"}
+                className="w-full rounded-lg border px-3 py-2"
+                placeholder={
+                  agentType === "claude-code"
+                    ? t("runtimeModels.defaultModel")
+                    : t("runtimeModels.modelHint")
+                }
+              />
+            </label>
+            <label className="block space-y-1.5 text-sm">
+              <span>{t("runtimeModels.baseURL")}</span>
+              <input
+                aria-label={t("runtimeModels.baseURL")}
+                type="url"
+                value={modelBaseURL}
+                maxLength={2048}
+                onChange={(e) => setModelBaseURL(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2"
+                placeholder={t("runtimeModels.defaultEndpoint")}
+              />
+            </label>
+            <p className="text-xs leading-5 text-stone-500">
+              {t("runtimeModels.description")}
+            </p>
+          </fieldset>
+        )}
         {agentType === "codex" && (
           <label className="block space-y-1.5">
             <span className="text-sm font-medium">

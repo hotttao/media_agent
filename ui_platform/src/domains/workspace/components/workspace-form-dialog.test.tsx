@@ -73,6 +73,12 @@ describe("WorkspaceFormDialog", () => {
     fireEvent.change(screen.getByLabelText("Agent"), {
       target: { value: "claude-code" },
     });
+    fireEvent.change(screen.getByLabelText("Model name"), {
+      target: { value: "deepseek/model" },
+    });
+    fireEvent.change(screen.getByLabelText("API base URL"), {
+      target: { value: "https://api.example.test" },
+    });
     fireEvent.change(screen.getByLabelText("API key"), {
       target: { value: "sk-ant-secret" },
     });
@@ -94,6 +100,9 @@ describe("WorkspaceFormDialog", () => {
     expect(JSON.parse(String(request?.body))).toEqual({
       name: "Claude workspace",
       agent_type: "claude-code",
+      model_protocol: "anthropic",
+      model_name: "deepseek/model",
+      model_base_url: "https://api.example.test",
       api_key: "sk-ant-secret",
       model_connection_id: "",
       organization_id: "org",

@@ -54,7 +54,7 @@ func CreateWorkspace(ctx context.Context, c *app.RequestContext) {
 	if creation != nil {
 		creator = creation
 	}
-	value, err := creator.Create(ctx, service.CreateCommand{UserID: middleware.UserID(ctx), OrganizationID: req.OrganizationId, TeamID: req.TeamId, Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey, ModelConnectionID: req.ModelConnectionId})
+	value, err := creator.Create(ctx, service.CreateCommand{UserID: middleware.UserID(ctx), OrganizationID: req.OrganizationId, TeamID: req.TeamId, Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey, ModelConnectionID: req.ModelConnectionId, ModelProtocol: req.ModelProtocol, ModelName: req.ModelName, ModelBaseURL: req.ModelBaseUrl})
 	if err != nil {
 		writeError(c, err)
 		return
@@ -124,7 +124,7 @@ func GetRuntimeContext(ctx context.Context, c *app.RequestContext) {
 		writeError(c, err)
 		return
 	}
-	output := &workspace.RuntimeContextResponse{WorkspaceId: value.Workspace.ID, AgentId: value.AgentID, AgentType: value.AgentType, ApiKey: apiKey, ContextVersion: value.AgentConfiguration.Version, AgentConfigurationId: value.AgentConfiguration.ID, MetadataTargetContextVersion: target}
+	output := &workspace.RuntimeContextResponse{WorkspaceId: value.Workspace.ID, AgentId: value.AgentID, AgentType: value.AgentType, ApiKey: apiKey, ContextVersion: value.AgentConfiguration.Version, AgentConfigurationId: value.AgentConfiguration.ID, MetadataTargetContextVersion: target, ModelProtocol: value.ModelProtocol, ModelName: value.ModelName, ModelBaseUrl: value.ModelBaseURL}
 	if value.ModelConnectionID != "" {
 		if connections == nil {
 			c.JSON(503, map[string]string{"error": "model connection unavailable"})
@@ -143,9 +143,13 @@ func GetRuntimeContext(ctx context.Context, c *app.RequestContext) {
 }
 
 func toResponse(value *domain.ConfiguredWorkspace) *workspace.WorkspaceResponse {
-	return &workspace.WorkspaceResponse{Id: value.Workspace.ID, Name: value.Workspace.Name, AgentId: value.AgentID, AgentType: value.AgentType, ApiKeyConfigured: len(value.EncryptedAPIKey) > 0, ModelConnectionId: value.ModelConnectionID, ConfigurationVersion: value.AgentConfiguration.Version, CreatedAt: value.Workspace.CreatedAt.UnixMilli(), UpdatedAt: value.Workspace.UpdatedAt.UnixMilli(), AgentConfigurationId: value.AgentConfiguration.ID, OrganizationId: value.OrganizationID, TeamId: value.TeamID, CreatedBy: value.CreatedBy, DesiredState: value.DesiredState}
+	return &workspace.WorkspaceResponse{Id: value.Workspace.ID, Name: value.Workspace.Name, AgentId: value.AgentID, AgentType: value.AgentType, ApiKeyConfigured: len(value.EncryptedAPIKey) > 0, ModelConnectionId: value.ModelConnectionID, ModelProtocol: value.ModelProtocol, ModelName: value.ModelName, ModelBaseUrl: value.ModelBaseURL, ConfigurationVersion: value.AgentConfiguration.Version, CreatedAt: value.Workspace.CreatedAt.UnixMilli(), UpdatedAt: value.Workspace.UpdatedAt.UnixMilli(), AgentConfigurationId: value.AgentConfiguration.ID, OrganizationId: value.OrganizationID, TeamId: value.TeamID, CreatedBy: value.CreatedBy, DesiredState: value.DesiredState}
 }
 func writeError(c *app.RequestContext, err error) {
+	if errors.Is(err, domain.ErrModelSettings) {
+		c.JSON(400, map[string]string{"error": err.Error()})
+		return
+	}
 	if errors.Is(err, domain.ErrConflict) {
 		c.JSON(consts.StatusConflict, map[string]string{"error": err.Error()})
 		return
@@ -172,7 +176,7 @@ func UpdateWorkspace(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	cmd := service.UpdateCommand{WorkspaceID: req.WorkspaceId, UserID: middleware.UserID(ctx), Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey, ModelConnectionID: req.ModelConnectionId}
+	cmd := service.UpdateCommand{WorkspaceID: req.WorkspaceId, UserID: middleware.UserID(ctx), Name: req.Name, AgentType: req.AgentType, APIKey: req.ApiKey, ModelConnectionID: req.ModelConnectionId, ModelProtocol: req.ModelProtocol, ModelName: req.ModelName, ModelBaseURL: req.ModelBaseUrl}
 	var value *domain.ConfiguredWorkspace
 	if updater, ok := creation.(interface {
 		Update(context.Context, service.UpdateCommand) (*domain.ConfiguredWorkspace, error)

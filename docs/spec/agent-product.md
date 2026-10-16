@@ -99,3 +99,9 @@ Workspace明确修改连接时在同一事务保存引用、配置历史及沿�
 ## Settings 统一导航
 
 Settings组合L2企业资源管理、个人模型连接管理和Workspace配置组件，移除顶部独立入口。右侧视口flex-1/min-w-0/min-h-0滚动，内部容器控制阅读宽度；容器断点适配狭窄Slot。Workspace分区存query settings，保留session；无Workspace和旧管理URL展示相同导航，仍执行原权限及范围校验。
+
+## Claude Code / Goose 接入
+
+Workspace创建/更新/读取及内部固定版本上下文新增model_protocol、model_name、model_base_url；更新字段为optional，省略保持，空值明确清空。新增数据库迁移在当前/历史配置增加同名字段并更新捕获触发器。Claude仅anthropic，Goose为openai/anthropic；Codex新增字段为空。服务端校验HTTP(S)绝对URL、不含凭据/query/fragment/控制字符，模型名最长256。
+
+Gateway执行上下文透传固定版本设置。Claude通过独立子进程环境使用ANTHROPIC_API_KEY/ANTHROPIC_BASE_URL/ANTHROPIC_MODEL；Goose每个ACP bridge配置GOOSE_PROVIDER/GOOSE_MODEL与对应key/host/path，不修改进程全局认证。缺少认证不借用宿主登录。Settings编辑Workspace提供协议/模型/兼容API地址，新Goose配置需模型名；选择变化创建新Session。镜像及启动文档覆盖两个Runtime。

@@ -49,3 +49,5 @@ Settings 左侧分为工作空间（概览、Agent配置）、企业资源（Pro
 `?settings=` 表示Workspace内活动分区，保留 `?session=`。无Workspace时 `/settings/:section?` 使用同一视图，工作空间分区不可用；旧 `/library/:organizationId?` 与 `/model-connections` 兼容进入统一导航。切换Workspace清理分区和资源草稿，不复制秘密到路由或持久化状态。
 
 Settings 根容器占满Slot，导航固定，内容视口位于右侧外缘。仅内部阅读容器限制宽度；表单长内容不会让滚动条停在Slot中央。狭窄Slot以容器断点切换分区选择器；资源列表/详情也按可用容器宽度适配。切分区会卸载原表单并清空未保存秘密，服务端已保存数据重新加载；不自动提交或丢弃已保存配置。保留加载、空态、失败重试、只读权限和确认操作。
+
+Claude Code/Goose的Workspace表单提供模型协议、名称与API基础地址；Goose必须明确模型名。原有API Key只写不回显，切换Agent/协议清空草稿，保存更新遵循新Session/旧配置保留规则。Codex个人连接选择不变。

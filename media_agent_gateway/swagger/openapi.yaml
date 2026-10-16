@@ -1502,6 +1502,18 @@ components:
                     type: string
                 context_version:
                     type: string
+                codex_auth_json:
+                    type: string
+                model_connection_id:
+                    type: string
+                model_connection_version:
+                    type: string
+                model_protocol:
+                    type: string
+                model_name:
+                    type: string
+                model_base_url:
+                    type: string
         ExecutionContextRequest:
             type: object
             properties:
@@ -1799,6 +1811,10 @@ components:
                 chat_status:
                     type: string
                 context_version:
+                    type: string
+                runtime_status:
+                    type: string
+                execution_epoch:
                     type: string
         SessionResumeRequest:
             type: object

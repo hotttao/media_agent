@@ -50,6 +50,9 @@ export async function updateWorkspace(
     agent_type: AgentType;
     api_key: string;
     model_connection_id?: string;
+    model_protocol?: string;
+    model_name?: string;
+    model_base_url?: string;
   },
 ): Promise<Workspace> {
   const response = await checked(

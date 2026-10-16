@@ -40,7 +40,7 @@ func (c *Control) ResolveVersion(ctx context.Context, userID string, workspaceID
 	if err != nil {
 		return service.AgentContext{}, err
 	}
-	return service.AgentContext{WorkspaceID: value.WorkspaceId, AgentID: value.AgentId, AgentType: value.AgentType, APIKey: value.ApiKey, CodexAuthJSON: value.CodexAuthJson, ModelConnectionID: value.ModelConnectionId, ModelConnectionVersion: value.ModelConnectionVersion, ContextVersion: value.ContextVersion, AgentConfigID: value.AgentConfigurationId, MetadataTargetContextVersion: value.MetadataTargetContextVersion}, nil
+	return service.AgentContext{WorkspaceID: value.WorkspaceId, AgentID: value.AgentId, AgentType: value.AgentType, APIKey: value.ApiKey, CodexAuthJSON: value.CodexAuthJson, ModelConnectionID: value.ModelConnectionId, ModelConnectionVersion: value.ModelConnectionVersion, ModelProtocol: value.ModelProtocol, ModelName: value.ModelName, ModelBaseURL: value.ModelBaseUrl, ContextVersion: value.ContextVersion, AgentConfigID: value.AgentConfigurationId, MetadataTargetContextVersion: value.MetadataTargetContextVersion}, nil
 }
 
 func (c *Control) AuthorizeWorkspace(ctx context.Context, userID, workspaceID, token string) error {

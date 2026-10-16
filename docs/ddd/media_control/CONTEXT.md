@@ -29,12 +29,16 @@ Workspace 期望的 Agent 模型、工具、Prompt、Skill、Memory 和运行参
 _禁用替代词_：Runtime State、Session Config
 
 **Agent Type（Agent 类型）**:
-决定 Workspace 使用哪一种 Agent Runtime 实现的受控枚举；当前支持 Codex 与 Claude Code。
+决定 Workspace 使用哪一种 Agent Runtime 实现的受控枚举；当前支持 Codex、Claude Code 与 Goose。
 _禁用替代词_：Model、Provider、Agent ID
 
 **Agent Identity（Agent 身份）**:
 由一个 Agent Configuration 代表的稳定委托身份，属于该配置的 Workspace 和创建者 User；不同配置即使采用相同 Agent Type 也具有不同身份。
 _禁用替代词_：Agent Type、Agent Session、Provider API Key
+
+**Model Invocation Settings（模型调用设置）**:
+Agent Configuration 中选定的模型API协议、模型名称与服务地址，是随会话固定的调用目标设置，不代表模型供应商目录或认证秘密。
+_禁用替代词_：Provider、Model Connection、API Key
 
 **Provider API Key（Provider API 密钥）**:
 Workspace 为当前 Agent Configuration 提交、由控制面加密托管并仅在运行调用链中解密传递的模型服务秘密。

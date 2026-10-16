@@ -19,10 +19,11 @@ type ExecutionContextCommand struct {
 	ExecutionEpoch                                                          int64
 }
 type ExecutionCredentials struct {
-	APIKey, SessionToken             string
-	CodexAuthJSON, ModelConnectionID string
-	ModelConnectionVersion           int64
-	ExecutionEpoch, ContextVersion   int64
+	ModelProtocol, ModelName, ModelBaseURL string
+	APIKey, SessionToken                   string
+	CodexAuthJSON, ModelConnectionID       string
+	ModelConnectionVersion                 int64
+	ExecutionEpoch, ContextVersion         int64
 }
 
 func NewExecutionContext(reg *InstanceRegistration, repo session.BindingRepository, sessions *sessions.Service, routing *SessionRouting) *ExecutionContext {
@@ -82,7 +83,7 @@ func (w *ExecutionContext) Get(ctx context.Context, token, credential string, cm
 	if err != nil || sessionToken == "" {
 		return ExecutionCredentials{}, ErrMetadataUnavailable
 	}
-	return ExecutionCredentials{APIKey: fixed.APIKey, SessionToken: sessionToken, ExecutionEpoch: cmd.ExecutionEpoch, ContextVersion: s.ContextVersion, CodexAuthJSON: fixed.CodexAuthJSON, ModelConnectionID: fixed.ModelConnectionID, ModelConnectionVersion: fixed.ModelConnectionVersion}, nil
+	return ExecutionCredentials{APIKey: fixed.APIKey, SessionToken: sessionToken, ExecutionEpoch: cmd.ExecutionEpoch, ContextVersion: s.ContextVersion, CodexAuthJSON: fixed.CodexAuthJSON, ModelConnectionID: fixed.ModelConnectionID, ModelConnectionVersion: fixed.ModelConnectionVersion, ModelProtocol: fixed.ModelProtocol, ModelName: fixed.ModelName, ModelBaseURL: fixed.ModelBaseURL}, nil
 }
 func (w *ExecutionContext) Resume(ctx context.Context, id, user, operation string, epoch int64) (*client.RuntimeSession, error) {
 	s, err := w.sessions.Authorize(ctx, id, user)

@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from adapter.agent_app import build_app
 from adapter.clients.cp import CpClient
+from goose.authentication import configure_model
 from goose.bridge import GooseAcpBridge
 from goose.config import GooseHooks, load_goose_config
 
@@ -44,7 +45,11 @@ def create_app() -> FastAPI:
         bridge.configure_metadata(bundle, session_id)
 
     app = build_app(
-        cfg, hooks=hooks, bridge_factory=bridge_factory, metadata_bridge_setup=configure
+        cfg,
+        hooks=hooks,
+        bridge_factory=bridge_factory,
+        metadata_bridge_setup=configure,
+        credential_bridge_setup=configure_model,
     )
     return app
 

@@ -144,3 +144,11 @@ Release 的 resources 接受 `media_plugin.mcp_binding` ID/version/checksum。Co
 ## 个人模型连接引用
 
 当前配置与 agent_configuration_versions 保存 model_connection_id，与 encrypted_api_key 互斥；Session 固定其选择的配置版本，因此不因 Workspace 更换连接而换身份。连接内容版本在每次 claim 按当前有效值读取，更新认证不改变 Prompt/Skill/MCP。连接领域与加载流程见0010-model_connection及工作流0004-model_connection_binding。
+
+## Claude Code / Goose 模型调用设置
+
+Agent Configuration 保存 model_protocol、model_name、model_base_url 三项非秘密值，并由配置历史捕获。Claude Code 接受 anthropic；Goose 接受 openai 或 anthropic，均可使用兼容API地址。协议缺省取Runtime默认；Goose新界面要求明确模型名。Codex原个人连接不接受这组新增设置，沿用原生登录配置。
+
+模型名/URL/协议更新递增执行配置版本，旧Session继续使用旧值。URL只允许HTTP(S)绝对地址，不含用户名密码、query、fragment或控制字符；模型名不含控制字符。API Key仍加密托管。模型调用目标不进入企业资源发布正文；执行时经已授权的固定配置查询传递给Runtime。
+
+更新跨配置历史与元数据Release，沿用workspace_creation.Update事务：复制原Prompt/Skill/MCP选择为新配置Release，不自动升级资源。认证只在执行期传递；Runtime不靠环境变量中的另一模型账号作为隐式回退。

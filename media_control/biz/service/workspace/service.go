@@ -14,10 +14,11 @@ import (
 	"media_agent/media_control/biz/shared/secret"
 )
 
-type CreateCommand struct{ UserID, OrganizationID, TeamID, Name, AgentType, APIKey, ModelConnectionID string }
+type CreateCommand struct{ UserID, OrganizationID, TeamID, Name, AgentType, APIKey, ModelConnectionID, ModelProtocol, ModelName, ModelBaseURL string }
 type UpdateCommand struct {
 	WorkspaceID, UserID, Name, AgentType, APIKey string
 	ModelConnectionID                            *string
+	ModelProtocol, ModelName, ModelBaseURL       *string
 }
 
 var ErrForbidden = errors.New("workspace access denied")
@@ -88,10 +89,14 @@ func (s *Service) PrepareCreate(ctx context.Context, cmd CreateCommand) (*domain
 	if err != nil {
 		return nil, err
 	}
+	protocol, modelName, baseURL, err := domain.NormalizeModelSettings(string(agentType), cmd.ModelProtocol, cmd.ModelName, cmd.ModelBaseURL)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	workspaceID := uuid.NewString()
 	w := &domain.Workspace{ID: workspaceID, OrganizationID: cmd.OrganizationID, TeamID: cmd.TeamID, CreatedBy: cmd.UserID, OwnerUserID: cmd.UserID, Name: cmd.Name, DesiredState: "running", Version: 1, CreatedAt: now, UpdatedAt: now}
-	a := &domain.AgentConfiguration{ID: uuid.NewString(), WorkspaceID: workspaceID, AgentID: string(agentType), AgentType: string(agentType), EncryptedAPIKey: encrypted, ModelConnectionID: cmd.ModelConnectionID, Version: 1, CreatedAt: now, UpdatedAt: now}
+	a := &domain.AgentConfiguration{ID: uuid.NewString(), WorkspaceID: workspaceID, AgentID: string(agentType), AgentType: string(agentType), EncryptedAPIKey: encrypted, ModelConnectionID: cmd.ModelConnectionID, ModelProtocol: protocol, ModelName: modelName, ModelBaseURL: baseURL, Version: 1, CreatedAt: now, UpdatedAt: now}
 	return &domain.ConfiguredWorkspace{Workspace: *w, AgentConfiguration: *a}, nil
 }
 
@@ -182,6 +187,25 @@ func (s *Service) PrepareUpdate(ctx context.Context, cmd UpdateCommand) (*domain
 	}
 	configurationChanged = configurationChanged || connectionID != value.ModelConnectionID
 	value.ModelConnectionID = connectionID
+	protocol, modelName, baseURL := value.ModelProtocol, value.ModelName, value.ModelBaseURL
+	if value.AgentType != string(agentType) {
+		protocol, modelName, baseURL = "", "", ""
+	}
+	if cmd.ModelProtocol != nil {
+		protocol = *cmd.ModelProtocol
+	}
+	if cmd.ModelName != nil {
+		modelName = *cmd.ModelName
+	}
+	if cmd.ModelBaseURL != nil {
+		baseURL = *cmd.ModelBaseURL
+	}
+	protocol, modelName, baseURL, err = domain.NormalizeModelSettings(string(agentType), protocol, modelName, baseURL)
+	if err != nil {
+		return nil, err
+	}
+	configurationChanged = configurationChanged || protocol != value.ModelProtocol || modelName != value.ModelName || baseURL != value.ModelBaseURL
+	value.ModelProtocol, value.ModelName, value.ModelBaseURL = protocol, modelName, baseURL
 	now := time.Now().UTC()
 	if value.Name != cmd.Name {
 		value.Workspace.Version++

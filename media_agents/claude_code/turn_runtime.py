@@ -74,6 +74,8 @@ class ClaudeCodeTurnRuntime:
             message=message,
             session_id=preparation.handle,
             api_key=credentials.api_key,
+            model_name=credentials.model_name,
+            base_url=credentials.model_base_url,
             resume=not preparation.is_new,
             metadata_args=args or None,
         ):

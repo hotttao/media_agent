@@ -57,3 +57,11 @@
 - [x] 对齐agent-platform左侧导航，统一企业资源/个人连接管理与旧链接。
 - [x] 修复滚动视口和窄Slot布局，保留权限与原业务功能。
 - [x] 回归、部署、review.md与commit。
+
+## F6 · Claude Code 与 Goose
+
+- [x] F6a：Workspace固定模型调用设置、Control/Gateway/Agent链路及界面，相关回归与review/commit。
+- [ ] F6b：原生Runtime对话/流式/历史/工具配置接通，Docker镜像构建、创建与使用。
+- [ ] F6c：使用明确的真实模型服务完成验收，记录所需凭据和外部限制；review与commit。
+
+本期优先此项；Kubernetes和外部OAuth验收后排，Docker扩缩容继续不开发。

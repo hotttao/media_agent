@@ -25,6 +25,9 @@ export interface Workspace {
   agent_type: AgentType;
   api_key_configured: boolean;
   model_connection_id?: string;
+  model_protocol?: string;
+  model_name?: string;
+  model_base_url?: string;
   configuration_version: number;
   created_at: number;
   updated_at: number;
@@ -37,4 +40,7 @@ export interface CreateWorkspaceInput {
   agent_type: AgentType;
   api_key: string;
   model_connection_id?: string;
+  model_protocol?: string;
+  model_name?: string;
+  model_base_url?: string;
 }

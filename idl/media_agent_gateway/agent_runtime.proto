@@ -13,7 +13,7 @@ message InstanceLocator {
 message InstanceIdentity { string environment_id=1; string resource_uid=2; string resource_generation=3; int64 registration_version=4; string agent_type=5; }
 message InstanceRegistration { string instance_credential=1; int64 registration_version=2; string admission=3; string incarnation_id=4; string drain_operation_id=5; }
 message ExecutionContextRequest { string session_id=1 [(api.path)="session_id"]; string workspace_id=2 [(api.body)="workspace_id"]; string agent_config_id=3 [(api.body)="agent_config_id"]; string replica_id=4 [(api.body)="replica_id"]; string incarnation_id=5 [(api.body)="incarnation_id"]; int64 execution_epoch=6 [(api.body)="execution_epoch"]; string turn_id=7 [(api.body)="turn_id"]; }
-message ExecutionContext { string api_key=1; string session_token=2; int64 execution_epoch=3; int64 context_version=4; string codex_auth_json=5;string model_connection_id=6;int64 model_connection_version=7; }
+message ExecutionContext { string api_key=1; string session_token=2; int64 execution_epoch=3; int64 context_version=4; string codex_auth_json=5;string model_connection_id=6;int64 model_connection_version=7;string model_protocol=8;string model_name=9;string model_base_url=10; }
 message SessionResumeRequest { string session_id=1 [(api.path)="session_id"]; string operation_id=2 [(api.body)="operation_id"]; int64 expected_epoch=3 [(api.body)="expected_epoch"]; }
 message SessionResumeResponse { string session_id=1; string status=2; int64 execution_epoch=3; }
 service AgentRuntimeService {

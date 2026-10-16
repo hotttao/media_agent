@@ -37,6 +37,7 @@ type Workspace struct {
 
 type AgentConfiguration struct {
 	ID, WorkspaceID, AgentID, AgentType, ModelConnectionID string
+	ModelProtocol, ModelName, ModelBaseURL                 string
 	EncryptedAPIKey                                        []byte
 	Version                                                int64
 	CreatedAt, UpdatedAt                                   time.Time

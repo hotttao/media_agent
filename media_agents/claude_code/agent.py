@@ -45,14 +45,29 @@ class ClaudeCodeAgent:
         api_key: str | None,
         resume: bool = True,
         metadata_args: list[str] | None = None,
+        model_name: str = "",
+        base_url: str = "",
     ) -> AsyncIterator[dict[str, object]]:
         runtime_session_id = session_id or str(uuid.uuid4())
         args = self._command(message, session_id if resume else None, runtime_session_id)
         if metadata_args:
             args[1:1] = metadata_args
         env = os.environ.copy()
+        for key in (
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_MODEL",
+        ):
+            env.pop(key, None)
         if api_key:
             env["ANTHROPIC_API_KEY"] = api_key
+        if model_name:
+            env["ANTHROPIC_MODEL"] = model_name
+        if base_url:
+            env["ANTHROPIC_BASE_URL"] = base_url
+        env["DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
         process = await asyncio.create_subprocess_exec(
             *args,
             cwd=self._cwd,

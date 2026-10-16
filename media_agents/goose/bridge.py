@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
@@ -41,11 +42,17 @@ class GooseAcpBridge(AcpBridge):
     async def start(self) -> None:
         target = self.path_root / self.platform_session_id / "goose"
         target.mkdir(parents=True, exist_ok=True, mode=0o700)
-        config = target / "config.yaml"
+        config_dir = target / "config"
+        config_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        config = config_dir / "config.yaml"
         # Session MCP declarations are supplied through ACP. Ambient extensions cannot
         # add backend servers from the process-global Goose configuration.
         config.write_text(json.dumps({"extensions": {}}))
         config.chmod(0o600)
+        if self.bundle is not None and (self.bundle / "skills").is_dir():
+            shutil.copytree(
+                self.bundle / "skills", target / ".agents" / "skills", dirs_exist_ok=True
+            )
         self.env["GOOSE_PATH_ROOT"] = str(target)
         await super().start()
         if self.client is not None:

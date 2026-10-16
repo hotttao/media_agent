@@ -11,6 +11,7 @@ type Workspace struct {
 func (Workspace) TableName() string { return "workspaces" }
 
 type AgentConfiguration struct {
+	ModelProtocol, ModelName, ModelBaseURL                 string
 	ID, WorkspaceID, AgentID, AgentType, ModelConnectionID string
 	EncryptedAPIKey                                        []byte
 	Version                                                int64

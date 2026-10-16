@@ -31,3 +31,5 @@ Agent 仅在 Turn prepare 时装配凭据，文件不属于 metadata bundle。�
 导入重复需用户选择原记录并 expected_version 替换；CAS 冲突409，不盲覆盖。Workspace 绑定失败不产生半条配置版本；原生写文件失败导致本轮 failed，不重放输入。撤销与绑定并发时下一 claim 拒绝，撤销不等待运行中的模型返回。
 
 Workspace 明确更换连接时，同一事务写配置引用和历史，并沿用原 Release 的 Prompt/Skill/MCP 固定内容生成新 Release 与 Outbox；旧 Workspace 无 Release 时生成 none/空资源初始内容。不能因更换模型连接而升级资源。仅替换连接认证内容时不生成元数据 Release 或通知。
+
+Claude Code/Goose的模型调用设置变更复用同一配置更新事务及Release沿用规则，旧Session固定原协议/模型/地址。无个人连接的API Key路径也必须原子发布新配置版本；Gateway从固定版本加载非秘密设置，并把认证与调用目标按同一配置版本交给Runtime。

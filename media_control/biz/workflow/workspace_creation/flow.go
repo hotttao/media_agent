@@ -63,7 +63,7 @@ func (f *Flow) Update(ctx context.Context, cmd workspace.UpdateCommand) (*domain
 	if e != nil && !errors.Is(e, config.ErrNotFound) {
 		return nil, e
 	}
-	confirm := v.ModelConnectionID != "" || cmd.ModelConnectionID != nil
+	confirm := v.ModelConnectionID != "" || cmd.ModelConnectionID != nil || cmd.ModelProtocol != nil || cmd.ModelName != nil || cmd.ModelBaseURL != nil
 	e = f.Tx.RunInTx(ctx, func(tx context.Context) error {
 		if e := w.StoreUpdate(tx, v); e != nil {
 			return e

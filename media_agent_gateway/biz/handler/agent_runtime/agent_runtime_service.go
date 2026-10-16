@@ -82,7 +82,7 @@ func GetExecutionContext(ctx context.Context, c *app.RequestContext) {
 		fail(c, err)
 		return
 	}
-	c.JSON(200, &dto.ExecutionContext{ApiKey: value.APIKey, CodexAuthJson: value.CodexAuthJSON, ModelConnectionId: value.ModelConnectionID, ModelConnectionVersion: value.ModelConnectionVersion, SessionToken: value.SessionToken, ExecutionEpoch: value.ExecutionEpoch, ContextVersion: value.ContextVersion})
+	c.JSON(200, &dto.ExecutionContext{ApiKey: value.APIKey, CodexAuthJson: value.CodexAuthJSON, ModelConnectionId: value.ModelConnectionID, ModelConnectionVersion: value.ModelConnectionVersion, ModelProtocol: value.ModelProtocol, ModelName: value.ModelName, ModelBaseUrl: value.ModelBaseURL, SessionToken: value.SessionToken, ExecutionEpoch: value.ExecutionEpoch, ContextVersion: value.ContextVersion})
 }
 func ResumeSession(ctx context.Context, c *app.RequestContext) {
 	if !ready(c) {

@@ -260,5 +260,17 @@
 		"configured": "已配置",
 		"notConfigured": "未配置",
 		"chooseWorkspace": "请先选择工作空间，再管理其配置。"
+	},
+	"runtimeModels": {
+		"title": "模型服务",
+		"protocol": "API 协议",
+		"model": "模型名称",
+		"baseURL": "API 基础地址",
+		"anthropic": "Anthropic 兼容",
+		"openai": "OpenAI 兼容",
+		"defaultModel": "Runtime 默认模型（可选）",
+		"modelHint": "填写服务提供方的模型 ID",
+		"defaultEndpoint": "提供方默认地址（可选）",
+		"description": "填写该服务的 API Key。每个会话固定模型设置，修改后用于新会话。"
 	}
 }

@@ -14,6 +14,7 @@ import (
 )
 
 type AgentContext struct {
+	ModelProtocol, ModelName, ModelBaseURL                                               string
 	WorkspaceID, AgentID, AgentType, APIKey, AgentConfigID, MetadataTargetContextVersion string
 	ContextVersion                                                                       int64
 	CodexAuthJSON, ModelConnectionID                                                     string

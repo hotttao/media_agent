@@ -307,5 +307,17 @@
 		"configured": "Configured",
 		"notConfigured": "Not configured",
 		"chooseWorkspace": "Choose a workspace to manage its configuration."
+	},
+	"runtimeModels": {
+		"title": "Model service",
+		"protocol": "API protocol",
+		"model": "Model name",
+		"baseURL": "API base URL",
+		"anthropic": "Anthropic compatible",
+		"openai": "OpenAI compatible",
+		"defaultModel": "Runtime default (optional)",
+		"modelHint": "Enter the model ID from your provider",
+		"defaultEndpoint": "Provider default (optional)",
+		"description": "Use an API key for this service. Model settings are fixed for each session; changes apply to new sessions."
 	}
 }
