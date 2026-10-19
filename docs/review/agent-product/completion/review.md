@@ -4,6 +4,12 @@
 
 结论：当前Docker可用产品范围的开发已完成，代码已提交并部署。不能据此宣称原003全部Kubernetes部署门禁、所有原生Runtime和所有外部OAuth提供商均已实际验收。
 
+## 2026-10-19 状态更新
+
+Claude Code / Goose 已在 F6a/F6b/F6c 完成真实 SiliconFlow 模型验收与部署，见 [F6c](../f6c/review.md)。外部 MCP OAuth 实际提供商接入按用户本日指示延期，不继续要求用户提供服务或凭据。Kubernetes 双 Pod / RWX 仍延期，本机 k3s 保持关闭。
+
+F7 修复聊天长内容在窄 Slot 的显示裁切并完成界面验收，见 [F7](../f7/review.md)。当前功能清单没有新增待开发项；这不表示已完成所有环境验收或全部历史 CLI 门禁。以下 2026-10-16 检查记录保留，不作为本日重新执行的检查。
+
 ## 能力覆盖
 
 | 要求 | 当前实现及阶段 | 证据与状态 |
@@ -20,10 +26,11 @@
 | 登录、创建会话、流式输出、历史、工具确认、暂停恢复 | F4b1/F4b2及登录/恢复修复 | 完成；真实账号、Codex、多轮SSE与历史证据 |
 | auth.json个人模型连接、多个Workspace明确复用、加密/替换/撤销 | F5 | 完成；正式“本机Codex”保留；真实两轮对话及恢复新会话验证 |
 | Settings左导航、资源/模型连接归一、滚动边界/窄Slot/旧链接 | Settings UI | 完成并部署；真实服务截图、几何断言与10场景回归 |
+| Claude Code / Goose 模型设置、流式、多轮、Skill、工具审批与 Gateway MCP | F6a/F6b/F6c | 完成并部署；正式 SiliconFlow 实际模型、界面和持久历史验证 |
 
 能力状态来自实现和阶段证据，而非只看plan勾选。抽查IDL、路由、Workflow、原生产物装配及未实现分支。源码中的Docker scaling NotImplemented为已批准范围；Codex旧非版本化Hooks.load_skills的no-op不承担当前正式元数据加载，当前路径通过main中的codex_home/版本产物装配，已有真实Skill验收，不作为当前功能未实现的依据。
 
-## 本轮检查
+## 2026-10-16 检查记录
 
 - 当前Control、Gateway、Plugin、Runtime Controller、Auth五模块 `go test` 全部通过。
 - 五模块archcheck全部通过。
@@ -40,8 +47,8 @@ Runtime计划P9原有四项仍未勾选，但实际由F4/F5及后续修复提交
 ## 未完成验收与已排除范围
 
 - Kubernetes真实双Pod Ready、RWX及跨Pod共享文件实测尚未完成；原存储镜像环境受阻，已按用户指示延期，不启动本机k3s补跑。
-- Claude/Goose已有适配与检查，但未使用其正式模型凭据完成与Codex同级的完整模型端到端验收。auth.json个人连接本期明确用于Codex。
-- 外部MCP三类认证能力已实现并有真实HTTP协议验证；任意第三方OAuth提供商的正式账号接入、互联网私有Git服务各自实际环境仍需部署验收。
+- Claude/Goose 原未验收项已由 F6 完成；auth.json 个人连接仍明确用于 Codex，不扩展为其他 Runtime 的 OAuth 登录。
+- 外部MCP三类认证能力已有真实HTTP协议验证；第三方OAuth提供商正式接入按用户2026-10-19指示延期，未继续本轮OAuth开发。互联网私有Git服务各自实际环境仍需部署验收。
 - 代理曾有间歇TLS EOF，正式模型通过重试后成功；当前功能交付不等于长期可用性/SRE保证。
 - Docker扩缩容、隔离增强、故障接管/SRE专项按用户要求不属于本期，不将501接口当成功实现。
 

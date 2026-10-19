@@ -1,0 +1,51 @@
+{
+  "readOnlyHistory": true,
+  "realModelCalls": 0,
+  "pageErrors": 0,
+  "results": [
+    {
+      "width": 1280,
+      "height": 800,
+      "chatWidth": 414,
+      "chatOverflow": false,
+      "bubbles": [
+        {
+          "width": 339,
+          "overflow": false
+        },
+        {
+          "width": 337,
+          "overflow": false
+        },
+        {
+          "width": 299,
+          "overflow": false
+        }
+      ],
+      "pageOverflow": false,
+      "historyBodyRetained": true
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "chatWidth": 332,
+      "chatOverflow": false,
+      "bubbles": [
+        {
+          "width": 272,
+          "overflow": false
+        },
+        {
+          "width": 270,
+          "overflow": false
+        },
+        {
+          "width": 270,
+          "overflow": false
+        }
+      ],
+      "pageOverflow": false,
+      "historyBodyRetained": true
+    }
+  ]
+}

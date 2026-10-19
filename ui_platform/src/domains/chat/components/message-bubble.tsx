@@ -4,9 +4,9 @@ import type { ChatMessage } from "@/domains/chat/types";
 export function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
   return (
-    <article className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <article className={`flex min-w-0 ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[82%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
+        className={`min-w-0 max-w-[82%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm [overflow-wrap:anywhere] ${
           isUser
             ? "bg-slate-900 text-white"
             : message.role === "tool"

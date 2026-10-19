@@ -109,3 +109,5 @@ Gateway执行上下文透传固定版本设置。Claude通过独立子进程环�
 Claude Code原生交互使用固定版本CLI的stream-json/stdio control通道：can_use_tool转为持久化权限请求，AskUserQuestion逐题转为input请求，回答后返回原生allow/deny，不自动批准。启用partial messages，文本增量实时发布，assistant完成快照只保存一次。原生错误分类后返回安全消息，不把供应商原始响应或stderr外发。
 
 ACP 原生消息通知按接收顺序完成翻译和下游写入，不能由 SDK 的 detached 通知任务提前确认处理完成。new/load/prompt 响应之后，适配器等待此前通知队列排空，再重置历史回放状态或生成最终消息快照；权限请求保持并发，等待用户不会阻塞通知处理。避免完成响应抢先引起文本截断或终态后写入。
+
+Chat 消息气泡容器允许 flex 内容收缩，并按可用宽度对连续字符串任意断行。用户/assistant/tool 使用同一文本布局规则，保持原内容解析、正文与换行；不修改历史或消息持久化。以真实历史工具 JSON 在桌面三栏、窄 Slot 和手机布局的 scrollWidth/clientWidth 几何检查验收。

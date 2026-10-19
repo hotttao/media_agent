@@ -1,0 +1,189 @@
+{
+  "type": "Actual MessageBubble rendered with synthetic layout content",
+  "cases": [
+    {
+      "width": 480,
+      "mode": "before",
+      "slotWidth": 480,
+      "slotOverflow": true,
+      "bubbles": [
+        {
+          "role": "user",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "assistant",
+          "overflow": true,
+          "textRetained": true
+        },
+        {
+          "role": "tool",
+          "overflow": true,
+          "textRetained": true
+        }
+      ]
+    },
+    {
+      "width": 480,
+      "mode": "after",
+      "slotWidth": 480,
+      "slotOverflow": false,
+      "bubbles": [
+        {
+          "role": "user",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "assistant",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "tool",
+          "overflow": false,
+          "textRetained": true
+        }
+      ]
+    },
+    {
+      "width": 320,
+      "mode": "before",
+      "slotWidth": 320,
+      "slotOverflow": true,
+      "bubbles": [
+        {
+          "role": "user",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "assistant",
+          "overflow": true,
+          "textRetained": true
+        },
+        {
+          "role": "tool",
+          "overflow": true,
+          "textRetained": true
+        }
+      ]
+    },
+    {
+      "width": 320,
+      "mode": "after",
+      "slotWidth": 320,
+      "slotOverflow": false,
+      "bubbles": [
+        {
+          "role": "user",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "assistant",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "tool",
+          "overflow": false,
+          "textRetained": true
+        }
+      ]
+    },
+    {
+      "width": 240,
+      "mode": "before",
+      "slotWidth": 240,
+      "slotOverflow": true,
+      "bubbles": [
+        {
+          "role": "user",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "assistant",
+          "overflow": true,
+          "textRetained": true
+        },
+        {
+          "role": "tool",
+          "overflow": true,
+          "textRetained": true
+        }
+      ]
+    },
+    {
+      "width": 240,
+      "mode": "after",
+      "slotWidth": 240,
+      "slotOverflow": false,
+      "bubbles": [
+        {
+          "role": "user",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "assistant",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "tool",
+          "overflow": false,
+          "textRetained": true
+        }
+      ]
+    },
+    {
+      "width": 358,
+      "mode": "before",
+      "slotWidth": 358,
+      "slotOverflow": true,
+      "bubbles": [
+        {
+          "role": "user",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "assistant",
+          "overflow": true,
+          "textRetained": true
+        },
+        {
+          "role": "tool",
+          "overflow": true,
+          "textRetained": true
+        }
+      ]
+    },
+    {
+      "width": 358,
+      "mode": "after",
+      "slotWidth": 358,
+      "slotOverflow": false,
+      "bubbles": [
+        {
+          "role": "user",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "assistant",
+          "overflow": false,
+          "textRetained": true
+        },
+        {
+          "role": "tool",
+          "overflow": false,
+          "textRetained": true
+        }
+      ]
+    }
+  ]
+}
