@@ -1,0 +1,5 @@
+# Build the standalone bundle first with `yarn build` in ui_workflow.
+# docker build -f ui_workflow/Dockerfile.static -t media-workflow-ui:migration ui_workflow
+FROM nginx:1.27-alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY dist/standalone/ /usr/share/nginx/html/workflow/

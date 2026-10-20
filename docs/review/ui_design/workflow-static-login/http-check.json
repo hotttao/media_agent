@@ -1,0 +1,6 @@
+{
+  "/self-service/login/browser": "303",
+  "/api/auth/me": "401",
+  "/recovery": "303",
+  "/assets/normalize.css": "200"
+}

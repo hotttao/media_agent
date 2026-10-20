@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-10-20T07:45:50.313Z",
+  "form": {
+    "origin": "http://192.168.2.38:5173",
+    "path": "/login",
+    "hasFlow": true,
+    "inputs": 3
+  },
+  "authenticated": {
+    "status": 200,
+    "hasUser": true,
+    "contentType": "application/json; charset=utf-8"
+  },
+  "overview": {
+    "title": "@media/ui-workflow",
+    "path": "/",
+    "headings": [
+      "Media Workflow",
+      "素材库"
+    ]
+  },
+  "pageErrors": []
+}

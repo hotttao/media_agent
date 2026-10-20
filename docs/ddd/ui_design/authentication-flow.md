@@ -49,5 +49,6 @@ Kratos browser logout 是两步协议：Shell 先请求 `/self-service/logout/br
 
 - `/recovery`、`/settings`、`/verification` 暂由 Kratos Login UI 承载；验证码和恢复凭证不进入业务前端。
 - Vite 开发模式也必须把这些页面及 Login UI 的静态资源代理到统一网关，不能由 SPA fallback 吞掉路径；`/login` 和 `/registration` 仍由本地前端承载。
+- Nginx 静态部署同样必须转发认证、业务 API 和 Ory 页面及资源；`/self-service/*` 不得返回 SPA HTML。API 代理使用统一网关的规范 Host，以匹配 Oathkeeper 规则，认证 flow 保留浏览器 origin。
 - 创建 flow、提交凭证或登出失败时保留明确错误，不假装本地状态已完成。
 - loading 期间显示认证加载态；401 显示/跳转登录；403 的 disabled/deleted 业务状态不得无限重试。
