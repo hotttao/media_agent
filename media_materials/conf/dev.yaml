@@ -73,7 +73,7 @@ object_storage:
   enabled: true
   provider: ${MEDIA_STORAGE_PROVIDER:-s3}
   endpoint: ${MEDIA_STORAGE_ENDPOINT:-http://127.0.0.1:8333}
-  public_endpoint: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://192.168.2.41:8333}
+  public_endpoint: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://mini-001.local:8333}
   region: ${MEDIA_STORAGE_REGION:-us-east-1}
   bucket: ${MEDIA_STORAGE_BUCKET:-media}
   access_key: ${MEDIA_STORAGE_ACCESS_KEY:-media-materials}

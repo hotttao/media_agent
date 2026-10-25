@@ -85,6 +85,7 @@ services:
     restart: "no"
 
   hydra:
+    extra_hosts: ["mini-001.local:host-gateway"]
     image: ghcr.io/hotttao/ory-hydra:v26.2.0
     command: serve all --dev
     depends_on:
@@ -92,14 +93,14 @@ services:
         condition: service_completed_successfully
     environment:
       DSN: postgres://hydra:hydra-local@auth-postgres:5432/hydra?sslmode=disable
-      URLS_SELF_ISSUER: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/ory/hydra/
-      URLS_SELF_PUBLIC: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/ory/hydra/
-      URLS_LOGIN: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/login
-      URLS_CONSENT: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/consent
-      URLS_LOGOUT: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/logout
-      URLS_ERROR: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/error
-      URLS_POST_LOGOUT_REDIRECT: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/
-      URLS_IDENTITY_PROVIDER_PUBLICURL: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/
+      URLS_SELF_ISSUER: ${ORY_PUBLIC_URL:-http://mini-001.local:18080}/ory/hydra/
+      URLS_SELF_PUBLIC: ${ORY_PUBLIC_URL:-http://mini-001.local:18080}/ory/hydra/
+      URLS_LOGIN: ${ORY_PUBLIC_URL:-http://mini-001.local:18080}/login
+      URLS_CONSENT: ${ORY_PUBLIC_URL:-http://mini-001.local:18080}/consent
+      URLS_LOGOUT: ${ORY_PUBLIC_URL:-http://mini-001.local:18080}/logout
+      URLS_ERROR: ${ORY_PUBLIC_URL:-http://mini-001.local:18080}/error
+      URLS_POST_LOGOUT_REDIRECT: ${ORY_PUBLIC_URL:-http://mini-001.local:18080}/
+      URLS_IDENTITY_PROVIDER_PUBLICURL: ${ORY_PUBLIC_URL:-http://mini-001.local:18080}/
       URLS_IDENTITY_PROVIDER_URL: http://kratos:4434/
       SECRETS_SYSTEM: ${ORY_HYDRA_SYSTEM_SECRET:-local-hydra-system-secret-change-me-32}
       SECRETS_COOKIE: ${ORY_HYDRA_COOKIE_SECRET:-local-hydra-cookie-secret-change-me-32}
@@ -149,6 +150,7 @@ services:
       - ./auth/oathkeeper:/etc/oathkeeper:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "mini-001.local:host-gateway"
     networks: [auth]
     restart: unless-stopped
 
@@ -182,6 +184,7 @@ services:
     restart: unless-stopped
 
   login-ui:
+    extra_hosts: ["mini-001.local:host-gateway"]
     image: ghcr.io/korjavin/kratos-selfservice-ui-node-vendor:latest
     depends_on: [kratos, hydra]
     environment:
@@ -190,10 +193,10 @@ services:
       # The UI app appends /self-service/... itself; a trailing slash produces
       # //self-service and Kratos redirects before cookies are forwarded.
       KRATOS_PUBLIC_URL: http://kratos:4433
-      KRATOS_BROWSER_URL: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/
+      KRATOS_BROWSER_URL: ${ORY_PUBLIC_URL:-http://mini-001.local:18080}/
       KRATOS_ADMIN_URL: http://kratos:4434
       HYDRA_ADMIN_URL: http://hydra:4445
-      BASE_URL: ${ORY_PUBLIC_URL:-http://192.168.2.41:18080}/
+      BASE_URL: ${ORY_PUBLIC_URL:-http://mini-001.local:18080}/
       COOKIE_SECRET: ${ORY_UI_COOKIE_SECRET:-local-login-ui-cookie-secret-change-me}
       CSRF_COOKIE_SECRET: ${ORY_UI_CSRF_SECRET:-local-login-ui-csrf-secret-change-me}
       CSRF_COOKIE_NAME: ory_ui_csrf

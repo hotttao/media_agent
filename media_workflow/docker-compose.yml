@@ -11,7 +11,7 @@ services:
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_workflow?sslmode=disable
       MEDIA_AUTH_URL: http://media_auth:8001
       MEDIA_MATERIALS_URL: http://host.docker.internal:8003
-      MEDIA_STORAGE_PUBLIC_ENDPOINT: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://192.168.2.41:8333}
+      MEDIA_STORAGE_PUBLIC_ENDPOINT: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://mini-001.local:8333}
       MEDIA_CONTROL_URL: http://host.docker.internal:8007
       CONTROL_INTERNAL_TOKEN: ${CONTROL_INTERNAL_TOKEN:-dev-control-internal-token}
       CONDUCTOR_URL: http://conductor:8080
@@ -29,6 +29,7 @@ services:
     - ../media_logs/media-workflow:/media_logs/media-workflow
     extra_hosts:
     - host.docker.internal:host-gateway
+    - mini-001.local:host-gateway
     networks:
     - media-net
     - auth
@@ -43,11 +44,12 @@ services:
       CONDUCTOR_URL: http://conductor:8080
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_workflow?sslmode=disable
       MEDIA_MATERIALS_URL: http://media_materials:8003
-      MEDIA_STORAGE_PUBLIC_ENDPOINT: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://192.168.2.41:8333}
+      MEDIA_STORAGE_PUBLIC_ENDPOINT: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://mini-001.local:8333}
       MEDIA_STORAGE_BUCKET: ${MEDIA_STORAGE_BUCKET:-media}
       MEDIA_MATERIALS_INTERNAL_TOKEN: ${MEDIA_MATERIALS_INTERNAL_TOKEN:-dev-media-materials-internal-token}
     extra_hosts:
     - host.docker.internal:host-gateway
+    - mini-001.local:host-gateway
     networks:
     - media-net
     restart: unless-stopped
@@ -63,13 +65,14 @@ services:
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media_workflow?sslmode=disable
       CONDUCTOR_URL: http://conductor:8080
       MANAGED_EXECUTOR_URL: ${MANAGED_EXECUTOR_URL:-http://host.docker.internal:8010}
-      MEDIA_STORAGE_PUBLIC_ENDPOINT: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://192.168.2.41:8333}
+      MEDIA_STORAGE_PUBLIC_ENDPOINT: ${MEDIA_STORAGE_PUBLIC_ENDPOINT:-http://mini-001.local:8333}
       MEDIA_MATERIALS_URL: http://media_materials:8003
       MEDIA_MATERIALS_INTERNAL_TOKEN: ${MEDIA_MATERIALS_INTERNAL_TOKEN:-dev-media-materials-internal-token}
     volumes:
     - ${MANAGED_WORKER_CONFIG:-./conf/managed-worker.example.yaml}:/app/conf/managed-worker.yaml:ro
     extra_hosts:
     - host.docker.internal:host-gateway
+    - mini-001.local:host-gateway
     networks: [media-net]
     restart: unless-stopped
 

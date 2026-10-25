@@ -55,3 +55,7 @@ media_agent_gateway/.runtime-identities/
 
 # Private local Agent product deployment material.
 docker-compose/.agent-product/
+
+docker-compose/.agent-product
+
+media_auth/.env.agent-gateway.local

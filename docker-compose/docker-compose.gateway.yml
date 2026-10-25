@@ -1,6 +1,6 @@
 # 统一业务网关（显式启动）。
 # 配置集中在 traefik/；Compose 不使用业务容器 labels。
-# 默认监听 192.168.2.41:18080（8080 已被 Conductor 占用）。
+# 默认监听 mini-001.local:18080（8080 已被 Conductor 占用）。
 
 services:
   media_gateway:
@@ -8,7 +8,7 @@ services:
     container_name: media-agent-gateway
     command: --configFile=/etc/traefik/traefik.yml
     ports:
-      # Bind all host interfaces so the LAN address (192.168.2.41) and local
+      # Bind all host interfaces so the LAN address (mini-001.local) and local
       # loopback both traverse Docker's published-port rules consistently.
       - "0.0.0.0:18080:80"
     extra_hosts:
