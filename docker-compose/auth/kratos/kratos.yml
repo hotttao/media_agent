@@ -8,22 +8,22 @@ serve:
     port: 4433
     # Development browser origin. Vite proxies Ory paths to Traefik; the
     # frontend itself is served directly by Vite and is not a gateway route.
-    base_url: http://192.168.2.41:5173/
+    base_url: http://192.168.2.38:5173/
     cors:
       enabled: true
       allowed_origins:
-        - http://192.168.2.41:5173
-        - http://192.168.2.41:18080
+        - http://192.168.2.38:5173
+        - http://192.168.2.38:18080
   admin:
     host: 0.0.0.0
     port: 4434
     base_url: http://kratos:4434/
 
 selfservice:
-  default_browser_return_url: http://192.168.2.41:5173/
+  default_browser_return_url: http://192.168.2.38:5173/
   allowed_return_urls:
-    - http://192.168.2.41:5173/
-    - http://192.168.2.41:18080/
+    - http://192.168.2.38:5173/
+    - http://192.168.2.38:18080/
   methods:
     password:
       enabled: true
@@ -31,13 +31,13 @@ selfservice:
       enabled: true
   flows:
     error:
-      ui_url: http://192.168.2.41:5173/error
+      ui_url: http://192.168.2.38:5173/error
     login:
-      ui_url: http://192.168.2.41:5173/login
+      ui_url: http://192.168.2.38:5173/login
       lifespan: 10m
     registration:
       enabled: true
-      ui_url: http://192.168.2.41:5173/registration
+      ui_url: http://192.168.2.38:5173/registration
       lifespan: 10m
       after:
         password:
@@ -45,17 +45,17 @@ selfservice:
             - hook: session
     logout:
       after:
-        default_browser_return_url: http://192.168.2.41:5173/login
+        default_browser_return_url: http://192.168.2.38:5173/login
     recovery:
       enabled: true
-      ui_url: http://192.168.2.41:5173/recovery
+      ui_url: http://192.168.2.38:5173/recovery
       use: code
     settings:
-      ui_url: http://192.168.2.41:5173/settings
+      ui_url: http://192.168.2.38:5173/settings
       privileged_session_max_age: 15m
     verification:
       enabled: true
-      ui_url: http://192.168.2.41:5173/verification
+      ui_url: http://192.168.2.38:5173/verification
       use: code
 
 identity:
