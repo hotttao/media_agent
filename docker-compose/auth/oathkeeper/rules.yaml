@@ -2,7 +2,7 @@
   upstream:
     url: http://host.docker.internal:8002
   match:
-    url: http://192.168.2.38:18080/api/worker/v1/<.*>
+    url: http://192.168.124.66:18080/api/worker/v1/<.*>
     methods: [GET, POST, PUT, PATCH, DELETE]
   authenticators:
     - handler: oauth2_introspection
@@ -31,7 +31,7 @@
   upstream:
     url: http://host.docker.internal:8002
   match:
-    url: http://192.168.2.38:18080/api/<(auth/me|chat.*|mcp-oauth.*|oauth.*|users.*|teams.*|organizations.*|api-tokens.*|worker-identities.*|service-tokens.*|v1.*)>
+    url: http://192.168.124.66:18080/api/<(auth/me|chat.*|mcp-oauth.*|oauth.*|users.*|teams.*|organizations.*|api-tokens.*|worker-identities.*|service-tokens.*|v1.*)>
     methods: [GET, POST, PUT, PATCH, DELETE]
   authenticators:
     - handler: cookie_session

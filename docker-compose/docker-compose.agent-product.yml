@@ -1,4 +1,5 @@
-# Complements the existing Auth, Control and Gateway Compose projects.
+# Runs prebuilt Agent product images with persistent state outside the source checkout.
+# docker compose --env-file /data/agent-product/product.env -f docker-compose/docker-compose.agent-product.yml up -d --no-build
 services:
   agent-model-proxy:
     image: media-agent-codex:local
@@ -26,11 +27,9 @@ services:
     networks: [auth]
     restart: unless-stopped
   media_plugin:
-    build:
-      context: ..
-      dockerfile: media_plugin/Dockerfile
     ports: ['8011:8011']
-    env_file: [.agent-product/product.env]
+    image: docker-compose-media_plugin:latest
+    env_file: ["${AGENT_PRODUCT_DATA_DIR:-/data/agent-product}/product.env"]
     environment:
       APP_ENV: dev
       POSTGRES_DSN: postgres://media_auth:media_auth@host.docker.internal:5432/media-plugin?sslmode=disable
@@ -44,10 +43,6 @@ services:
     restart: unless-stopped
   runtime-controller:
     image: media-runtime-controller:local
-    build:
-      context: ..
-      dockerfile: media_runtime_controller/Dockerfile
-      target: docker
     user: '${RUNTIME_UID:-1000}:${RUNTIME_GID:-1000}'
     group_add: ['${DOCKER_GID:?required}']
     entrypoint: [/runtime-controller-docker]
@@ -58,14 +53,13 @@ services:
     ports: ['127.0.0.1:8010:8010']
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./.agent-product/runtime-policy.json:/run/config/runtime-policy.json:ro
+      - ${AGENT_PRODUCT_DATA_DIR:-/data/agent-product}/runtime-policy.json:/run/config/runtime-policy.json:ro
       - ${RUNTIME_PRODUCT_ROOT:?required}:${RUNTIME_PRODUCT_ROOT}
       - ${RUNTIME_PUBLIC_KEYS_HOST_FILE:?required}:${RUNTIME_PUBLIC_KEYS_HOST_FILE}:ro
     networks: [auth]
     restart: unless-stopped
   agent-ui:
-    build:
-      context: ../ui_platform
+    image: docker-compose-agent-ui:latest
     ports: ['5178:80']
     networks: [auth]
     restart: unless-stopped
@@ -75,3 +69,5 @@ networks:
     name: media-auth
 volumes:
   product_broker:
+    external: true
+    name: docker-compose_product_broker

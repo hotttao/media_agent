@@ -1,55 +1,44 @@
-# 本机 Docker Agent 产品
+# 本机 Agent 服务与持久化目录
 
-用于当前仓库已有 Auth/Control/Gateway、Ory Edge 和 PostgreSQL 的本机环境。Agent 创建为单容器；不要启动 k3s。原 Workflow 入口保留，新界面为 `http://192.168.2.41:18080/agent/`。端口5178仅提供界面，API 和登录请走18080。
+Agent 私有部署材料和工作区存放在 `/data/agent-product`，不进入 Git。
 
-## 准备与启动
+| 路径 | 用途 |
+| --- | --- |
+| `product.env` | 服务凭据、镜像和运行路径 |
+| `runtime-policy.json` | Controller 策略 |
+| `runtime-public-keys.json` | Agent 身份验证公钥 |
+| `runtime/` | Agent 工作区、身份令牌、会话文件及运行状态 |
+| `.data-migration/` | 迁移前容器配置及私有配置备份 |
+| `network-overrides/` | 本机地址变更后的 Compose 环境覆盖 |
 
-从仓库根执行，需 Docker 权限、Python3、OpenSSL。准备命令沿用现有部署的服务凭据，生成持久 runtime 签名/Session 密钥、Plugin 加密凭据、创建服务策略与单个 Docker 环境，并创建 `media-plugin`、`media-agents` 数据库；不改变既有环境或 Session 绑定。前置 Control 应已完成 runtime_environments 迁移。
+原位置 `/home/tao/code/github/media_agent/docker-compose/.agent-product` 仅保留指向新目录的兼容软链接。运行中的 Agent 和 Controller 直接挂载 `/data/agent-product`。数据库和对象存储各自保持原有目录或 Docker volume；备份业务 PostgreSQL 不能代替备份 Agent 工作区。
 
-```bash
-python3 docker-compose/agent-product-local.py
-export COMPOSE_PARALLEL_LIMIT=1
-agent_product_env=docker-compose/.agent-product/product.env
-docker compose --env-file "$agent_product_env" -f docker-compose/docker-compose.agent-product.yml build
-docker build -f media_agents/codex/Dockerfile -t media-agent-codex:local media_agents
-docker build -f media_agents/claude_code/Dockerfile -t media-agent-claude-code:local media_agents
-docker build -f media_agents/goose/Dockerfile -t media-agent-goose:local media_agents
-docker compose --env-file "$agent_product_env" -f media_auth/docker-compose.yml up -d --no-deps --build media_auth
-docker compose --env-file "$agent_product_env" -f docker-compose/docker-compose.agent-product.yml up -d product-broker media_plugin runtime-controller agent-ui
-docker compose --env-file "$agent_product_env" -f media_control/docker-compose.yml up -d --no-deps --build media_control
-docker compose --env-file "$agent_product_env" -f media_agent_gateway/docker-compose.yml up -d --no-deps --build media_agent_gateway
-```
+## 启动
 
-Edge 路由使用既有动态配置挂载，当前 watch=false，修改后需执行 `docker restart media-agent-gateway` 加载；Oathkeeper rules 修改后需重启既有 Oathkeeper 服务。不要启动旧 Gateway Compose 中的固定 Codex/Claude 服务或其 host Broker；本产品 Broker 在 media-auth 网络中，由创建服务按 Workspace 启动 Agent。
-
-`.agent-product/` 和 `media_agent_gateway/.secrets/` 为忽略提交的私有部署材料，product.env/策略/私钥0600，目录0700。Gateway 的 runtime_bootstrap volume 保管加密后的 Agent 凭据。保留这些目录、volume和密钥以支持正常重启；不要输出 env 或 Docker inspect Env 到 review/log。Auth 继续拥有凭据授权事实，Controller 只负责创建，Agent 配置仍来自 Control。
-
-## 使用
-
-以现有企业成员登录，创建带企业/部门的 Workspace。在资源库创建 Prompt、上传/编辑并发布 Skill、由企业管理员登记 MCP；到 Workspace 设置配置连接并明确确认固定版本，随后创建会话。模型 API Key 在 Workspace 表单中填写，只写不回显。模型 OAuth 登录应使用专用 Workspace 的原生运行目录，准备命令不会复制本机开发者登录。
-
-无需认证、Bearer/API Key 和 OAuth 的远端 MCP 均通过 Gateway；OAuth 用户连接由 Auth 持有。外部服务地址需要从容器网络可达。新增企业 MCP 须满足 Gateway 现有上游地址允许规则。
-
-此启动方式只覆盖本机既有部署；数据库地址/网络、Linux UID/GID 和 Docker socket group 由准备命令按当前环境生成。其他主机应使用其部署配置。扩缩容和后台凭据轮换不在当前功能范围。
-
-模型服务需要出网代理时，在私有 product.env 设置 AGENT_HTTP_PROXY、AGENT_HTTPS_PROXY、AGENT_NO_PROXY，重新执行准备命令并重启创建服务后，新建 Agent 容器才会使用。代理地址必须从容器可达；宿主127.0.0.1不是容器宿主地址。NO_PROXY 应包含 Gateway、Broker、数据库及内部域名。不要把带凭据的代理地址提交仓库。
-
-Control、Gateway 与 Agent 必须使用 product.env 中同一 MEDIA_AGENTS_RABBITMQ_URL（product-broker 内网地址）。Compose 允许显式覆盖旧部署的 host Broker 默认值；只检查历史回放不能证明实时 delta 与元数据通知已接通。
-
-个人 Codex 登录可在“模型连接”页上传 auth.json，按用户加密存储并作为可选连接，不自动绑定 Workspace。创建或编辑 Workspace 时选择“个人 Codex 连接”。更新文件使用连接编辑入口；撤销后停止后续 claim。工作台不会读取开发者主目录作为隐式默认账号。
-
-宿主代理仅监听127.0.0.1:7897时，可使用可选的正式本机转发服务（只监听Docker宿主内网地址，不读取凭据）：
+从项目根目录运行。此文件使用本机已有镜像；Agent 源码及完整镜像构建流程位于 `agent` 分支。
 
 ```bash
-docker compose --env-file docker-compose/.agent-product/product.env -f docker-compose/docker-compose.agent-product.yml --profile model-proxy up -d agent-model-proxy
+docker compose --env-file /data/agent-product/product.env \
+  -f docker-compose/docker-compose.agent-product.yml \
+  up -d --no-build --no-deps runtime-controller media_plugin agent-ui
+
+docker compose --env-file /data/agent-product/product.env \
+  -f docker-compose/docker-compose.agent-product.yml \
+  --profile model-proxy up -d --no-build --no-deps agent-model-proxy
 ```
 
-在私有 product.env 配置 AGENT_HTTP_PROXY/AGENT_HTTPS_PROXY 为 http://172.27.0.1:17897，AGENT_NO_PROXY 包含内部服务与数据库地址，执行准备命令并重启 Controller。既有 Agent 需在空闲时重建以使用新部署配置；连接 auth.json 的上传和替换无需重建容器。
+Broker 使用已有的外部 volume `docker-compose_product_broker`。已有四个 Agent 实例由 Controller 管理，不作为 Compose 的固定服务重复启动。恢复其他机器时还需备份 Gateway 的签名/加密密钥及其持久化 volume。
 
-## Claude Code / Goose
+认证辅助服务使用已保存的私有环境覆盖，避免覆盖已有配置：
 
-创建或编辑 Workspace，Agent 选择 Claude Code 或 Goose，在模型服务里填写协议、模型名称、API 基础地址，再填写 API key。Claude Code 使用 Anthropic 兼容接口；Goose 支持 OpenAI / Anthropic 兼容接口。密钥加密保存且不回显；模型设置随 Session 固定，更新 Workspace 后新建 Session 使用新设置。
+```bash
+docker compose -p media-agent-auth \
+  -f docker-compose/docker-compose.auth.yml \
+  -f /data/agent-product/auth-services.override.json \
+  -f /data/agent-product/network-overrides/media-agent-auth.json \
+  up -d --no-deps login-ui consent mailpit
+```
 
-SiliconFlow 示例：模型名 `deepseek-ai/DeepSeek-V4.1-Flash`，Claude Code 使用 Anthropic 兼容协议、基础地址 `https://api.siliconflow.cn`；Goose 使用 OpenAI 兼容协议、基础地址 `https://api.siliconflow.cn/v1`。不要把 `/messages` 或 `/chat/completions` 填入基础地址。其他服务请使用其兼容协议及基础地址，不以运行客户端名称推断模型厂商。
+当前本机地址为 `192.168.124.66`。Workflow、Materials、Hydra 等服务的地址覆盖保存在 `network-overrides/<Compose项目名>.json`；后续用对应服务原有 Compose 启动时，通过额外的 `-f` 参数加载。网络变更时同步检查 Kratos 回跳/CORS、Oathkeeper 匹配规则、Hydra URL 和素材公开地址。
 
-两个 Runtime 使用 Control 已确认的 Prompt、Skill 固定版本，并仅通过 Gateway 发现和调用 Workspace 授权 MCP。工具请求在对话中等待用户选择，选择只允许本次时不会扩大到后续调用。Claude Code 原生用户提问映射为对话输入请求。网络断开不会隐式终止后端执行，刷新可读取持久历史。
+`product.env`、策略及迁移快照包含私有凭据，保持仅所有者可读。不要将这些内容粘贴到日志或提交到仓库。
