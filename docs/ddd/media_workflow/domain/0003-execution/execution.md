@@ -337,3 +337,7 @@ Finalize以成功invoke的Task ID派生Generation Result键，在Materials幂等
 2. 事务内写 Step Review Decision 与 Outbox，并把 StepRun 改为 confirming 或 regenerating；外部调用不在事务内执行。
 3. accept 经 `GenerationCandidateConfirmed` 与 Generated Asset 登记后写唯一 output_resource_id、置 succeeded 并推进 DAG。
 4. regenerate 经 `GenerationRegenerationAccepted` 后递增 StepRun attempt、回到 pending/running；旧 attempt 的晚到确认不得覆盖新 attempt。
+
+### ListJobs
+
+任务查询保持调用者及现有执行边界过滤，按提交时间倒序、Job ID 倒序稳定分页。同一时间提交的任务必须有确定顺序；数据集合不变时，读取连续页不得重复或遗漏可见任务。该只读能力不改变执行状态的权威，不新增跨聚合 Workflow。

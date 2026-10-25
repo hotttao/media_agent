@@ -121,7 +121,7 @@ func (r *JobRepo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, 
 	if q.Offset > 0 {
 		tx = tx.Offset(q.Offset)
 	}
-	rows, err := tx.Order(Q.Job.SubmittedAt.Desc()).Find()
+	rows, err := tx.Order(Q.Job.SubmittedAt.Desc(), Q.Job.ID.Desc()).Find()
 	if err != nil {
 		return nil, 0, err
 	}
