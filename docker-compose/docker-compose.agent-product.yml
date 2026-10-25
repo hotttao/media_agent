@@ -1,4 +1,4 @@
-# Runs prebuilt Agent product images with persistent state outside the source checkout.
+# Builds or runs Agent product images with persistent state outside the source checkout.
 # docker compose --env-file /data/agent-product/product.env -f docker-compose/docker-compose.agent-product.yml up -d --no-build
 services:
   agent-model-proxy:
@@ -27,6 +27,9 @@ services:
     networks: [auth]
     restart: unless-stopped
   media_plugin:
+    build:
+      context: ..
+      dockerfile: media_plugin/Dockerfile
     ports: ['8011:8011']
     image: docker-compose-media_plugin:latest
     env_file: ["${AGENT_PRODUCT_DATA_DIR:-/data/agent-product}/product.env"]
@@ -42,6 +45,10 @@ services:
     networks: [auth]
     restart: unless-stopped
   runtime-controller:
+    build:
+      context: ..
+      dockerfile: media_runtime_controller/Dockerfile
+      target: docker
     image: media-runtime-controller:local
     user: '${RUNTIME_UID:-1000}:${RUNTIME_GID:-1000}'
     group_add: ['${DOCKER_GID:?required}']
@@ -59,6 +66,8 @@ services:
     networks: [auth]
     restart: unless-stopped
   agent-ui:
+    build:
+      context: ../ui_platform
     image: docker-compose-agent-ui:latest
     ports: ['5178:80']
     networks: [auth]

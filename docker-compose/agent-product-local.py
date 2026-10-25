@@ -7,7 +7,9 @@ No user/model credentials are read, printed or injected by this command.
 """
 from pathlib import Path
 import os,subprocess,json,secrets,base64,hashlib,uuid
-root=Path(__file__).resolve().parent.parent;private=root/'docker-compose/.agent-product';private.mkdir(exist_ok=True,mode=0o700)
+root=Path(__file__).resolve().parent.parent
+private=Path(os.environ.get('AGENT_PRODUCT_DATA_DIR','/data/agent-product')).expanduser().resolve()
+private.mkdir(parents=True,exist_ok=True,mode=0o700)
 env_path=private/'product.env'
 values={}
 if env_path.exists():
