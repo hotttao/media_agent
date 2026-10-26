@@ -309,7 +309,7 @@ Provider 生成、客户端日志落盘、对象写入、Conductor 完成、Mate
 ## 9. 阅读代码与验收证据
 
 - [初次启动接受](../../media_workflow/biz/service/job/start.go)、[后台启动与取消](../../media_workflow/biz/workflow/start_delivery/flow.go)。
-- [Worker 网关](../../media_workflow/biz/workflow/worker_gateway/flow.go)、[直接结果确认](../../media_workflow/biz/workflow/worker_gateway/result_delivery.go)、[客户端私有恢复日志](../../media_worker/internal/results/store.go)。
+- [Worker 网关](../../media_workflow/biz/workflow/worker_gateway/flow.go)、[直接结果确认](../../media_workflow/biz/workflow/worker_gateway/result_delivery.go)、[客户端私有恢复日志](../../media_worker/biz/dal/repo/results/store.go)。
 - [审批](../../media_workflow/biz/service/job/review.go)、[审批投递](../../media_workflow/biz/workflow/review_delivery/flow.go)、[Finalize 登记](../../media_workflow/biz/workflow/finalize_task/registration.go)。
 - [普通执行与输入覆盖](../../media_workflow/biz/service/job/service.go)、[输入确认](../../media_workflow/biz/service/job/rerun_confirmation.go)、[确认后本地审计](../../media_workflow/biz/service/job/retry_commit.go)。
 - [上传验收](../plan/worker-artifact-upload.md)：真实客户端四节点、反馈/失败/原生 retry、四份图片/视频完整 SHA256读取；保留首轮测试缓存误判失败证据。

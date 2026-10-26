@@ -115,7 +115,8 @@ func UpsertGeneratedAsset(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	a, err := Svc.Upsert(ctx, gensvc.UpsertCommand{
-		Scope: req.GetScope(), AssetKind: req.GetAssetKind(), Name: req.GetName(),
+		OrganizationID: req.GetOrganizationId(),
+		Scope:          req.GetScope(), AssetKind: req.GetAssetKind(), Name: req.GetName(),
 		URL: req.GetUrl(), Content: req.GetContent(), OwnerUserID: req.GetOwnerUserId(),
 		Visibility: req.GetVisibility(), TeamID: req.GetTeamId(),
 		JobID: req.GetJobId(), StepRunID: req.GetStepRunId(), TemplateID: req.GetTemplateId(),

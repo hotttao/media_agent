@@ -1687,6 +1687,8 @@ components:
                     type: string
                 result_key:
                     type: string
+                organization_id:
+                    type: string
         UpsertGeneratedAssetResp:
             type: object
             properties:

@@ -136,6 +136,7 @@ message UpsertGeneratedAssetReq {
   string source_virtual_ip_id = 13;
   string source_product_id = 14;
   string result_key = 15;
+  string organization_id = 16; // trusted Job tenant; sources, when present, must match
 }
 
 message UpsertGeneratedAssetResp {

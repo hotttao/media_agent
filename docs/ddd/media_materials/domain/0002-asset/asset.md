@@ -158,6 +158,8 @@ material ↔ virtual_ip / material ↔ product 的 N:N 绑定。
 
 ## UpsertGeneratedAsset 与生成结果身份
 
+内部原生登记接收可信 Job 的 `organization_id`，不要求通用生成能力额外携带商品或虚拟 IP。提供来源时必须校验其 Scope 和 Organization 与产物一致；兼容旧调用方从来源推导归属。两者都缺失时拒绝登记。对象路径仍须属于该企业、同 Scope，且通过存储元数据与媒体类型校验。
+
 generated_asset 保留唯一键 `(organization_id, scope, asset_kind, name) WHERE deleted_at IS NULL`。原生新结果使用包含结果身份的稳定名称；名称不作为跨轮覆盖入口。
 
 - 每个 Generation Result 对应独立、不可变 Generated Asset；Retry 不覆盖上一轮的资源 ID、对象或内容，已存在资源引用不改变含义。

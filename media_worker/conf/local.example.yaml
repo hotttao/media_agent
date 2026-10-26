@@ -1,0 +1,15 @@
+app:
+  name: media_worker
+media_worker:
+  enabled: true
+  studio_user_data: ${MEDIA_WORKER_STUDIO_USER_DATA}
+  studio_account_id: ${MEDIA_WORKER_STUDIO_ACCOUNT_ID}
+  studio_working_directory: ${MEDIA_WORKER_STUDIO_DIRECTORY}
+  studio_command:
+    - ${MEDIA_WORKER_STUDIO_ELECTRON}
+    - .
+    - --local-control
+  model: seedance-2.0-fast
+  duration_seconds: 5
+  aspect_ratio: "9:16"
+  startup_timeout_seconds: 90

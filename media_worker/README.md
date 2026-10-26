@@ -122,4 +122,37 @@ Worker 启动后先注册能力，再按 Capability 并发轮询。任务只使�
 `dispatch_id` 回报心跳、完成或失败；结果回报发生暂时性网络错误时，会使用同一个
 幂等键重试，不会重新执行 Provider。
 
-`MEDIA_WORKER_FIXTURE_ASSETS_URL`（或 `--fixture-assets-url`）仅指定 Mock 样本的旧资源服务根地址，默认与素材迁移工具一致为 `http://192.168.2.38`。历史单视频联调先经 Library Object Upload 把一份真实旧视频摄取到目标对象存储，再把该对象的短期 URL 交给 `MEDIA_WORKER_FIXTURE_VIDEO_RESULT_URL`；Worker 只返回已确定的测试结果，不持有 User 上传凭证。`media_materials` 在登记原生 Generated Asset 时复核对象位于本企业/Scope 且媒体类型正确，只持久化 Object Path。生产 Worker 的对象上传协议仍需单独实现。
+`MEDIA_WORKER_FIXTURE_ASSETS_URL`（或 `--fixture-assets-url`）仅指定 Mock 样本的旧资源服务根地址，默认与素材迁移工具一致为 `http://192.168.2.38`。历史单视频联调先经 Library Object Upload 把一份真实旧视频摄取到目标对象存储，再把该对象的短期 URL 交给 `MEDIA_WORKER_FIXTURE_VIDEO_RESULT_URL`；Worker 只返回已确定的测试结果，不持有 User 上传凭证。`media_materials` 在登记原生 Generated Asset 时复核对象位于本企业/Scope 且媒体类型正确，只持久化 Object Path。生产 profile 复用网关授权上传、内容摘要与确定 object_path，不使用 User 上传凭据。
+
+## 分层与迁移状态
+
+CLI 位于 `cmd/media_worker`，执行生命周期位于 `biz/workflow/execute`，能力选择和失败分类位于 `biz/policy/execution`。`biz/domain/execution` 定义执行、上传与结果/检查点端口；HTTP 和磁盘 DTO 分别位于 `biz/client/worker_gateway`、`biz/dal/repo/results`，保留 `.worker-state` 命名空间、权限与旧日志格式。生成检查点由独立 `biz/dal/repo/checkpoints` 实现，记录私有生成意图、引用、manifest 和已确认对象路径。
+
+`biz/domain/doubao` 定义可替换 Generator，`biz/client/doubao/studio` 实现专用实例的本机 Worker 协议。`biz/workflow/generate` 协调原 Attempt 资格确认、输入下载、稳定 Key 查询、提交、确切产物下载、manifest 和授权上传。生产仅支持 `doubao.i2v.first_frame_prompt@1`，要求恰好一张参考图，输出 VIDEO。
+
+## Studio 生产 profile
+
+先安装并构建用户 fork `hotttao/doubao-studio`，使用独立用户目录扫码。将 `conf/local.example.yaml` 复制到私密 `conf/local.yaml` 后填写专用目录、账号 ID、精确 Electron 命令和生成参数；配置走共享 loader 与 protobuf schema。网关 URL、Worker Token 和实例 ID 仍由原 CLI/env 提供，Token 不写入 yaml 或运行日志。
+
+```bash
+export MEDIA_WORKER_PROFILE=doubao_studio
+export MEDIA_WORKER_STUDIO_USER_DATA=/private/dedicated-studio
+export MEDIA_WORKER_STUDIO_ACCOUNT_ID=<account-id>
+export MEDIA_WORKER_STUDIO_DIRECTORY=/path/to/doubao-studio
+export MEDIA_WORKER_STUDIO_ELECTRON=/path/to/doubao-studio/node_modules/electron/dist/electron
+# 在确认独立 Worker 身份与待执行队列后启动；需要已设置原网关/Token/Worker ID。
+go run ./cmd/media_worker -config conf/local.yaml
+```
+
+启动时独占结果命名空间与 studio 用户目录；只声明一个并发槽，领取前确认 studio 就绪且没有待确认/生成中的旧任务。重启先恢复已确定结果，再恢复未关闭检查点，恢复资格由原 Dispatch/Attempt 的 Heartbeat 确认。拒绝资格停止副作用；网络不确定与需人工确认留在同次尝试，不回写失败触发重新生成。签名输入 URL 不持久化，不可清空状态目录绕过恢复。
+
+真实生成、公开网关上传与审批是否验收通过，以 migration plan/review 的实际记录为准；代码检查不替代部署验收。
+
+[迁移 spec](../docs/spec/media-worker-doubao.md) · [迁移 plan](../docs/plan/media-worker-doubao.md) · [领域与执行流程](../docs/ddd/media_worker/CONTEXT.md)。
+
+验证：在本目录运行 `go build ./...`、`go test ./...`、`go test -race ./...`、`go vet ./...`、`go run ../harness/tools/archcheck` 和 `go run ../harness/tools/deadcheck -filter=media_agent/media_worker`。跨进程组合测试在 `e2e/`。
+
+
+2026-10-26 首帧生产验收已完成：真实视频经公开网关上传、审批、登记，Job SUCCEEDED；原 Worker 重启后复用同一 Studio 生成。用户 fork 固定为 [840117a](https://github.com/hotttao/doubao-studio/commit/840117a)，分支 `codex/media-worker-studio`。证据与范围见 [完整 review](../docs/review/media_worker/workflow/0002-generate/generate.md)。
+
+后端 `media_materials` 与 `internal_worker` 的 `MEDIA_STORAGE_PUBLIC_ENDPOINT` 必须一致。通用生成登记从可信 Job 传递企业归属，Product/Virtual IP 可选；登记失败使用不带 input_override 的原生 retry 继续原实例，无需重新启动能力 Worker 或重生成。

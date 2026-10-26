@@ -5,19 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
-	"sync"
 	"syscall"
-	"time"
 
-	"media_agent/media_worker/internal/fixture"
-	"media_agent/media_worker/internal/gateway"
-	"media_agent/media_worker/internal/results"
+	"media_agent/media_worker/biz/client/fixture"
+	"media_agent/media_worker/biz/client/worker_gateway"
+	"media_agent/media_worker/biz/dal/repo/results"
+	"media_agent/media_worker/biz/domain/execution"
+	policy "media_agent/media_worker/biz/policy/execution"
+	"media_agent/media_worker/biz/workflow/execute"
 )
 
 func main() {
@@ -36,6 +35,7 @@ func main() {
 	fixtureFirstFrameResultURL := flag.String("fixture-first-frame-result-url", envOr("MEDIA_WORKER_FIXTURE_FIRST_FRAME_RESULT_URL", ""), "pre-uploaded target-storage first-frame image URL (test profile only)")
 	fixtureFailStep := flag.String("fixture-fail-step", envOr("MEDIA_WORKER_FIXTURE_FAIL_STEP", ""), "step to fail once per Job (test profile only)")
 	fixtureFailCall := flag.String("fixture-fail-call", envOr("MEDIA_WORKER_FIXTURE_FAIL_CALL", "1"), "distinct dispatch number to fail, one to eight (test profile only)")
+	configPath := flag.String("config", envOr("CONFIG_FILE", "conf/local.yaml"), "shared config file (doubao_studio profile)")
 	flag.Parse()
 	if *gatewayURL == "" {
 		log.Fatal("MEDIA_GATEWAY_URL or -gateway-url is required")
@@ -43,8 +43,17 @@ func main() {
 	if *apiToken == "" {
 		log.Fatal("MEDIA_WORKER_API_TOKEN or -token is required")
 	}
+	if *profile == "doubao_studio" {
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		if err := runProduction(ctx, *configPath, *gatewayURL, *apiToken, *workerID, *stateDir, *capabilityList); err != nil {
+			log.Print(err)
+			os.Exit(1)
+		}
+		return
+	}
 	if *profile != "media_ai_fixture" && *profile != fixture.ProviderProfile {
-		log.Fatal("integration requires media_ai_fixture or provider_fixture profile")
+		log.Fatal("execution requires doubao_studio, media_ai_fixture or provider_fixture profile")
 	}
 	var executor *fixture.Executor
 	var err error
@@ -103,14 +112,14 @@ func main() {
 		}
 	}
 	capabilities := executor.AvailableCapabilities()
-	capabilities, err = selectCapabilities(capabilities, *capabilityList)
+	capabilities, err = policy.SelectCapabilities(capabilities, *capabilityList)
 	if err != nil {
 		log.Fatal(err)
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	client := gateway.New(*gatewayURL, *apiToken)
-	executor.SetFileUploader(func(ctx context.Context, task gateway.Task, index int, file string) (string, error) {
+	client := worker_gateway.New(*gatewayURL, *apiToken)
+	executor.SetFileUploader(func(ctx context.Context, task execution.Task, index int, file string) (string, error) {
 		return client.UploadFile(ctx, *workerID, task, index, file)
 	})
 	store, err := results.Open(*stateDir, *gatewayURL, *workerID, *apiToken)
@@ -118,31 +127,10 @@ func main() {
 		log.Fatal(err)
 	}
 	defer store.Close()
-	if err := client.Register(ctx, *workerID, capabilities); err != nil {
-		log.Fatalf("register worker: %v", err)
-	}
-	pending, err := store.Pending()
-	if err != nil {
+	log.Printf("media_worker starting: worker_id=%s profile=%s capabilities=%d", *workerID, *profile, len(capabilities))
+	if err := (execute.Workflow{Gateway: client, Executor: executor, Results: store}).Run(ctx, execute.Command{WorkerID: *workerID, Capabilities: capabilities}); err != nil {
 		log.Fatal(err)
 	}
-	for _, record := range pending {
-		if !deliverStoredResult(ctx, client, *workerID, store, record) && ctx.Err() != nil {
-			return
-		}
-	}
-	var wg sync.WaitGroup
-	for _, capability := range capabilities {
-		for range capability.Concurrency {
-			wg.Add(1)
-			go func(capability gateway.Capability) {
-				defer wg.Done()
-				runCapability(ctx, client, *workerID, capability, executor, store)
-			}(capability)
-		}
-	}
-	log.Printf("media_worker started: worker_id=%s profile=%s capabilities=%d", *workerID, *profile, len(capabilities))
-	<-ctx.Done()
-	wg.Wait()
 }
 
 func parseFixtureResultURLs(raw string) ([]string, error) {
@@ -151,122 +139,6 @@ func parseFixtureResultURLs(raw string) ([]string, error) {
 		return nil, errors.New("multiple fixture results require a JSON string array of two to eight URLs")
 	}
 	return urls, nil
-}
-
-func runCapability(ctx context.Context, client *gateway.Client, workerID string, capability gateway.Capability, executor *fixture.Executor, store *results.Store) {
-	for ctx.Err() == nil {
-		task, err := client.Poll(ctx, workerID, capability)
-		if err != nil {
-			log.Printf("poll deferred capability=%s@%d", capability.Key, capability.Version)
-			wait(ctx, time.Second)
-			continue
-		}
-		if task == nil {
-			wait(ctx, 300*time.Millisecond)
-			continue
-		}
-		taskCtx, cancelTask := context.WithCancel(gateway.TaskContext(ctx, *task))
-		go heartbeat(taskCtx, client, workerID, *task)
-		output, executeErr := executor.ExecuteContext(taskCtx, *task)
-		idempotencyKey := task.DispatchID + ":" + fmt.Sprint(task.Attempt)
-		record := results.Record{Task: *task, Key: idempotencyKey + ":complete", Output: output}
-		if executeErr != nil {
-			record.Key, record.Output, record.Reason, record.FailureKind = idempotencyKey+":fail", nil, executeErr.Error(), gateway.FailureKind(executeErr)
-		}
-		if err := store.Save(record); err != nil {
-			cancelTask()
-			log.Fatal(err)
-		}
-		submitted := deliverStoredResult(ctx, client, workerID, store, record)
-		cancelTask()
-		if !submitted {
-			continue
-		}
-		if executeErr != nil {
-			log.Printf("event=worker_task_failed trace_id=%s dispatch=%s capability=%s@%d", task.TraceID(), task.DispatchID, capability.Key, capability.Version)
-			continue
-		}
-		log.Printf("event=worker_task_completed trace_id=%s dispatch=%s capability=%s@%d", task.TraceID(), task.DispatchID, capability.Key, capability.Version)
-	}
-}
-
-func deliverStoredResult(ctx context.Context, client *gateway.Client, workerID string, store *results.Store, record results.Record) bool {
-	for ctx.Err() == nil {
-		var err error
-		if record.Reason != "" {
-			_, err = client.FailWithKind(ctx, workerID, record.Task, record.Key, record.Reason, record.FailureKind)
-		} else {
-			_, err = client.Complete(ctx, workerID, record.Task, record.Key, record.Output)
-		}
-		if err == nil {
-			if err := store.Finish(record, false); err != nil {
-				log.Fatal(err)
-			}
-			return true
-		}
-		var httpErr *gateway.HTTPError
-		if errors.As(err, &httpErr) && (httpErr.StatusCode == 409 || httpErr.StatusCode == 410) {
-			if err := store.Finish(record, true); err != nil {
-				log.Fatal(err)
-			}
-			log.Printf("event=worker_result_rejected trace_id=%s dispatch=%s", record.Task.TraceID(), record.Task.DispatchID)
-			return false
-		}
-		log.Printf("event=worker_result_unconfirmed trace_id=%s dispatch=%s", record.Task.TraceID(), record.Task.DispatchID)
-		wait(ctx, time.Second)
-	}
-	return false
-}
-
-func selectCapabilities(available []gateway.Capability, raw string) ([]gateway.Capability, error) {
-	if strings.TrimSpace(raw) == "" {
-		return available, nil
-	}
-	byRef := make(map[string]gateway.Capability, len(available))
-	for _, capability := range available {
-		byRef[fmt.Sprintf("%s@%d", capability.Key, capability.Version)] = capability
-	}
-	selected := make([]gateway.Capability, 0)
-	seen := map[string]bool{}
-	for _, item := range strings.Split(raw, ",") {
-		ref := strings.TrimSpace(item)
-		capability, ok := byRef[ref]
-		if !ok {
-			return nil, fmt.Errorf("unsupported capability %q", ref)
-		}
-		if !seen[ref] {
-			selected = append(selected, capability)
-			seen[ref] = true
-		}
-	}
-	if len(selected) == 0 {
-		return nil, errors.New("at least one capability is required")
-	}
-	return selected, nil
-}
-
-func heartbeat(ctx context.Context, client *gateway.Client, workerID string, task gateway.Task) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := client.Heartbeat(ctx, workerID, task); err != nil && ctx.Err() == nil {
-				log.Printf("event=worker_heartbeat_deferred trace_id=%s dispatch=%s", task.TraceID(), task.DispatchID)
-			}
-		}
-	}
-}
-
-func wait(ctx context.Context, duration time.Duration) {
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-	case <-timer.C:
-	}
 }
 
 func envOr(name, fallback string) string {

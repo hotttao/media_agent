@@ -8,6 +8,7 @@ import (
 
 // UpsertCommand 由 media_workflow execution 期调用，落产物 + 生成记录。
 type UpsertCommand struct {
+	OrganizationID    string // trusted Job tenant; legacy callers may derive it from sources
 	Scope             string
 	AssetKind         string // = template.output_asset_kind
 	Name              string

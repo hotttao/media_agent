@@ -59,3 +59,6 @@ docker-compose/.agent-product/
 docker-compose/.agent-product
 
 media_auth/.env.agent-gateway.local
+
+# Private client Worker configuration.
+media_worker/conf/local.yaml

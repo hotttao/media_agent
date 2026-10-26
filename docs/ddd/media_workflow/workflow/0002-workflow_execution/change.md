@@ -1,5 +1,9 @@
 # workflow_execution 变更记录
 
+## 2026-10-26 · Finalize 传递可信 Job 企业
+
+首帧视频真实验收暴露通用能力缺少 Product/VIP 时无法登记；从已验证 Job 传递企业，只恢复失败登记，不重跑成功调用。
+
 ## 2026-10-07 · 结果交付责任移到客户端
 
 同步代理原Task更新并查询确认，响应丢失不盲重发，不接受ignored terminal update为成功。Personal文件日志支持退出恢复；Managed同次执行内重试发送，进程恢复仍用原生重试和下游幂等。旧Inbox存档，不提供第二套执行状态。

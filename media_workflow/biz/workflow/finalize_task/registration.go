@@ -129,7 +129,7 @@ func (h Handler) Execute(ctx context.Context, input Input) (Output, error) {
 	if len(nameID) > 8 {
 		nameID = nameID[:8]
 	}
-	request := &client.UpsertGenAssetReq{Scope: j.Scope, AssetKind: step.AssetKind, Name: step.StepKey + "_" + nameID,
+	request := &client.UpsertGenAssetReq{OrganizationID: j.OrganizationID, Scope: j.Scope, AssetKind: step.AssetKind, Name: step.StepKey + "_" + nameID,
 		URL: registrationURL, Content: selected.Content, OwnerUserID: j.SubmittedBy, Visibility: "private",
 		JobID: j.ID, StepRunID: step.ID, TemplateID: step.TemplateID, TemplateVersion: step.TemplateVersion, ResultKey: resultKey}
 	request.SourceProductID, request.SourceVirtualIPID, err = generationSources(j, execution)

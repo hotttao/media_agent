@@ -13,6 +13,7 @@
 - [工作流上下文](media_workflow/CONTEXT.md) — 媒体工作流定义、校验与执行
 - [素材上下文](media_materials/CONTEXT.md) — Material、Generated Asset、Product 与 Virtual IP
 - [生成上下文](media_gen/CONTEXT.md) — 媒体生成执行、转写与发布
+- [客户端 Worker 上下文](media_worker/CONTEXT.md) — 执行任务、生成引用与待交付结果
 - [抓取上下文](media_crawler/CONTEXT.md) — 抓取任务、断点与平台数据
 Runtime Controller 是 Agent 资源创建的环境实现：Gateway 使用 Kubernetes 客户端提交自定义资源 manifest，由自定义控制器创建 StatefulSet 等资源；Docker 环境由 Gateway 调用有 Docker 权限的创建服务。Browser、Sandbox、Channel Gateway 和 AFS 是外部上下文。平台仅保存其引用或状态投影，不复制其内部模型。
 
@@ -34,6 +35,7 @@ Runtime Controller 是 Agent 资源创建的环境实现：Gateway 使用 Kubern
 - `media_agent_gateway` 是 MCP Definition 的权威来源，持有注册目录；`media_plugin` 通过 Gateway 接口查询定义，不共享目录表。
 - `media_plugin` 发布 Plugin Binding 变更；Gateway 据此重建快照；Agent 运行期统一连接 Gateway，由 Gateway 代理平台内业务 MCP。
 - `media_workflow` 编排 `media_crawler`、`media_gen` 和 `media_materials`，各服务保留自身任务事实。
+- `media_worker` 通过公开 Worker Gateway 使用 `media_workflow` 的调度与资格事实，拥有本地执行和交付事实；豆包领域通过 Generator 端口隔离 studio。
 - `media_workflow` 是客户端 Capability Worker 与内部 Conductor 之间的防腐层：客户端只见 Worker Gateway API 和不透明 Dispatch，Conductor Task Definition、Task Domain 与 Task ID 均留在内部。
 - 所有需要二进制对象的业务服务通过 S3 Storage Port 依赖逻辑 `media_storage`；本地部署由 SeaweedFS 提供，生产可切换 MinIO、Aliyun OSS、AWS S3 等兼容实现。业务归属、分享、读取授权和删除决策仍归业务服务。
 - 各业务服务发布通知请求，`media_notification` 负责投递，不反向拥有业务事件。

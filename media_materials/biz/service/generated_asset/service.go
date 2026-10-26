@@ -122,7 +122,7 @@ func (s *Service) Upsert(ctx context.Context, cmd UpsertCommand) (*domain.Genera
 			return nil, fmt.Errorf("lookup existing generated_asset: %w", err)
 		}
 	}
-	var organizationID string
+	organizationID := strings.TrimSpace(cmd.OrganizationID)
 	if cmd.SourceProductID != "" {
 		product, err := s.products.Get(ctx, cmd.SourceProductID)
 		if err != nil {
@@ -130,6 +130,9 @@ func (s *Service) Upsert(ctx context.Context, cmd UpsertCommand) (*domain.Genera
 		}
 		if product.Scope != cmd.Scope {
 			return nil, errors.New("source product scope does not match output")
+		}
+		if organizationID != "" && organizationID != product.OrganizationID {
+			return nil, errors.New("source product organization does not match output")
 		}
 		organizationID = product.OrganizationID
 	}
@@ -142,12 +145,12 @@ func (s *Service) Upsert(ctx context.Context, cmd UpsertCommand) (*domain.Genera
 			return nil, errors.New("source virtual IP scope does not match output")
 		}
 		if organizationID != "" && organizationID != vip.OrganizationID {
-			return nil, errors.New("source product and virtual IP belong to different organizations")
+			return nil, errors.New("source virtual IP organization does not match output")
 		}
 		organizationID = vip.OrganizationID
 	}
 	if organizationID == "" {
-		return nil, errors.New("source product or virtual IP is required to resolve organization")
+		return nil, errors.New("organization or source product or virtual IP is required")
 	}
 	objectPath := ""
 	if cmd.URL != "" && s.nativeOutputOrigin != "" {

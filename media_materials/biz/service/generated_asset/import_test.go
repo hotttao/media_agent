@@ -233,3 +233,32 @@ func TestImportRejectsMissingMappingCrossOrganizationAndUnreachableObject(t *tes
 		})
 	}
 }
+
+func TestNativeOutputUsesTrustedJobOrganizationWithoutSources(t *testing.T) {
+	for _, tc := range []struct {
+		name, org, product, vip string
+		wantErr                 bool
+	}{
+		{"generic job", "org", "", "", false},
+		{"matching sources", "org", "product", "vip", false},
+		{"legacy source", "", "product", "", false},
+		{"missing tenant", "", "", "", true},
+		{"foreign product", "other", "product", "", true},
+		{"foreign vip", "other", "", "vip", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &importRepo{}
+			svc := NewService(repo, importProduct{}, importVIP{})
+			svc.ConfigureHistoryImport(importStorage{info: objectstorage.ObjectInfo{SizeBytes: 42, Checksum: testDigest, ContentType: "video/mp4"}}, videoKinds{})
+			svc.ConfigureNativeOutputStorage("https://storage.example", "media")
+			got, err := svc.Upsert(context.Background(), UpsertCommand{OrganizationID: tc.org, Scope: "ai_clothing", AssetKind: "ai_video", OwnerUserID: "user", JobID: "job", StepRunID: "step", TemplateID: "template", SourceProductID: tc.product, SourceVirtualIPID: tc.vip, URL: "https://storage.example/media/materials/org/ai_clothing/worker_generated/result.mp4"})
+			if tc.wantErr {
+				if err == nil || repo.saves != 0 {
+					t.Fatal("untrusted tenant accepted", err)
+				}
+			} else if err != nil || got.OrganizationID != "org" || got.ObjectPath == "" || repo.saves != 1 {
+				t.Fatal("trusted tenant output not registered", err)
+			}
+		})
+	}
+}

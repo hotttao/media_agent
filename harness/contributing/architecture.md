@@ -546,3 +546,7 @@ consul_kv:              # 对应 ConsulKVConfig
 ```
 
 `consul:`（服务注册）、`consul_discovery:`（客户端发现）、`consul_kv:`（配置中心）三块物理隔离，不混字段。
+
+## 非 HTTP Worker 的适用说明
+
+media_worker 同样使用 biz/domain、biz/policy、biz/workflow、biz/client、biz/dal/repo、biz/shared 分层。cmd 是 CLI 协议入口和 composition root：绑定参数、构造 Command、装配具体实现、调用 Workflow、输出与退出。注册、恢复、领取、执行、心跳与交付属于 Workflow，通过 domain 端口注入，不在 CLI 实现业务循环。领域无 JSON/ORM tag；HTTP wire DTO 和磁盘 DTO 分别留在 client / dal。跨进程真实适配器组合测试放 e2e。

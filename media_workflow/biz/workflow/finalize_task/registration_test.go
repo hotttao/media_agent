@@ -72,7 +72,7 @@ func TestFinalizeUsesNativeRerunSourcesNotLaggingJobInput(t *testing.T) {
 		if include {
 			wantProduct, wantVIP = "new-product", "new-person"
 		}
-		if assets.request.SourceProductID != wantProduct || assets.request.SourceVirtualIPID != wantVIP {
+		if assets.request.OrganizationID != "org" || assets.request.SourceProductID != wantProduct || assets.request.SourceVirtualIPID != wantVIP {
 			t.Fatal("generation used prior input provenance")
 		}
 	}

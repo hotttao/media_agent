@@ -102,6 +102,7 @@ func (c *MaterialsClient) BatchGet(ctx context.Context, names []string) (map[str
 
 // UpsertGenAssetReq 落产物请求。
 type UpsertGenAssetReq struct {
+	OrganizationID    string `json:"organization_id,omitempty"`
 	Scope             string `json:"scope"`
 	AssetKind         string `json:"asset_kind"`
 	Name              string `json:"name"`

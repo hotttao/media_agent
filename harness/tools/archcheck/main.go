@@ -95,7 +95,6 @@ func main() {
 
 			if isInternal {
 				toRel = normalizeArchPath(relDir(root, to.Dir))
-				toRel = relDir(root, to.Dir)
 			}
 
 			violations = append(violations, checkLayerRules(from, fromRel, imp, toRel, isInternal)...)

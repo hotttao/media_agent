@@ -168,6 +168,8 @@ sequenceDiagram
 
 外部调用结果不明确时按 `job_id` correlationId、`dispatch_id` 或 `step_run_id + attempt` 查询，禁止盲目创建第二个执行。初次启动的correlation查询只定位候选，不提供去重保证；唯一候选还须读取精确实例并核对Definition名称/版本、完整冻结输入和Task Domain，匹配才绑定或终止。缺字段、重复实例、不同版本/输入/路由保持uncertain，不错绑、不清理异源实例。Execution Domain 决定 Job/StepRun/WorkerDispatch 转换；Adapter、Compiler 与 Worker 只协调技术执行。
 
+Finalize 从已验证的 Job 传入企业归属，来源 Product/Virtual IP 是可选溯源，不能成为通用 prompt/images 能力的隐含必填输入。Materials 复核来源归属与对象命名空间后原子登记结果；登记失败后的原生 Retry 保留已完成 Invoke 与审批，只继续失败的 Finalize，不重新生成媒体。
+
 ### 审批与重新生成的技术编排
 
 重新生成反馈与决定一同冻结在 Review，并由后台完成本轮 HUMAN。下一轮 Renderer 接收本节点上一轮审批输出、上一轮轮次与当前循环轮次；只有 `previous_generation=current_generation-1` 且决定为 regenerate 时使用反馈。首轮不接受旧决定。每轮重新渲染原冻结模板，再附加紧邻上一轮反馈作为普通文本；不执行反馈里的模板语法、不累计早期反馈，也不改变其他节点。后台重复投递和 Renderer 重试使用同一冻结输入，提示词摘要包含反馈。

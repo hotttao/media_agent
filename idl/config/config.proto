@@ -89,6 +89,7 @@ message Config {
   // internal VerifyToken（mTLS）listener 配置（token internal service）。
   TokenVerifyConfig token_verify = 74;
   PlatformTokenConfig platform_token = 79;
+  MediaWorkerConfig media_worker = 80;
 
   // ---- 业务配置（media_crawler 专用）----
   // 抓取编排配置（python 路径 / 垫片 / 串行数 等）
@@ -524,4 +525,18 @@ message AgentWorkloadConfig {
  string shared_secret=5;string storage_class=6;string storage_size=7;
  map<string,AgentWorkloadProfile> profiles=8;
  string session_exchange=9;
+}
+
+// Dedicated client Worker runtime. Existing fixture flags remain unchanged.
+message MediaWorkerConfig {
+  bool enabled = 1;
+  string studio_user_data = 2;
+  string studio_account_id = 3;
+  string studio_working_directory = 4;
+  // Exact Electron executable and argv, including --local-control. No shell.
+  repeated string studio_command = 5;
+  string model = 6;
+  int32 duration_seconds = 7;
+  string aspect_ratio = 8;
+  int32 startup_timeout_seconds = 9;
 }
