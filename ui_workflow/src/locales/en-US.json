@@ -799,6 +799,12 @@
 		"upload": "Upload product images"
 	},
 	"productDetail": {
+		"sections": "Product detail sections",
+		"infoTab": "Product information",
+		"relatedTab": "Related images",
+		"relatedHint": "Generated images, videos, and other assets associated with this product.",
+		"relatedEmpty": "No generated assets are associated with this product yet.",
+		"previewAsset": "View asset: {{name}}",
 		"notFound": "Product not found.",
 		"back": "Back to products",
 		"archive": "Archive",

@@ -788,6 +788,12 @@
 		"upload": "上传产品图片"
 	},
 	"productDetail": {
+		"sections": "产品详情内容",
+		"infoTab": "产品信息",
+		"relatedTab": "相关图片",
+		"relatedHint": "查看与这个产品关联的生成图片、视频等素材。",
+		"relatedEmpty": "这个产品还没有关联的生成素材。",
+		"previewAsset": "查看素材：{{name}}",
 		"notFound": "没有找到这个产品。",
 		"back": "返回产品列表",
 		"archive": "归档",

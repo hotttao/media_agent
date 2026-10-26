@@ -1,3 +1,5 @@
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RelatedGeneratedAssets } from "@/domains/generated-assets/components/related-generated-assets";
 import { ConfirmActionButton } from "@/foundation/components/confirm-action-button";
 import { ListState } from "@/foundation/components/resource-list-layout";
 import { ProductWorkflowLaunch } from "./workflow-launch";
@@ -164,103 +166,129 @@ export function ProductShow({
           </DetailFieldGrid>
         </div>
       </section>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <DetailSection
-          title={t("productForm.audience")}
-          description={t("productDetail.audienceHint")}
-          icon={Users}
+      <Tabs
+        key={`${product.organization_id || organization.id}:${id}`}
+        defaultValue="info"
+        className="min-w-0"
+      >
+        <TabsList
+          aria-label={t("productDetail.sections")}
+          className="mb-4 w-full justify-start sm:w-auto"
         >
-          <p className="whitespace-pre-wrap text-sm leading-7">
-            {product.target_audience || t("productDetail.noAudience")}
-          </p>
-        </DetailSection>
-        <DetailSection
-          title={t("productForm.details")}
-          description={t("productDetail.detailsHint")}
-          icon={PackageOpen}
-        >
-          <p className="whitespace-pre-wrap text-sm leading-7">
-            {product.product_details || t("productDetail.noDetails")}
-          </p>
-        </DetailSection>
-      </div>
-      {actions.length ? (
-        <DetailSection
-          title={t("productForm.actions")}
-          description={t("productDetail.actionsHint")}
-          icon={Sparkles}
-        >
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {actions.map((action, index) => (
-              <div
-                key={`${String(action)}-${index}`}
-                className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/25 px-3.5 py-3 text-sm"
-              >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                  {index + 1}
-                </span>
-                <span>{String(action)}</span>
-              </div>
-            ))}
+          <TabsTrigger value="info" className="flex-1">
+            {t("productDetail.infoTab")}
+          </TabsTrigger>
+          <TabsTrigger value="related" className="flex-1">
+            {t("productDetail.relatedTab")}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="info" className="mt-0 space-y-5">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <DetailSection
+              title={t("productForm.audience")}
+              description={t("productDetail.audienceHint")}
+              icon={Users}
+            >
+              <p className="whitespace-pre-wrap text-sm leading-7">
+                {product.target_audience || t("productDetail.noAudience")}
+              </p>
+            </DetailSection>
+            <DetailSection
+              title={t("productForm.details")}
+              description={t("productDetail.detailsHint")}
+              icon={PackageOpen}
+            >
+              <p className="whitespace-pre-wrap text-sm leading-7">
+                {product.product_details || t("productDetail.noDetails")}
+              </p>
+            </DetailSection>
           </div>
-        </DetailSection>
-      ) : null}
-      <div className="grid gap-5 lg:grid-cols-2">
-        {Object.keys(commerce).length ? (
+          {actions.length ? (
+            <DetailSection
+              title={t("productForm.actions")}
+              description={t("productDetail.actionsHint")}
+              icon={Sparkles}
+            >
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {actions.map((action, index) => (
+                  <div
+                    key={`${String(action)}-${index}`}
+                    className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/25 px-3.5 py-3 text-sm"
+                  >
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                      {index + 1}
+                    </span>
+                    <span>{String(action)}</span>
+                  </div>
+                ))}
+              </div>
+            </DetailSection>
+          ) : null}
+          <div className="grid gap-5 lg:grid-cols-2">
+            {Object.keys(commerce).length ? (
+              <DetailSection
+                title={t("productDetail.commerce")}
+                description={t("productDetail.commerceHint")}
+                icon={ExternalLink}
+              >
+                <StructuredDetails value={commerce} />
+              </DetailSection>
+            ) : null}
+            {Object.keys(metadata).length ? (
+              <DetailSection
+                title={t("materialDetail.metadata")}
+                description={t("productDetail.metadataHint")}
+                icon={Braces}
+              >
+                <StructuredDetails value={metadata} />
+              </DetailSection>
+            ) : null}
+          </div>
           <DetailSection
-            title={t("productDetail.commerce")}
-            description={t("productDetail.commerceHint")}
-            icon={ExternalLink}
+            title={t("productDetail.audit")}
+            description={t("productDetail.auditHint")}
+            icon={ShoppingBag}
           >
-            <StructuredDetails value={commerce} />
+            <DetailFieldGrid>
+              <DetailField label={t("productDetail.createdBy")}>
+                {product.created_by}
+              </DetailField>
+              <DetailField label={t("productDetail.updatedBy")}>
+                {product.updated_by}
+              </DetailField>
+              <DetailField label={t("materialDetail.createdAt")}>
+                {formatDetailDate(product.created_at)}
+              </DetailField>
+              <DetailField label={t("materialDetail.updatedAt")}>
+                {formatDetailDate(product.updated_at)}
+              </DetailField>
+            </DetailFieldGrid>
           </DetailSection>
-        ) : null}
-        {Object.keys(metadata).length ? (
           <DetailSection
-            title={t("materialDetail.metadata")}
-            description={t("productDetail.metadataHint")}
-            icon={Braces}
+            title={t("productDetail.management")}
+            description={t("productDetail.managementHint")}
+            icon={ShoppingBag}
+            className="border-destructive/20"
           >
-            <StructuredDetails value={metadata} />
+            <ConfirmActionButton
+              variant="destructive"
+              size="sm"
+              disabled={remove.isPending}
+              onConfirm={() => remove.mutateAsync(id, { onSuccess: onBack })}
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              {t("productDetail.delete")}
+            </ConfirmActionButton>
           </DetailSection>
-        ) : null}
-      </div>
-      <DetailSection
-        title={t("productDetail.audit")}
-        description={t("productDetail.auditHint")}
-        icon={ShoppingBag}
-      >
-        <DetailFieldGrid>
-          <DetailField label={t("productDetail.createdBy")}>
-            {product.created_by}
-          </DetailField>
-          <DetailField label={t("productDetail.updatedBy")}>
-            {product.updated_by}
-          </DetailField>
-          <DetailField label={t("materialDetail.createdAt")}>
-            {formatDetailDate(product.created_at)}
-          </DetailField>
-          <DetailField label={t("materialDetail.updatedAt")}>
-            {formatDetailDate(product.updated_at)}
-          </DetailField>
-        </DetailFieldGrid>
-      </DetailSection>
-      <DetailSection
-        title={t("productDetail.management")}
-        description={t("productDetail.managementHint")}
-        icon={ShoppingBag}
-        className="border-destructive/20"
-      >
-        <ConfirmActionButton
-          variant="destructive"
-          size="sm"
-          disabled={remove.isPending}
-          onConfirm={() => remove.mutateAsync(id, { onSuccess: onBack })}
-        >
-          <Trash2 className="mr-1.5 h-4 w-4" />
-          {t("productDetail.delete")}
-        </ConfirmActionButton>
-      </DetailSection>
+        </TabsContent>
+        <TabsContent value="related" className="mt-0">
+          <RelatedGeneratedAssets
+            organizationId={product.organization_id || organization.id}
+            sourceProductId={id}
+            scope={product.scope}
+          />
+        </TabsContent>
+      </Tabs>
     </DetailPage>
   );
 }

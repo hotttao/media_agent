@@ -26,7 +26,7 @@
   "src/pages/materials/product/create.tsx": "6cd33fbbc547980057dbe2b5c19cd8d0",
   "src/pages/materials/product/edit.tsx": "1b5bfce37e5a0031c6ac37d207ce2571",
   "src/pages/materials/product/list.tsx": "a83aa614037b90c99f3d42f3a201654f",
-  "src/pages/materials/product/show.tsx": "9af9cd76db01b6ea66d2929166221685",
+  "src/pages/materials/product/show.tsx": "8c3b4527cb8d2e89200e32b0ec1b637c",
   "src/pages/materials/material/create.tsx": "7abead0412c26224edba1bc3b14cdf0e",
   "src/pages/materials/material/edit.tsx": "a0c71d515d4bece94b505aca0512743b",
   "src/pages/materials/material/list.tsx": "2ec4397d918ca5e84b1da0e32fe7b2d2",
@@ -161,5 +161,6 @@
   "src/foundation/lib/library-object.ts": "32cd791126189b9c5b86add46534aa33",
   "src/domains/capabilities/components/capability-selector.tsx": "b127b96b8fb6444f680a4e0e09b23295",
   "src/pages/workflow/job/job-input.ts": "0e4e9b5a77f3b3b8076f7664f9739c05",
-  "src/pages/workflow/job/run-wizard.tsx": "91b2d75827728440cbd9155aff289f79"
+  "src/pages/workflow/job/run-wizard.tsx": "91b2d75827728440cbd9155aff289f79",
+  "src/domains/generated-assets/components/related-generated-assets.tsx": "d5527e211e9cb16dd31aad4a8095f385"
 }

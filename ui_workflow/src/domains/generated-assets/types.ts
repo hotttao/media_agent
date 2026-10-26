@@ -38,6 +38,7 @@ export interface GeneratedAsset {
 
 /** Query params for GET /generated-assets (see ListGeneratedAssetsReq). */
 export interface GeneratedAssetListParams {
+  organization_id?: string;
   scope?: string;
   asset_kind?: string;
   owner?: string;
