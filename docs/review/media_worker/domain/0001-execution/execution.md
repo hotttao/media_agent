@@ -1,6 +1,8 @@
+> 历史审查记录。2026-10-26 起 execution 已归回公共技术运行层，generate 更名 doubao_generate；当前结构见 `docs/ddd/media_worker/runtime.md`。
+
 # Execution 结构迁移 review
 
-日期：2026-10-25。范围：[execution 模型](../../../../ddd/media_worker/domain/0001-execution/execution.md)、[迁移 spec](../../../../spec/media-worker-doubao.md) 的 P1。
+日期：2026-10-25。范围：[execution 模型](../../../../ddd/media_worker/runtime.md)、[迁移 spec](../../../../spec/media-worker-doubao.md) 的 P1。
 
 ## 结论与修正
 

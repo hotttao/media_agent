@@ -11,14 +11,14 @@ import (
 	"media_agent/media_worker/biz/client/doubao/studio"
 	"media_agent/media_worker/biz/client/media_input"
 	"media_agent/media_worker/biz/client/worker_gateway"
-	"media_agent/media_worker/biz/dal/repo/checkpoints"
+	"media_agent/media_worker/biz/dal/repo/doubao_checkpoints"
 	"media_agent/media_worker/biz/dal/repo/results"
 	policy "media_agent/media_worker/biz/policy/execution"
+	"media_agent/media_worker/biz/workflow/doubao_generate"
 	"media_agent/media_worker/biz/workflow/execute"
-	"media_agent/media_worker/biz/workflow/generate"
 )
 
-func runProduction(ctx context.Context, configPath, gatewayURL, token, workerID, stateDir, allowlist string) error {
+func runDoubaoProduction(ctx context.Context, configPath, gatewayURL, token, workerID, stateDir, allowlist string) error {
 	loader, err := sharedconfig.NewLoaderFromPath(configPath)
 	if err != nil {
 		return errors.New("worker shared configuration unavailable")
@@ -52,12 +52,12 @@ func runProduction(ctx context.Context, configPath, gatewayURL, token, workerID,
 		return err
 	}
 	defer instance.Close()
-	repository, err := checkpoints.Open(namespace)
+	repository, err := doubao_checkpoints.Open(namespace)
 	if err != nil {
 		return err
 	}
 	gateway := worker_gateway.New(gatewayURL, token)
-	generator := &generate.Workflow{Generator: instance, Files: media_input.Downloader{}, Gateway: gateway, Uploader: gateway, Checkpoints: repository, Inputs: media_input.Downloader{Root: assets}, WorkerID: workerID, Namespace: filepath.Base(namespace), Model: cfg.GetModel(), DurationSeconds: int(cfg.GetDurationSeconds()), AspectRatio: cfg.GetAspectRatio()}
+	generator := &doubao_generate.Workflow{Generator: instance, Files: media_input.Downloader{}, Gateway: gateway, Uploader: gateway, Checkpoints: repository, Inputs: media_input.Downloader{Root: assets}, WorkerID: workerID, Namespace: filepath.Base(namespace), Model: cfg.GetModel(), DurationSeconds: int(cfg.GetDurationSeconds()), AspectRatio: cfg.GetAspectRatio()}
 	capabilities, err := policy.SelectCapabilities(generator.AvailableCapabilities(), allowlist)
 	if err != nil {
 		return err

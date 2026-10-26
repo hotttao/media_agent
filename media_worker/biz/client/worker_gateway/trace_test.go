@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"media_agent/media_worker/biz/domain/execution"
 	"media_agent/media_worker/biz/shared/correlation"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 func TestWorkerTaskCorrelationIsNotProviderInputAndIsReusedForReports(t *testing.T) {
@@ -26,7 +26,7 @@ func TestWorkerTaskCorrelationIsNotProviderInputAndIsReusedForReports(t *testing
 	}))
 	defer server.Close()
 	c := New(server.URL, "test-token")
-	task, err := c.Poll(context.Background(), "worker", execution.Capability{Key: "cap", Version: 1})
+	task, err := c.Poll(context.Background(), "worker", worker_runtime.Capability{Key: "cap", Version: 1})
 	if err != nil || task.TraceParent != parent || task.Input["_traceparent"] != nil || correlation.TraceID(task.TraceParent) != parent[3:35] {
 		t.Fatal("transport trace reached Provider inputs", err)
 	}

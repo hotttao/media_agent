@@ -3,7 +3,7 @@ package execution
 import (
 	"errors"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 // Explicit non-permanent failures are retryable; other errors retain terminal behavior.
@@ -14,4 +14,4 @@ func FailureKind(err error) string {
 	}
 	return "permanent"
 }
-func ResultRejected(err error) bool { return errors.Is(err, execution.ErrResultRejected) }
+func ResultRejected(err error) bool { return errors.Is(err, worker_runtime.ErrResultRejected) }

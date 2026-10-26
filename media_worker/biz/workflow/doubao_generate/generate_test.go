@@ -1,4 +1,4 @@
-package generate
+package doubao_generate
 
 import (
 	"context"
@@ -10,23 +10,23 @@ import (
 	"testing"
 
 	"media_agent/media_worker/biz/domain/doubao"
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 type checkpointFake struct {
-	data     *execution.Checkpoint
+	data     *doubao.Checkpoint
 	failSave int
 	saves    int
 	events   *[]string
 }
 
-func clone(c execution.Checkpoint) execution.Checkpoint {
+func clone(c doubao.Checkpoint) doubao.Checkpoint {
 	raw, _ := json.Marshal(c)
-	var out execution.Checkpoint
+	var out doubao.Checkpoint
 	_ = json.Unmarshal(raw, &out)
 	return out
 }
-func (s *checkpointFake) Save(_ context.Context, c execution.Checkpoint) error {
+func (s *checkpointFake) Save(_ context.Context, c doubao.Checkpoint) error {
 	s.saves++
 	*s.events = append(*s.events, "save")
 	if s.saves == s.failSave {
@@ -36,18 +36,18 @@ func (s *checkpointFake) Save(_ context.Context, c execution.Checkpoint) error {
 	s.data = &v
 	return nil
 }
-func (s *checkpointFake) Load(context.Context, string, int) (*execution.Checkpoint, error) {
+func (s *checkpointFake) Load(context.Context, string, int) (*doubao.Checkpoint, error) {
 	if s.data == nil {
 		return nil, nil
 	}
 	v := clone(*s.data)
 	return &v, nil
 }
-func (s *checkpointFake) Pending(context.Context) ([]execution.Checkpoint, error) {
+func (s *checkpointFake) Pending(context.Context) ([]doubao.Checkpoint, error) {
 	if s.data == nil || s.data.Closed {
 		return nil, nil
 	}
-	return []execution.Checkpoint{clone(*s.data)}, nil
+	return []doubao.Checkpoint{clone(*s.data)}, nil
 }
 
 type generatorFake struct {
@@ -101,21 +101,23 @@ type gatewayFake struct {
 	uploadLost bool
 }
 
-func (g *gatewayFake) Heartbeat(context.Context, string, execution.Task) error {
+func (g *gatewayFake) Heartbeat(context.Context, string, worker_runtime.Task) error {
 	*g.events = append(*g.events, "eligibility")
 	return g.err
 }
-func (g *gatewayFake) Register(context.Context, string, []execution.Capability) error { return nil }
-func (g *gatewayFake) Poll(context.Context, string, execution.Capability) (*execution.Task, error) {
+func (g *gatewayFake) Register(context.Context, string, []worker_runtime.Capability) error {
+	return nil
+}
+func (g *gatewayFake) Poll(context.Context, string, worker_runtime.Capability) (*worker_runtime.Task, error) {
 	panic("generation must not poll")
 }
-func (g *gatewayFake) Complete(context.Context, string, execution.Task, string, map[string]any) (*execution.ResultReceipt, error) {
+func (g *gatewayFake) Complete(context.Context, string, worker_runtime.Task, string, map[string]any) (*worker_runtime.ResultReceipt, error) {
 	panic("generation must not bypass result journal")
 }
-func (g *gatewayFake) FailWithKind(context.Context, string, execution.Task, string, string, string) (*execution.ResultReceipt, error) {
+func (g *gatewayFake) FailWithKind(context.Context, string, worker_runtime.Task, string, string, string) (*worker_runtime.ResultReceipt, error) {
 	panic("generation must not report uncertain side effects as failure")
 }
-func (g *gatewayFake) UploadFile(_ context.Context, _ string, t execution.Task, index int, file string) (string, error) {
+func (g *gatewayFake) UploadFile(_ context.Context, _ string, t worker_runtime.Task, index int, file string) (string, error) {
 	g.uploads++
 	*g.events = append(*g.events, "upload")
 	if index != 0 || file != "/private/exact.mp4" || t.DispatchID != "dispatch" {
@@ -134,13 +136,13 @@ type filesFake struct {
 	events    *[]string
 }
 
-func (f *filesFake) Fetch(context.Context, string, string) (execution.Artifact, error) {
+func (f *filesFake) Fetch(context.Context, string, string) (worker_runtime.Artifact, error) {
 	f.downloads++
 	*f.events = append(*f.events, "input")
-	return execution.Artifact{ID: "image", LocalPath: "/private/input.png", ChecksumSHA256: strings.Repeat("b", 64), SizeBytes: 12}, nil
+	return worker_runtime.Artifact{ID: "image", LocalPath: "/private/input.png", ChecksumSHA256: strings.Repeat("b", 64), SizeBytes: 12}, nil
 }
-func (f *filesFake) Verify(context.Context, execution.Artifact) error { return f.err }
-func setup(t *testing.T) (*Workflow, *checkpointFake, *generatorFake, *gatewayFake, *filesFake, *[]string, execution.Task) {
+func (f *filesFake) Verify(context.Context, worker_runtime.Artifact) error { return f.err }
+func setup(t *testing.T) (*Workflow, *checkpointFake, *generatorFake, *gatewayFake, *filesFake, *[]string, worker_runtime.Task) {
 	t.Helper()
 	events := []string{}
 	store := &checkpointFake{events: &events}
@@ -148,7 +150,7 @@ func setup(t *testing.T) (*Workflow, *checkpointFake, *generatorFake, *gatewayFa
 	gw := &gatewayFake{events: &events}
 	files := &filesFake{events: &events}
 	flow := &Workflow{Generator: gen, Gateway: gw, Uploader: gw, Checkpoints: store, Inputs: files, Files: files, WorkerID: "worker", Namespace: "credential-hash", Model: "seedance-2.0-fast", DurationSeconds: 5, AspectRatio: "9:16"}
-	task := execution.Task{DispatchID: "dispatch", Attempt: 1, CapabilityKey: CapabilityKey, CapabilityVersion: 1, Input: map[string]any{"prompt": "rendered prompt", "images": []any{"https://storage/input?private-signed-url"}}}
+	task := worker_runtime.Task{DispatchID: "dispatch", Attempt: 1, CapabilityKey: CapabilityKey, CapabilityVersion: 1, Input: map[string]any{"prompt": "rendered prompt", "images": []any{"https://storage/input?private-signed-url"}}}
 	return flow, store, gen, gw, files, &events, task
 }
 func TestGenerationPersistsBeforeSideEffectsAndDoesNotKeepSignedURLs(t *testing.T) {
@@ -175,7 +177,7 @@ func TestRestartAcrossEveryCheckpointCommitKeepsOneGeneration(t *testing.T) {
 			flow, store, gen, _, _, _, task := setup(t)
 			store.failSave = save
 			_, err := flow.ExecuteContext(context.Background(), task)
-			if !errors.Is(err, execution.ErrExecutionPending) {
+			if !errors.Is(err, worker_runtime.ErrExecutionPending) {
 				t.Fatalf("expected pending at save %d: %v", save, err)
 			}
 			store.failSave = 0
@@ -199,7 +201,7 @@ func TestLostSubmitOrUploadResponseDoesNotResubmit(t *testing.T) {
 			} else {
 				gw.uploadLost = true
 			}
-			if _, err := flow.ExecuteContext(context.Background(), task); !errors.Is(err, execution.ErrExecutionPending) {
+			if _, err := flow.ExecuteContext(context.Background(), task); !errors.Is(err, worker_runtime.ErrExecutionPending) {
 				t.Fatal(err)
 			}
 			task.Input = nil
@@ -212,13 +214,13 @@ func TestLostSubmitOrUploadResponseDoesNotResubmit(t *testing.T) {
 func TestUncertainLookupAndRevokedEligibilityNeverSubmit(t *testing.T) {
 	flow, store, gen, gw, _, events, task := setup(t)
 	gen.lookupState = doubao.Uncertain
-	if _, err := flow.ExecuteContext(context.Background(), task); !errors.Is(err, execution.ErrExecutionPending) || gen.submits != 0 {
+	if _, err := flow.ExecuteContext(context.Background(), task); !errors.Is(err, worker_runtime.ErrExecutionPending) || gen.submits != 0 {
 		t.Fatal("uncertain lookup submitted")
 	}
 	*events = nil
-	gw.err = execution.ErrResultRejected
+	gw.err = worker_runtime.ErrResultRejected
 	task.Input = nil
-	if _, err := flow.ExecuteContext(context.Background(), task); !errors.Is(err, execution.ErrExecutionAbandoned) || !store.data.Closed || gen.submits != 0 {
+	if _, err := flow.ExecuteContext(context.Background(), task); !errors.Is(err, worker_runtime.ErrExecutionAbandoned) || !store.data.Closed || gen.submits != 0 {
 		t.Fatal("revoked execution continued", err)
 	}
 	if !reflect.DeepEqual(*events, []string{"eligibility", "save"}) {
@@ -245,7 +247,7 @@ func TestRejectsMultipleImagesAndSeparatesNewAttemptIdentity(t *testing.T) {
 func TestChangedManifestFileCannotUpload(t *testing.T) {
 	flow, _, gen, gw, files, _, task := setup(t)
 	files.err = errors.New("changed")
-	if _, err := flow.ExecuteContext(context.Background(), task); !errors.Is(err, execution.ErrExecutionPending) || gen.submits != 0 || gw.uploads != 0 {
+	if _, err := flow.ExecuteContext(context.Background(), task); !errors.Is(err, worker_runtime.ErrExecutionPending) || gen.submits != 0 || gw.uploads != 0 {
 		t.Fatal("changed input submitted")
 	}
 }

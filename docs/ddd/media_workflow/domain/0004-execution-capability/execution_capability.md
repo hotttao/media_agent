@@ -23,7 +23,7 @@ Execution Capability拥有Provider操作的稳定版本化契约，例如Doubao�
 
 - 主键为 `(capability_key, version)`；published 版本不可修改，只能发布新版本或归档。
 - 核心身份为platform/generation_method/generation_type；Personal Key为`platform.generation_method.generation_type`，同契约Managed变体沿用独立Key规则加`.managed`，避免改变已发布Target。唯一版本为Key@version，数据库同时约束结构化字段与Key一致。
-- generation_method表示输入到输出的媒体转换(t2i/i2i/t2v/i2v)；generation_type表示首帧(first_frame_prompt)/多图(multi_image_prompt)等输入模式，不是业务Asset Kind。首帧images恰好一张；多图images至少一张且顺序有意义。豆包多图视频是原需求“类似两种”下的项目契约，真实Provider原生协议仍需未来适配验证。
+- generation_method表示输入到输出的媒体转换(t2i/i2i/t2v/i2v)；generation_type表示首帧(first_frame_prompt)/多图(multi_image_prompt)等输入模式，不是业务Asset Kind。首帧images恰好一张；多图images至少一张且顺序有意义；max_items=0 表示未设上限，Provider 也可发布有限上限（例如 GPT 为 4），不能超过上限后静默丢图。豆包多图视频是原需求“类似两种”下的项目契约，真实Provider原生协议仍需未来适配验证。
 - `input_schema`中每个逻辑输入都必须能由Template Invocation Mapping提供；新Provider契约的`output_media_type`为IMAGE/VIDEO/TEXT，必须与Template业务输出Asset Kind的Media Type兼容，不要求Asset Kind名称相等。旧`output_asset_kind`仅解释既有业务型Capability，不能作为新Provider能力的分类依据。
 - Capability 只声明目标参数 schema，不拥有业务 Slot 到参数的规则；该规则属于 Template Version 的 Invocation Mapping。
 - `execution_target` 是不可变枚举 `personal_worker | managed_worker`；它决定任务进入 Personal 或 Managed Execution Domain，不指定具体 Worker。

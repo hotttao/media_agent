@@ -1,13 +1,13 @@
 ---
-name: generate
+name: doubao_generate
 description: 按稳定生成意图恢复首帧视频并交付确定产物
-participants: [execution, doubao, WorkerGateway, studio]
-domains: [execution, doubao]
+participants: [worker_runtime, doubao, WorkerGateway, studio]
+domains: [doubao]
 ---
 
 ## 一句话说明
 
-生产 Executor 实现协调 execution 与 doubao：在专用实例容量内执行首帧视频，所有不确定副作用停留同一 Attempt。
+豆包独立 Executor 通过公共运行契约调用网关与 Studio：在专用实例容量内执行首帧视频，所有不确定副作用停留同一 Attempt。
 
 ## 触发与结果
 
@@ -18,7 +18,7 @@ domains: [execution, doubao]
 ```mermaid
 sequenceDiagram
  participant W as execute
- participant G as generate
+ participant G as doubao_generate
  participant GW as Gateway
  participant C as CheckpointRepository
  participant D as Generator

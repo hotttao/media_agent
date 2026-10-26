@@ -3600,11 +3600,12 @@ type MediaWorkerConfig struct {
 	StudioAccountId        string                 `protobuf:"bytes,3,opt,name=studio_account_id,json=studioAccountId,proto3" json:"studio_account_id,omitempty"`
 	StudioWorkingDirectory string                 `protobuf:"bytes,4,opt,name=studio_working_directory,json=studioWorkingDirectory,proto3" json:"studio_working_directory,omitempty"`
 	// Exact Electron executable and argv, including --local-control. No shell.
-	StudioCommand         []string `protobuf:"bytes,5,rep,name=studio_command,json=studioCommand,proto3" json:"studio_command,omitempty"`
-	Model                 string   `protobuf:"bytes,6,opt,name=model,proto3" json:"model,omitempty"`
-	DurationSeconds       int32    `protobuf:"varint,7,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
-	AspectRatio           string   `protobuf:"bytes,8,opt,name=aspect_ratio,json=aspectRatio,proto3" json:"aspect_ratio,omitempty"`
-	StartupTimeoutSeconds int32    `protobuf:"varint,9,opt,name=startup_timeout_seconds,json=startupTimeoutSeconds,proto3" json:"startup_timeout_seconds,omitempty"`
+	StudioCommand         []string           `protobuf:"bytes,5,rep,name=studio_command,json=studioCommand,proto3" json:"studio_command,omitempty"`
+	Model                 string             `protobuf:"bytes,6,opt,name=model,proto3" json:"model,omitempty"`
+	DurationSeconds       int32              `protobuf:"varint,7,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
+	AspectRatio           string             `protobuf:"bytes,8,opt,name=aspect_ratio,json=aspectRatio,proto3" json:"aspect_ratio,omitempty"`
+	StartupTimeoutSeconds int32              `protobuf:"varint,9,opt,name=startup_timeout_seconds,json=startupTimeoutSeconds,proto3" json:"startup_timeout_seconds,omitempty"`
+	GptImageUse           *GPTImageUseConfig `protobuf:"bytes,10,opt,name=gpt_image_use,json=gptImageUse,proto3" json:"gpt_image_use,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -3698,6 +3699,114 @@ func (x *MediaWorkerConfig) GetAspectRatio() string {
 func (x *MediaWorkerConfig) GetStartupTimeoutSeconds() int32 {
 	if x != nil {
 		return x.StartupTimeoutSeconds
+	}
+	return 0
+}
+
+func (x *MediaWorkerConfig) GetGptImageUse() *GPTImageUseConfig {
+	if x != nil {
+		return x.GptImageUse
+	}
+	return nil
+}
+
+// ChatGPT browser generation. Backend is always web, never configurable.
+type GPTImageUseConfig struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Enabled              bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	BridgeCommand        []string               `protobuf:"bytes,2,rep,name=bridge_command,json=bridgeCommand,proto3" json:"bridge_command,omitempty"`
+	UpstreamCli          string                 `protobuf:"bytes,3,opt,name=upstream_cli,json=upstreamCli,proto3" json:"upstream_cli,omitempty"`
+	BrowserLockDirectory string                 `protobuf:"bytes,4,opt,name=browser_lock_directory,json=browserLockDirectory,proto3" json:"browser_lock_directory,omitempty"`
+	Size                 string                 `protobuf:"bytes,5,opt,name=size,proto3" json:"size,omitempty"`
+	WebModel             string                 `protobuf:"bytes,6,opt,name=web_model,json=webModel,proto3" json:"web_model,omitempty"`
+	ProjectUrl           string                 `protobuf:"bytes,7,opt,name=project_url,json=projectUrl,proto3" json:"project_url,omitempty"`
+	TimeoutSeconds       int32                  `protobuf:"varint,8,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *GPTImageUseConfig) Reset() {
+	*x = GPTImageUseConfig{}
+	mi := &file_config_config_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GPTImageUseConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GPTImageUseConfig) ProtoMessage() {}
+
+func (x *GPTImageUseConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_config_config_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GPTImageUseConfig.ProtoReflect.Descriptor instead.
+func (*GPTImageUseConfig) Descriptor() ([]byte, []int) {
+	return file_config_config_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *GPTImageUseConfig) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *GPTImageUseConfig) GetBridgeCommand() []string {
+	if x != nil {
+		return x.BridgeCommand
+	}
+	return nil
+}
+
+func (x *GPTImageUseConfig) GetUpstreamCli() string {
+	if x != nil {
+		return x.UpstreamCli
+	}
+	return ""
+}
+
+func (x *GPTImageUseConfig) GetBrowserLockDirectory() string {
+	if x != nil {
+		return x.BrowserLockDirectory
+	}
+	return ""
+}
+
+func (x *GPTImageUseConfig) GetSize() string {
+	if x != nil {
+		return x.Size
+	}
+	return ""
+}
+
+func (x *GPTImageUseConfig) GetWebModel() string {
+	if x != nil {
+		return x.WebModel
+	}
+	return ""
+}
+
+func (x *GPTImageUseConfig) GetProjectUrl() string {
+	if x != nil {
+		return x.ProjectUrl
+	}
+	return ""
+}
+
+func (x *GPTImageUseConfig) GetTimeoutSeconds() int32 {
+	if x != nil {
+		return x.TimeoutSeconds
 	}
 	return 0
 }
@@ -4350,7 +4459,7 @@ var file_config_config_proto_rawDesc = string([]byte{
 	0x32, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c,
 	0x2e, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2e, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x57, 0x6f, 0x72,
 	0x6b, 0x6c, 0x6f, 0x61, 0x64, 0x50, 0x72, 0x6f, 0x66, 0x69, 0x6c, 0x65, 0x52, 0x05, 0x76, 0x61,
-	0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x80, 0x03, 0x0a, 0x11, 0x4d, 0x65, 0x64, 0x69,
+	0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0xbf, 0x03, 0x0a, 0x11, 0x4d, 0x65, 0x64, 0x69,
 	0x61, 0x57, 0x6f, 0x72, 0x6b, 0x65, 0x72, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x18, 0x0a,
 	0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07,
 	0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x12, 0x28, 0x0a, 0x10, 0x73, 0x74, 0x75, 0x64, 0x69,
@@ -4374,10 +4483,32 @@ var file_config_config_proto_rawDesc = string([]byte{
 	0x69, 0x6f, 0x12, 0x36, 0x0a, 0x17, 0x73, 0x74, 0x61, 0x72, 0x74, 0x75, 0x70, 0x5f, 0x74, 0x69,
 	0x6d, 0x65, 0x6f, 0x75, 0x74, 0x5f, 0x73, 0x65, 0x63, 0x6f, 0x6e, 0x64, 0x73, 0x18, 0x09, 0x20,
 	0x01, 0x28, 0x05, 0x52, 0x15, 0x73, 0x74, 0x61, 0x72, 0x74, 0x75, 0x70, 0x54, 0x69, 0x6d, 0x65,
-	0x6f, 0x75, 0x74, 0x53, 0x65, 0x63, 0x6f, 0x6e, 0x64, 0x73, 0x42, 0x1e, 0x5a, 0x1c, 0x6d, 0x65,
-	0x64, 0x69, 0x61, 0x5f, 0x61, 0x67, 0x65, 0x6e, 0x74, 0x2f, 0x68, 0x65, 0x72, 0x74, 0x7a, 0x5f,
-	0x67, 0x65, 0x6e, 0x2f, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x33,
+	0x6f, 0x75, 0x74, 0x53, 0x65, 0x63, 0x6f, 0x6e, 0x64, 0x73, 0x12, 0x3d, 0x0a, 0x0d, 0x67, 0x70,
+	0x74, 0x5f, 0x69, 0x6d, 0x61, 0x67, 0x65, 0x5f, 0x75, 0x73, 0x65, 0x18, 0x0a, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x19, 0x2e, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2e, 0x47, 0x50, 0x54, 0x49, 0x6d,
+	0x61, 0x67, 0x65, 0x55, 0x73, 0x65, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x52, 0x0b, 0x67, 0x70,
+	0x74, 0x49, 0x6d, 0x61, 0x67, 0x65, 0x55, 0x73, 0x65, 0x22, 0xa8, 0x02, 0x0a, 0x11, 0x47, 0x50,
+	0x54, 0x49, 0x6d, 0x61, 0x67, 0x65, 0x55, 0x73, 0x65, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12,
+	0x18, 0x0a, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08,
+	0x52, 0x07, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x12, 0x25, 0x0a, 0x0e, 0x62, 0x72, 0x69,
+	0x64, 0x67, 0x65, 0x5f, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x18, 0x02, 0x20, 0x03, 0x28,
+	0x09, 0x52, 0x0d, 0x62, 0x72, 0x69, 0x64, 0x67, 0x65, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64,
+	0x12, 0x21, 0x0a, 0x0c, 0x75, 0x70, 0x73, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x5f, 0x63, 0x6c, 0x69,
+	0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x75, 0x70, 0x73, 0x74, 0x72, 0x65, 0x61, 0x6d,
+	0x43, 0x6c, 0x69, 0x12, 0x34, 0x0a, 0x16, 0x62, 0x72, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x5f, 0x6c,
+	0x6f, 0x63, 0x6b, 0x5f, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x18, 0x04, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x14, 0x62, 0x72, 0x6f, 0x77, 0x73, 0x65, 0x72, 0x4c, 0x6f, 0x63, 0x6b,
+	0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x12, 0x12, 0x0a, 0x04, 0x73, 0x69, 0x7a,
+	0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x73, 0x69, 0x7a, 0x65, 0x12, 0x1b, 0x0a,
+	0x09, 0x77, 0x65, 0x62, 0x5f, 0x6d, 0x6f, 0x64, 0x65, 0x6c, 0x18, 0x06, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x08, 0x77, 0x65, 0x62, 0x4d, 0x6f, 0x64, 0x65, 0x6c, 0x12, 0x1f, 0x0a, 0x0b, 0x70, 0x72,
+	0x6f, 0x6a, 0x65, 0x63, 0x74, 0x5f, 0x75, 0x72, 0x6c, 0x18, 0x07, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x0a, 0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x55, 0x72, 0x6c, 0x12, 0x27, 0x0a, 0x0f, 0x74,
+	0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x5f, 0x73, 0x65, 0x63, 0x6f, 0x6e, 0x64, 0x73, 0x18, 0x08,
+	0x20, 0x01, 0x28, 0x05, 0x52, 0x0e, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x53, 0x65, 0x63,
+	0x6f, 0x6e, 0x64, 0x73, 0x42, 0x1e, 0x5a, 0x1c, 0x6d, 0x65, 0x64, 0x69, 0x61, 0x5f, 0x61, 0x67,
+	0x65, 0x6e, 0x74, 0x2f, 0x68, 0x65, 0x72, 0x74, 0x7a, 0x5f, 0x67, 0x65, 0x6e, 0x2f, 0x63, 0x6f,
+	0x6e, 0x66, 0x69, 0x67, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 })
 
 var (
@@ -4392,7 +4523,7 @@ func file_config_config_proto_rawDescGZIP() []byte {
 	return file_config_config_proto_rawDescData
 }
 
-var file_config_config_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_config_config_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_config_config_proto_goTypes = []any{
 	(*Config)(nil),                // 0: config.Config
 	(*ManagedWorkerConfig)(nil),   // 1: config.ManagedWorkerConfig
@@ -4435,8 +4566,9 @@ var file_config_config_proto_goTypes = []any{
 	(*AgentWorkloadProfile)(nil),  // 38: config.AgentWorkloadProfile
 	(*AgentWorkloadConfig)(nil),   // 39: config.AgentWorkloadConfig
 	(*MediaWorkerConfig)(nil),     // 40: config.MediaWorkerConfig
-	nil,                           // 41: config.Config.ClientEntry
-	nil,                           // 42: config.AgentWorkloadConfig.ProfilesEntry
+	(*GPTImageUseConfig)(nil),     // 41: config.GPTImageUseConfig
+	nil,                           // 42: config.Config.ClientEntry
+	nil,                           // 43: config.AgentWorkloadConfig.ProfilesEntry
 }
 var file_config_config_proto_depIdxs = []int32{
 	3,  // 0: config.Config.app:type_name -> config.AppConfig
@@ -4473,20 +4605,21 @@ var file_config_config_proto_depIdxs = []int32{
 	40, // 31: config.Config.media_worker:type_name -> config.MediaWorkerConfig
 	32, // 32: config.Config.crawler:type_name -> config.CrawlerConfig
 	33, // 33: config.Config.crawl_data:type_name -> config.CrawlDataConfig
-	41, // 34: config.Config.client:type_name -> config.Config.ClientEntry
+	42, // 34: config.Config.client:type_name -> config.Config.ClientEntry
 	2,  // 35: config.ManagedWorkerConfig.bindings:type_name -> config.ManagedWorkerBinding
 	29, // 36: config.ServerConfig.timeout:type_name -> config.TimeoutConfig
 	29, // 37: config.AppClientConfig.timeout:type_name -> config.TimeoutConfig
 	30, // 38: config.AppClientConfig.retry:type_name -> config.RetryConfig
 	19, // 39: config.AppClientConfig.circuit_breaker:type_name -> config.CircuitBreakerConfig
-	42, // 40: config.AgentWorkloadConfig.profiles:type_name -> config.AgentWorkloadConfig.ProfilesEntry
-	31, // 41: config.Config.ClientEntry.value:type_name -> config.AppClientConfig
-	38, // 42: config.AgentWorkloadConfig.ProfilesEntry.value:type_name -> config.AgentWorkloadProfile
-	43, // [43:43] is the sub-list for method output_type
-	43, // [43:43] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	43, // 40: config.AgentWorkloadConfig.profiles:type_name -> config.AgentWorkloadConfig.ProfilesEntry
+	41, // 41: config.MediaWorkerConfig.gpt_image_use:type_name -> config.GPTImageUseConfig
+	31, // 42: config.Config.ClientEntry.value:type_name -> config.AppClientConfig
+	38, // 43: config.AgentWorkloadConfig.ProfilesEntry.value:type_name -> config.AgentWorkloadProfile
+	44, // [44:44] is the sub-list for method output_type
+	44, // [44:44] is the sub-list for method input_type
+	44, // [44:44] is the sub-list for extension type_name
+	44, // [44:44] is the sub-list for extension extendee
+	0,  // [0:44] is the sub-list for field type_name
 }
 
 func init() { file_config_config_proto_init() }
@@ -4500,7 +4633,7 @@ func file_config_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_config_config_proto_rawDesc), len(file_config_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   43,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

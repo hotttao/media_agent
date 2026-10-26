@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 func TestFixtureFailureIsExplicitPerJobAndStablePerDispatch(t *testing.T) {
@@ -18,8 +18,8 @@ func TestFixtureFailureIsExplicitPerJobAndStablePerDispatch(t *testing.T) {
 	if e.SetFailureOnce("image", 2) != nil {
 		t.Fatal("fixture failure configuration rejected")
 	}
-	task := func(job, dispatch string) execution.Task {
-		return execution.Task{DispatchID: dispatch, CapabilityKey: "media.image.model", CapabilityVersion: 1,
+	task := func(job, dispatch string) worker_runtime.Task {
+		return worker_runtime.Task{DispatchID: dispatch, CapabilityKey: "media.image.model", CapabilityVersion: 1,
 			Input: map[string]any{"job_id": job, "step_key": "image"}}
 	}
 	for _, job := range []string{"a", "b"} {
@@ -41,7 +41,7 @@ func TestFixtureFailureIsExplicitPerJobAndStablePerDispatch(t *testing.T) {
 			t.Fatal("fixture failed the new retry dispatch")
 		}
 	}
-	if _, err := e.Execute(execution.Task{CapabilityKey: "media_render_template_v1", CapabilityVersion: 1}); err == nil {
+	if _, err := e.Execute(worker_runtime.Task{CapabilityKey: "media_render_template_v1", CapabilityVersion: 1}); err == nil {
 		t.Fatal("failure mode accepted internal task")
 	}
 }
@@ -52,7 +52,7 @@ func TestFixtureUsesConfiguredAssetServiceAndFrozenProvenance(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, capability := range Capabilities() {
-		output, err := executor.Execute(execution.Task{CapabilityKey: capability.Key, CapabilityVersion: capability.Version})
+		output, err := executor.Execute(worker_runtime.Task{CapabilityKey: capability.Key, CapabilityVersion: capability.Version})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,7 +65,7 @@ func TestFixtureUsesConfiguredAssetServiceAndFrozenProvenance(t *testing.T) {
 			t.Fatal("mock provenance lost")
 		}
 	}
-	for _, task := range []execution.Task{
+	for _, task := range []worker_runtime.Task{
 		{CapabilityKey: "media_render_template_v1", CapabilityVersion: 1},
 		{CapabilityKey: "media.image.model", CapabilityVersion: 2},
 	} {
@@ -97,7 +97,7 @@ func TestFixtureCanReturnPreuploadedVideoResult(t *testing.T) {
 	if err := executor.SetVideoResultURL(videoURL); err != nil {
 		t.Fatal(err)
 	}
-	output, err := executor.Execute(execution.Task{CapabilityKey: "media.video.generate", CapabilityVersion: 1})
+	output, err := executor.Execute(worker_runtime.Task{CapabilityKey: "media.video.generate", CapabilityVersion: 1})
 	if err != nil || output["candidates"].([]map[string]any)[0]["url"] != videoURL {
 		t.Fatalf("fixture did not return controlled video: output=%+v err=%v", output, err)
 	}
@@ -118,7 +118,7 @@ func TestFixtureAllCapabilitiesUseControlledResults(t *testing.T) {
 				t.Fatal("unsafe override accepted or exposed in error")
 			}
 		}
-		output, err := executor.Execute(execution.Task{CapabilityKey: capability.Key, CapabilityVersion: 1})
+		output, err := executor.Execute(worker_runtime.Task{CapabilityKey: capability.Key, CapabilityVersion: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -132,7 +132,7 @@ func TestFixtureAllCapabilitiesUseControlledResults(t *testing.T) {
 		if err := executor.SetResultURL(capability.Key, ""); err != nil {
 			t.Fatal(err)
 		}
-		fallback, err := executor.Execute(execution.Task{CapabilityKey: capability.Key, CapabilityVersion: 1})
+		fallback, err := executor.Execute(worker_runtime.Task{CapabilityKey: capability.Key, CapabilityVersion: 1})
 		if err != nil || !strings.HasPrefix(fallback["candidates"].([]map[string]any)[0]["url"].(string), "https://legacy.example/") {
 			t.Fatal("cleared override did not restore the existing fixture")
 		}
@@ -141,11 +141,11 @@ func TestFixtureAllCapabilitiesUseControlledResults(t *testing.T) {
 		if err := executor.SetResultURL(key, "https://storage.example/result"); err == nil {
 			t.Fatal("internal or unknown task accepted as a fixture Capability")
 		}
-		if _, err := executor.Execute(execution.Task{CapabilityKey: key, CapabilityVersion: 1}); err == nil {
+		if _, err := executor.Execute(worker_runtime.Task{CapabilityKey: key, CapabilityVersion: 1}); err == nil {
 			t.Fatal("internal or unknown task was executed by the client Worker")
 		}
 	}
-	if _, err := executor.Execute(execution.Task{CapabilityKey: "media.image.model", CapabilityVersion: 2}); err == nil {
+	if _, err := executor.Execute(worker_runtime.Task{CapabilityKey: "media.image.model", CapabilityVersion: 2}); err == nil {
 		t.Fatal("unknown Capability Version accepted")
 	}
 }
@@ -168,7 +168,7 @@ func TestFixtureMultipleCandidatesAreDistinctAndImmutable(t *testing.T) {
 			t.Fatal("invalid or sensitive candidates accepted")
 		}
 	}
-	output, err := e.Execute(execution.Task{CapabilityKey: "media.image.model", CapabilityVersion: 1})
+	output, err := e.Execute(worker_runtime.Task{CapabilityKey: "media.image.model", CapabilityVersion: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"media_agent/media_worker/biz/domain/execution"
 	"media_agent/media_worker/biz/shared/correlation"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 type uploadGrant struct {
@@ -35,7 +35,7 @@ func (uploadUnconfirmed) Permanent() bool { return false }
 // UploadFile sends the bearer only to the gateway. Uncertain PUT responses
 // are resolved by requesting a fresh grant (server-side HEAD), never by
 // regenerating the Provider result or treating an unconfirmed write as done.
-func (c *Client) UploadFile(ctx context.Context, workerID string, task execution.Task, index int, filename string) (string, error) {
+func (c *Client) UploadFile(ctx context.Context, workerID string, task worker_runtime.Task, index int, filename string) (string, error) {
 	ctx = correlation.WithParent(ctx, task.TraceParent)
 	f, err := os.Open(filename)
 	if err != nil {

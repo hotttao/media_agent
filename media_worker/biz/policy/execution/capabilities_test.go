@@ -3,11 +3,11 @@ package execution
 import (
 	"testing"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 func TestSelectCapabilities(t *testing.T) {
-	available := []execution.Capability{
+	available := []worker_runtime.Capability{
 		{Key: "media.image.model", Version: 1, Concurrency: 1},
 		{Key: "media.video.generate", Version: 1, Concurrency: 2},
 	}
@@ -21,7 +21,7 @@ func TestSelectCapabilities(t *testing.T) {
 }
 
 func TestSelectCapabilitiesRejectsUnknownVersion(t *testing.T) {
-	_, err := SelectCapabilities([]execution.Capability{{Key: "media.image.model", Version: 1}}, "media.image.model@2")
+	_, err := SelectCapabilities([]worker_runtime.Capability{{Key: "media.image.model", Version: 1}}, "media.image.model@2")
 	if err == nil {
 		t.Fatal("SelectCapabilities() should reject an unsupported capability version")
 	}

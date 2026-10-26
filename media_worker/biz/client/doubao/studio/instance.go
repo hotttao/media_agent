@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"media_agent/media_worker/biz/domain/doubao"
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 type InstanceConfig struct {
@@ -247,7 +247,7 @@ func (i *Instance) FetchArtifacts(ctx context.Context, ref doubao.Reference, as 
 }
 
 var _ doubao.Generator = (*Instance)(nil)
-var _ execution.Admission = (*Instance)(nil)
+var _ worker_runtime.Admission = (*Instance)(nil)
 
 func (i *Instance) AcquireRecovery(ctx context.Context) (func(), error) {
 	select {

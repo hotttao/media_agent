@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 var ErrDownload = errors.New("input image unavailable or invalid")
@@ -22,20 +22,20 @@ type Downloader struct {
 	HTTP *http.Client
 }
 
-func (d Downloader) Fetch(ctx context.Context, key, raw string) (execution.Artifact, error) {
+func (d Downloader) Fetch(ctx context.Context, key, raw string) (worker_runtime.Artifact, error) {
 	if os.MkdirAll(d.Root, 0700) != nil {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	rootInfo, rootErr := os.Lstat(d.Root)
 	if rootErr != nil || !rootInfo.IsDir() || rootInfo.Mode().Perm()&0077 != 0 {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	if len(key) != 64 {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	client := d.HTTP
 	if client == nil {
@@ -43,39 +43,39 @@ func (d Downloader) Fetch(ctx context.Context, key, raw string) (execution.Artif
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	response, err := client.Do(req)
 	if err != nil {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	defer response.Body.Close()
 	if response.StatusCode != 200 || response.ContentLength > 16<<20 {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, (16<<20)+1))
 	if err != nil || len(data) == 0 || len(data) > 16<<20 {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	mime := http.DetectContentType(data)
 	ext := map[string]string{"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}[mime]
 	if ext == "" {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	dir := filepath.Join(d.Root, key)
 	if os.MkdirAll(dir, 0700) != nil {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	dirInfo, dirErr := os.Lstat(dir)
 	if dirErr != nil || !dirInfo.IsDir() || dirInfo.Mode().Perm()&0077 != 0 {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	target := filepath.Join(dir, "input-0"+ext)
 	if err := writePrivate(dir, target, data); err != nil {
-		return execution.Artifact{}, ErrDownload
+		return worker_runtime.Artifact{}, ErrDownload
 	}
 	sum := sha256.Sum256(data)
-	return execution.Artifact{ID: hex.EncodeToString(sum[:]), LocalPath: target, ChecksumSHA256: hex.EncodeToString(sum[:]), SizeBytes: int64(len(data))}, nil
+	return worker_runtime.Artifact{ID: hex.EncodeToString(sum[:]), LocalPath: target, ChecksumSHA256: hex.EncodeToString(sum[:]), SizeBytes: int64(len(data))}, nil
 }
 func writePrivate(dir, target string, data []byte) error {
 	f, err := os.CreateTemp(dir, ".input-")
@@ -107,7 +107,7 @@ func writePrivate(dir, target string, data []byte) error {
 }
 
 // Verify rejects changed, missing, symlinked or partially written manifest files.
-func (d Downloader) Verify(ctx context.Context, a execution.Artifact) error {
+func (d Downloader) Verify(ctx context.Context, a worker_runtime.Artifact) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}

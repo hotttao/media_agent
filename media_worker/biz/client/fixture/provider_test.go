@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 func TestProviderFileResultsAreExplicitAndConfirmed(t *testing.T) {
@@ -28,7 +28,7 @@ func TestProviderFileResultsAreExplicitAndConfirmed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	calls := 0
-	e.SetFileUploader(func(got context.Context, actual execution.Task, index int, file string) (string, error) {
+	e.SetFileUploader(func(got context.Context, actual worker_runtime.Task, index int, file string) (string, error) {
 		calls++
 		if got != ctx || actual.DispatchID != task.DispatchID || file != b.ResultFiles[index] {
 			t.Error("upload binding changed")
@@ -43,7 +43,7 @@ func TestProviderFileResultsAreExplicitAndConfirmed(t *testing.T) {
 	if len(candidates) != 2 || candidates[0]["object_path"] == "" || candidates[0]["url"] != nil || candidates[1]["is_primary"] != false {
 		t.Fatal("uploaded result shape invalid")
 	}
-	e.SetFileUploader(func(context.Context, execution.Task, int, string) (string, error) {
+	e.SetFileUploader(func(context.Context, worker_runtime.Task, int, string) (string, error) {
 		return "", errors.New("upload unconfirmed")
 	})
 	if out, err = e.Execute(task); err == nil || out != nil {
@@ -53,7 +53,7 @@ func TestProviderFileResultsAreExplicitAndConfirmed(t *testing.T) {
 		t.Fatal("failure fixture rejected")
 	}
 	calls = 0
-	e.SetFileUploader(func(context.Context, execution.Task, int, string) (string, error) { calls++; return "path", nil })
+	e.SetFileUploader(func(context.Context, worker_runtime.Task, int, string) (string, error) { calls++; return "path", nil })
 	if _, err = e.Execute(task); err == nil || calls != 0 {
 		t.Fatal("explicit generation failure uploaded results")
 	}
@@ -63,8 +63,8 @@ func providerBinding(job, step, key, result string) ProviderBinding {
 	return ProviderBinding{JobID: job, StepKey: step, CapabilityKey: key, CapabilityVersion: 1, ResultURLs: []string{result}}
 }
 
-func providerTask(job, step, key string, images ...string) execution.Task {
-	return execution.Task{DispatchID: job + "-" + step, CapabilityKey: key, CapabilityVersion: 1, Input: map[string]any{"job_id": job, "step_key": step, "prompt": "already rendered", "images": images}}
+func providerTask(job, step, key string, images ...string) worker_runtime.Task {
+	return worker_runtime.Task{DispatchID: job + "-" + step, CapabilityKey: key, CapabilityVersion: 1, Input: map[string]any{"job_id": job, "step_key": step, "prompt": "already rendered", "images": images}}
 }
 
 func TestProviderFixtureReusesCapabilityWithExactJobStepResults(t *testing.T) {
@@ -111,7 +111,7 @@ func TestProviderFixtureReusesCapabilityWithExactJobStepResults(t *testing.T) {
 	if e.SetResultURL(key, "https://storage.test/unscoped.png") == nil {
 		t.Fatal("provider accepted business/unscoped override")
 	}
-	for _, task := range []execution.Task{
+	for _, task := range []worker_runtime.Task{
 		providerTask("wrong-job", "model", key, "https://storage.test/input.png"),
 		providerTask("job-a", "unknown", key, "https://storage.test/input.png"),
 		providerTask("job-a", "model", "doubao.i2v.first_frame_prompt", "https://storage.test/input.png"),

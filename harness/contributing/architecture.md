@@ -549,4 +549,4 @@ consul_kv:              # 对应 ConsulKVConfig
 
 ## 非 HTTP Worker 的适用说明
 
-media_worker 同样使用 biz/domain、biz/policy、biz/workflow、biz/client、biz/dal/repo、biz/shared 分层。cmd 是 CLI 协议入口和 composition root：绑定参数、构造 Command、装配具体实现、调用 Workflow、输出与退出。注册、恢复、领取、执行、心跳与交付属于 Workflow，通过 domain 端口注入，不在 CLI 实现业务循环。领域无 JSON/ORM tag；HTTP wire DTO 和磁盘 DTO 分别留在 client / dal。跨进程真实适配器组合测试放 e2e。
+media_worker 同样使用 biz/domain、biz/policy、biz/workflow、biz/client、biz/dal/repo、biz/shared 分层。cmd 是 CLI 协议入口和 composition root：绑定参数、构造 Command、装配具体实现、调用 Workflow、输出与退出。注册、恢复、领取、执行、心跳与交付属于 Workflow，通过稳定运行契约注入，不在 CLI 实现业务循环。Task、Result 和网关协议属于 `biz/shared/worker_runtime` 技术运行层，不为目录分层强造 execution Domain；业务 Provider 的意图/检查点由各自 Domain 定义，各 Provider 使用独立生成 Workflow。领域无 JSON/ORM tag；HTTP wire DTO 和磁盘 DTO 分别留在 client / dal。跨进程真实适配器组合测试放 e2e。

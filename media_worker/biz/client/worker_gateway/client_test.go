@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 func TestClientPollUsesBearerTokenAndDecodesOpaqueTask(t *testing.T) {
@@ -34,7 +34,7 @@ func TestClientPollUsesBearerTokenAndDecodesOpaqueTask(t *testing.T) {
 	}))
 	defer server.Close()
 
-	task, err := New(server.URL, "talos_test_secret").Poll(context.Background(), "desktop-1", execution.Capability{Key: "media.image.model", Version: 1})
+	task, err := New(server.URL, "talos_test_secret").Poll(context.Background(), "desktop-1", worker_runtime.Capability{Key: "media.image.model", Version: 1})
 	if err != nil {
 		t.Fatalf("Poll() error = %v", err)
 	}
@@ -49,8 +49,8 @@ func TestClientReturnsTypedHTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := New(server.URL, "talos_test_secret").Complete(context.Background(), "desktop-1", execution.Task{DispatchID: "dispatch-1", Attempt: 1}, "key-1", map[string]any{"candidates": []any{}})
-	if !errors.Is(err, execution.ErrResultRejected) {
+	_, err := New(server.URL, "talos_test_secret").Complete(context.Background(), "desktop-1", worker_runtime.Task{DispatchID: "dispatch-1", Attempt: 1}, "key-1", map[string]any{"candidates": []any{}})
+	if !errors.Is(err, worker_runtime.ErrResultRejected) {
 		t.Fatalf("Complete() error = %#v", err)
 	}
 }
@@ -74,7 +74,7 @@ func TestClientPollNoContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	task, err := New(server.URL, "talos_test_secret").Poll(context.Background(), "desktop-1", execution.Capability{Key: "media.image.model", Version: 1})
+	task, err := New(server.URL, "talos_test_secret").Poll(context.Background(), "desktop-1", worker_runtime.Capability{Key: "media.image.model", Version: 1})
 	if err != nil || task != nil {
 		t.Fatalf("Poll() = %#v, %v", task, err)
 	}
@@ -106,7 +106,7 @@ func TestClientCompleteUsesDispatchRouteAndStablePayload(t *testing.T) {
 	}))
 	defer server.Close()
 
-	receipt, err := New(server.URL, "talos_test_secret").Complete(context.Background(), "desktop-1", execution.Task{DispatchID: "dispatch-1", Attempt: 3}, "key-1", map[string]any{"candidates": []any{}})
+	receipt, err := New(server.URL, "talos_test_secret").Complete(context.Background(), "desktop-1", worker_runtime.Task{DispatchID: "dispatch-1", Attempt: 3}, "key-1", map[string]any{"candidates": []any{}})
 	if err != nil || receipt.ReceiptID != "receipt-1" {
 		t.Fatalf("Complete() = %#v, %v", receipt, err)
 	}
@@ -115,9 +115,9 @@ func TestClientCompleteUsesDispatchRouteAndStablePayload(t *testing.T) {
 func TestGatewayWireRegistrationAndResultSemantics(t *testing.T) {
 	for _, status := range []int{http.StatusConflict, http.StatusGone} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
-		_, err := New(server.URL, "token").Complete(context.Background(), "worker", execution.Task{DispatchID: "dispatch", Attempt: 1}, "key", map[string]any{"candidates": []any{}})
+		_, err := New(server.URL, "token").Complete(context.Background(), "worker", worker_runtime.Task{DispatchID: "dispatch", Attempt: 1}, "key", map[string]any{"candidates": []any{}})
 		server.Close()
-		if !errors.Is(err, execution.ErrResultRejected) {
+		if !errors.Is(err, worker_runtime.ErrResultRejected) {
 			t.Fatalf("status %d did not map to domain rejection: %v", status, err)
 		}
 	}
@@ -141,10 +141,10 @@ func TestGatewayWireRegistrationAndResultSemantics(t *testing.T) {
 	}))
 	defer server.Close()
 	c := New(server.URL, "token")
-	if err := c.Register(context.Background(), "worker", []execution.Capability{{Key: "cap", Version: 2, Concurrency: 3}}); err != nil {
+	if err := c.Register(context.Background(), "worker", []worker_runtime.Capability{{Key: "cap", Version: 2, Concurrency: 3}}); err != nil {
 		t.Fatal(err)
 	}
-	task := execution.Task{DispatchID: "dispatch", Attempt: 1}
+	task := worker_runtime.Task{DispatchID: "dispatch", Attempt: 1}
 	if _, err := c.Complete(context.Background(), "worker", task, "key", map[string]any{}); err == nil {
 		t.Fatal("unconfirmed completion accepted")
 	}

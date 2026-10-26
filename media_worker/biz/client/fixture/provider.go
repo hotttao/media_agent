@@ -8,12 +8,12 @@ import (
 	"io"
 	"strings"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 const ProviderProfile = "provider_fixture"
 
-var providerCapabilities = []execution.Capability{
+var providerCapabilities = []worker_runtime.Capability{
 	{Key: "jimeng.i2i.first_frame_prompt", Version: 1, Concurrency: 1},
 	{Key: "jimeng.i2i.multi_image_prompt", Version: 1, Concurrency: 1},
 	{Key: "doubao.i2v.first_frame_prompt", Version: 1, Concurrency: 1},
@@ -33,8 +33,8 @@ type ProviderBinding struct {
 
 type providerTaskRef struct{ job, step string }
 
-func ProviderCapabilities() []execution.Capability {
-	return append([]execution.Capability(nil), providerCapabilities...)
+func ProviderCapabilities() []worker_runtime.Capability {
+	return append([]worker_runtime.Capability(nil), providerCapabilities...)
 }
 
 // ReadProviderConfig deliberately omits decoder errors: fixture files may
@@ -96,11 +96,11 @@ func supportedProvider(key string, version int) bool {
 
 // AvailableCapabilities registers only configured contracts. Old business
 // capabilities and server-internal tasks never enter the Provider profile.
-func (e *Executor) AvailableCapabilities() []execution.Capability {
+func (e *Executor) AvailableCapabilities() []worker_runtime.Capability {
 	if e.providerResults == nil {
 		return Capabilities()
 	}
-	var available []execution.Capability
+	var available []worker_runtime.Capability
 	for _, cap := range providerCapabilities {
 		for _, binding := range e.providerResults {
 			if binding.CapabilityKey == cap.Key && binding.CapabilityVersion == cap.Version {
@@ -112,7 +112,7 @@ func (e *Executor) AvailableCapabilities() []execution.Capability {
 	return available
 }
 
-func (e *Executor) executeProvider(ctx context.Context, task execution.Task) (map[string]any, error) {
+func (e *Executor) executeProvider(ctx context.Context, task worker_runtime.Task) (map[string]any, error) {
 	if !supportedProvider(task.CapabilityKey, task.CapabilityVersion) {
 		return nil, errors.New("unsupported provider fixture Capability")
 	}

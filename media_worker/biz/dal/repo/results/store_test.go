@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 func TestResultSurvivesRestartAndCannotBeChangedOrCrossCredentialReplayed(t *testing.T) {
@@ -15,7 +15,7 @@ func TestResultSurvivesRestartAndCannotBeChangedOrCrossCredentialReplayed(t *tes
 		t.Fatal(err)
 	}
 	const parent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
-	r := execution.Result{Task: execution.Task{DispatchID: "dispatch", Attempt: 1, Input: map[string]any{"prompt": "private prompt"}, TraceParent: parent}, Key: "stable", Output: map[string]any{"candidates": []any{map[string]any{"content": "result"}}}}
+	r := worker_runtime.Result{Task: worker_runtime.Task{DispatchID: "dispatch", Attempt: 1, Input: map[string]any{"prompt": "private prompt"}, TraceParent: parent}, Key: "stable", Output: map[string]any{"candidates": []any{map[string]any{"content": "result"}}}}
 	if store.Save(r) != nil || store.Save(r) != nil {
 		t.Fatal("same result not saved idempotently")
 	}

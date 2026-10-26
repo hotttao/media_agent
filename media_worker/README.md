@@ -126,9 +126,9 @@ Worker 启动后先注册能力，再按 Capability 并发轮询。任务只使�
 
 ## 分层与迁移状态
 
-CLI 位于 `cmd/media_worker`，执行生命周期位于 `biz/workflow/execute`，能力选择和失败分类位于 `biz/policy/execution`。`biz/domain/execution` 定义执行、上传与结果/检查点端口；HTTP 和磁盘 DTO 分别位于 `biz/client/worker_gateway`、`biz/dal/repo/results`，保留 `.worker-state` 命名空间、权限与旧日志格式。生成检查点由独立 `biz/dal/repo/checkpoints` 实现，记录私有生成意图、引用、manifest 和已确认对象路径。
+CLI 位于 `cmd/media_worker`，执行生命周期位于 `biz/workflow/execute`，能力选择和失败分类位于 `biz/policy/execution`。`biz/shared/worker_runtime` 定义公共技术执行、上传与结果交付端口；HTTP 和磁盘 DTO 分别位于 `biz/client/worker_gateway`、`biz/dal/repo/results`，保留 `.worker-state` 命名空间、权限与旧日志格式。生成检查点由独立 `biz/dal/repo/doubao_checkpoints` 实现，记录私有生成意图、引用、manifest 和已确认对象路径。
 
-`biz/domain/doubao` 定义可替换 Generator，`biz/client/doubao/studio` 实现专用实例的本机 Worker 协议。`biz/workflow/generate` 协调原 Attempt 资格确认、输入下载、稳定 Key 查询、提交、确切产物下载、manifest 和授权上传。生产仅支持 `doubao.i2v.first_frame_prompt@1`，要求恰好一张参考图，输出 VIDEO。
+`biz/domain/doubao` 定义可替换 Generator，`biz/client/doubao/studio` 实现专用实例的本机 Worker 协议。`biz/workflow/doubao_generate` 协调原 Attempt 资格确认、输入下载、稳定 Key 查询、提交、确切产物下载、manifest 和授权上传。生产仅支持 `doubao.i2v.first_frame_prompt@1`，要求恰好一张参考图，输出 VIDEO。
 
 ## Studio 生产 profile
 
@@ -156,3 +156,40 @@ go run ./cmd/media_worker -config conf/local.yaml
 2026-10-26 首帧生产验收已完成：真实视频经公开网关上传、审批、登记，Job SUCCEEDED；原 Worker 重启后复用同一 Studio 生成。用户 fork 固定为 [840117a](https://github.com/hotttao/doubao-studio/commit/840117a)，分支 `codex/media-worker-studio`。证据与范围见 [完整 review](../docs/review/media_worker/workflow/0002-generate/generate.md)。
 
 后端 `media_materials` 与 `internal_worker` 的 `MEDIA_STORAGE_PUBLIC_ENDPOINT` 必须一致。通用生成登记从可信 Job 传递企业归属，Product/Virtual IP 可选；登记失败使用不带 input_override 的原生 retry 继续原实例，无需重新启动能力 Worker 或重生成。
+
+## GPT 成图 profile（独立流程）
+
+GPT 实现位于 `biz/domain/gpt`、`biz/workflow/gpt_generate`、`biz/client/gpt/image_use` 与 `biz/dal/repo/gpt_checkpoints`。豆包仍使用独立 `doubao_generate`；不通过通用生成流程或 Recipe 兼容。公共 Worker 技术契约位于 `biz/shared/worker_runtime`，不是业务 Domain。
+
+首版能力：
+
+- `gpt.t2i.text_prompt@1`：已渲染 prompt，输出一张图片。
+- `gpt.i2i.multi_image_prompt@1`：prompt + 1～4 张有序参考图，输出一张图片；不会静默丢弃多余参考图。
+
+固定 `image-use --backend web --profile relay`，连接当前已登录 Chrome。**单账号串行**，没有 Studio 式账号池。不会使用 auto/Codex/Gemini，也不会读取或转发 Codex 凭证。图片尺寸在网页端是提示，不保证像素、质量或透明背景。上游版本固定，不能直接执行 upgrade 后沿用旧 bridge。
+
+```bash
+# 安装固定版本 image-use；校验上游源码 SHA-256，不安装 Chrome 插件。
+python3 tools/install_image_use.py
+# chrome-use CLI 与 Chrome 扩展须先按其官方安装说明完成连接。
+python3 tools/check_gpt_browser.py --image-use /absolute/path/to/pinned/image-use --open
+```
+
+浏览器准备遵循 [chrome-use 官方文档](https://github.com/leeguooooo/chrome-use)：安装 CLI、执行 `chrome-use extension install` 注册 native host，并在当前 Chrome 安装/启用扩展后登录 ChatGPT。不要复制 Cookie，不要用新建的无登录 headless 浏览器替代 relay；首次插件授权需要用户在 Chrome 完成。
+
+将 `conf/gpt.example.yaml` 复制为私密 `conf/local.yaml`，配置 Python/bridge 绝对路径、上游 CLI、共享浏览器锁目录、网页模型标签与可选现有 Project URL。bridge 文件位于本仓库 `media_worker/tools/image_use_bridge.py`。模型默认候选 `Instant,Auto` 沿用固定上游的支持值；不是官方图片模型 ID。网关 URL、Worker Token、稳定 Worker ID 与状态目录继续沿用原配置。
+
+```bash
+export MEDIA_WORKER_PROFILE=gpt_image_use
+export MEDIA_WORKER_GPT_BRIDGE=/absolute/path/to/media_worker/tools/image_use_bridge.py
+export MEDIA_WORKER_IMAGE_USE_CLI=/absolute/path/to/pinned/image-use
+export MEDIA_WORKER_GPT_LOCK_DIRECTORY=/private/shared-gpt-browser-lock
+# 核对独立 Worker 身份和待执行队列后运行；需要设置原网关/Token/Worker ID。
+go run ./cmd/media_worker -config conf/local.yaml
+```
+
+服务端发布能力需要 `media_workflow` migration 000028 及支持有限 `max_items` 的契约校验代码；发布后由既有 Conductor Task Definition 注册流程处理。不要只插入数据库记录而仍运行旧服务二进制。该迁移沿用既有不可变 Provider 契约规则：存在已发布版本时拒绝 down；需要停用时通过后续迁移归档，不删除已经被引用的版本。
+
+GPT Workflow 检查点位于凭证命名空间的 `gpt-checkpoints`，bridge 技术台账位于 `image-use`。发送意图先于浏览器动作，之后只恢复原 conversation/user turn；多出一轮用户消息、会话变更、无绑定或不确定发送会保留 needs_human。原会话与人工状态需要检查，不能清空状态目录或重新提交相同请求绕过。图片 manifest 通过大小、媒体类型、SHA-256 与私有文件校验后才上传；公开 Gateway 仍决定执行资格和对象路径。
+
+[GPT 设计](../docs/spec/media-worker-gpt-image-use.md) · [落地状态](../docs/plan/media-worker-gpt-image-use.md) · [公共运行契约](../docs/ddd/media_worker/runtime.md)。

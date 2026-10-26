@@ -1,5 +1,9 @@
 # Execution Capability 变更记录
 
+## 2026-10-26：GPT web 成图契约
+
+新增 gpt.t2i.text_prompt@1 与 gpt.i2i.multi_image_prompt@1 的发布迁移。多图契约允许显式 max_items=4，保留旧 max_items=0 的无限语义；旧发布版本不修改，退役仍须前向归档。
+
 ## 2026-09-28：冻结 Personal/Managed Execution Target
 
 - Capability Version 新增不可变 `execution_target=personal_worker|managed_worker` 与可选 `managed_pool_key`。

@@ -1,3 +1,5 @@
+> 历史审查记录。2026-10-26 起 execution 已归回公共技术运行层，generate 更名 doubao_generate；当前结构见 `docs/ddd/media_worker/runtime.md`。
+
 # Doubao 接口 review
 
 日期：2026-10-25。依据：[doubao 模型](../../../../ddd/media_worker/domain/0002-doubao/doubao.md)、[迁移 spec](../../../../spec/media-worker-doubao.md)。

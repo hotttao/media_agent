@@ -1,8 +1,9 @@
-package checkpoints
+package doubao_checkpoints
 
 import (
 	"context"
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/domain/doubao"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,7 +16,7 @@ func TestCheckpointRestoresWithoutInputAndRejectsRegressions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cp := execution.Checkpoint{Task: execution.Task{DispatchID: "dispatch", Attempt: 1, CapabilityKey: "cap", CapabilityVersion: 1, Input: map[string]any{"images": []string{"private-signed-url"}}}, GenerationKey: "key", RequestDigest: "digest", Intent: execution.GenerationIntent{Prompt: "rendered"}}
+	cp := doubao.Checkpoint{Task: worker_runtime.Task{DispatchID: "dispatch", Attempt: 1, CapabilityKey: "cap", CapabilityVersion: 1, Input: map[string]any{"images": []string{"private-signed-url"}}}, GenerationKey: "key", RequestDigest: "digest", Intent: doubao.GenerationIntent{Prompt: "rendered"}}
 	if err := s.Save(ctx, cp); err != nil {
 		t.Fatal(err)
 	}

@@ -62,3 +62,6 @@ media_auth/.env.agent-gateway.local
 
 # Private client Worker configuration.
 media_worker/conf/local.yaml
+
+# Python bridge compilation cache.
+media_worker/tools/__pycache__/

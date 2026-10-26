@@ -118,3 +118,17 @@ func TestFirstFrameAndMultiImageContractsKeepDistinctCardinality(t *testing.T) {
 		t.Fatal("invalid count constraint accepted")
 	}
 }
+
+func TestMultiImageContractCanDeclareProviderReferenceLimit(t *testing.T) {
+	c := Capability{Key: "gpt.i2i.multi_image_prompt", Version: 1, Provider: "gpt", Mode: "image_generation", GenerationMethod: ImageToImage, GenerationType: MultiImagePrompt, OutputMediaType: MediaImage, ExecutionTarget: ExecutionTargetPersonalWorker, ConductorTaskDef: "gpt_i2i_multi_image_v1", Inputs: []Input{{Name: "prompt", Type: InputString, Required: true}, {Name: "images", Type: InputResourceRefList, Required: true, MediaType: MediaImage, MinItems: 1, MaxItems: 4}}}
+	if err := c.ValidateContract(); err != nil {
+		t.Fatal(err)
+	}
+	if !c.Inputs[1].AcceptsResourceCount(4) || c.Inputs[1].AcceptsResourceCount(5) {
+		t.Fatal("reference limit ignored")
+	}
+	c.Inputs[1].MaxItems = 0
+	if err := c.ValidateContract(); err != nil || !c.Inputs[1].AcceptsResourceCount(5) {
+		t.Fatal("legacy unlimited multi-image contract changed", err)
+	}
+}

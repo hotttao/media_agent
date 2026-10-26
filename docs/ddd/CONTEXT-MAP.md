@@ -35,7 +35,7 @@ Runtime Controller 是 Agent 资源创建的环境实现：Gateway 使用 Kubern
 - `media_agent_gateway` 是 MCP Definition 的权威来源，持有注册目录；`media_plugin` 通过 Gateway 接口查询定义，不共享目录表。
 - `media_plugin` 发布 Plugin Binding 变更；Gateway 据此重建快照；Agent 运行期统一连接 Gateway，由 Gateway 代理平台内业务 MCP。
 - `media_workflow` 编排 `media_crawler`、`media_gen` 和 `media_materials`，各服务保留自身任务事实。
-- `media_worker` 通过公开 Worker Gateway 使用 `media_workflow` 的调度与资格事实，拥有本地执行和交付事实；豆包领域通过 Generator 端口隔离 studio。
+- `media_worker` 通过公开 Worker Gateway 使用 `media_workflow` 的调度与资格事实，拥有本地执行和交付事实；豆包和 GPT 分别通过独立 Domain/Workflow 隔离生成器；任务执行与交付是公共运行契约，不划为 execution Domain。
 - `media_workflow` 是客户端 Capability Worker 与内部 Conductor 之间的防腐层：客户端只见 Worker Gateway API 和不透明 Dispatch，Conductor Task Definition、Task Domain 与 Task ID 均留在内部。
 - 所有需要二进制对象的业务服务通过 S3 Storage Port 依赖逻辑 `media_storage`；本地部署由 SeaweedFS 提供，生产可切换 MinIO、Aliyun OSS、AWS S3 等兼容实现。业务归属、分享、读取授权和删除决策仍归业务服务。
 - 各业务服务发布通知请求，`media_notification` 负责投递，不反向拥有业务事件。

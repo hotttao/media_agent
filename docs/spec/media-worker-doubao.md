@@ -87,3 +87,8 @@ Generator 定义 Submit、Lookup、Observe、FetchArtifacts。Request 表达稳�
 Finalize 内部请求 `UpsertGeneratedAssetReq.organization_id = 16` 从已经验证的 Job 取得，由共享 client DTO 传入 Materials Command。通用首帧能力不隐式要求 Product/Virtual IP；有来源时校验来源 Scope/Organization 与目标一致，无显式企业的旧调用保留来源推导。Materials 继续复验受控存储 origin、企业/Scope 路径、对象大小/摘要与媒体类型，并按结果键原子登记。IDL model 与 OpenAPI 从协议生成，不增加公开入口。
 
 运行时 Materials 与 internal_worker 必须配置同一 `MEDIA_STORAGE_PUBLIC_ENDPOINT`。登记失败通过公开 Job 原生 retry 继续 Finalize，省略 input_override，保留成功 Invoke 与审批；不重新轮询能力或提交 Studio。
+
+
+## 2026-10-26 结构更正
+
+用户明确移除 execution Domain：公共技术执行协议现位于 `biz/shared/worker_runtime`，Provider 检查点分别归各自 Domain。原 `workflow/generate` 正名为 `workflow/doubao_generate`，仓储正名为 `dal/repo/doubao_checkpoints`；物理检查点目录与格式保持兼容。GPT 成图独立实现，不能通过 Recipe 合入豆包流程。旧 P1 review 保留其当时审查记录，当前结构见 [运行契约](../ddd/media_worker/runtime.md)。

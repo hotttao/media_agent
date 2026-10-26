@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"media_agent/media_worker/biz/domain/execution"
 	"media_agent/media_worker/biz/shared/correlation"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 type Client struct {
@@ -64,12 +64,12 @@ type receiptDTO struct {
 	Status     string `json:"status"`
 }
 
-func (c *Client) Register(ctx context.Context, workerID string, capabilities []execution.Capability) error {
+func (c *Client) Register(ctx context.Context, workerID string, capabilities []worker_runtime.Capability) error {
 	body := map[string]any{"worker_instance_id": workerID, "capabilities": capabilityDTOs(capabilities)}
 	return c.doJSON(ctx, http.MethodPost, "/api/worker/v1/registrations", body, nil)
 }
 
-func (c *Client) Poll(ctx context.Context, workerID string, capability execution.Capability) (*execution.Task, error) {
+func (c *Client) Poll(ctx context.Context, workerID string, capability worker_runtime.Capability) (*worker_runtime.Task, error) {
 	body := map[string]any{
 		"worker_instance_id": workerID, "capability_key": capability.Key, "capability_version": capability.Version,
 	}
@@ -93,17 +93,17 @@ func (c *Client) Poll(ctx context.Context, workerID string, capability execution
 		parent = ""
 	}
 	delete(input, "_traceparent")
-	return &execution.Task{DispatchID: t.DispatchID, Attempt: t.Attempt, CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion, Input: input, LeaseExpiresAt: t.LeaseExpiresAt, TraceParent: parent}, nil
+	return &worker_runtime.Task{DispatchID: t.DispatchID, Attempt: t.Attempt, CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion, Input: input, LeaseExpiresAt: t.LeaseExpiresAt, TraceParent: parent}, nil
 }
 
-func (c *Client) Heartbeat(ctx context.Context, workerID string, task execution.Task) error {
+func (c *Client) Heartbeat(ctx context.Context, workerID string, task worker_runtime.Task) error {
 	ctx = correlation.WithParent(ctx, task.TraceParent)
 	body := map[string]any{"worker_instance_id": workerID, "attempt": task.Attempt}
 	path := "/api/worker/v1/tasks/" + url.PathEscape(task.DispatchID) + "/heartbeat"
 	return c.doJSON(ctx, http.MethodPost, path, body, nil)
 }
 
-func (c *Client) Complete(ctx context.Context, workerID string, task execution.Task, idempotencyKey string, output map[string]any) (*execution.ResultReceipt, error) {
+func (c *Client) Complete(ctx context.Context, workerID string, task worker_runtime.Task, idempotencyKey string, output map[string]any) (*worker_runtime.ResultReceipt, error) {
 	ctx = correlation.WithParent(ctx, task.TraceParent)
 	encoded, err := json.Marshal(output)
 	if err != nil {
@@ -121,14 +121,14 @@ func (c *Client) Complete(ctx context.Context, workerID string, task execution.T
 	if receipt.Status != "submitted" {
 		return nil, errors.New("native task result is not confirmed")
 	}
-	return &execution.ResultReceipt{ReceiptID: receipt.ReceiptID, DispatchID: receipt.DispatchID, Status: receipt.Status}, nil
+	return &worker_runtime.ResultReceipt{ReceiptID: receipt.ReceiptID, DispatchID: receipt.DispatchID, Status: receipt.Status}, nil
 }
 
-func (c *Client) Fail(ctx context.Context, workerID string, task execution.Task, idempotencyKey, reason string) (*execution.ResultReceipt, error) {
+func (c *Client) Fail(ctx context.Context, workerID string, task worker_runtime.Task, idempotencyKey, reason string) (*worker_runtime.ResultReceipt, error) {
 	return c.FailWithKind(ctx, workerID, task, idempotencyKey, reason, "permanent")
 }
 
-func (c *Client) FailWithKind(ctx context.Context, workerID string, task execution.Task, idempotencyKey, reason, kind string) (*execution.ResultReceipt, error) {
+func (c *Client) FailWithKind(ctx context.Context, workerID string, task worker_runtime.Task, idempotencyKey, reason, kind string) (*worker_runtime.ResultReceipt, error) {
 	ctx = correlation.WithParent(ctx, task.TraceParent)
 	body := map[string]any{
 		"worker_instance_id": workerID, "attempt": task.Attempt,
@@ -143,7 +143,7 @@ func (c *Client) FailWithKind(ctx context.Context, workerID string, task executi
 	if receipt.Status != "submitted" {
 		return nil, errors.New("native task result is not confirmed")
 	}
-	return &execution.ResultReceipt{ReceiptID: receipt.ReceiptID, DispatchID: receipt.DispatchID, Status: receipt.Status}, nil
+	return &worker_runtime.ResultReceipt{ReceiptID: receipt.ReceiptID, DispatchID: receipt.DispatchID, Status: receipt.Status}, nil
 }
 
 func (c *Client) doJSON(ctx context.Context, method, path string, body, output any) error {
@@ -180,7 +180,7 @@ func (c *Client) doJSONStatus(ctx context.Context, method, path string, body, ou
 		// Gateway errors may contain task inputs or credentials; do not retain
 		// their response bodies in errors that the client logs during retries.
 		if response.StatusCode == 409 || response.StatusCode == 410 {
-			return response.StatusCode, execution.ErrResultRejected
+			return response.StatusCode, worker_runtime.ErrResultRejected
 		}
 		return response.StatusCode, &HTTPError{Method: method, Path: path, StatusCode: response.StatusCode}
 	}
@@ -192,7 +192,7 @@ func (c *Client) doJSONStatus(ctx context.Context, method, path string, body, ou
 	return response.StatusCode, nil
 }
 
-func capabilityDTOs(caps []execution.Capability) []capabilityDTO {
+func capabilityDTOs(caps []worker_runtime.Capability) []capabilityDTO {
 	out := make([]capabilityDTO, len(caps))
 	for i, c := range caps {
 		out[i] = capabilityDTO{Key: c.Key, Version: c.Version, Concurrency: c.Concurrency}
@@ -200,5 +200,5 @@ func capabilityDTOs(caps []execution.Capability) []capabilityDTO {
 	return out
 }
 
-var _ execution.Gateway = (*Client)(nil)
-var _ execution.Uploader = (*Client)(nil)
+var _ worker_runtime.Gateway = (*Client)(nil)
+var _ worker_runtime.Uploader = (*Client)(nil)

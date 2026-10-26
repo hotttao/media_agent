@@ -13,7 +13,7 @@ import (
 	"sync"
 	"syscall"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 type recordDTO struct {
@@ -81,14 +81,14 @@ func Open(base, endpoint, worker, credential string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.lock.Close() }
-func (s *Store) path(r execution.Result) string {
+func (s *Store) path(r worker_runtime.Result) string {
 	return filepath.Join(s.dir, hash(r.Task.DispatchID+"\x00"+r.Key)+".json")
 }
-func valid(r execution.Result) bool {
+func valid(r worker_runtime.Result) bool {
 	return r.Task.DispatchID != "" && r.Task.Attempt > 0 && r.Key != "" && (r.Reason != "" || len(r.Output) > 0)
 }
 
-func (s *Store) Save(r execution.Result) error {
+func (s *Store) Save(r worker_runtime.Result) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !valid(r) {
@@ -131,14 +131,14 @@ func (s *Store) Save(r execution.Result) error {
 	return s.syncDir()
 }
 
-func (s *Store) Pending() ([]execution.Result, error) {
+func (s *Store) Pending() ([]worker_runtime.Result, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return nil, ErrStorage
 	}
-	var records []execution.Result
+	var records []worker_runtime.Result
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.Name(), ".json") {
 			continue
@@ -163,7 +163,7 @@ func (s *Store) Pending() ([]execution.Result, error) {
 
 // Only the store's own pending file is removed after native acknowledgement.
 // Rejected/expired results are retained separately for inspection, not resent.
-func (s *Store) Finish(r execution.Result, rejected bool) error {
+func (s *Store) Finish(r worker_runtime.Result, rejected bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !valid(r) {
@@ -193,16 +193,16 @@ func (s *Store) syncDir() error {
 	return nil
 }
 
-func toDisk(r execution.Result) recordDTO {
+func toDisk(r worker_runtime.Result) recordDTO {
 	t := r.Task
 	return recordDTO{Task: taskDTO{DispatchID: t.DispatchID, Attempt: t.Attempt, CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion, LeaseExpiresAt: t.LeaseExpiresAt, TraceParent: t.TraceParent}, Key: r.Key, Output: r.Output, Reason: r.Reason, FailureKind: r.FailureKind}
 }
-func fromDisk(d recordDTO) execution.Result {
+func fromDisk(d recordDTO) worker_runtime.Result {
 	t := d.Task
-	return execution.Result{Task: execution.Task{DispatchID: t.DispatchID, Attempt: t.Attempt, CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion, LeaseExpiresAt: t.LeaseExpiresAt, TraceParent: t.TraceParent}, Key: d.Key, Output: d.Output, Reason: d.Reason, FailureKind: d.FailureKind}
+	return worker_runtime.Result{Task: worker_runtime.Task{DispatchID: t.DispatchID, Attempt: t.Attempt, CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion, LeaseExpiresAt: t.LeaseExpiresAt, TraceParent: t.TraceParent}, Key: d.Key, Output: d.Output, Reason: d.Reason, FailureKind: d.FailureKind}
 }
 
-var _ execution.ResultRepository = (*Store)(nil)
+var _ worker_runtime.ResultRepository = (*Store)(nil)
 
 // Namespace is the credential-isolated directory protected by this Store's lock.
 func (s *Store) Namespace() string { return s.dir }

@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 func TestFailWithKindSendsStableClassifiedReceipt(t *testing.T) {
@@ -32,7 +32,7 @@ func TestFailWithKindSendsStableClassifiedReceipt(t *testing.T) {
 	defer server.Close()
 	client := New(server.URL, "test-token")
 	for range 2 {
-		receipt, err := client.FailWithKind(context.Background(), "worker-1", execution.Task{DispatchID: "d1", Attempt: 1}, "stable-key", "provider unavailable", "transient")
+		receipt, err := client.FailWithKind(context.Background(), "worker-1", worker_runtime.Task{DispatchID: "d1", Attempt: 1}, "stable-key", "provider unavailable", "transient")
 		if err != nil || receipt.ReceiptID != "r1" {
 			t.Fatalf("receipt=%#v err=%v", receipt, err)
 		}

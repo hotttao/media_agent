@@ -1,5 +1,5 @@
-// Package execution defines worker execution facts and ports. Scheduling and leases are owned by the gateway.
-package execution
+// Package worker_runtime defines technical Worker runtime contracts, not a business domain.
+package worker_runtime
 
 import (
 	"context"
@@ -55,35 +55,12 @@ type ResultRepository interface {
 	Finish(Result, bool) error
 }
 
-// Checkpoint holds opaque generation references without coupling execution to a provider domain.
-// It records facts only; it never grants execution eligibility or schedules work.
-type GenerationIntent struct {
-	Prompt          string
-	Images          []Artifact
-	Model           string
-	DurationSeconds int
-	AspectRatio     string
-}
-type Checkpoint struct {
-	Task          Task
-	Intent        GenerationIntent
-	Closed        bool
-	GenerationKey string
-	RequestDigest string
-	Reference     string
-	Artifacts     []Artifact
-}
 type Artifact struct {
 	ChecksumSHA256 string
 	SizeBytes      int64
 	ID             string
 	LocalPath      string
 	ObjectPath     string
-}
-type CheckpointRepository interface {
-	Save(context.Context, Checkpoint) error
-	Load(context.Context, string, int) (*Checkpoint, error)
-	Pending(context.Context) ([]Checkpoint, error)
 }
 
 // ErrExecutionPending keeps the same attempt and local slot while a side effect

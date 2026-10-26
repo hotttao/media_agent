@@ -1,5 +1,5 @@
-// Package checkpoints persists generation facts separately from delivery results.
-package checkpoints
+// Package doubao_checkpoints persists generation facts separately from delivery results.
+package doubao_checkpoints
 
 import (
 	"context"
@@ -12,7 +12,8 @@ import (
 	"reflect"
 	"sync"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/domain/doubao"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 var ErrStorage = errors.New("worker checkpoint storage unavailable")
@@ -69,7 +70,7 @@ func (s *Store) path(dispatch string, attempt int) string {
 	data, _ := json.Marshal([]any{dispatch, attempt})
 	return filepath.Join(s.dir, hash(string(data))+".json")
 }
-func (s *Store) Save(ctx context.Context, c execution.Checkpoint) error {
+func (s *Store) Save(ctx context.Context, c doubao.Checkpoint) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ctx.Err() != nil {
@@ -127,7 +128,7 @@ func (s *Store) Save(ctx context.Context, c execution.Checkpoint) error {
 	}
 	return nil
 }
-func (s *Store) load(dispatch string, attempt int) (*execution.Checkpoint, error) {
+func (s *Store) load(dispatch string, attempt int) (*doubao.Checkpoint, error) {
 	filename := s.path(dispatch, attempt)
 	info, err := os.Lstat(filename)
 	if os.IsNotExist(err) {
@@ -147,7 +148,7 @@ func (s *Store) load(dispatch string, attempt int) (*execution.Checkpoint, error
 	c := fromDisk(dto)
 	return &c, nil
 }
-func (s *Store) Load(ctx context.Context, dispatch string, attempt int) (*execution.Checkpoint, error) {
+func (s *Store) Load(ctx context.Context, dispatch string, attempt int) (*doubao.Checkpoint, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ctx.Err() != nil {
@@ -155,7 +156,7 @@ func (s *Store) Load(ctx context.Context, dispatch string, attempt int) (*execut
 	}
 	return s.load(dispatch, attempt)
 }
-func (s *Store) Pending(ctx context.Context) ([]execution.Checkpoint, error) {
+func (s *Store) Pending(ctx context.Context) ([]doubao.Checkpoint, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ctx.Err() != nil {
@@ -165,7 +166,7 @@ func (s *Store) Pending(ctx context.Context) ([]execution.Checkpoint, error) {
 	if err != nil {
 		return nil, ErrStorage
 	}
-	var out []execution.Checkpoint
+	var out []doubao.Checkpoint
 	for _, entry := range entries {
 		if filepath.Ext(entry.Name()) != ".json" {
 			continue
@@ -189,29 +190,29 @@ func (s *Store) Pending(ctx context.Context) ([]execution.Checkpoint, error) {
 	}
 	return out, nil
 }
-func artifactsToDisk(as []execution.Artifact) []artifactDTO {
+func artifactsToDisk(as []worker_runtime.Artifact) []artifactDTO {
 	var out []artifactDTO
 	for _, a := range as {
 		out = append(out, artifactDTO{ID: a.ID, LocalPath: a.LocalPath, ObjectPath: a.ObjectPath, ChecksumSHA256: a.ChecksumSHA256, SizeBytes: a.SizeBytes})
 	}
 	return out
 }
-func artifactsFromDisk(as []artifactDTO) []execution.Artifact {
-	var out []execution.Artifact
+func artifactsFromDisk(as []artifactDTO) []worker_runtime.Artifact {
+	var out []worker_runtime.Artifact
 	for _, a := range as {
-		out = append(out, execution.Artifact{ID: a.ID, LocalPath: a.LocalPath, ObjectPath: a.ObjectPath, ChecksumSHA256: a.ChecksumSHA256, SizeBytes: a.SizeBytes})
+		out = append(out, worker_runtime.Artifact{ID: a.ID, LocalPath: a.LocalPath, ObjectPath: a.ObjectPath, ChecksumSHA256: a.ChecksumSHA256, SizeBytes: a.SizeBytes})
 	}
 	return out
 }
-func toDisk(c execution.Checkpoint) checkpointDTO {
+func toDisk(c doubao.Checkpoint) checkpointDTO {
 	t := c.Task
 	i := c.Intent
 	return checkpointDTO{Task: taskDTO{t.DispatchID, t.Attempt, t.CapabilityKey, t.CapabilityVersion, t.TraceParent}, Intent: intentDTO{i.Prompt, artifactsToDisk(i.Images), i.Model, i.DurationSeconds, i.AspectRatio}, GenerationKey: c.GenerationKey, RequestDigest: c.RequestDigest, Reference: c.Reference, Artifacts: artifactsToDisk(c.Artifacts), Closed: c.Closed}
 }
-func fromDisk(c checkpointDTO) execution.Checkpoint {
+func fromDisk(c checkpointDTO) doubao.Checkpoint {
 	t := c.Task
 	i := c.Intent
-	return execution.Checkpoint{Task: execution.Task{DispatchID: t.DispatchID, Attempt: t.Attempt, CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion, TraceParent: t.TraceParent}, Intent: execution.GenerationIntent{Prompt: i.Prompt, Images: artifactsFromDisk(i.Images), Model: i.Model, DurationSeconds: i.DurationSeconds, AspectRatio: i.AspectRatio}, GenerationKey: c.GenerationKey, RequestDigest: c.RequestDigest, Reference: c.Reference, Artifacts: artifactsFromDisk(c.Artifacts), Closed: c.Closed}
+	return doubao.Checkpoint{Task: worker_runtime.Task{DispatchID: t.DispatchID, Attempt: t.Attempt, CapabilityKey: t.CapabilityKey, CapabilityVersion: t.CapabilityVersion, TraceParent: t.TraceParent}, Intent: doubao.GenerationIntent{Prompt: i.Prompt, Images: artifactsFromDisk(i.Images), Model: i.Model, DurationSeconds: i.DurationSeconds, AspectRatio: i.AspectRatio}, GenerationKey: c.GenerationKey, RequestDigest: c.RequestDigest, Reference: c.Reference, Artifacts: artifactsFromDisk(c.Artifacts), Closed: c.Closed}
 }
 
-var _ execution.CheckpointRepository = (*Store)(nil)
+var _ doubao.CheckpointRepository = (*Store)(nil)

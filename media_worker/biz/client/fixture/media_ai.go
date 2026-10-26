@@ -7,27 +7,27 @@ import (
 	"strings"
 	"sync"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 const source = "media_ai_fixture:video_task:a6b51312-868e-41dc-a169-698389559703"
 
-var capabilities = []execution.Capability{
+var capabilities = []worker_runtime.Capability{
 	{Key: "media.image.model", Version: 1, Concurrency: 1},
 	{Key: "media.image.style", Version: 1, Concurrency: 1},
 	{Key: "media.image.first_frame", Version: 1, Concurrency: 1},
 	{Key: "media.video.generate", Version: 1, Concurrency: 1},
 }
 
-func Capabilities() []execution.Capability {
-	return append([]execution.Capability(nil), capabilities...)
+func Capabilities() []worker_runtime.Capability {
+	return append([]worker_runtime.Capability(nil), capabilities...)
 }
 
 type Executor struct {
 	baseURL           string
 	resultURLs        map[string][]string
 	providerResults   map[providerTaskRef]ProviderBinding
-	uploadFile        func(context.Context, execution.Task, int, string) (string, error)
+	uploadFile        func(context.Context, worker_runtime.Task, int, string) (string, error)
 	failureMu         sync.Mutex
 	failureStep       string
 	failureCall       int
@@ -48,7 +48,7 @@ func (e *Executor) SetFailureOnce(step string, call int) error {
 	return nil
 }
 
-func (e *Executor) shouldFail(task execution.Task) bool {
+func (e *Executor) shouldFail(task worker_runtime.Task) bool {
 	step, _ := task.Input["step_key"].(string)
 	job, _ := task.Input["job_id"].(string)
 	if e.failureStep == "" || step != e.failureStep || job == "" || task.DispatchID == "" {
@@ -142,16 +142,16 @@ func validateResultURLs(urls []string) error {
 	return nil
 }
 
-func (e *Executor) Execute(task execution.Task) (map[string]any, error) {
+func (e *Executor) Execute(task worker_runtime.Task) (map[string]any, error) {
 	return e.ExecuteContext(context.Background(), task)
 }
 
 // SetFileUploader must be configured before execution starts.
-func (e *Executor) SetFileUploader(upload func(context.Context, execution.Task, int, string) (string, error)) {
+func (e *Executor) SetFileUploader(upload func(context.Context, worker_runtime.Task, int, string) (string, error)) {
 	e.uploadFile = upload
 }
 
-func (e *Executor) ExecuteContext(ctx context.Context, task execution.Task) (map[string]any, error) {
+func (e *Executor) ExecuteContext(ctx context.Context, task worker_runtime.Task) (map[string]any, error) {
 	if e.providerResults != nil {
 		return e.executeProvider(ctx, task)
 	}
@@ -178,7 +178,7 @@ func (e *Executor) ExecuteContext(ctx context.Context, task execution.Task) (map
 	}, nil
 }
 
-func (e *Executor) fixtureResult(task execution.Task) (string, string) {
+func (e *Executor) fixtureResult(task worker_runtime.Task) (string, string) {
 	if urls := e.resultURLs[task.CapabilityKey]; len(urls) > 0 {
 		return urls[0], ""
 	}

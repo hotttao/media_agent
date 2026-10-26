@@ -1,5 +1,5 @@
-// Package generate coordinates execution eligibility, generation facts and artifact delivery.
-package generate
+// Package doubao_generate coordinates execution eligibility, generation facts and artifact delivery.
+package doubao_generate
 
 import (
 	"context"
@@ -11,39 +11,39 @@ import (
 	"strings"
 
 	"media_agent/media_worker/biz/domain/doubao"
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 const CapabilityKey = "doubao.i2v.first_frame_prompt"
 
 type Workflow struct {
-	Files                                   execution.ArtifactVerifier
+	Files                                   worker_runtime.ArtifactVerifier
 	Generator                               doubao.Generator
-	Gateway                                 execution.Gateway
-	Uploader                                execution.Uploader
-	Checkpoints                             execution.CheckpointRepository
-	Inputs                                  execution.InputDownloader
+	Gateway                                 worker_runtime.Gateway
+	Uploader                                worker_runtime.Uploader
+	Checkpoints                             doubao.CheckpointRepository
+	Inputs                                  worker_runtime.InputDownloader
 	WorkerID, Namespace, Model, AspectRatio string
 	DurationSeconds                         int
 }
 
-func (w *Workflow) AvailableCapabilities() []execution.Capability {
-	return []execution.Capability{{Key: CapabilityKey, Version: 1, Concurrency: 1}}
+func (w *Workflow) AvailableCapabilities() []worker_runtime.Capability {
+	return []worker_runtime.Capability{{Key: CapabilityKey, Version: 1, Concurrency: 1}}
 }
-func pending() error { return execution.ErrExecutionPending }
-func (w *Workflow) authorize(ctx context.Context, t execution.Task) error {
+func pending() error { return worker_runtime.ErrExecutionPending }
+func (w *Workflow) authorize(ctx context.Context, t worker_runtime.Task) error {
 	if err := w.Gateway.Heartbeat(ctx, w.WorkerID, t); err != nil {
-		if errors.Is(err, execution.ErrResultRejected) {
+		if errors.Is(err, worker_runtime.ErrResultRejected) {
 			if err := w.FinishTask(ctx, t); err != nil {
 				return pending()
 			}
-			return execution.ErrExecutionAbandoned
+			return worker_runtime.ErrExecutionAbandoned
 		}
 		return pending()
 	}
 	return nil
 }
-func (w *Workflow) ExecuteContext(ctx context.Context, t execution.Task) (map[string]any, error) {
+func (w *Workflow) ExecuteContext(ctx context.Context, t worker_runtime.Task) (map[string]any, error) {
 	if t.CapabilityKey != CapabilityKey || t.CapabilityVersion != 1 {
 		return nil, errors.New("unsupported production capability")
 	}
@@ -55,7 +55,7 @@ func (w *Workflow) ExecuteContext(ctx context.Context, t execution.Task) (map[st
 		return nil, pending()
 	}
 	if cp != nil && cp.Closed {
-		return nil, execution.ErrExecutionAbandoned
+		return nil, worker_runtime.ErrExecutionAbandoned
 	}
 	if cp == nil {
 		prompt, ok := t.Input["prompt"].(string)
@@ -88,10 +88,10 @@ func (w *Workflow) ExecuteContext(ctx context.Context, t execution.Task) (map[st
 		// No signed URL or duplicated transport envelope survives this boundary.
 		task := t
 		task.Input = nil
-		intent := execution.GenerationIntent{Prompt: prompt, Images: []execution.Artifact{image}, Model: w.Model, DurationSeconds: w.DurationSeconds, AspectRatio: w.AspectRatio}
+		intent := doubao.GenerationIntent{Prompt: prompt, Images: []worker_runtime.Artifact{image}, Model: w.Model, DurationSeconds: w.DurationSeconds, AspectRatio: w.AspectRatio}
 		raw, _ := json.Marshal(intent)
 		digest := sha256.Sum256(raw)
-		cp = &execution.Checkpoint{Task: task, GenerationKey: key, RequestDigest: hex.EncodeToString(digest[:]), Intent: intent}
+		cp = &doubao.Checkpoint{Task: task, GenerationKey: key, RequestDigest: hex.EncodeToString(digest[:]), Intent: intent}
 		if w.Checkpoints.Save(ctx, *cp) != nil {
 			return nil, pending()
 		}
@@ -154,7 +154,7 @@ func (w *Workflow) ExecuteContext(ctx context.Context, t execution.Task) (map[st
 		if err != nil || len(files) != 1 || files[0].ArtifactID != observation.Artifacts[0].ID || files[0].LocalPath == "" {
 			return nil, pending()
 		}
-		cp.Artifacts = []execution.Artifact{{ID: files[0].ArtifactID, LocalPath: files[0].LocalPath, ChecksumSHA256: files[0].ChecksumSHA256, SizeBytes: files[0].SizeBytes}}
+		cp.Artifacts = []worker_runtime.Artifact{{ID: files[0].ArtifactID, LocalPath: files[0].LocalPath, ChecksumSHA256: files[0].ChecksumSHA256, SizeBytes: files[0].SizeBytes}}
 		if w.Checkpoints.Save(ctx, *cp) != nil {
 			return nil, pending()
 		}
@@ -184,18 +184,18 @@ func (w *Workflow) ExecuteContext(ctx context.Context, t execution.Task) (map[st
 	}
 	return map[string]any{"candidates": candidates, "provenance": map[string]any{"provider": "doubao", "profile": "doubao_studio", "mock": false, "generation_key": cp.GenerationKey}}, nil
 }
-func (w *Workflow) PendingTasks(ctx context.Context) ([]execution.Task, error) {
+func (w *Workflow) PendingTasks(ctx context.Context) ([]worker_runtime.Task, error) {
 	cps, err := w.Checkpoints.Pending(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var tasks []execution.Task
+	var tasks []worker_runtime.Task
 	for _, cp := range cps {
 		tasks = append(tasks, cp.Task)
 	}
 	return tasks, nil
 }
-func (w *Workflow) FinishTask(ctx context.Context, t execution.Task) error {
+func (w *Workflow) FinishTask(ctx context.Context, t worker_runtime.Task) error {
 	cp, err := w.Checkpoints.Load(ctx, t.DispatchID, t.Attempt)
 	if err != nil {
 		return err
@@ -210,5 +210,5 @@ func (w *Workflow) FinishTask(ctx context.Context, t execution.Task) error {
 	return nil
 }
 
-var _ execution.Executor = (*Workflow)(nil)
-var _ execution.ExecutionRecovery = (*Workflow)(nil)
+var _ worker_runtime.Executor = (*Workflow)(nil)
+var _ worker_runtime.ExecutionRecovery = (*Workflow)(nil)

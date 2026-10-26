@@ -99,7 +99,7 @@ func (c Capability) ValidateContract() error {
 			if c.GenerationType == TextPrompt || input.Type != InputResourceRefList || input.MediaType != MediaImage || input.MinItems != 1 {
 				return ErrInvalidContract
 			}
-			if (c.GenerationType == FirstFramePrompt && input.MaxItems != 1) || (c.GenerationType == MultiImagePrompt && input.MaxItems != 0) {
+			if c.GenerationType == FirstFramePrompt && input.MaxItems != 1 {
 				return ErrInvalidContract
 			}
 		default:

@@ -539,4 +539,17 @@ message MediaWorkerConfig {
   int32 duration_seconds = 7;
   string aspect_ratio = 8;
   int32 startup_timeout_seconds = 9;
+  GPTImageUseConfig gpt_image_use = 10;
+}
+
+// ChatGPT browser generation. Backend is always web, never configurable.
+message GPTImageUseConfig {
+  bool enabled = 1;
+  repeated string bridge_command = 2;
+  string upstream_cli = 3;
+  string browser_lock_directory = 4;
+  string size = 5;
+  string web_model = 6;
+  string project_url = 7;
+  int32 timeout_seconds = 8;
 }

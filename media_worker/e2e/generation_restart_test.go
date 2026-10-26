@@ -18,19 +18,20 @@ import (
 	"media_agent/media_worker/biz/client/doubao/studio"
 	"media_agent/media_worker/biz/client/media_input"
 	"media_agent/media_worker/biz/client/worker_gateway"
-	"media_agent/media_worker/biz/dal/repo/checkpoints"
+	"media_agent/media_worker/biz/dal/repo/doubao_checkpoints"
 	"media_agent/media_worker/biz/dal/repo/results"
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/domain/doubao"
+	"media_agent/media_worker/biz/shared/worker_runtime"
+	"media_agent/media_worker/biz/workflow/doubao_generate"
 	"media_agent/media_worker/biz/workflow/execute"
-	"media_agent/media_worker/biz/workflow/generate"
 )
 
 type exitAfterCommit struct {
-	store        *checkpoints.Store
+	store        *doubao_checkpoints.Store
 	after, count int
 }
 
-func (s *exitAfterCommit) Save(ctx context.Context, c execution.Checkpoint) error {
+func (s *exitAfterCommit) Save(ctx context.Context, c doubao.Checkpoint) error {
 	if err := s.store.Save(ctx, c); err != nil {
 		return err
 	}
@@ -40,10 +41,10 @@ func (s *exitAfterCommit) Save(ctx context.Context, c execution.Checkpoint) erro
 	}
 	return nil
 }
-func (s *exitAfterCommit) Load(ctx context.Context, d string, a int) (*execution.Checkpoint, error) {
+func (s *exitAfterCommit) Load(ctx context.Context, d string, a int) (*doubao.Checkpoint, error) {
 	return s.store.Load(ctx, d, a)
 }
-func (s *exitAfterCommit) Pending(ctx context.Context) ([]execution.Checkpoint, error) {
+func (s *exitAfterCommit) Pending(ctx context.Context) ([]doubao.Checkpoint, error) {
 	return s.store.Pending(ctx)
 }
 func TestGenerationCheckpointProcessCrash(t *testing.T) {
@@ -55,7 +56,7 @@ func TestGenerationCheckpointProcessCrash(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer journal.Close()
-		cp, err := checkpoints.Open(journal.Namespace())
+		cp, err := doubao_checkpoints.Open(journal.Namespace())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -67,8 +68,8 @@ func TestGenerationCheckpointProcessCrash(t *testing.T) {
 		}
 		gateway := worker_gateway.New(endpoint, "test-token")
 		files := media_input.Downloader{Root: filepath.Join(journal.Namespace(), "inputs")}
-		flow := &generate.Workflow{Generator: client, Gateway: gateway, Uploader: gateway, Checkpoints: repo, Inputs: files, Files: files, WorkerID: "worker", Namespace: filepath.Base(journal.Namespace()), Model: "seedance-2.0-fast", DurationSeconds: 5, AspectRatio: "9:16"}
-		task := execution.Task{DispatchID: "dispatch", Attempt: 1, CapabilityKey: generate.CapabilityKey, CapabilityVersion: 1}
+		flow := &doubao_generate.Workflow{Generator: client, Gateway: gateway, Uploader: gateway, Checkpoints: repo, Inputs: files, Files: files, WorkerID: "worker", Namespace: filepath.Base(journal.Namespace()), Model: "seedance-2.0-fast", DurationSeconds: 5, AspectRatio: "9:16"}
+		task := worker_runtime.Task{DispatchID: "dispatch", Attempt: 1, CapabilityKey: doubao_generate.CapabilityKey, CapabilityVersion: 1}
 		if after > 0 {
 			task.Input = map[string]any{"prompt": "rendered", "images": []any{endpoint + "/input.png?private-signed-sentinel"}}
 		}
@@ -76,7 +77,7 @@ func TestGenerationCheckpointProcessCrash(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		record := execution.Result{Task: task, Key: "dispatch:1:complete", Output: output}
+		record := worker_runtime.Result{Task: task, Key: "dispatch:1:complete", Output: output}
 		if err := journal.Save(record); err != nil {
 			t.Fatal(err)
 		}

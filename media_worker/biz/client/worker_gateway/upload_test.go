@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 func TestUploadFileConfirmsStorageWithoutForwardingToken(t *testing.T) {
@@ -84,7 +84,7 @@ func TestUploadFileConfirmsStorageWithoutForwardingToken(t *testing.T) {
 				json.NewEncoder(w).Encode(grant)
 			}))
 			defer api.Close()
-			path, err := New(api.URL, "test-worker-token").UploadFile(context.Background(), "desktop", execution.Task{DispatchID: "dispatch", Attempt: 2, TraceParent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"}, 1, filename)
+			path, err := New(api.URL, "test-worker-token").UploadFile(context.Background(), "desktop", worker_runtime.Task{DispatchID: "dispatch", Attempt: 2, TraceParent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"}, 1, filename)
 			mu.Lock()
 			defer mu.Unlock()
 			if mode == "redirect" || mode == "unsafe_header" {
@@ -107,7 +107,7 @@ func TestUploadFileRejectsNonMediaWithoutGatewayRequest(t *testing.T) {
 	defer api.Close()
 	filename := filepath.Join(t.TempDir(), "not-an-image.png")
 	os.WriteFile(filename, []byte("plain text, despite extension"), 0600)
-	_, err := New(api.URL, "test").UploadFile(context.Background(), "worker", execution.Task{}, 0, filename)
+	_, err := New(api.URL, "test").UploadFile(context.Background(), "worker", worker_runtime.Task{}, 0, filename)
 	if err == nil || requests != 0 {
 		t.Fatal("non-media requested upload grant")
 	}

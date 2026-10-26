@@ -1,6 +1,8 @@
+> 历史审查记录。2026-10-26 起 execution 已归回公共技术运行层，generate 更名 doubao_generate；当前结构见 `docs/ddd/media_worker/runtime.md`。
+
 # Generate 实现审查与真实验收
 
-日期：2026-10-26。范围：P2–P6，承接已经过用户确认的 P1。对照 [spec](../../../../spec/media-worker-doubao.md)、[流程](../../../../ddd/media_worker/workflow/0002-generate/generate.md) 与 Harness 分层规范。
+日期：2026-10-26。范围：P2–P6，承接已经过用户确认的 P1。对照 [spec](../../../../spec/media-worker-doubao.md)、[流程](../../../../ddd/media_worker/workflow/0002-doubao_generate/doubao_generate.md) 与 Harness 分层规范。
 
 ## 实现审查
 

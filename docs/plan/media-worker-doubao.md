@@ -59,3 +59,8 @@ R1 代码 review 已完成并修正：CLI 业务循环、具体 HTTPError 耦合
 - [x] P6 用户 fork 分支 `codex/media-worker-studio`，commit `840117a`；完整 validate 通过。
 
 最终实现、检查范围、历史架构问题及真实证据见 [Generate review](../review/media_worker/workflow/0002-generate/generate.md)。只开放 `doubao.i2v.first_frame_prompt@1`；多图、生图及平台挑战仍需要各自验收，不能从本次结论外推。
+
+
+## 2026-10-26 结构更正
+
+用户明确移除 execution Domain：公共技术执行协议现位于 `biz/shared/worker_runtime`，Provider 检查点分别归各自 Domain。原 `workflow/generate` 正名为 `workflow/doubao_generate`，仓储正名为 `dal/repo/doubao_checkpoints`；物理检查点目录与格式保持兼容。GPT 成图独立实现，不能通过 Recipe 合入豆包流程。旧 P1 review 保留其当时审查记录，当前结构见 [运行契约](../ddd/media_worker/runtime.md)。

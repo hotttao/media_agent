@@ -14,8 +14,8 @@ import (
 	"media_agent/media_worker/biz/client/fixture"
 	"media_agent/media_worker/biz/client/worker_gateway"
 	"media_agent/media_worker/biz/dal/repo/results"
-	"media_agent/media_worker/biz/domain/execution"
 	policy "media_agent/media_worker/biz/policy/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 	"media_agent/media_worker/biz/workflow/execute"
 )
 
@@ -24,7 +24,7 @@ func main() {
 	apiToken := flag.String("token", envOr("MEDIA_WORKER_API_TOKEN", ""), "opaque Personal Worker API Token")
 	workerID := flag.String("worker-id", envOr("MEDIA_WORKER_ID", defaultWorkerID()), "stable client worker id")
 	stateDir := flag.String("state-dir", envOr("MEDIA_WORKER_STATE_DIR", ".worker-state"), "private local directory for unconfirmed result replay")
-	profile := flag.String("profile", envOr("MEDIA_WORKER_PROFILE", ""), "execution profile; use media_ai_fixture only for integration testing")
+	profile := flag.String("profile", envOr("MEDIA_WORKER_PROFILE", ""), "execution profile: doubao_studio, gpt_image_use, media_ai_fixture or provider_fixture")
 	fixtureConfig := flag.String("fixture-config", envOr("MEDIA_WORKER_FIXTURE_CONFIG", ""), "private Provider fixture JSON file with explicit Job/Step results")
 	capabilityList := flag.String("capabilities", envOr("MEDIA_WORKER_CAPABILITIES", ""), "comma-separated capability key@version allowlist")
 	fixtureAssetsURL := flag.String("fixture-assets-url", envOr("MEDIA_WORKER_FIXTURE_ASSETS_URL", "http://192.168.2.38"), "media_ai fixture asset service base URL (test profile only)")
@@ -35,7 +35,7 @@ func main() {
 	fixtureFirstFrameResultURL := flag.String("fixture-first-frame-result-url", envOr("MEDIA_WORKER_FIXTURE_FIRST_FRAME_RESULT_URL", ""), "pre-uploaded target-storage first-frame image URL (test profile only)")
 	fixtureFailStep := flag.String("fixture-fail-step", envOr("MEDIA_WORKER_FIXTURE_FAIL_STEP", ""), "step to fail once per Job (test profile only)")
 	fixtureFailCall := flag.String("fixture-fail-call", envOr("MEDIA_WORKER_FIXTURE_FAIL_CALL", "1"), "distinct dispatch number to fail, one to eight (test profile only)")
-	configPath := flag.String("config", envOr("CONFIG_FILE", "conf/local.yaml"), "shared config file (doubao_studio profile)")
+	configPath := flag.String("config", envOr("CONFIG_FILE", "conf/local.yaml"), "shared config file (production profiles)")
 	flag.Parse()
 	if *gatewayURL == "" {
 		log.Fatal("MEDIA_GATEWAY_URL or -gateway-url is required")
@@ -43,17 +43,21 @@ func main() {
 	if *apiToken == "" {
 		log.Fatal("MEDIA_WORKER_API_TOKEN or -token is required")
 	}
-	if *profile == "doubao_studio" {
+	if *profile == "doubao_studio" || *profile == "gpt_image_use" {
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
-		if err := runProduction(ctx, *configPath, *gatewayURL, *apiToken, *workerID, *stateDir, *capabilityList); err != nil {
+		run := runDoubaoProduction
+		if *profile == "gpt_image_use" {
+			run = runGPTProduction
+		}
+		if err := run(ctx, *configPath, *gatewayURL, *apiToken, *workerID, *stateDir, *capabilityList); err != nil {
 			log.Print(err)
 			os.Exit(1)
 		}
 		return
 	}
 	if *profile != "media_ai_fixture" && *profile != fixture.ProviderProfile {
-		log.Fatal("execution requires doubao_studio, media_ai_fixture or provider_fixture profile")
+		log.Fatal("execution requires doubao_studio, gpt_image_use, media_ai_fixture or provider_fixture profile")
 	}
 	var executor *fixture.Executor
 	var err error
@@ -119,7 +123,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	client := worker_gateway.New(*gatewayURL, *apiToken)
-	executor.SetFileUploader(func(ctx context.Context, task execution.Task, index int, file string) (string, error) {
+	executor.SetFileUploader(func(ctx context.Context, task worker_runtime.Task, index int, file string) (string, error) {
 		return client.UploadFile(ctx, *workerID, task, index, file)
 	})
 	store, err := results.Open(*stateDir, *gatewayURL, *workerID, *apiToken)

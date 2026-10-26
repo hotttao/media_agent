@@ -8,21 +8,21 @@ import (
 	"sync"
 	"time"
 
-	"media_agent/media_worker/biz/domain/execution"
 	policy "media_agent/media_worker/biz/policy/execution"
 	"media_agent/media_worker/biz/shared/correlation"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 type Command struct {
 	WorkerID     string
-	Capabilities []execution.Capability
+	Capabilities []worker_runtime.Capability
 }
 type Workflow struct {
-	Gateway   execution.Gateway
-	Executor  execution.Executor
-	Results   execution.ResultRepository
-	Recovery  execution.ExecutionRecovery
-	Admission execution.Admission
+	Gateway   worker_runtime.Gateway
+	Executor  worker_runtime.Executor
+	Results   worker_runtime.ResultRepository
+	Recovery  worker_runtime.ExecutionRecovery
+	Admission worker_runtime.Admission
 }
 
 func (w Workflow) Run(ctx context.Context, cmd Command) error {
@@ -69,7 +69,7 @@ func (w Workflow) Run(ctx context.Context, cmd Command) error {
 	for _, capability := range cmd.Capabilities {
 		for range capability.Concurrency {
 			wg.Add(1)
-			go func(cap execution.Capability) {
+			go func(cap worker_runtime.Capability) {
 				defer wg.Done()
 				if err := runCapability(ctx, w.Gateway, cmd.WorkerID, cap, w.Executor, w.Results, w.Recovery, w.Admission); err != nil {
 					once.Do(func() { runErr = err; cancel() })
@@ -80,7 +80,7 @@ func (w Workflow) Run(ctx context.Context, cmd Command) error {
 	wg.Wait()
 	return runErr
 }
-func runCapability(ctx context.Context, client execution.Gateway, workerID string, capability execution.Capability, executor execution.Executor, store execution.ResultRepository, recovery execution.ExecutionRecovery, admission execution.Admission) error {
+func runCapability(ctx context.Context, client worker_runtime.Gateway, workerID string, capability worker_runtime.Capability, executor worker_runtime.Executor, store worker_runtime.ResultRepository, recovery worker_runtime.ExecutionRecovery, admission worker_runtime.Admission) error {
 	for ctx.Err() == nil {
 		release, err := acquire(ctx, admission)
 		if err != nil {
@@ -107,7 +107,7 @@ func runCapability(ctx context.Context, client execution.Gateway, workerID strin
 	return nil
 }
 
-func DeliverStoredResult(ctx context.Context, client execution.Gateway, workerID string, store execution.ResultRepository, record execution.Result) (bool, error) {
+func DeliverStoredResult(ctx context.Context, client worker_runtime.Gateway, workerID string, store worker_runtime.ResultRepository, record worker_runtime.Result) (bool, error) {
 	for ctx.Err() == nil {
 		var err error
 		if record.Reason != "" {
@@ -134,7 +134,7 @@ func DeliverStoredResult(ctx context.Context, client execution.Gateway, workerID
 	return false, nil
 }
 
-func heartbeat(ctx context.Context, client execution.Gateway, workerID string, task execution.Task) {
+func heartbeat(ctx context.Context, client worker_runtime.Gateway, workerID string, task worker_runtime.Task) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -158,13 +158,13 @@ func wait(ctx context.Context, duration time.Duration) {
 	}
 }
 
-func acquire(ctx context.Context, admission execution.Admission) (func(), error) {
+func acquire(ctx context.Context, admission worker_runtime.Admission) (func(), error) {
 	if admission == nil {
 		return func() {}, nil
 	}
 	return admission.Acquire(ctx)
 }
-func runTask(ctx context.Context, client execution.Gateway, workerID string, task execution.Task, executor execution.Executor, store execution.ResultRepository, recovery execution.ExecutionRecovery) error {
+func runTask(ctx context.Context, client worker_runtime.Gateway, workerID string, task worker_runtime.Task, executor worker_runtime.Executor, store worker_runtime.ResultRepository, recovery worker_runtime.ExecutionRecovery) error {
 	taskCtx, cancelTask := context.WithCancel(correlation.WithParent(ctx, task.TraceParent))
 	heartbeatDone := make(chan struct{})
 	go func() { defer close(heartbeatDone); heartbeat(taskCtx, client, workerID, task) }()
@@ -173,7 +173,7 @@ func runTask(ctx context.Context, client execution.Gateway, workerID string, tas
 	var executeErr error
 	for ctx.Err() == nil {
 		output, executeErr = executor.ExecuteContext(taskCtx, task)
-		if !errors.Is(executeErr, execution.ErrExecutionPending) {
+		if !errors.Is(executeErr, worker_runtime.ErrExecutionPending) {
 			break
 		}
 		wait(ctx, 5*time.Second)
@@ -182,12 +182,12 @@ func runTask(ctx context.Context, client execution.Gateway, workerID string, tas
 		stopTask()
 		return nil
 	}
-	if errors.Is(executeErr, execution.ErrExecutionAbandoned) {
+	if errors.Is(executeErr, worker_runtime.ErrExecutionAbandoned) {
 		stopTask()
 		return nil
 	}
 	idempotencyKey := task.DispatchID + ":" + fmt.Sprint(task.Attempt)
-	record := execution.Result{Task: task, Key: idempotencyKey + ":complete", Output: output}
+	record := worker_runtime.Result{Task: task, Key: idempotencyKey + ":complete", Output: output}
 	if executeErr != nil {
 		record.Key, record.Output, record.Reason, record.FailureKind = idempotencyKey+":fail", nil, executeErr.Error(), policy.FailureKind(executeErr)
 	}
@@ -217,8 +217,8 @@ func runTask(ctx context.Context, client execution.Gateway, workerID string, tas
 	return nil
 }
 
-func acquireRecovery(ctx context.Context, a execution.Admission) (func(), error) {
-	if recovery, ok := a.(execution.RecoveryAdmission); ok {
+func acquireRecovery(ctx context.Context, a worker_runtime.Admission) (func(), error) {
+	if recovery, ok := a.(worker_runtime.RecoveryAdmission); ok {
 		return recovery.AcquireRecovery(ctx)
 	}
 	return acquire(ctx, a)

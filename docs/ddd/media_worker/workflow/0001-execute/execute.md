@@ -2,10 +2,9 @@
 name: execute
 description: 注册能力、恢复结果并领取执行和可靠交付
 participants:
-  - media_worker/execution
+  - media_worker/worker_runtime
   - media_workflow/worker_gateway
-domains:
-  - execution
+domains: []
 ---
 
 ## 一句话说明
@@ -114,3 +113,5 @@ Worker Bearer 仅发送 Gateway，上传签名 PUT 不携带 Token。最终 Task
 ## 结果事件
 
 无领域事件；worker_task_completed、worker_task_failed、worker_result_rejected 等为脱敏运行日志。
+
+公共运行契约见 [runtime](../../runtime.md)。execute 是技术执行循环，不对应业务 Domain；两套生成 Workflow 通过 Executor/ExecutionRecovery 独立接入。

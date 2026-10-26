@@ -6,17 +6,17 @@ import (
 	"reflect"
 	"testing"
 
-	"media_agent/media_worker/biz/domain/execution"
+	"media_agent/media_worker/biz/shared/worker_runtime"
 )
 
 type memoryResults struct {
-	pending                        []execution.Result
+	pending                        []worker_runtime.Result
 	events                         *[]string
 	saveErr, pendingErr, finishErr error
 	rejected                       bool
 }
 
-func (r *memoryResults) Save(v execution.Result) error {
+func (r *memoryResults) Save(v worker_runtime.Result) error {
 	*r.events = append(*r.events, "save")
 	if r.saveErr != nil {
 		return r.saveErr
@@ -24,11 +24,11 @@ func (r *memoryResults) Save(v execution.Result) error {
 	r.pending = append(r.pending, v)
 	return nil
 }
-func (r *memoryResults) Pending() ([]execution.Result, error) {
+func (r *memoryResults) Pending() ([]worker_runtime.Result, error) {
 	*r.events = append(*r.events, "pending")
 	return r.pending, r.pendingErr
 }
-func (r *memoryResults) Finish(v execution.Result, rejected bool) error {
+func (r *memoryResults) Finish(v worker_runtime.Result, rejected bool) error {
 	*r.events = append(*r.events, "finish")
 	r.rejected = rejected
 	if r.finishErr != nil {
@@ -40,17 +40,17 @@ func (r *memoryResults) Finish(v execution.Result, rejected bool) error {
 
 type fakeGateway struct {
 	events                 *[]string
-	task                   *execution.Task
+	task                   *worker_runtime.Task
 	cancel                 context.CancelFunc
 	reportErr, registerErr error
-	delivered              execution.Result
+	delivered              worker_runtime.Result
 }
 
-func (g *fakeGateway) Register(context.Context, string, []execution.Capability) error {
+func (g *fakeGateway) Register(context.Context, string, []worker_runtime.Capability) error {
 	*g.events = append(*g.events, "register")
 	return g.registerErr
 }
-func (g *fakeGateway) Poll(ctx context.Context, _ string, _ execution.Capability) (*execution.Task, error) {
+func (g *fakeGateway) Poll(ctx context.Context, _ string, _ worker_runtime.Capability) (*worker_runtime.Task, error) {
 	*g.events = append(*g.events, "poll")
 	task := g.task
 	g.task = nil
@@ -59,18 +59,18 @@ func (g *fakeGateway) Poll(ctx context.Context, _ string, _ execution.Capability
 	}
 	return task, nil
 }
-func (g *fakeGateway) Heartbeat(context.Context, string, execution.Task) error { return nil }
-func (g *fakeGateway) Complete(_ context.Context, _ string, task execution.Task, key string, out map[string]any) (*execution.ResultReceipt, error) {
+func (g *fakeGateway) Heartbeat(context.Context, string, worker_runtime.Task) error { return nil }
+func (g *fakeGateway) Complete(_ context.Context, _ string, task worker_runtime.Task, key string, out map[string]any) (*worker_runtime.ResultReceipt, error) {
 	*g.events = append(*g.events, "complete")
-	g.delivered = execution.Result{Task: task, Key: key, Output: out}
+	g.delivered = worker_runtime.Result{Task: task, Key: key, Output: out}
 	g.cancel()
-	return &execution.ResultReceipt{Status: "submitted"}, g.reportErr
+	return &worker_runtime.ResultReceipt{Status: "submitted"}, g.reportErr
 }
-func (g *fakeGateway) FailWithKind(_ context.Context, _ string, task execution.Task, key, reason, kind string) (*execution.ResultReceipt, error) {
+func (g *fakeGateway) FailWithKind(_ context.Context, _ string, task worker_runtime.Task, key, reason, kind string) (*worker_runtime.ResultReceipt, error) {
 	*g.events = append(*g.events, "fail")
-	g.delivered = execution.Result{Task: task, Key: key, Reason: reason, FailureKind: kind}
+	g.delivered = worker_runtime.Result{Task: task, Key: key, Reason: reason, FailureKind: kind}
 	g.cancel()
-	return &execution.ResultReceipt{Status: "submitted"}, g.reportErr
+	return &worker_runtime.ResultReceipt{Status: "submitted"}, g.reportErr
 }
 
 type fakeExecutor struct {
@@ -78,10 +78,10 @@ type fakeExecutor struct {
 	err    error
 }
 
-func (e fakeExecutor) AvailableCapabilities() []execution.Capability {
-	return []execution.Capability{{Key: "cap", Version: 1, Concurrency: 1}}
+func (e fakeExecutor) AvailableCapabilities() []worker_runtime.Capability {
+	return []worker_runtime.Capability{{Key: "cap", Version: 1, Concurrency: 1}}
 }
-func (e fakeExecutor) ExecuteContext(context.Context, execution.Task) (map[string]any, error) {
+func (e fakeExecutor) ExecuteContext(context.Context, worker_runtime.Task) (map[string]any, error) {
 	*e.events = append(*e.events, "execute")
 	return map[string]any{"candidates": []any{"result"}}, e.err
 }
@@ -95,10 +95,10 @@ func TestRecoveryUsesOriginalIdentityWithoutExecutingOrPolling(t *testing.T) {
 	events := []string{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	original := execution.Result{Task: execution.Task{DispatchID: "old", Attempt: 3}, Key: "original-key", Output: map[string]any{"candidates": []any{"saved"}}}
-	store := &memoryResults{events: &events, pending: []execution.Result{original}}
+	original := worker_runtime.Result{Task: worker_runtime.Task{DispatchID: "old", Attempt: 3}, Key: "original-key", Output: map[string]any{"candidates": []any{"saved"}}}
+	store := &memoryResults{events: &events, pending: []worker_runtime.Result{original}}
 	gateway := &fakeGateway{events: &events, cancel: cancel}
-	err := (Workflow{Gateway: gateway, Executor: fakeExecutor{events: &events}, Results: store}).Run(ctx, Command{WorkerID: "worker", Capabilities: []execution.Capability{{Key: "cap", Version: 1, Concurrency: 1}}})
+	err := (Workflow{Gateway: gateway, Executor: fakeExecutor{events: &events}, Results: store}).Run(ctx, Command{WorkerID: "worker", Capabilities: []worker_runtime.Capability{{Key: "cap", Version: 1, Concurrency: 1}}})
 	if err != nil || !reflect.DeepEqual(events, []string{"register", "pending", "complete", "finish"}) || !reflect.DeepEqual(gateway.delivered, original) {
 		t.Fatalf("recovery events=%v delivered=%v err=%v", events, gateway.delivered, err)
 	}
@@ -110,7 +110,7 @@ func TestSavePrecedesSendAndClassifiesFailure(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			store := &memoryResults{events: &events}
-			gateway := &fakeGateway{events: &events, cancel: cancel, task: &execution.Task{DispatchID: "dispatch", Attempt: 2}}
+			gateway := &fakeGateway{events: &events, cancel: cancel, task: &worker_runtime.Task{DispatchID: "dispatch", Attempt: 2}}
 			executor := fakeExecutor{events: &events, err: failure}
 			err := (Workflow{Gateway: gateway, Executor: executor, Results: store}).Run(ctx, Command{WorkerID: "worker", Capabilities: executor.AvailableCapabilities()})
 			method := "complete"
@@ -144,7 +144,7 @@ func TestStorageErrorsReturnToCallerBeforeFurtherSideEffects(t *testing.T) {
 			defer cancel()
 			sentinel := errors.New("storage failed")
 			store := &memoryResults{events: &events}
-			gateway := &fakeGateway{events: &events, cancel: cancel, task: &execution.Task{DispatchID: "dispatch", Attempt: 1}}
+			gateway := &fakeGateway{events: &events, cancel: cancel, task: &worker_runtime.Task{DispatchID: "dispatch", Attempt: 1}}
 			switch step {
 			case "register":
 				gateway.registerErr = sentinel
@@ -167,11 +167,11 @@ func TestRejectedResultsAreArchivedAndUncertainResultsRemainPending(t *testing.T
 	for _, rejected := range []bool{true, false} {
 		events := []string{}
 		ctx, cancel := context.WithCancel(context.Background())
-		result := execution.Result{Task: execution.Task{DispatchID: "dispatch", Attempt: 1}, Key: "key", Output: map[string]any{"candidates": []any{}}}
-		store := &memoryResults{events: &events, pending: []execution.Result{result}}
+		result := worker_runtime.Result{Task: worker_runtime.Task{DispatchID: "dispatch", Attempt: 1}, Key: "key", Output: map[string]any{"candidates": []any{}}}
+		store := &memoryResults{events: &events, pending: []worker_runtime.Result{result}}
 		gateway := &fakeGateway{events: &events, cancel: cancel, reportErr: errors.New("response lost")}
 		if rejected {
-			gateway.reportErr = execution.ErrResultRejected
+			gateway.reportErr = worker_runtime.ErrResultRejected
 		}
 		ok, err := DeliverStoredResult(ctx, gateway, "worker", store, result)
 		cancel()
@@ -183,14 +183,14 @@ func TestRejectedResultsAreArchivedAndUncertainResultsRemainPending(t *testing.T
 
 type recoveryFake struct {
 	events *[]string
-	tasks  []execution.Task
+	tasks  []worker_runtime.Task
 }
 
-func (r recoveryFake) PendingTasks(context.Context) ([]execution.Task, error) {
+func (r recoveryFake) PendingTasks(context.Context) ([]worker_runtime.Task, error) {
 	*r.events = append(*r.events, "recover-pending")
 	return r.tasks, nil
 }
-func (r recoveryFake) FinishTask(context.Context, execution.Task) error {
+func (r recoveryFake) FinishTask(context.Context, worker_runtime.Task) error {
 	*r.events = append(*r.events, "recover-finish")
 	return nil
 }
@@ -225,11 +225,11 @@ func TestRecoveryUsesOriginalTaskAndRecoveryCapacityBeforePolling(t *testing.T) 
 	events := []string{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	task := execution.Task{DispatchID: "old-dispatch", Attempt: 4, CapabilityKey: "cap", CapabilityVersion: 1}
+	task := worker_runtime.Task{DispatchID: "old-dispatch", Attempt: 4, CapabilityKey: "cap", CapabilityVersion: 1}
 	store := &memoryResults{events: &events}
 	gateway := &fakeGateway{events: &events, cancel: cancel}
 	executor := fakeExecutor{events: &events}
-	recovery := recoveryFake{events: &events, tasks: []execution.Task{task}}
+	recovery := recoveryFake{events: &events, tasks: []worker_runtime.Task{task}}
 	err := (Workflow{Gateway: gateway, Executor: executor, Results: store, Recovery: recovery, Admission: admissionFake{events: &events}}).Run(ctx, Command{Capabilities: executor.AvailableCapabilities()})
 	if err != nil || !reflect.DeepEqual(events, []string{"register", "pending", "recover-pending", "recovery-admission", "execute", "save", "complete", "finish", "release"}) || gateway.delivered.Task.DispatchID != "old-dispatch" || gateway.delivered.Key != "old-dispatch:4:complete" {
 		t.Fatalf("recovery changed original attempt: %v %v", events, err)

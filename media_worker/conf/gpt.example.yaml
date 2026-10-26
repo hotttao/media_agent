@@ -1,0 +1,17 @@
+app:
+  name: media_worker
+media_worker:
+  enabled: true
+  gpt_image_use:
+    enabled: true
+    # Exact executable and bridge path. No shell or backend override.
+    bridge_command:
+      - /usr/bin/python3
+      - ${MEDIA_WORKER_GPT_BRIDGE}
+    upstream_cli: ${MEDIA_WORKER_IMAGE_USE_CLI}
+    browser_lock_directory: ${MEDIA_WORKER_GPT_LOCK_DIRECTORY}
+    size: auto
+    web_model: Instant,Auto
+    # Optional existing ChatGPT Project URL; empty uses a regular new chat.
+    project_url: ""
+    timeout_seconds: 600
