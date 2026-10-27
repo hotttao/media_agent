@@ -177,6 +177,8 @@ python3 tools/check_gpt_browser.py --image-use /absolute/path/to/pinned/image-us
 
 浏览器准备遵循 [chrome-use 官方文档](https://github.com/leeguooooo/chrome-use)：安装 CLI、执行 `chrome-use extension install` 注册 native host，并在当前 Chrome 安装/启用扩展后登录 ChatGPT。不要复制 Cookie，不要用新建的无登录 headless 浏览器替代 relay；首次插件授权需要用户在 Chrome 完成。
 
+运行 Worker 的环境必须能在 `PATH` 找到 `chrome-use`（安装在 `~/.local/bin` 时需将该目录加入 `PATH`）。准备命令的 `--open` 会打开专用 ChatGPT 会话；正常空队列轮询只读探测，不刷新页面，有草稿或仍在生成时不会领取新任务。
+
 将 `conf/gpt.example.yaml` 复制为私密 `conf/local.yaml`，配置 Python/bridge 绝对路径、上游 CLI、共享浏览器锁目录、网页模型标签与可选现有 Project URL。bridge 文件位于本仓库 `media_worker/tools/image_use_bridge.py`。模型默认候选 `Instant,Auto` 沿用固定上游的支持值；不是官方图片模型 ID。网关 URL、Worker Token、稳定 Worker ID 与状态目录继续沿用原配置。
 
 ```bash

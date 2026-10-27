@@ -36,10 +36,11 @@ type Config struct {
 	Timeout                                                           time.Duration
 }
 type Client struct {
-	cfg  Config
-	lock *os.File
-	slot chan struct{}
-	mu   sync.Mutex
+	cfg        Config
+	lock       *os.File
+	slot       chan struct{}
+	mu         sync.Mutex
+	readyUntil time.Time
 }
 type requestDTO struct {
 	Size     string   `json:"size,omitempty"`
@@ -122,6 +123,9 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 func (c *Client) call(ctx context.Context, action string, in requestDTO) (responseDTO, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if action == "submit" || action == "observe" || action == "artifact" {
+		c.readyUntil = time.Time{}
+	}
 	data, err := json.Marshal(in)
 	if err != nil {
 		return responseDTO{}, ErrBridge
@@ -182,11 +186,20 @@ func (c *Client) acquire(ctx context.Context, check bool) (func(), error) {
 	}
 	release := func() { <-c.slot }
 	if check {
+		c.mu.Lock()
+		cached := time.Now().Before(c.readyUntil)
+		c.mu.Unlock()
+		if cached {
+			return release, nil
+		}
 		r, err := c.call(ctx, "preflight", requestDTO{})
 		if err != nil || !r.Ready {
 			release()
 			return nil, ErrBridge
 		}
+		c.mu.Lock()
+		c.readyUntil = time.Now().Add(5 * time.Second)
+		c.mu.Unlock()
 	}
 	return release, nil
 }

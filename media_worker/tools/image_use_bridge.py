@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Private JSON bridge. No backend selection, credentials, or raw CLI logs escape it."""
 import argparse
+import base64
 import contextlib
 import fcntl
 import hashlib
@@ -67,7 +68,38 @@ def load_upstream(path):
     module = importlib.util.module_from_spec(spec)
     sys.modules[loader.name] = module
     loader.exec_module(module)
+    adapt_web_dom(module)
     return module
+
+
+def adapt_web_dom(module):
+    """Support the observed Oct-2026 layout without changing pinned source.
+
+    The new editor and Send control share data-composer-body instead of a form.
+    Keep every state read/click scoped to that editor's own container.
+    """
+    module.WEB_COMPOSER_SEL += ', [data-composer-body] div.ProseMirror[contenteditable="true"][role="textbox"]'
+    module.WEB_SEND_SEL += ', button[aria-label="发送"], button[aria-label="Send prompt"], button[aria-label="Send"]'
+    module.WEB_SEND_CLICK_SEL = ", ".join(
+        f':is(form, [data-composer-body]):has(div.ProseMirror[contenteditable="true"]) {selector.strip()}'
+        for selector in module.WEB_SEND_SEL.split(","))
+    original = "composer.closest('form')"
+    if module._JS_WEB_COMPOSER_STATE.count(original) != 1:
+        raise ValueError("unsupported composer state contract")
+    module._JS_WEB_COMPOSER_STATE = module._JS_WEB_COMPOSER_STATE.replace(
+        original, "(composer.closest('form') || composer.closest('[data-composer-surface-variant]') || composer.closest('[data-composer-body]'))")
+    module._UPLOAD_SELECTORS = (module._UPLOAD_SELECTORS[0],
+        '[data-composer-surface-variant]:has([data-composer-body] div.ProseMirror[contenteditable="true"]) input[type=file][multiple][accept="image/*"]:not([capture])',
+        *module._UPLOAD_SELECTORS[1:])
+    # This layout also omits <main>. Turn containers still exclude unrelated
+    # image-created toasts and retain the upstream reference-image filtering.
+    for name in ("_JS_BASELINE", "_JS_STATE"):
+        script = getattr(module, name)
+        original = "document.querySelectorAll('main img')"
+        if script.count(original) != 1:
+            raise ValueError("unsupported generated image scope contract")
+        setattr(module, name, script.replace(original, "document.querySelectorAll('main img, [data-turn-key] img')"))
+    module._JS_STATE = module._JS_STATE.replace("document.querySelectorAll('main ' + SEL.turn)", "document.querySelectorAll(SEL.turn)")
 
 
 def manifest(folder):
@@ -104,6 +136,10 @@ def seal(folder):
 
 
 class ConversationChanged(ValueError):
+    pass
+
+
+class OutputMismatch(ValueError):
     pass
 
 
@@ -154,9 +190,24 @@ def install_binding_hook(module, folder):
         # the upstream's confirmed single send may proceed to identity binding.
         result = submit(*args, **kwargs)
         expected = text_digest(args[2])
-        for _ in range(5):
-            state = module._web_composer_state(ab, session, remaining)
-            observed = owned_context(module, ab, session, min(5.0, remaining()))
+        write(folder / "confirmed-send.json", {"user_text_sha256": expected, "confirmed_at": time.time()})
+        deadline = time.monotonic() + min(120.0, remaining())
+        while time.monotonic() < deadline:
+            try:
+                state = module._web_composer_state(ab, session, remaining)
+                observed = owned_context(module, ab, session, min(5.0, remaining()))
+            except Exception:
+                time.sleep(0.5)
+                continue
+            write(folder / "binding-probe.json", {
+                "user_turns": state.get("user_turns"), "draft_empty": state.get("text") == "",
+                "conversation": observed.get("conversation") if isinstance(observed, dict) else None,
+                "turns": observed.get("turns") if isinstance(observed, dict) else None,
+                "unknown": observed.get("unknown") if isinstance(observed, dict) else True,
+                "observed_text_sha256": [text_digest(t) for t in observed.get("texts", [])] if isinstance(observed, dict) else [],
+            })
+            if state.get("user_turns", 0) > 1:
+                raise ConversationChanged("additional user turn after confirmed Send")
             if state.get("user_turns") == 1 and state.get("text") == "" and isinstance(observed, dict) and not observed.get("unknown") and len(observed.get("turns", [])) == 1 and len(observed.get("texts", [])) == 1 and text_digest(observed["texts"][0]) == expected and CONVERSATION.fullmatch(observed.get("conversation") or ""):
                 write(folder / "binding.json", {"conversation": observed["conversation"], "turn_id": observed["turns"][0], "user_text_sha256": expected})
                 return result
@@ -198,27 +249,48 @@ def recover(args, folder):
     with module._chatgpt_web_turn(False, time.monotonic()):
         if not module._chatgpt_web_lock_held:
             raise ValueError("cross-tool lock required")
-        module._ab(browser, "open", binding["conversation"], session=module.CHATGPT_WEB_SESSION, timeout=20)
-        deadline = time.monotonic() + 20
-        if not module._wait_composer(browser, module.CHATGPT_WEB_SESSION, lambda: max(1.0, deadline - time.monotonic())):
+        current = module._ab_eval(browser, module._JS_CONV_URL, session=module.CHATGPT_WEB_SESSION, timeout=10)
+        if current != binding["conversation"]:
+            module._ab(browser, "open", binding["conversation"], session=module.CHATGPT_WEB_SESSION, timeout=20)
+        deadline = time.monotonic() + 90
+        if not module._wait_composer(browser, module.CHATGPT_WEB_SESSION, lambda: max(1.0, deadline - time.monotonic()), tries=90):
             raise ValueError("conversation not ready")
         assert_binding(module, browser, module.CHATGPT_WEB_SESSION, folder)
-        # Upstream recovery normally takes this same lock. Keep the outer lock
-        # across identity checks and download, without recursively taking it.
-        original_turn = module._chatgpt_web_turn
-        @contextlib.contextmanager
-        def already_held(*unused):
-            if not module._chatgpt_web_lock_held:
-                raise ValueError("cross-tool lock lost")
-            yield
-        module._chatgpt_web_turn = already_held
-        try:
-            result = module._recover_command([binding["conversation"], "--last", "--quiet", "--timeout", str(min(args.timeout, 120)), "--out", str(folder / "output.png")])
-        finally:
-            module._chatgpt_web_turn = original_turn
-        if result not in (0, None):
-            raise ValueError("recovery unconfirmed")
+        # Use the pinned adapter/download primitives directly. The upstream
+        # recover command closes the tab in finally, preventing our required
+        # post-download identity check, and also permits multiple outputs.
+        result = module._site_call(browser, "chatgpt/images", [binding["conversation"], "--last", "true"],
+                                   module.CHATGPT_WEB_SESSION, timeout=min(args.timeout, 60))
+        images = result.get("images") if isinstance(result, dict) else None
+        if not isinstance(images, list) or not images:
+            raise ValueError("generated image not available")
+        # The live branch can repeat the same immutable file in tool and
+        # assistant messages. Count files, not message appearances.
+        files = {}
+        for image in images:
+            if not isinstance(image, dict) or not isinstance(image.get("file_id"), str) or not image["file_id"]:
+                raise OutputMismatch("generated file identity unavailable")
+            if image.get("download_url"):
+                files[image["file_id"]] = image
+        if len({image["file_id"] for image in images}) != 1:
+            raise OutputMismatch("multiple distinct generated images")
+        if len(files) != 1:
+            raise ValueError("generated file download not available")
+        image = next(iter(files.values()))
         assert_binding(module, browser, module.CHATGPT_WEB_SESSION, folder)
+        downloaded = module._ab_eval(browser, module._JS_FETCH % json.dumps(image["download_url"]),
+                                     session=module.CHATGPT_WEB_SESSION, timeout=min(args.timeout, 60))
+        if not isinstance(downloaded, dict) or downloaded.get("ok") is not True or not isinstance(downloaded.get("b64"), str) or len(downloaded["b64"]) > 90 << 20:
+            raise ValueError("download unconfirmed")
+        data = base64.b64decode(downloaded["b64"], validate=True)
+        if not 0 < len(data) <= 64 << 20:
+            raise ValueError("invalid download size")
+        assert_binding(module, browser, module.CHATGPT_WEB_SESSION, folder)
+        fd = os.open(folder / "output.png", os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "wb") as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
         return seal(folder)
 
 
@@ -229,11 +301,26 @@ def preflight(args):
         return {"ready": False}
     deadline = time.monotonic() + 25
     remaining = lambda: max(1.0, deadline - time.monotonic())
+    probe = r"""(() => {
+      const editor = document.querySelector(%s);
+      const stop = document.querySelector(%s);
+      return JSON.stringify({host: location.hostname, composer: !!editor,
+        draft: !!(editor && (editor.value || editor.innerText || '').trim()), busy: !!stop});
+    })()""" % (json.dumps(module.WEB_COMPOSER_SEL), json.dumps(module.WEB_STOP_SEL))
     with module._chatgpt_web_turn(False, time.monotonic()):
         if not module._chatgpt_web_lock_held:
             return {"ready": False}
-        module._ab(browser, "open", module.WEB_NEW_CHAT_URL, session=module.CHATGPT_WEB_SESSION, timeout=15)
-        return {"ready": bool(module._wait_composer(browser, module.CHATGPT_WEB_SESSION, remaining))}
+        # Normal queue polling is read-only: never replace the current tab or
+        # discard a draft merely because the gateway has no task yet.
+        if getattr(args, "prepare", False):
+            module._ab(browser, "open", module.WEB_NEW_CHAT_URL, session=module.CHATGPT_WEB_SESSION, timeout=15)
+            if not module._wait_composer(browser, module.CHATGPT_WEB_SESSION, remaining):
+                return {"ready": False}
+        try:
+            state = module._ab_eval(browser, probe, session=module.CHATGPT_WEB_SESSION, timeout=min(10.0, remaining()))
+        except Exception:
+            return {"ready": False}
+        return {"ready": bool(isinstance(state, dict) and state.get("host") == "chatgpt.com" and state.get("composer") and not state.get("draft") and not state.get("busy"))}
 
 
 def dispatch(args, request):
@@ -325,7 +412,7 @@ def dispatch(args, request):
     write(folder / "status.json", {"state": "generating", "next_recover": time.time() + 60})
     try:
         return recover(args, folder)
-    except ConversationChanged:
+    except (ConversationChanged, OutputMismatch):
         write(folder / "status.json", {"state": "needs_human"})
         return {"state": "needs_human"}
     except (Exception, SystemExit):

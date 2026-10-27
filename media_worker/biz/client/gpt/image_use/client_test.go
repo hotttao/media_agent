@@ -40,7 +40,9 @@ action=args[1];root=Path(args[args.index('--root')+1]);key=req.get('key','')
 if action=='preflight' and (root/'slow').exists(): time.sleep(30)
 out={'ok':True}
 if action=='lookup': out.update(state='absent')
-if action=='preflight': out.update(ready=True)
+if action=='preflight':
+ p=root/'preflight-count';p.write_text(str(int(p.read_text())+1) if p.exists() else '1')
+ out.update(ready=True)
 if action=='submit':
  assert req['prompt']=='private prompt'
  folder=root/key;folder.mkdir(mode=0o700,exist_ok=True)
@@ -148,5 +150,32 @@ func TestRejectUnsafeArtifactSymlink(t *testing.T) {
 	}
 	if _, err = c.Observe(ctx, ref); err == nil {
 		t.Fatal("symlink media accepted")
+	}
+}
+
+func TestIdlePollingCachesReadinessAndGenerationInvalidatesIt(t *testing.T) {
+	c, cfg, key := fixture(t)
+	for i := 0; i < 2; i++ {
+		release, err := c.Acquire(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		release()
+	}
+	count, err := os.ReadFile(filepath.Join(cfg.Root, "preflight-count"))
+	if err != nil || string(count) != "1" {
+		t.Fatal("idle polls repeatedly probe browser", string(count), err)
+	}
+	if _, err = c.Submit(context.Background(), gpt.Request{Key: key, Prompt: "private prompt"}); err != nil {
+		t.Fatal(err)
+	}
+	release, err := c.Acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
+	count, err = os.ReadFile(filepath.Join(cfg.Root, "preflight-count"))
+	if err != nil || string(count) != "2" {
+		t.Fatal("generation reused stale readiness", string(count), err)
 	}
 }
