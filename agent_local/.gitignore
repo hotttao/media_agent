@@ -1,0 +1,9 @@
+**/runs/
+**/.claude/
+**/.opencode/
+__pycache__/
+.env
+*.local.json
+codex/.codex/config.toml
+claude/.mcp.json
+opencode/opencode.json

@@ -1,0 +1,10 @@
+# 示例。实际配置位于 .codex/config.toml；不要把 Token 填进本示例后提交。
+[mcp_servers.media]
+url = "http://mini-001.local:18080/mcp"
+startup_timeout_sec = 30
+tool_timeout_sec = 40
+required = true
+[mcp_servers.media.http_headers]
+Authorization = "Bearer <User Token>"
+X-Media-Organization-ID = "<企业 ID>"
+X-Media-Workspace-ID = "<Workspace ID>"

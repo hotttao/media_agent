@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "media": {
+      "type": "http",
+      "url": "http://mini-001.local:18080/mcp",
+      "headers": {
+        "Authorization": "Bearer <User Token>",
+        "X-Media-Organization-ID": "<企业 ID>",
+        "X-Media-Workspace-ID": "<Workspace ID>"
+      }
+    }
+  }
+}
