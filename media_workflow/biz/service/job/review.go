@@ -46,7 +46,7 @@ func (s *Service) DecideReview(ctx context.Context, cmd ReviewCommand) (*domain.
 		(cmd.OrganizationID != "" && j.OrganizationID != cmd.OrganizationID) {
 		return nil, ErrSubmitForbidden
 	}
-	if principal, ok := internaljwt.AgentPrincipalFromContext(ctx); ok &&
+	if principal, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok &&
 		(principal.UserID != cmd.UserID || principal.OrganizationID != j.OrganizationID || principal.WorkspaceID != j.WorkspaceID) {
 		return nil, ErrSubmitForbidden
 	}

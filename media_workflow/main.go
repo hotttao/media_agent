@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"media_agent/hertz_infra/authn/internaljwt"
+	"media_agent/hertz_infra/authn/mcpdelegation"
+	"media_agent/hertz_infra/authn/resourceaccess"
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_workflow/biz/dal"
@@ -34,6 +36,7 @@ import (
 	"media_agent/media_workflow/biz/shared"
 	"media_agent/media_workflow/biz/shared/auth"
 	"media_agent/media_workflow/biz/shared/client"
+	mcpworkflow "media_agent/media_workflow/biz/workflow"
 	"media_agent/media_workflow/biz/workflow/conductor"
 	"media_agent/media_workflow/biz/workflow/publication"
 	reviewdelivery "media_agent/media_workflow/biz/workflow/review_delivery"
@@ -188,6 +191,7 @@ func main() {
 	wfSvc.ConfigureResourceAuthority(resourceAuthority)
 	jobSvc.ConfigureWorkflowAccess(wfSvc.AuthorizeExecution)
 	jobSvc.ConfigureHistoryWorkspaces(controlClient)
+	jobSvc.ConfigureListWorkspaces(controlClient.ListWorkflowWorkspaceIDs)
 	jobSvc.ConfigureResume(jobRepo, controlClient, conductorClient, os.Getenv("MEDIA_STORAGE_PUBLIC_ENDPOINT"))
 	jobSvc.ConfigureReviews(jobRepo)
 	jobSvc.ConfigureStarts(jobRepo)
@@ -313,6 +317,13 @@ func main() {
 			log.Fatal("Agent JWT issuer is required")
 		}
 		authCfg.AgentJWTVerifier = internaljwt.NewVerifier(jwksURL, os.Getenv("AGENT_JWT_ISSUER"), "media-workflow-agent", nil)
+	}
+	if delegation := cfg.GetMcpDelegation(); delegation.GetEnabled() {
+		if delegation.GetJwksUrl() == "" || delegation.GetIssuer() == "" || len(delegation.GetServiceToken()) < 32 {
+			log.Fatal("invalid MCP delegation configuration")
+		}
+		admission := mcpworkflow.MCPAdmission{Verifier: internaljwt.NewVerifier(delegation.GetJwksUrl(), delegation.GetIssuer(), mcpdelegation.Workflow, nil), ServiceToken: delegation.GetServiceToken(), Facts: resourceaccess.New(mediaAuthURL, os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN"), nil), Workspaces: resourceaccess.WorkspaceClient{BaseURL: os.Getenv("MEDIA_CONTROL_URL"), Credential: os.Getenv("CONTROL_INTERNAL_TOKEN")}}
+		authCfg.MCPAuthenticate = admission.Authenticate
 	}
 	authMw := auth.New(authCfg)
 

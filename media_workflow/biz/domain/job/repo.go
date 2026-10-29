@@ -93,6 +93,7 @@ type StepRunRepo interface {
 }
 
 type ListQuery struct {
+	WorkspaceIDs   []string
 	OrganizationID string
 	WorkspaceID    string
 	Scope          string

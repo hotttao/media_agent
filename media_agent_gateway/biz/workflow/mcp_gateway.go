@@ -13,6 +13,7 @@ import (
 	"github.com/yosida95/uritemplate/v3"
 	"io"
 	"log/slog"
+	"media_agent/hertz_infra/authn/mcpdelegation"
 	"media_agent/hertz_infra/sessioncredential"
 	catalog "media_agent/media_agent_gateway/biz/service/mcp_catalog"
 	"media_agent/media_agent_gateway/biz/shared/client"
@@ -44,10 +45,11 @@ type MCPGateway struct {
 	upstream MCPUpstreamPort
 	keys     *sessioncredential.Ring
 	metadata MetadataControl
+	business *MCPBusiness
 }
 
 func NewMCPGateway(identity MCPIdentityPort, c *catalog.Service, bindings MCPBindingAccess, upstream MCPUpstreamPort, keys *sessioncredential.Ring, metadata MetadataControl) *MCPGateway {
-	return &MCPGateway{identity, c, bindings, upstream, keys, metadata}
+	return &MCPGateway{identity: identity, catalog: c, bindings: bindings, upstream: upstream, keys: keys, metadata: metadata}
 }
 
 type mcpSource struct {
@@ -61,16 +63,19 @@ func allowed(values []string, name string) bool {
 	return slices.Contains(values, "*") || slices.Contains(values, name)
 }
 func (w *MCPGateway) sources(ctx context.Context, scope MCPContext) ([]mcpSource, string, error) {
-	platform, e := w.catalog.Get(ctx, "platform")
-	if e != nil {
-		return nil, "", ErrMCPUnavailable
-	}
+	var e error
 	sources := []mcpSource{}
-	if platform.Status == "enabled" {
-		sources = append(sources, mcpSource{definitionID: "platform", version: platform.Version, currentVersion: platform.Version})
+	if scope.Kind != "user" {
+		platform, err := w.catalog.Get(ctx, "platform")
+		if err != nil {
+			return nil, "", ErrMCPUnavailable
+		}
+		if platform.Status == "enabled" {
+			sources = append(sources, mcpSource{definitionID: "platform", version: platform.Version, currentVersion: platform.Version})
+		}
 	}
 	access := client.MCPAccess{SnapshotVersion: "platform-only", AuthorizationRevision: "platform-only"}
-	if w.bindings != nil {
+	if w.bindings != nil && scope.Kind != "user" {
 		access, e = w.bindings.Resolve(ctx, scope)
 		if e != nil {
 			return nil, "", ErrMCPUnavailable
@@ -79,8 +84,46 @@ func (w *MCPGateway) sources(ctx context.Context, scope MCPContext) ([]mcpSource
 	if len(access.Grants) > 128 || access.SnapshotVersion == "" || access.AuthorizationRevision == "" {
 		return nil, "", ErrMCPUnavailable
 	}
+	business, err := w.businessSource(ctx, scope)
+	if err != nil {
+		return nil, "", err
+	}
+	if business != nil && slices.Contains(access.RestrictedDefinitionIDs, business.definitionID) {
+		granted := false
+		for _, grant := range access.Grants {
+			if grant.DefinitionID == business.definitionID {
+				granted = true
+				break
+			}
+		}
+		if !granted {
+			business = nil
+		}
+	}
 	seen := map[string]bool{"platform": true}
+	if business != nil {
+		sources = append(sources, *business)
+	}
 	for _, grant := range access.Grants {
+		if w.business != nil && grant.DefinitionID == w.business.DefinitionID {
+			// A managed binding may only narrow the built-in business source.
+			// Do not silently apply a fixed binding to a different definition.
+			if seen[grant.DefinitionID] || grant.DefinitionVersion < 1 {
+				return nil, "", ErrMCPUnavailable
+			}
+			seen[grant.DefinitionID] = true
+			if business != nil && grant.DefinitionVersion != business.version {
+				return nil, "", ErrMCPUnavailable
+			}
+			if business != nil {
+				for i := range sources {
+					if sources[i].definitionID == grant.DefinitionID {
+						sources[i].grant = grant
+					}
+				}
+			}
+			continue
+		}
 		if seen[grant.DefinitionID] || grant.DefinitionVersion < 1 {
 			return nil, "", ErrMCPUnavailable
 		}
@@ -307,7 +350,7 @@ func (w *MCPGateway) page(scope MCPContext, method, vector, cursor string, entri
 			return nil, "", ErrMCPCursor
 		}
 		now := time.Now().Unix()
-		if c.Session != scope.SessionID || c.Method != method || c.Vector != vector || c.Issued > now+5 || now-c.Issued > 600 || c.Offset < 0 || c.Offset > len(entries) {
+		if c.Session != scopeIdentity(scope) || c.Method != method || c.Vector != vector || c.Issued > now+5 || now-c.Issued > 600 || c.Offset < 0 || c.Offset > len(entries) {
 			return nil, "", ErrMCPCursor
 		}
 		offset = c.Offset
@@ -316,7 +359,7 @@ func (w *MCPGateway) page(scope MCPContext, method, vector, cursor string, entri
 	if end >= len(entries) {
 		return entries[offset:], "", nil
 	}
-	c := mcpCursor{Session: scope.SessionID, Method: method, Vector: vector, Key: w.keys.Active, Offset: end, Issued: time.Now().Unix()}
+	c := mcpCursor{Session: scopeIdentity(scope), Method: method, Vector: vector, Key: w.keys.Active, Offset: end, Issued: time.Now().Unix()}
 	raw, _ := json.Marshal(c)
 	encoded := base64.RawURLEncoding.EncodeToString(raw)
 	signature, e := w.keys.Derive("mc1", c.Key, encoded)
@@ -347,6 +390,20 @@ func (w *MCPGateway) Call(ctx context.Context, credentials MCPCredentials, metho
 		return nil, true, e
 	}
 	auditScope = scope
+
+	if w.business != nil && method == "tools/call" {
+		var request struct {
+			Name string `json:"name"`
+		}
+		if json.Unmarshal(raw, &request) != nil {
+			return nil, true, ErrMCPArgument
+		}
+		if strings.HasPrefix(request.Name, w.business.DefinitionID+"__") {
+			if _, err := mcpdelegation.ArgumentsDigest(raw); err != nil {
+				return nil, true, ErrMCPArgument
+			}
+		}
+	}
 	var params map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
@@ -543,6 +600,13 @@ func (w *MCPGateway) invoke(ctx context.Context, credentials MCPCredentials, sco
 	raw, e := peer.Call(ctx, method, encoded)
 	if errors.Is(e, client.ErrMCPReauth) {
 		return nil, true, &MCPReauth{Source: sourceID}
+	}
+	var remote *client.MCPRemoteError
+	if errors.As(e, &remote) {
+		if remote.Code == -32001 {
+			return nil, true, ErrMCPForbidden
+		}
+		return nil, true, ErrMCPArgument
 	}
 	if e != nil {
 		return nil, true, ErrMCPOutcomeUnknown

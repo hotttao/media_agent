@@ -6,7 +6,7 @@ domains: [agent_session, mcp_catalog]
 ---
 
 ## 一句话说明
-Agent 仅连接 Gateway 的统一 MCP 入口。Gateway 校验 Session Token、解析固定用户/Workspace/Session 上下文，向 Agent 暴露有权访问的工具；Platform MCP 在 Gateway 内执行，其他 MCP 调用路由到具体 Plugin 或业务服务实现。
+内部和外部 Agent 仅连接 Gateway 的统一 MCP 入口。User 分支验证 mcp.access 及当前组织/可选 Workspace，托管分支校验 Session Token、解析固定用户/Workspace/Session 上下文，向 Agent 暴露有权访问的工具；Platform MCP 在 Gateway 内执行，其他 MCP 调用路由到具体 Plugin 或业务服务实现。
 
 ## 触发与结果
 | 项目 | 内容 |
@@ -73,7 +73,7 @@ Session Token 是 Agent Session 认证；受控 Agent/实例身份限制哪些 R
 
 ## 统一入口边界
 
-Gateway 对 Agent 提供 MCP Server 接口，对后端 MCP 实现承担客户端职责。Agent 不配置后端 MCP 地址；后端凭据不直接透传 Agent 的入口凭据，身份传递按各后端认证契约适配。具体 Plugin/业务服务保留工具实现与最终资源授权。MCP 注册目录由 Gateway 的 MCP Catalog 拥有。工具、Prompt 使用稳定 Definition slug 命名空间；资源及模板 URI 使用保留原 URI 的来源前缀。使用官方 SDK 标准协议与兼容版本，每次请求重新授权；分页 cursor 绑定 Session 与来源版本，详情见 agent-mcp-gateway 实现规格。
+Gateway 对 Agent 提供 MCP Server 接口，对后端 MCP 实现承担客户端职责。Agent 不配置后端 MCP 地址；后端凭据不直接透传 Agent 的入口凭据，身份传递按各后端认证契约适配。具体 Plugin/业务服务保留工具实现与最终资源授权。MCP 注册目录由 Gateway 的 MCP Catalog 拥有。工具、Prompt 使用稳定 Definition slug 命名空间；资源及模板 URI 使用保留原 URI 的来源前缀。使用官方 SDK 标准协议与兼容版本，每次请求重新授权；分页 cursor 绑定调用主体、组织/Workspace、托管 Session（如有）与来源版本，详情见 agent-mcp-gateway 实现规格。
 
 
 ## 连接与协议版本
@@ -81,3 +81,9 @@ Gateway 对 Agent 提供 MCP Server 接口，对后端 MCP 实现承担客户端
 入口使用无状态 HTTP 请求模型，官方 SDK 兼容 initialize 版本与 server/discover。入口不持有必须转移的 MCP 协议 Session；仅签名分页 cursor 需要跨 Gateway 保持有效。上游在一次请求内完成独立协议协商、全部发现分页和调用，结束即关闭；不建立跨请求后台连接或保存上游 Session 引用。上游分页过程复用同一连接，避免不同协议 Session 的 cursor 混用。未来若新增后台订阅，须另行设计协议引用持久化与接管。
 
 入口 SDK 的协议上下文不传到上游；取消与 deadline 保留，认证和业务身份只通过显式、服务计算的 header 传递。发现受总条数、页数、响应大小和整体30秒 deadline 限制。调用前重新读取当前权限与目录状态；权限撤销发生在发现之后仍必须阻止发送业务调用。外部 needs_reauth 返回 Definition ID 与不可重试标记，由用户重新连接。
+
+## 平台内媒体业务调用
+
+User 不伪造 Session，不暴露 Session 专属平台工具。Gateway 根据当前 use_workflow/use_materials 事实决定内部业务来源可见性，托管运行约束仍取交集。平台媒体来源不要求重复创建 Binding；第三方来源保留原流程。
+
+媒体工具统一批量参数，Gateway 只代理，不执行批次业务编排。Gateway 向 Worker 签发后端请求断言和面向 Workflow/Materials 的不同受众委托；Worker 直接访问资源 API，不回调 Gateway。资源服务验证身份/操作范围并执行原有 ACL。委托最长 60 秒，不承诺追溯撤销已提交操作。具体合约见媒体 MCP spec。

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"io"
 	"net/http"
@@ -17,16 +18,23 @@ import (
 var ErrMCPReauth = errors.New("MCP integration needs reauthorization")
 var ErrMCPUpstream = errors.New("MCP upstream request failed; outcome may be unknown")
 
+// MCPRemoteError preserves only a protocol rejection code, never remote text or data.
+type MCPRemoteError struct{ Code int64 }
+
+func (*MCPRemoteError) Error() string { return "MCP upstream rejected request" }
+
 type MCPBackend struct {
 	Endpoint, Transport string
 	Headers             map[string]string
+	RequestHeaders      func(context.Context, string, json.RawMessage) (map[string]string, error)
 }
 type MCPUpstream struct{}
 type mcpHTTPTransport struct {
-	headers   map[string]string
-	transport http.RoundTripper
-	reauth    *atomic.Bool
-	origin    *url.URL
+	headers        map[string]string
+	transport      http.RoundTripper
+	reauth         *atomic.Bool
+	origin         *url.URL
+	requestHeaders func(context.Context, string, json.RawMessage) (map[string]string, error)
 }
 
 func (t mcpHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -37,6 +45,34 @@ func (t mcpHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	clone.Header = req.Header.Clone()
 	for key, value := range t.headers {
 		clone.Header.Set(key, value)
+	}
+	if t.requestHeaders != nil && req.Method == http.MethodPost {
+		if req.GetBody == nil {
+			return nil, ErrMCPUpstream
+		}
+		body, err := req.GetBody()
+		if err != nil {
+			return nil, ErrMCPUpstream
+		}
+		raw, err := io.ReadAll(io.LimitReader(body, (1<<20)+1))
+		body.Close()
+		if err != nil || len(raw) > 1<<20 {
+			return nil, ErrMCPUpstream
+		}
+		var message struct {
+			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
+		}
+		if json.Unmarshal(raw, &message) != nil || message.Method == "" {
+			return nil, ErrMCPUpstream
+		}
+		headers, err := t.requestHeaders(req.Context(), message.Method, message.Params)
+		if err != nil {
+			return nil, err
+		}
+		for key, value := range headers {
+			clone.Header.Set(key, value)
+		}
 	}
 	resp, e := t.transport.RoundTrip(clone)
 	if e != nil {
@@ -84,7 +120,7 @@ func (MCPUpstream) Open(ctx context.Context, backend MCPBackend) (MCPPeer, error
 		return nil, ErrMCPUpstream
 	}
 	reauth := &atomic.Bool{}
-	httpClient := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }, Transport: mcpHTTPTransport{backend.Headers, http.DefaultTransport, reauth, origin}}
+	httpClient := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }, Transport: mcpHTTPTransport{headers: backend.Headers, transport: http.DefaultTransport, reauth: reauth, origin: origin, requestHeaders: backend.RequestHeaders}}
 	var transport mcp.Transport
 	switch backend.Transport {
 	case "streamable_http":
@@ -179,6 +215,13 @@ func (p *mcpPeer) Call(ctx context.Context, method string, raw []byte) ([]byte, 
 	if e != nil {
 		if p.reauth.Load() {
 			return nil, ErrMCPReauth
+		}
+		var remote *jsonrpc.Error
+		if errors.As(e, &remote) {
+			switch remote.Code {
+			case -32602, -32601, -32001:
+				return nil, &MCPRemoteError{Code: remote.Code}
+			}
 		}
 		return nil, ErrMCPUpstream
 	}

@@ -96,6 +96,9 @@ func (r *JobRepo) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, 
 	if q.OrganizationID != "" {
 		tx = tx.Where(field.NewString("", "organization_id").Eq(q.OrganizationID))
 	}
+	if len(q.WorkspaceIDs) > 0 {
+		tx = tx.Where(field.NewString("", "workspace_id").In(q.WorkspaceIDs...))
+	}
 	if q.WorkspaceID != "" {
 		tx = tx.Where(field.NewString("", "workspace_id").Eq(q.WorkspaceID))
 	}

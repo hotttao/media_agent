@@ -23,6 +23,9 @@ type RPCError struct {
 
 func (e *RPCError) Error() string { return e.Message }
 func NewHandler(factory Factory) http.Handler {
+	return NewNamedHandler("media-agent-gateway", false, factory)
+}
+func NewNamedHandler(name string, toolsOnly bool, factory Factory) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		caller, status, e := factory(r.Context(), r.Header)
@@ -30,7 +33,12 @@ func NewHandler(factory Factory) http.Handler {
 			http.Error(w, "MCP request authorization failed", status)
 			return
 		}
-		server := mcp.NewServer(&mcp.Implementation{Name: "media-agent-gateway", Version: "1"}, &mcp.ServerOptions{Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}, Prompts: &mcp.PromptCapabilities{}, Resources: &mcp.ResourceCapabilities{}}, SetCacheable: func(_ context.Context, _ mcp.Request, c *mcp.Cacheable) { c.TTLMs = 0; c.CacheScope = "private" }})
+		caps := &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}}
+		if !toolsOnly {
+			caps.Prompts = &mcp.PromptCapabilities{}
+			caps.Resources = &mcp.ResourceCapabilities{}
+		}
+		server := mcp.NewServer(&mcp.Implementation{Name: name, Version: "1"}, &mcp.ServerOptions{Capabilities: caps, SetCacheable: func(_ context.Context, _ mcp.Request, c *mcp.Cacheable) { c.TTLMs = 0; c.CacheScope = "private" }})
 		server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
 			return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 				params, e := json.Marshal(req.GetParams())

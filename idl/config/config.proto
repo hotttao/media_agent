@@ -90,6 +90,8 @@ message Config {
   TokenVerifyConfig token_verify = 74;
   PlatformTokenConfig platform_token = 79;
   MediaWorkerConfig media_worker = 80;
+  MCPDelegationConfig mcp_delegation = 81;
+  MediaMCPConfig media_mcp = 82;
 
   // ---- 业务配置（media_crawler 专用）----
   // 抓取编排配置（python 路径 / 垫片 / 串行数 等）
@@ -552,4 +554,23 @@ message GPTImageUseConfig {
   string web_model = 6;
   string project_url = 7;
   int32 timeout_seconds = 8;
+}
+
+// Internal identity assertions; disabled unless explicitly configured.
+message MCPDelegationConfig {
+ bool enabled = 1;
+ string issuer = 2;
+ string jwks_url = 3;
+ string signing_key_file = 4;
+ // Target-specific presenter credential, never an end-user Token.
+ string service_token = 5;
+ string workflow_service_token = 6;
+ string materials_service_token = 7;
+ string edge_jwks_url = 8;
+ string edge_issuer = 9;
+}
+message MediaMCPConfig {
+ bool enabled = 1;
+ string definition_id = 2;
+ repeated string allowed_origins = 3;
 }

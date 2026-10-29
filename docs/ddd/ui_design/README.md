@@ -39,3 +39,5 @@ Penpot v1.2 的七个核心用户旅程及交互修订见 [workflow-v1.2-flow.md
 计划、实现规格和审查产物分别保留在 `docs/plan`、`docs/spec`、`docs/review`。
 
 Agent Prompt/Skill/MCP 管理、Workspace 固定配置及明确更新见 [agent-product-flow.md](agent-product-flow.md)。Settings 统一导航包含 Workspace 配置、企业资源及个人模型连接，见 [ADR 0007](decisions/0007-agent-settings-navigation.md)。
+
+个人 API Token 签发、一次性明文展示与撤销见 [api-token-flow.md](api-token-flow.md)。

@@ -6,6 +6,24 @@ info:
     title: ""
     version: 0.0.1
 paths:
+    /.well-known/mcp-jwks.json:
+        get:
+            tags:
+                - McpCatalogService
+            operationId: McpCatalogService_GetMCPJWKS
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MCPJWKS'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/agent/v1/instances/identity:
         post:
             tags:
@@ -1662,6 +1680,28 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/TaskResponse'
+        MCPJWK:
+            type: object
+            properties:
+                kty:
+                    type: string
+                use:
+                    type: string
+                alg:
+                    type: string
+                kid:
+                    type: string
+                n:
+                    type: string
+                e:
+                    type: string
+        MCPJWKS:
+            type: object
+            properties:
+                keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MCPJWK'
         MessageResponse:
             type: object
             properties:

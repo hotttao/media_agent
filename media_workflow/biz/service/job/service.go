@@ -44,6 +44,7 @@ type Service struct {
 	historyWorkspaces   HistoricalWorkspaceLookup
 	resumeRepo          domain.ResumeRepo
 	resumeAccess        ResumeWorkspaceAccess
+	listWorkspaces      func(context.Context, string, string) ([]string, error)
 	resumeLauncher      ResumeLauncher
 	resumeStorageOrigin string
 	resumeURLVerifier   func(context.Context, string) error
@@ -72,6 +73,7 @@ type SubmitCommand struct {
 }
 
 var ErrSubmitForbidden = errors.New("workflow execution access denied")
+var ErrSubmitVersionConflict = errors.New("workflow version mismatch")
 var ErrSubmitAuthorityUnavailable = errors.New("workflow execution authorization unavailable")
 
 func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, error) {
@@ -129,7 +131,7 @@ func (s *Service) Submit(ctx context.Context, cmd SubmitCommand) (*domain.Job, e
 	// workflow_version is optional at the HTTP boundary. Zero means "use the
 	// current published version"; a non-zero value remains an optimistic lock.
 	if cmd.WorkflowVersion != 0 && wf.Version != cmd.WorkflowVersion {
-		return nil, fmt.Errorf("workflow version mismatch: want %d, got %d", wf.Version, cmd.WorkflowVersion)
+		return nil, fmt.Errorf("%w: want %d, got %d", ErrSubmitVersionConflict, wf.Version, cmd.WorkflowVersion)
 	}
 	if s.compilations == nil || s.engine == nil {
 		return nil, errors.New("registered Conductor execution unavailable")
@@ -503,8 +505,8 @@ func (s *Service) GetForUser(ctx context.Context, id, userID, organizationID str
 	if j.SubmittedBy != userID || (organizationID != "" && j.OrganizationID != organizationID) {
 		return nil, nil, gorm.ErrRecordNotFound
 	}
-	if principal, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
-		if principal.UserID != userID || principal.OrganizationID != j.OrganizationID || principal.WorkspaceID != j.WorkspaceID {
+	if principal, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok {
+		if principal.UserID != userID || principal.OrganizationID != j.OrganizationID || (principal.WorkspaceID != "" && principal.WorkspaceID != j.WorkspaceID) {
 			return nil, nil, gorm.ErrRecordNotFound
 		}
 		if s.resumeAccess == nil {
@@ -522,11 +524,15 @@ func (s *Service) GetForUser(ctx context.Context, id, userID, organizationID str
 }
 
 func (s *Service) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, int, error) {
-	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+	if p, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok {
 		if s.resumeAccess == nil {
 			return nil, 0, ErrSubmitAuthorityUnavailable
 		}
-		allowed, err := s.resumeAccess.CanUseWorkflow(ctx, p.WorkspaceID, p.UserID)
+		allowed := true
+		var err error
+		if p.WorkspaceID != "" {
+			allowed, err = s.resumeAccess.CanUseWorkflow(ctx, p.WorkspaceID, p.UserID)
+		}
 		if err != nil {
 			return nil, 0, ErrSubmitAuthorityUnavailable
 		}
@@ -536,6 +542,19 @@ func (s *Service) List(ctx context.Context, q domain.ListQuery) ([]*domain.Job, 
 		q.SubmittedBy = p.UserID
 		q.OrganizationID = p.OrganizationID
 		q.WorkspaceID = p.WorkspaceID
+		if p.WorkspaceID == "" {
+			if s.listWorkspaces == nil {
+				return nil, 0, ErrSubmitAuthorityUnavailable
+			}
+			ids, err := s.listWorkspaces(ctx, p.UserID, p.OrganizationID)
+			if err != nil {
+				return nil, 0, ErrSubmitAuthorityUnavailable
+			}
+			if len(ids) == 0 {
+				return []*domain.Job{}, 0, nil
+			}
+			q.WorkspaceIDs = ids
+		}
 	}
 	if q.Limit <= 0 || q.Limit > 200 {
 		q.Limit = 50
@@ -855,4 +874,10 @@ func parseTaskReference(reference string) (string, string, bool) {
 		}
 	}
 	return "", "", false
+}
+
+// ConfigureListWorkspaces supplies current authorized workspace IDs for an
+// organization-wide delegated list. The repository filters before pagination.
+func (s *Service) ConfigureListWorkspaces(f func(context.Context, string, string) ([]string, error)) {
+	s.listWorkspaces = f
 }

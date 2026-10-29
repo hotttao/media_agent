@@ -67,6 +67,11 @@ http:
       priority: 70
       middlewares: [oathkeeper-forward-auth]
       service: agent-api
+    media-mcp:
+      rule: "Path(`/mcp`)"
+      priority: 115
+      middlewares: [mcp-public-headers, oathkeeper-forward-auth]
+      service: agent-api
     agent-proxy:
       # Agent Gateway introspects the API Token and issues its own assertion.
       # No Ory User/Worker mutation applies to this entry point.
@@ -88,6 +93,18 @@ http:
       service: frontend
 
   middlewares:
+    mcp-public-headers:
+      headers:
+        customRequestHeaders:
+          X-Session-Token: ""
+          X-Agent-Instance-Credential: ""
+          X-Agent-Replica-ID: ""
+          X-Agent-Incarnation-ID: ""
+          X-Agent-Turn-ID: ""
+          X-Agent-Execution-Epoch: ""
+          X-Media-MCP-Service-Token: ""
+          X-Media-MCP-Workflow-Delegation: ""
+          X-Media-MCP-Materials-Delegation: ""
     oathkeeper-forward-auth:
       forwardAuth:
         address: "http://oathkeeper:4456/decisions"

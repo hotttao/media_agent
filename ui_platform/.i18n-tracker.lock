@@ -69,5 +69,6 @@
   "src/foundation/types/model-connection.ts": "18ce14dc4a0e0f27d74304dc493604da",
   "src/domains/agent-catalog/components/catalog-manager.tsx": "f7e11a23102452cb8212a192f38b32c5",
   "src/domains/model-connection/components/model-connection-manager.tsx": "d684c72cb64767d7bebf534ba714e757",
-  "src/pages/chat/settings-panel.tsx": "200576d6f1ed18b657627e6f51a88dcc"
+  "src/pages/chat/settings-panel.tsx": "d71439605193114c23479cbb0111ef4c",
+  "src/domains/api-token/components/token-manager.tsx": "604e1d1149d30e76fec03f078cf53093"
 }

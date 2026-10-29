@@ -31,6 +31,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/golang-jwt/jwt/v5"
 	"media_agent/hertz_infra/authn/internaljwt"
+	"media_agent/hertz_infra/authn/mcpdelegation"
 	"media_agent/hertz_infra/delegationaudit"
 )
 
@@ -45,6 +46,7 @@ type User struct {
 
 // Config auth 中间件配置。
 type Config struct {
+	MCPAuthenticate        func(context.Context, string, string, string, string) (mcpdelegation.Access, error)
 	JWTSecret              string // materials/workflow 共享的 JWT secret（与 media_auth 不同）
 	CookieName             string // cookie 名（默认 "mw_token"）
 	JWTExpiresSec          int    // session JWT 有效期（默认 7 天）
@@ -220,6 +222,33 @@ func New(cfg *Config) *Middleware {
 func (m *Middleware) Handler() app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		path := string(c.Request.Path())
+		// Service-authenticated MCP requests must be checked before development
+		// identities or internal-route skips. No failed delegate falls back.
+		if presenter := string(c.Request.Header.Peek(mcpdelegation.ServiceHeader)); presenter != "" {
+			if m.cfg.MCPAuthenticate == nil {
+				c.JSON(401, map[string]string{"error": "MCP delegation disabled"})
+				c.Abort()
+				return
+			}
+			access, err := m.cfg.MCPAuthenticate(ctx, string(c.Request.Header.Peek("Authorization")), presenter, string(c.Request.Method()), string(c.Request.URI().PathOriginal()))
+			if err != nil {
+				status := 403
+				if errors.Is(err, mcpdelegation.ErrAuthorityUnavailable) {
+					status = 503
+				}
+				c.Header("X-Media-MCP-Admission", "rejected")
+				c.JSON(status, map[string]string{"error": "MCP delegation denied"})
+				c.Abort()
+				return
+			}
+			p := access.Principal
+			ctx = mcpdelegation.WithPrincipal(ctx, p)
+			ctx = internaljwt.ContextWithBusinessPrincipal(ctx, internaljwt.BusinessPrincipal{UserID: p.UserID, ActorID: p.ActorID, CredentialID: p.CredentialID, OrganizationID: p.OrganizationID, WorkspaceID: p.WorkspaceID})
+			ctx = context.WithValue(ctx, callerKey{}, &User{Sub: p.UserID, Username: p.UserID, Name: p.UserID, Role: "user", OrganizationID: p.OrganizationID})
+
+			c.Next(ctx)
+			return
+		}
 		workerRoute := strings.HasPrefix(path, "/api/worker/v1/")
 		if m.cfg.DevUserID != "" && !workerRoute && path != "/api/auth/login" && path != "/api/auth/callback" && path != "/api/auth/logout" {
 			ctx = context.WithValue(ctx, callerKey{}, &User{Sub: m.cfg.DevUserID, Username: m.cfg.DevUserID, Name: "Local Developer", Role: "admin"})

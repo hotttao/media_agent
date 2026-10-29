@@ -1,0 +1,28 @@
+services:
+  media-worker-mcp:
+    image: media-worker-mcp:local
+    build:
+      context: ..
+      dockerfile: media_worker/Dockerfile.mcp
+    environment:
+      MEDIA_MCP_LISTEN: ":8015"
+      MCP_DELEGATION_ISSUER: ${MCP_DELEGATION_ISSUER:?required}
+      MCP_DELEGATION_JWKS_URL: ${MCP_DELEGATION_JWKS_URL:?required}
+      MCP_WORKFLOW_SERVICE_TOKEN: ${MCP_WORKFLOW_SERVICE_TOKEN:?required}
+      MCP_MATERIALS_SERVICE_TOKEN: ${MCP_MATERIALS_SERVICE_TOKEN:?required}
+      MEDIA_WORKFLOW_URL: ${MEDIA_WORKFLOW_URL:-http://media_workflow:8002}
+      MEDIA_MATERIALS_URL: ${MEDIA_MATERIALS_URL:-http://media_materials:8003}
+    expose: ["8015"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    networks: [auth, media-net]
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+networks:
+  auth:
+    external: true
+    name: media-auth
+  media-net:
+    external: true
+    name: media-net

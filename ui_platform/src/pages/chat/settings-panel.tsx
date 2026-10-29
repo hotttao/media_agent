@@ -10,6 +10,7 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CatalogManager } from "@/domains/agent-catalog/components/catalog-manager";
+import { TokenManager } from "@/domains/api-token/components/token-manager";
 import { ModelConnectionManager } from "@/domains/model-connection/components/model-connection-manager";
 import type { Workspace } from "@/domains/workspace/types";
 import { AgentSettingsPanel } from "./agent-settings-panel";
@@ -20,8 +21,10 @@ export type SettingsSection =
   | "prompts"
   | "skills"
   | "mcp"
-  | "models";
+  | "models"
+  | "tokens";
 const sections = [
+  { id: "tokens", group: "personal", icon: KeyRound, label: "apiTokens.title" },
   {
     id: "general",
     group: "workspace",
@@ -157,7 +160,9 @@ export function SettingsPanel({
             />
           ) : (
             <div className="mx-auto w-full max-w-4xl p-5 sm:p-6">
-              {section === "models" ? (
+              {section === "tokens" ? (
+                <TokenManager />
+              ) : section === "models" ? (
                 <ModelConnectionManager />
               ) : workspace ? (
                 section === "general" ? (

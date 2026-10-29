@@ -22,6 +22,7 @@ type Grant struct {
 type Access struct {
 	SnapshotVersion, AuthorizationRevision string
 	Grants                                 []Grant
+	RestrictedDefinitionIDs                []string
 }
 
 func (w *Bindings) Resolve(ctx context.Context, scope Scope) (Access, error) {
@@ -65,6 +66,7 @@ func (w *Bindings) Resolve(ctx context.Context, scope Scope) (Access, error) {
 		if current.WorkspaceID != ws.ID {
 			return Access{}, d.ErrForbidden
 		}
+		result.RestrictedDefinitionIDs = append(result.RestrictedDefinitionIDs, current.DefinitionID)
 		vector += current.ID + ":" + strconv.FormatInt(current.Version, 10) + ";"
 		if !current.Enabled {
 			continue

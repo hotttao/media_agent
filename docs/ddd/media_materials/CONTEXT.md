@@ -97,3 +97,7 @@ _禁用替代词_：product material、商品 Asset。
 **Asset Reachability（素材可达性）**:
 判定一个 material / generated_asset 在指定 workflow（其 scope 为锚点）下能否被 **引用** 的复合规则：`scope_match == workflow.scope ∧ visibility 通过 ∧ 容器可达`。容器可达 = 绑定的 vip 对 user 可见，或绑定的 product scope 匹配（material 走 material_bindings；generated_asset 走 source_*_id）。作为 RPC 暴露给 `media_workflow`，**不允许直接读 materials 库**。
 _禁用替代词_：access check、permission check。
+
+## MCP 业务委托
+
+MCP Worker 使用独立受众的短期委托和 Materials 专用服务凭据调用现有只读 API。Materials 逐请求读取当前企业/团队/Workspace 事实，检查 use_materials 后将已验证主体、企业及实时团队关系交给既有对象 ACL；不使用 JWT 中的团队列表。操作路由仅允许 Job 输入所需产品/虚拟形象详情、Job 产物详情与企业对象路径解析。路径解析仍是企业命名空间授权，不能代替生成资产详情的资源 ACL。

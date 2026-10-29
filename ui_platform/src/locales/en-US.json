@@ -323,5 +323,28 @@
 		"modelHint": "Enter the model ID from your provider",
 		"defaultEndpoint": "Provider default (optional)",
 		"description": "Use an API key for this service. Model settings are fixed for each session; changes apply to new sessions."
+	},
+	"apiTokens": {
+		"title": "API Tokens",
+		"description": "Create MCP credentials for an Agent. Scopes allow access to an entry point; your current business permissions still govern tools and resources.",
+		"name": "Name",
+		"expires": "Expires at",
+		"scopes": "Allow access",
+		"mcp": "MCP tools (mcp.access)",
+		"api": "Business API (api.access)",
+		"create": "Create token",
+		"newAttempt": "Clear and start new",
+		"once": "Save this token now. It cannot be displayed again after closing.",
+		"copy": "Copy token",
+		"close": "Hide secret",
+		"copyFailed": "Copy failed. Please copy manually.",
+		"refresh": "Refresh list",
+		"loading": "Loading tokens…",
+		"empty": "No API tokens yet.",
+		"revoke": "Revoke",
+		"confirmRevoke": "Revoke this token? Agents using it will lose access.",
+		"failed": "Request failed. Refresh and try again.",
+		"unknown": "No complete issuance receipt received. Check the list and revoke tokens whose secrets you did not receive before creating another. Issuance will not retry automatically.",
+		"futureExpiry": "Choose a future expiry time."
 	}
 }

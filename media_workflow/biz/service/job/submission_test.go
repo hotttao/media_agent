@@ -138,3 +138,11 @@ func TestSubmitReceiptCannotExposeForeignOrCorruptAcceptedJob(t *testing.T) {
 		}
 	}
 }
+
+func TestSubmitVersionRaceReturnsConflictBeforeCreatingJob(t *testing.T) {
+	svc, repo, _, _, _, _ := submissionFixture()
+	_, err := svc.Submit(context.Background(), SubmitCommand{WorkflowID: "wf1", WorkflowVersion: 999, SubmittedBy: "owner", OrganizationID: "org", WorkspaceID: "workspace"})
+	if !errors.Is(err, ErrSubmitVersionConflict) || len(repo.jobs) != 0 {
+		t.Fatalf("version change did not reject submission: %v", err)
+	}
+}

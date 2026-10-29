@@ -35,7 +35,7 @@ func ResolveMCPAccess(ctx context.Context, c *app.RequestContext) {
 		c.JSON(status, map[string]string{"error": "mcp_access_unavailable"})
 		return
 	}
-	result := &dto.AccessResponse{WorkspaceId: req.WorkspaceId, AgentConfigId: req.AgentConfigId, ContextVersion: req.ContextVersion, SnapshotVersion: value.SnapshotVersion, AuthorizationRevision: value.AuthorizationRevision, Grants: []*dto.Grant{}}
+	result := &dto.AccessResponse{WorkspaceId: req.WorkspaceId, AgentConfigId: req.AgentConfigId, ContextVersion: req.ContextVersion, SnapshotVersion: value.SnapshotVersion, AuthorizationRevision: value.AuthorizationRevision, Grants: []*dto.Grant{}, RestrictedDefinitionIds: value.RestrictedDefinitionIDs}
 	for _, grant := range value.Grants {
 		b := grant.Binding
 		result.Grants = append(result.Grants, &dto.Grant{DefinitionId: b.DefinitionID, DefinitionVersion: b.DefinitionVersion, AllowedMethods: b.AllowedMethods, AllowedTools: b.AllowedTools, AllowedPrompts: b.AllowedPrompts, AllowedResources: b.AllowedResources, UpstreamHeaders: grant.Headers, BindingId: b.ID, BindingVersion: b.Version, OauthProxy: grant.OAuthProxy})

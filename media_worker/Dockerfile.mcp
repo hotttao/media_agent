@@ -1,0 +1,19 @@
+# Build from the repository root: docker build -f media_worker/Dockerfile.mcp .
+FROM golang:1.26-alpine AS build
+WORKDIR /workspace
+ENV GOMAXPROCS=2
+COPY hertz_gen/go.mod hertz_gen/go.sum hertz_gen/
+COPY hertz_infra/go.mod hertz_infra/go.sum hertz_infra/
+COPY media_worker/go.mod media_worker/go.sum media_worker/
+RUN cd media_worker && GOWORK=off go mod download
+COPY hertz_gen/ hertz_gen/
+COPY hertz_infra/ hertz_infra/
+COPY media_worker/ media_worker/
+RUN --mount=type=cache,target=/root/.cache/go-build cd media_worker && GOWORK=off CGO_ENABLED=0 go build -mod=readonly -o /out/media_worker_mcp ./cmd/media_worker_mcp
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY --from=build /out/media_worker_mcp /app/media_worker_mcp
+COPY media_worker/conf/mcp.yaml /app/conf/mcp.yaml
+EXPOSE 8015
+ENTRYPOINT ["/app/media_worker_mcp", "--config", "/app/conf/mcp.yaml"]

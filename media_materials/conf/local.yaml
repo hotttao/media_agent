@@ -95,3 +95,9 @@ client:
     service_name: "media-auth"
     base_domain: ${MEDIA_AUTH_URL:-http://127.0.0.1:8001}
     use_discovery: false
+
+mcp_delegation:
+  enabled: ${MEDIA_MCP_ENABLED:-false}
+  issuer: ${MCP_DELEGATION_ISSUER:-}
+  jwks_url: ${MCP_DELEGATION_JWKS_URL:-}
+  service_token: ${MCP_MATERIALS_SERVICE_TOKEN:-}

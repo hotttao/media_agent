@@ -1,3 +1,33 @@
+- id: media-mcp-user-token
+  upstream:
+    url: http://host.docker.internal:8002
+  match:
+    url: http://mini-001.local:18080/mcp
+    methods: [GET, POST, DELETE]
+  authenticators:
+    - handler: oauth2_introspection
+      config:
+        introspection_url: http://media_auth:8001/internal/token/api-token:verify
+        scope_strategy: exact
+        required_scope: [mcp.access]
+        prefix: talos_
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: id_token
+      config:
+        ttl: 1m
+        claims: |
+          {
+            "aud": ["media-agent-gateway-mcp"],
+            "principal_type": "user",
+            "act": {"sub": "{{ print .Extra.actor_id }}"},
+            "organization_id": "{{ print .Extra.organization_id }}",
+            "credential_id": "{{ print .Extra.credential_id }}",
+            "scope": "{{ print .Extra.scope }}",
+            "auth_source": "{{ print .Extra.auth_source }}"
+          }
+
 - id: media-worker-api-token
   upstream:
     url: http://host.docker.internal:8002

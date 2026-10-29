@@ -101,3 +101,15 @@ agent_mcp:
 
 agent_workload:
   enabled: ${AGENT_WORKLOAD_ENABLED:-false}
+
+# Public User MCP is enabled independently of the managed Agent entry headers.
+media_mcp:
+  enabled: ${MEDIA_MCP_ENABLED:-false}
+  definition_id: media-workflow
+  allowed_origins: ${MEDIA_MCP_ALLOWED_ORIGINS:-[]}
+mcp_delegation:
+  enabled: ${MEDIA_MCP_ENABLED:-false}
+  issuer: ${MCP_DELEGATION_ISSUER:-}
+  signing_key_file: ${MCP_DELEGATION_SIGNING_KEY_FILE:-}
+  edge_jwks_url: ${INTERNAL_JWKS_URL:-}
+  edge_issuer: ${INTERNAL_JWT_ISSUER:-}

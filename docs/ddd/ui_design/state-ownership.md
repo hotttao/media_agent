@@ -31,3 +31,5 @@ P0 继续使用 localStorage，但访问必须通过 Profile Backend 接口，�
 Prompt/Skill 库、版本与 ACL 由 Control 保存；MCP 目录归 Gateway，Workspace 绑定及加密凭据归 Plugin，OAuth 连接归 Auth。资源编辑草稿仅在组件内存，Agent 固定选择及配置版本仍由 Control Release 决定；不在 localStorage 缓存资源权限或秘密。
 
 Settings 当前分区由页面URL表示；企业选择和资源编辑/秘密草稿属于当前Settings视图内存。管理入口移入Slot不改变企业资源ACL、个人连接owner或Workspace的固定配置事实。
+
+个人 API Token 的名称、scope、有效期和撤销状态归 Auth；Settings 的 API Token 分区只持有查询结果和表单草稿。一次性 Secret 仅在签发成功后的组件内存中展示，关闭或离开分区即丢弃，不写 URL、localStorage、日志或剪贴板（除非用户明确点击复制）。

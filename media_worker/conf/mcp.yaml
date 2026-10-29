@@ -1,0 +1,20 @@
+app:
+  name: media_worker_mcp
+server:
+  address: ${MEDIA_MCP_LISTEN:-127.0.0.1:8015}
+media_mcp:
+  enabled: true
+  definition_id: media-workflow
+mcp_delegation:
+  enabled: true
+  issuer: ${MCP_DELEGATION_ISSUER}
+  jwks_url: ${MCP_DELEGATION_JWKS_URL}
+  workflow_service_token: ${MCP_WORKFLOW_SERVICE_TOKEN}
+  materials_service_token: ${MCP_MATERIALS_SERVICE_TOKEN}
+client:
+  media_workflow:
+    enabled: true
+    base_domain: ${MEDIA_WORKFLOW_URL}
+  media_materials:
+    enabled: true
+    base_domain: ${MEDIA_MATERIALS_URL}

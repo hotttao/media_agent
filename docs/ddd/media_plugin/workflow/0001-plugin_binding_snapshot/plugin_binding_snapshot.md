@@ -69,3 +69,7 @@ TX1 原子提交 Binding/current、history、credential；TX2 由 Control 提交
 ## 结果事件
 
 Binding 编辑只返回候选版本。只有用户确认后的 Control Release 产生既有 `agent.metadata.update_requested`，广播、消息幂等与应用结果沿用元数据协议。
+
+## 内部业务来源的显式限制
+
+内部 access 响应中的 `restricted_definition_ids` 列出固定 Release 已引用 Binding 的 Definition ID，包含当前停用的 Binding。Gateway 对平台自动业务来源仍按当前模块权限开放；当来源在该限制集合内时，必须同时存在本次可用 Grant，并匹配固定版本与方法/工具限制。这样可以区分未建立额外 Binding 与明确停用已有 Binding，不将停用来源重新加入。第三方 Binding 的凭据和版本语义保持原有合同。

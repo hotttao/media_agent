@@ -19,6 +19,14 @@ import (
 )
 
 type Claims struct {
+	MCPPrincipalKind   string `json:"mcp_principal_kind,omitempty"`
+	MCPCallID          string `json:"mcp_call_id,omitempty"`
+	MCPSourceID        string `json:"mcp_source_id,omitempty"`
+	MCPOperation       string `json:"mcp_operation,omitempty"`
+	MCPMethod          string `json:"mcp_method,omitempty"`
+	MCPArgumentsDigest string `json:"mcp_arguments_digest,omitempty"`
+	MCPPresenter       string `json:"mcp_presenter,omitempty"`
+
 	PrincipalType      string `json:"principal_type"`
 	OrganizationID     string `json:"organization_id,omitempty"`
 	CredentialID       string `json:"credential_id,omitempty"`

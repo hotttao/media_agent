@@ -88,7 +88,7 @@ func (c *ResourceAuthorityClient) identityFacts(ctx context.Context, user string
 	if user == "" {
 		return f, shared.ErrResourceAccessDenied
 	}
-	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok && p.UserID != user {
+	if p, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok && p.UserID != user {
 		return f, shared.ErrResourceAccessDenied
 	}
 	var orgs struct {
@@ -109,7 +109,7 @@ func (c *ResourceAuthorityClient) identityFacts(ctx context.Context, user string
 		return f, err
 	}
 	f.OrganizationIDs = orgs.IDs
-	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+	if p, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok {
 		f.OrganizationIDs = nil
 		if shared.HasResourceID(orgs.IDs, p.OrganizationID) {
 			f.OrganizationIDs = []string{p.OrganizationID}
@@ -156,7 +156,7 @@ func (c *ResourceAuthorityClient) Facts(ctx context.Context, user string) (share
 	if user == "" {
 		return f, shared.ErrResourceAccessDenied
 	}
-	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok && p.UserID != user {
+	if p, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok && p.UserID != user {
 		return f, shared.ErrResourceAccessDenied
 	}
 	if c.control == nil {
@@ -181,7 +181,7 @@ func (c *ResourceAuthorityClient) Facts(ctx context.Context, user string) (share
 		return shared.ResourceFacts{}, err
 	}
 	for _, w := range workspaces {
-		if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok && (p.WorkspaceID != w.ID || p.OrganizationID != w.OrganizationID) {
+		if p, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok && ((p.WorkspaceID != "" && p.WorkspaceID != w.ID) || p.OrganizationID != w.OrganizationID) {
 			continue
 		}
 		if shared.HasResourceID(f.OrganizationIDs, w.OrganizationID) && shared.HasResourceID(f.TeamIDs, w.TeamID) {

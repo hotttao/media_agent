@@ -41,4 +41,8 @@ func Register(r *server.Hertz) {
 			_mcp_definitions0.GET("/:definition_id", append(_getinternaldefinitionMw(), mcp_catalog.GetInternalDefinition)...)
 		}
 	}
+	{
+		__well_known := root.Group("/.well-known", __well_knownMw()...)
+		__well_known.GET("/mcp-jwks.json", append(_getmcpjwksMw(), mcp_catalog.GetMCPJWKS)...)
+	}
 }

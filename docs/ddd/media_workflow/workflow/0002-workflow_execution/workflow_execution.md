@@ -419,3 +419,7 @@ sequenceDiagram
 命中只读核验不持有事务调用 Materials，不创建 Worker Dispatch；执行分支、后继推进和失败重试始终由 Conductor 负责。复用索引只保存输入/产物证据，不拥有执行状态或调度权。索引写入与 Materials 登记不是跨服务事务：登记成功而索引失败由 Finalize 原生重试，以原 result_key 重放登记；索引写入成功而 Task 回写失败仍完成原 Task，不再次生成。取消或替代 Task 不允许晚到结果推进新 Task。
 
 缓存缺失、资源已撤销或对象确定不存在为未命中；鉴权/存储服务暂时不可用不能当未命中并产生额外费用，报告可重试内部任务失败。输入摘要不包含签名 URL、Task/Job ID、投递次数或生成轮次；媒体顺序、真实内容和全部生成参数参与摘要。审批重新生成及显式 force_new 不命中复用，避免反复返回被拒绝结果。没有可信模板/能力版本与实际输入证据的旧迁移产物不自动推测命中。
+
+## MCP 委托接入
+
+MCP 通过独立业务委托与专用服务凭据接入已有 API。验签后使用中立 BusinessPrincipal 传递 User/Actor/Organization/可选 Workspace，不将 User 伪装为 Agent 或 Worker。Job 提交仍检查当前 Workspace 使用权限、当前已发布版本、资源 ACL 和单项幂等；提交回执只返回 Job ID 与当前状态，执行由独立生成 Worker 完成。组织内 Job 列表先获得当前有权使用的 Workspace ID 集合，再由 repository 过滤、计数及分页；查询权限失败不能回退无范围列表。

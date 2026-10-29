@@ -358,3 +358,33 @@ func TestRevokeRetriesLocalCommitAfterUpstreamSuccess(t *testing.T) {
 		t.Fatal("confirmed upstream revocation must finish local commit")
 	}
 }
+
+func TestMCPScopeIsExplicitAndUserOnly(t *testing.T) {
+	for _, tc := range []struct {
+		actor     domain.ActorType
+		scopes    []string
+		forbidden bool
+	}{
+		{domain.ActorUser, []string{"api.access"}, false},
+		{domain.ActorUser, []string{"mcp.access"}, false},
+		{domain.ActorPersonalWorker, []string{"mcp.access"}, true},
+		{domain.ActorAgent, []string{"mcp.access"}, true},
+		{domain.ActorService, []string{"mcp.access"}, true},
+	} {
+		svc := NewService(&fakeRepo{}, &fakeSecrets{})
+		svc.SetSubjectValidator(func(context.Context, string) bool { return true })
+		svc.actorValidator = func(context.Context, domain.ActorType, string, string, string) bool { return true }
+		issuer := &fakeIssuer{}
+		svc.SetIssuer(issuer)
+		_, err := svc.Create(context.Background(), CreateCommand{CreatorUserID: "u", SubjectUserID: "u", ActorType: tc.actor, ActorID: "User:u", Name: "scope", Scopes: tc.scopes, ExpiresAt: time.Now().Add(time.Hour), TrustedActorCreation: true})
+		if tc.forbidden {
+			if !errors.Is(err, ErrForbidden) {
+				t.Fatalf("non-user MCP scope allowed: %s %v", tc.actor, err)
+			}
+			continue
+		}
+		if err != nil || len(issuer.token.Scopes) != 1 || issuer.token.Scopes[0] != tc.scopes[0] {
+			t.Fatal("scope implicitly changed", err)
+		}
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"media_agent/hertz_infra/authn/internaljwt"
+	"media_agent/hertz_infra/authn/mcpdelegation"
 	"media_agent/hertz_infra/authn/resourceaccess"
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/mcpprotocol"
@@ -201,8 +202,15 @@ func main() {
 	cataloghandler.Configure(catalogApplication, nil)
 	cataloghandler.ConfigureManagement(&workflow.MCPCatalogManagement{Catalog: catalogApplication, Facts: resourceaccess.New(os.Getenv("MEDIA_AUTH_URL"), os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN"), nil)})
 	if mcpCfg := cfg.GetAgentMcp(); mcpCfg.GetEnabled() {
-		if execution == nil || credentialKeys == nil {
-			log.Fatal("MCP requires Agent Runtime identity configuration")
+		if !cfg.GetMediaMcp().GetEnabled() && execution == nil {
+			log.Fatal("managed MCP requires Agent Runtime identity configuration")
+		}
+		if credentialKeys == nil {
+			var err error
+			credentialKeys, err = sessioncredential.Load(cfg.GetAgentRuntime().GetCredentialKeysFile())
+			if err != nil {
+				log.Fatal("MCP cursor signing keys are required")
+			}
 		}
 		var access workflow.MCPBindingAccess
 		if mcpCfg.GetPluginUrl() != "" {
@@ -213,7 +221,21 @@ func main() {
 		}
 		identity := workflow.NewMCPIdentity(sessionService, credentialVerifier, agentAuthority, execution)
 		gateway := workflow.NewMCPGateway(identity, catalogApplication, access, sharedclient.MCPUpstream{}, credentialKeys, sharedclient.NewMetadataControlClient(os.Getenv("MEDIA_CONTROL_URL"), internalToken, cfg.GetAgentMetadata().GetGatewayCredential()))
-		cataloghandler.Configure(catalogApplication, mcpprotocol.NewHandler(cataloghandler.ProtocolFactory(identity, gateway)))
+		if mediaCfg := cfg.GetMediaMcp(); mediaCfg.GetEnabled() {
+			d := cfg.GetMcpDelegation()
+			if !d.GetEnabled() || d.GetEdgeJwksUrl() == "" || d.GetEdgeIssuer() == "" || mediaCfg.GetDefinitionId() == "" {
+				log.Fatal("invalid media MCP configuration")
+			}
+			signer, err := mcpdelegation.LoadSigner(d.GetSigningKeyFile(), d.GetIssuer())
+			if err != nil {
+				log.Fatal("invalid MCP delegation signing key")
+			}
+			users := &sharedclient.MCPUserAccess{Verifier: internaljwt.NewVerifier(d.GetEdgeJwksUrl(), d.GetEdgeIssuer(), "media-agent-gateway-mcp", nil), AuthURL: os.Getenv("MEDIA_AUTH_URL"), AuthCredential: os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN"), ControlURL: os.Getenv("MEDIA_CONTROL_URL"), ControlCredential: internalToken}
+			identity.WithUsers(users)
+			cataloghandler.ConfigureDelegationSigner(signer)
+			gateway.WithBusiness(&workflow.MCPBusiness{DefinitionID: mediaCfg.GetDefinitionId(), Access: users, Signer: signer})
+		}
+		cataloghandler.Configure(catalogApplication, mcpprotocol.WithOrigins(mcpprotocol.NewHandler(cataloghandler.ProtocolFactory(identity, gateway)), cfg.GetMediaMcp().GetAllowedOrigins()))
 	}
 
 	taskApplication := taskservice.New(taskStore, taskStore, txRunner, store, control, teamworkStore)

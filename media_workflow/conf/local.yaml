@@ -95,3 +95,9 @@ client:
 job:
   max_retries: 3
   claim_timeout_seconds: 600
+
+mcp_delegation:
+  enabled: ${MEDIA_MCP_ENABLED:-false}
+  issuer: ${MCP_DELEGATION_ISSUER:-}
+  jwks_url: ${MCP_DELEGATION_JWKS_URL:-}
+  service_token: ${MCP_WORKFLOW_SERVICE_TOKEN:-}

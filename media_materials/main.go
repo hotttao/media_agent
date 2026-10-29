@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"media_agent/hertz_infra/authn/internaljwt"
+	"media_agent/hertz_infra/authn/mcpdelegation"
+	"media_agent/hertz_infra/authn/resourceaccess"
 	"media_agent/hertz_infra/config"
 	"media_agent/hertz_infra/serverhertz"
 	"media_agent/media_materials/biz/dal"
@@ -30,6 +32,7 @@ import (
 	vipsvc "media_agent/media_materials/biz/service/virtual_ip"
 	"media_agent/media_materials/biz/shared/auth"
 	"media_agent/media_materials/biz/shared/objectstorage"
+	mcpworkflow "media_agent/media_materials/biz/workflow"
 	uploadworkflow "media_agent/media_materials/biz/workflow/library_object_upload"
 )
 
@@ -153,6 +156,13 @@ func main() {
 			log.Fatal("Agent JWT issuer is required")
 		}
 		authCfg.AgentJWTVerifier = internaljwt.NewVerifier(jwksURL, os.Getenv("AGENT_JWT_ISSUER"), "media-materials-agent", nil)
+	}
+	if delegation := cfg.GetMcpDelegation(); delegation.GetEnabled() {
+		if delegation.GetJwksUrl() == "" || delegation.GetIssuer() == "" || len(delegation.GetServiceToken()) < 32 {
+			log.Fatal("invalid MCP delegation configuration")
+		}
+		admission := mcpworkflow.MCPAdmission{Verifier: internaljwt.NewVerifier(delegation.GetJwksUrl(), delegation.GetIssuer(), mcpdelegation.Materials, nil), ServiceToken: delegation.GetServiceToken(), Facts: resourceaccess.New(mediaAuthURL, os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN"), nil), Workspaces: resourceaccess.WorkspaceClient{BaseURL: os.Getenv("MEDIA_CONTROL_URL"), Credential: os.Getenv("CONTROL_INTERNAL_TOKEN")}}
+		authCfg.MCPAuthenticate = admission.Authenticate
 	}
 	authMw := auth.New(authCfg)
 

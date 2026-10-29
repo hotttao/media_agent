@@ -40,7 +40,7 @@ func SubmitJob(ctx context.Context, c *app.RequestContext) {
 		}
 		command.OrganizationID = caller.OrganizationID
 	}
-	if principal, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+	if principal, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok {
 		if (command.OrganizationID != "" && command.OrganizationID != principal.OrganizationID) ||
 			(command.WorkspaceID != "" && command.WorkspaceID != principal.WorkspaceID) {
 			c.String(consts.StatusForbidden, "workflow execution access denied")
@@ -56,7 +56,13 @@ func SubmitJob(ctx context.Context, c *app.RequestContext) {
 	}
 	j, err := Svc.Submit(ctx, command)
 	if err != nil {
+		if errors.Is(err, jobsvc.ErrSubmitVersionConflict) {
+			c.Header("X-Media-Workflow-Error", "version_conflict")
+			c.String(consts.StatusConflict, "workflow version changed")
+			return
+		}
 		if errors.Is(err, domain.ErrSubmissionConflict) {
+			c.Header("X-Media-Workflow-Error", "idempotency_conflict")
 			c.String(consts.StatusConflict, "submission key conflicts with different parameters")
 			return
 		}
@@ -435,7 +441,7 @@ func ownsJob(ctx context.Context, jobID string) bool {
 }
 
 func delegatedOrganization(ctx context.Context) string {
-	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+	if p, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok {
 		return p.OrganizationID
 	}
 	if caller := auth.CallerFromContext(ctx); caller != nil {
@@ -445,7 +451,7 @@ func delegatedOrganization(ctx context.Context) string {
 }
 
 func delegatedWorkspace(ctx context.Context) string {
-	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+	if p, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok {
 		return p.WorkspaceID
 	}
 	return ""

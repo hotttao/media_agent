@@ -16,6 +16,8 @@ import (
 var ErrMCPAccess = errors.New("fixed MCP binding access unavailable")
 
 type MCPScope struct {
+	Kind, ActorID, CredentialID                                                            string
+	ExpiresAt                                                                              time.Time
 	SessionID, UserID, WorkspaceID, AgentConfigID, AgentType, MetadataTargetContextVersion string
 	OrganizationID                                                                         string
 	ContextVersion                                                                         int64
@@ -31,6 +33,7 @@ type MCPGrant struct {
 type MCPAccess struct {
 	SnapshotVersion, AuthorizationRevision string
 	Grants                                 []MCPGrant
+	RestrictedDefinitionIDs                []string
 }
 type PluginMCPAccess struct{ BaseURL, Credential string }
 
@@ -51,7 +54,10 @@ func (c PluginMCPAccess) Resolve(ctx context.Context, scope MCPScope) (MCPAccess
 	if v.WorkspaceId != scope.WorkspaceID || v.AgentConfigId != scope.AgentConfigID || v.ContextVersion != scope.ContextVersion || v.SnapshotVersion == "" || v.AuthorizationRevision == "" || len(v.Grants) > 128 {
 		return MCPAccess{}, ErrMCPAccess
 	}
-	result := MCPAccess{SnapshotVersion: v.SnapshotVersion, AuthorizationRevision: v.AuthorizationRevision}
+	if len(v.RestrictedDefinitionIds) > 128 {
+		return MCPAccess{}, ErrMCPAccess
+	}
+	result := MCPAccess{SnapshotVersion: v.SnapshotVersion, AuthorizationRevision: v.AuthorizationRevision, RestrictedDefinitionIDs: v.RestrictedDefinitionIds}
 	for _, grant := range v.Grants {
 		if grant == nil || grant.DefinitionVersion < 1 || grant.DefinitionId == "platform" {
 			return MCPAccess{}, ErrMCPAccess

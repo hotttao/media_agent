@@ -64,7 +64,7 @@ func NewControlClient(baseURL, serviceToken string) *ControlClient {
 }
 
 func (c *ControlClient) GetWorkspaceForUser(ctx context.Context, workspaceID, userID string) (*WorkspaceContext, error) {
-	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok && (p.UserID != userID || p.WorkspaceID != workspaceID) {
+	if p, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok && (p.UserID != userID || (p.WorkspaceID != "" && p.WorkspaceID != workspaceID)) {
 		return nil, ErrWorkspaceDelegationDenied
 	}
 	if c.baseURL == "" || c.token == "" || workspaceID == "" || userID == "" {
@@ -94,14 +94,14 @@ func (c *ControlClient) GetWorkspaceForUser(ctx context.Context, workspaceID, us
 	if result.ID != workspaceID || result.OrganizationID == "" || result.TeamID == "" {
 		return nil, fmt.Errorf("workspace context is incomplete")
 	}
-	if p, ok := internaljwt.AgentPrincipalFromContext(ctx); ok && p.OrganizationID != result.OrganizationID {
+	if p, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok && p.OrganizationID != result.OrganizationID {
 		return nil, ErrWorkspaceDelegationDenied
 	}
 	return &result, nil
 }
 
 func (c *ControlClient) CanUseWorkflow(ctx context.Context, workspaceID, userID string) (bool, error) {
-	if _, ok := internaljwt.AgentPrincipalFromContext(ctx); ok {
+	if _, ok := internaljwt.BusinessPrincipalFromContext(ctx); ok {
 		if _, err := c.GetWorkspaceForUser(ctx, workspaceID, userID); err != nil {
 			return false, err
 		}
@@ -132,4 +132,25 @@ func (c *ControlClient) CanUseWorkflow(ctx context.Context, workspaceID, userID 
 		return false, fmt.Errorf("decode workspace workflow access: %w", err)
 	}
 	return result.Allowed, nil
+}
+
+func (c *ControlClient) ListWorkflowWorkspaceIDs(ctx context.Context, user, organization string) ([]string, error) {
+	workspaces, err := c.ListResourceWorkspaces(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	ids := []string{}
+	for _, workspace := range workspaces {
+		if workspace.OrganizationID != organization {
+			continue
+		}
+		allowed, err := c.CanUseWorkflow(ctx, workspace.ID, user)
+		if err != nil {
+			return nil, err
+		}
+		if allowed {
+			ids = append(ids, workspace.ID)
+		}
+	}
+	return ids, nil
 }

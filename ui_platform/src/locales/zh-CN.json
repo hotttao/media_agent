@@ -276,5 +276,28 @@
 		"modelHint": "填写服务提供方的模型 ID",
 		"defaultEndpoint": "提供方默认地址（可选）",
 		"description": "填写该服务的 API Key。每个会话固定模型设置，修改后用于新会话。"
+	},
+	"apiTokens": {
+		"title": "API Token",
+		"description": "为 Agent 创建 MCP 访问凭证。Token 只开放所选入口，具体工具和资源仍按你的当前业务权限授权。",
+		"name": "名称",
+		"expires": "有效期至",
+		"scopes": "允许访问",
+		"mcp": "MCP 工具（mcp.access）",
+		"api": "业务 API（api.access）",
+		"create": "创建 Token",
+		"newAttempt": "清空并新建",
+		"once": "请保存此 Token，关闭后无法再次查看。",
+		"copy": "复制 Token",
+		"close": "关闭明文",
+		"copyFailed": "复制失败，请手动复制。",
+		"refresh": "刷新列表",
+		"loading": "正在加载 Token…",
+		"empty": "尚无 API Token。",
+		"revoke": "撤销",
+		"confirmRevoke": "撤销这个 Token？使用它的 Agent 将无法继续访问。",
+		"failed": "请求失败，请刷新后重试。",
+		"unknown": "未收到完整签发回执。请查看下方列表，撤销无法取得明文的 Token 后再新建；不会自动重试签发。",
+		"futureExpiry": "请选择未来的有效期。"
 	}
 }

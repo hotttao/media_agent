@@ -13,6 +13,7 @@ var ErrMCPForbidden = errors.New("MCP scope forbidden")
 var ErrMCPUnavailable = errors.New("MCP scope unavailable")
 
 type MCPCredentials struct {
+	UserAssertion, OrganizationID, WorkspaceID                                     string
 	SessionToken, AgentToken, InstanceCredential, ReplicaID, IncarnationID, TurnID string
 	ExecutionEpoch                                                                 int64
 }
@@ -22,12 +23,35 @@ type MCPIdentity struct {
 	credentials AgentCredentialVerifier
 	authority   AgentTokenAuthority
 	execution   *ExecutionContext
+	users       MCPUserIdentity
 }
 
 func NewMCPIdentity(s *sessions.Service, c AgentCredentialVerifier, a AgentTokenAuthority, e *ExecutionContext) *MCPIdentity {
-	return &MCPIdentity{s, c, a, e}
+	return &MCPIdentity{sessions: s, credentials: c, authority: a, execution: e}
 }
+
+type MCPUserIdentity interface {
+	Authenticate(context.Context, string, string, string) (MCPContext, error)
+}
+
+func (w *MCPIdentity) WithUsers(users MCPUserIdentity) *MCPIdentity { w.users = users; return w }
 func (w *MCPIdentity) Authorize(ctx context.Context, c MCPCredentials) (MCPContext, error) {
+	if c.UserAssertion != "" {
+		if w == nil || w.users == nil {
+			return MCPContext{}, ErrMCPUnavailable
+		}
+		if c.AgentToken != "" || c.SessionToken != "" || c.InstanceCredential != "" || c.ReplicaID != "" || c.IncarnationID != "" || c.TurnID != "" || c.ExecutionEpoch != 0 {
+			return MCPContext{}, ErrMCPForbidden
+		}
+		result, err := w.users.Authenticate(ctx, c.UserAssertion, c.OrganizationID, c.WorkspaceID)
+		if errors.Is(err, client.ErrMCPUserDenied) {
+			return MCPContext{}, ErrMCPForbidden
+		}
+		if err != nil {
+			return MCPContext{}, ErrMCPUnavailable
+		}
+		return result, nil
+	}
 	if w == nil || w.sessions == nil || w.credentials == nil || w.authority == nil {
 		return MCPContext{}, ErrMCPUnavailable
 	}
@@ -79,5 +103,5 @@ func (w *MCPIdentity) Authorize(ctx context.Context, c MCPCredentials) (MCPConte
 	if target == "" {
 		target = fixed.MetadataTargetContextVersion
 	}
-	return MCPContext{OrganizationID: facts.OrganizationID, SessionID: s.ID, UserID: s.UserID, WorkspaceID: s.WorkspaceID, AgentConfigID: cfg, AgentType: s.AgentType, MetadataTargetContextVersion: target, ContextVersion: s.ContextVersion}, nil
+	return MCPContext{Kind: "managed_agent", ActorID: p.ActorID, CredentialID: p.CredentialID, OrganizationID: facts.OrganizationID, SessionID: s.ID, UserID: s.UserID, WorkspaceID: s.WorkspaceID, AgentConfigID: cfg, AgentType: s.AgentType, MetadataTargetContextVersion: target, ContextVersion: s.ContextVersion}, nil
 }

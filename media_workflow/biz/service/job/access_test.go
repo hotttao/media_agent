@@ -185,3 +185,30 @@ func TestGetForUserAuthorizesBeforeConductorReconciliation(t *testing.T) {
 		}
 	}
 }
+
+func TestUserDelegatedListFiltersWorkspacesBeforeRepositoryPagination(t *testing.T) {
+	ctx := internaljwt.ContextWithBusinessPrincipal(context.Background(), internaljwt.BusinessPrincipal{UserID: "owner", ActorID: "User:owner", OrganizationID: "org", CredentialID: "credential"})
+	svc, base, _ := newTestService(false)
+	repo := &accessListRepo{mockJobRepo: base}
+	svc.jobRepo = repo
+	svc.resumeAccess = &submitAuthority{allowed: true}
+	svc.ConfigureListWorkspaces(func(_ context.Context, user, org string) ([]string, error) {
+		if user != "owner" || org != "org" {
+			t.Fatal("untrusted identity")
+		}
+		return []string{"allowed"}, nil
+	})
+	_, _, err := svc.List(ctx, domain.ListQuery{WorkspaceIDs: []string{"forged"}, Limit: 20, Offset: 20})
+	if err != nil || len(repo.query.WorkspaceIDs) != 1 || repo.query.WorkspaceIDs[0] != "allowed" || repo.query.Offset != 20 {
+		t.Fatalf("unscoped query: %+v %v", repo.query, err)
+	}
+	svc.ConfigureListWorkspaces(func(context.Context, string, string) ([]string, error) { return nil, nil })
+	rows, total, err := svc.List(ctx, domain.ListQuery{})
+	if err != nil || len(rows) != 0 || total != 0 || repo.calls != 1 {
+		t.Fatal("empty authorized scope reached repository")
+	}
+	svc.ConfigureListWorkspaces(func(context.Context, string, string) ([]string, error) { return nil, errors.New("offline") })
+	if _, _, err = svc.List(ctx, domain.ListQuery{}); !errors.Is(err, ErrSubmitAuthorityUnavailable) || repo.calls != 1 {
+		t.Fatal("authority outage failed open")
+	}
+}

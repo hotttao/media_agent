@@ -46,6 +46,14 @@ func ProtocolFactory(identity *workflow.MCPIdentity, flow *workflow.MCPGateway) 
 		}
 		epoch, _ := strconv.ParseInt(h.Get("X-Agent-Execution-Epoch"), 10, 64)
 		c := workflow.MCPCredentials{AgentToken: token, SessionToken: h.Get("X-Session-Token"), InstanceCredential: h.Get("X-Agent-Instance-Credential"), ReplicaID: h.Get("X-Agent-Replica-ID"), IncarnationID: h.Get("X-Agent-Incarnation-ID"), TurnID: h.Get("X-Agent-Turn-ID"), ExecutionEpoch: epoch}
+		// User credentials are selected only when no managed-session credential is present.
+		// The User verifier accepts only the dedicated Edge issuer/audience.
+		if c.SessionToken == "" {
+			c.UserAssertion = token
+			c.AgentToken = ""
+			c.OrganizationID = h.Get("X-Media-Organization-ID")
+			c.WorkspaceID = h.Get("X-Media-Workspace-ID")
+		}
 		if _, e := identity.Authorize(ctx, c); e != nil {
 			status := 503
 			if errors.Is(e, workflow.ErrMCPForbidden) {

@@ -21,3 +21,7 @@ Binding 变化只构建候选快照；Control 收到用户明确选择后才生�
 ## 2026-10-15 · 固定绑定引用实现
 
 候选快照以 Binding 不可变版本集合表达，Control Release 保存引用；不新增自动快照构建器或 Plugin 配置缓存。Binding CAS/history/加密凭据在同一事务保存，只有用户确认后的 Control Release 发布元数据通知。运行每次核对固定 Release 及当前准入。
+
+## 2026-10-29 · 显式来源限制
+
+内部解析响应增加 restricted_definition_ids，以便 Gateway 将自动业务来源与固定配置的显式停用/工具限制取交集；不新增 User Binding API。

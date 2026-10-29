@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/cloudwego/hertz/pkg/app"
 	dto "media_agent/hertz_gen/model/media_agent_gateway/mcp_catalog"
+	"media_agent/hertz_infra/authn/mcpdelegation"
 	d "media_agent/media_agent_gateway/biz/domain/mcp_catalog"
 	"media_agent/media_agent_gateway/biz/middleware"
 	service "media_agent/media_agent_gateway/biz/service/mcp_catalog"
@@ -117,6 +118,10 @@ func ListDefinitions(ctx context.Context, c *app.RequestContext) {
 	c.JSON(200, out)
 }
 func HandleMCP(ctx context.Context, c *app.RequestContext) {
+	if len(c.Request.Body()) > 1<<20 && len(c.Request.Header.Peek("X-Session-Token")) == 0 {
+		c.JSON(413, map[string]string{"error": "MCP request too large"})
+		return
+	}
 	if protocolHandler == nil {
 		failure(c, errors.New("MCP unavailable"))
 		return
@@ -186,4 +191,24 @@ func ListInternalDefinitions(ctx context.Context, c *app.RequestContext) {
 		out.NextAfterId = rows[len(rows)-1].ID
 	}
 	c.JSON(200, out)
+}
+
+// GetMCPJWKS .
+// @router /.well-known/mcp-jwks.json [GET]
+var delegationSigner *mcpdelegation.Signer
+
+func ConfigureDelegationSigner(signer *mcpdelegation.Signer) { delegationSigner = signer }
+
+func GetMCPJWKS(ctx context.Context, c *app.RequestContext) {
+	c.Header("Cache-Control", "no-store")
+	if delegationSigner == nil {
+		c.JSON(503, map[string]string{"error": "MCP signing key unavailable"})
+		return
+	}
+	public := delegationSigner.PublicJWKS()
+	response := &dto.MCPJWKS{}
+	for _, key := range public.Keys {
+		response.Keys = append(response.Keys, &dto.MCPJWK{Kty: key.Kty, Use: key.Use, Alg: key.Alg, Kid: key.Kid, N: key.N, E: key.E})
+	}
+	c.JSON(200, response)
 }

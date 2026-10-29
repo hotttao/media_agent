@@ -74,3 +74,13 @@ func _getinternaldefinitionMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func __well_knownMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getmcpjwksMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

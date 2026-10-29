@@ -19,6 +19,10 @@ services:
       INTERNAL_JWT_ISSUER: http://oathkeeper:4456/
       AGENT_JWKS_URL: http://host.docker.internal:8006/internal/.well-known/agent-jwks.json
       AGENT_JWT_ISSUER: ${AGENT_JWT_ISSUER:-urn:media:agent-gateway}
+      MEDIA_MCP_ENABLED: ${MEDIA_MCP_ENABLED:-false}
+      MCP_DELEGATION_ISSUER: ${MCP_DELEGATION_ISSUER:-}
+      MCP_DELEGATION_JWKS_URL: ${MCP_DELEGATION_JWKS_URL:-http://host.docker.internal:8006/.well-known/mcp-jwks.json}
+      MCP_WORKFLOW_SERVICE_TOKEN: ${MCP_WORKFLOW_SERVICE_TOKEN:-}
       ORY_KRATOS_PUBLIC_URL: http://kratos:4433
       MEDIA_AUTH_INTERNAL_TOKEN: ${MEDIA_AUTH_INTERNAL_TOKEN:-dev-media-auth-internal-token}
       MEDIA_MATERIALS_INTERNAL_TOKEN: ${MEDIA_MATERIALS_INTERNAL_TOKEN:-dev-media-materials-internal-token}

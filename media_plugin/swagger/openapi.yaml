@@ -355,6 +355,10 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/Grant'
+                restricted_definition_ids:
+                    type: array
+                    items:
+                        type: string
         Binding:
             type: object
             properties:

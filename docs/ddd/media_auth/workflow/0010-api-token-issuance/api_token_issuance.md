@@ -118,3 +118,7 @@ T1 未提交不调用 Talos。T2 失败不返回 Secret。T2 成功但 HTTP 交�
 ## 结果事件
 
 无；后台从聚合的持久状态恢复，不新增 Secret Outbox。
+
+## MCP 入口 scope
+
+User 可显式申请 `mcp.access`，与 `api.access` 独立；现有 Token 的 scopes 不自动扩张。Agent/Personal Worker/Service Actor 不能申请该 User MCP scope。Ory 每次 introspection 后签发独立 audience `media-agent-gateway-mcp` 的短期断言，Gateway 仍查询当前企业/Workspace 模块权限。Token 创建、明文一次性交付、失败清理与撤销沿用上述流程，不新增 Secret 存储。

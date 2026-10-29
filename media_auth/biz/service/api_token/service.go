@@ -109,6 +109,7 @@ var (
 
 var allowedScopes = map[string]bool{
 	"api.access":                true,
+	"mcp.access":                true,
 	"agent.gateway":             true,
 	"workflow.worker.poll":      true,
 	"workflow.worker.heartbeat": true,
@@ -148,6 +149,11 @@ func (s *Service) Create(ctx context.Context, cmd CreateCommand) (CreateResult, 
 	scopes, err := normalizeScopes(cmd.Scopes)
 	if err != nil {
 		return CreateResult{}, err
+	}
+	for _, scope := range scopes {
+		if scope == "mcp.access" && cmd.ActorType != domain.ActorUser {
+			return CreateResult{}, ErrForbidden
+		}
 	}
 	if cmd.OrganizationID != "" && (s.membership == nil || !s.membership(ctx, cmd.OrganizationID, cmd.SubjectUserID)) {
 		return CreateResult{}, ErrForbidden

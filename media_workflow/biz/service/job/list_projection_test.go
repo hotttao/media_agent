@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -104,7 +105,7 @@ func TestListProjectionOverlapsIndependentReadsWithoutReorderingOrHidingErrors(t
 	case <-time.After(5 * time.Second):
 		t.Fatal("list did not settle after reads were released")
 	}
-	if err != nil || total != 91 || len(items) != 9 || repo.query != query {
+	if err != nil || total != 91 || len(items) != 9 || !reflect.DeepEqual(repo.query, query) {
 		t.Fatal("list changed authority filters, pagination or availability", err)
 	}
 	for index, item := range items {

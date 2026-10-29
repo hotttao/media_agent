@@ -82,8 +82,11 @@ func (c *Client) Resolve(ctx context.Context, user, organization string) (Facts,
 	return facts, nil
 }
 func (c *Client) Team(ctx context.Context, user, teamID string) (Team, error) {
+	return c.TeamPermission(ctx, user, teamID, "view")
+}
+func (c *Client) TeamPermission(ctx context.Context, user, teamID, permission string) (Team, error) {
 	var result Team
-	err := c.post(ctx, "/internal/team-authorization/check", map[string]string{"user_id": user, "team_id": teamID, "permission": "view"}, &result)
+	err := c.post(ctx, "/internal/team-authorization/check", map[string]string{"user_id": user, "team_id": teamID, "permission": permission}, &result)
 	if err == nil && result.TeamID != teamID {
 		return Team{}, fmt.Errorf("authorization team mismatch")
 	}
