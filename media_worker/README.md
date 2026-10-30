@@ -170,7 +170,7 @@ GPT 实现位于 `biz/domain/gpt`、`biz/workflow/gpt_generate`、`biz/client/gp
 
 ```bash
 # 安装固定版本 image-use；校验上游源码 SHA-256，不安装 Chrome 插件。
-python3 tools/install_image_use.py
+python3 ../deploy/image-use/install.py
 # chrome-use CLI 与 Chrome 扩展须先按其官方安装说明完成连接。
 python3 tools/check_gpt_browser.py --image-use /absolute/path/to/pinned/image-use --open
 ```
@@ -201,3 +201,5 @@ GPT Workflow 检查点位于凭证命名空间的 `gpt-checkpoints`，bridge 技
 同一个公网 `/mcp` 现在可按模块授权聚合两个来源：`media-workflow` 的 13 个批量工具，以及 `media-materials` 的 6 个只读批量工具：`virtual_ips_list/get`、`materials_list/get`、`generated_assets_list/get`。它们分别调用原 Materials 列表/详情 API，保持租户、对象 ACL 和分页语义。素材来源不依赖 Workflow 模块使用权限，且不会获得 Workflow 目标凭据。原 CLI MCP 配置无需改 URL；已打开的会话需要刷新/重连工具目录。
 
 多图执行请同步更新 Studio 配套代码。Worker 未设置能力 allowlist 时注册两个 Doubao 能力；若设置了 MEDIA_WORKER_CAPABILITIES，需显式包含 doubao.i2v.multi_image_prompt@1。不能只更新 MCP 白名单而继续运行旧的单图 Studio 接口。
+
+外部工具安装/更新见 [deploy](../deploy/README.md)：只维护 Studio、Chrome/GPT 工具和 Penpot 的新增部署元数据；已有服务继续使用原 Compose。工具安装在 `/home/tao/deploy`，新应用数据在 `/data`，不会自动迁移现有 Worker 状态。
