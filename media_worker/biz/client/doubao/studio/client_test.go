@@ -162,3 +162,25 @@ func TestAdmissionRefusesBusyProviderBeforeCheckingQuota(t *testing.T) {
 		t.Fatal("busy provider admitted")
 	}
 }
+
+func TestSubmitPreservesAllOrderedImagePaths(t *testing.T) {
+	key := strings.Repeat("b", 64)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Images []string `json:"images"`
+		}
+		if json.NewDecoder(r.Body).Decode(&body) != nil || len(body.Images) != 2 || body.Images[0] != "/first.png" || body.Images[1] != "/second.png" {
+			t.Error("ordered input images lost")
+		}
+		fmt.Fprintf(w, `{"ok":true,"reference":"%s"}`, key)
+	}))
+	defer server.Close()
+	c, err := NewClient(server.URL, "token", "account", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Submit(context.Background(), doubao.Request{Key: key, Kind: doubao.Video, Prompt: "prompt", Images: []doubao.LocalImage{{Path: "/first.png"}, {Path: "/second.png"}}, Model: "seedance-2.0-fast", DurationSeconds: 5, AspectRatio: "9:16"})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

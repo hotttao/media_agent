@@ -10,9 +10,34 @@ import (
 var ErrInvalid = errors.New("invalid media tool parameters")
 var Names = []string{"templates_list", "templates_get", "templates_create", "templates_publish", "workflows_list", "workflows_get", "workflows_create", "workflows_validate", "workflows_publish", "jobs_list", "jobs_get", "jobs_submit", "capabilities_list"}
 
+var MaterialsNames = []string{"virtual_ips_list", "virtual_ips_get", "materials_list", "materials_get", "generated_assets_list", "generated_assets_get"}
+
+func MaterialsTool(name string) bool {
+	for _, n := range MaterialsNames {
+		if name == n {
+			return true
+		}
+	}
+	return false
+}
+func SourceNames(source string) []string {
+	if source == "media-materials" {
+		return MaterialsNames
+	}
+	return Names
+}
+func InSource(source, name string) bool {
+	for _, n := range SourceNames(source) {
+		if name == n {
+			return true
+		}
+	}
+	return false
+}
+func AllNames() []string { return append(append([]string{}, Names...), MaterialsNames...) }
 func Known(name string) bool {
-	for _, n := range Names {
-		if n == name {
+	for _, n := range AllNames() {
+		if name == n {
 			return true
 		}
 	}
@@ -23,7 +48,7 @@ func ReadOnly(name string) bool {
 }
 func NeedsWorkspace(name string) bool { return name == "workflows_create" || name == "jobs_submit" }
 func Supported(key string, version int) bool {
-	return version == 1 && (key == "doubao.i2v.first_frame_prompt" || key == "gpt.t2i.text_prompt" || key == "gpt.i2i.multi_image_prompt")
+	return version == 1 && (key == "doubao.i2v.first_frame_prompt" || key == "doubao.i2v.multi_image_prompt" || key == "gpt.t2i.text_prompt" || key == "gpt.i2i.multi_image_prompt")
 }
 func Validate(name string, p contract.Params) error {
 	if !Known(name) {

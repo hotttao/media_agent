@@ -92,3 +92,7 @@ Finalize 内部请求 `UpsertGeneratedAssetReq.organization_id = 16` 从已经�
 ## 2026-10-26 结构更正
 
 用户明确移除 execution Domain：公共技术执行协议现位于 `biz/shared/worker_runtime`，Provider 检查点分别归各自 Domain。原 `workflow/generate` 正名为 `workflow/doubao_generate`，仓储正名为 `dal/repo/doubao_checkpoints`；物理检查点目录与格式保持兼容。GPT 成图独立实现，不能通过 Recipe 合入豆包流程。旧 P1 review 保留其当时审查记录，当前结构见 [运行契约](../ddd/media_worker/runtime.md)。
+
+## 多图参考视频扩展（2026-10-29，用户授权实现）
+
+真实 doubao_studio Worker 增加已有能力 doubao.i2v.multi_image_prompt@1，复用同一 Doubao Workflow/检查点和 Studio Worker 协议。首帧能力仍恰好一图；多图能力遵循已有注册合同，至少一图，保持输入顺序。逐图下载与验证，每个位置使用不同本地下载标识，避免覆盖；所有图片写入原 Intent 并参与摘要。恢复优先查询原 Key，严禁因响应丢失重新生成。Studio 逐图验证真实路径位于专用素材根目录、普通文件和大小限制，再复用正式附件上传与提交链。MCP 开放新能力，不增加工具。旧检查点不迁移、不改变原 Key。测试通过不等于网页真实多图生成已验收，须另行记录实际结果。

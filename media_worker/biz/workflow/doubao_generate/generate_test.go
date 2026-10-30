@@ -133,13 +133,17 @@ func (g *gatewayFake) UploadFile(_ context.Context, _ string, t worker_runtime.T
 type filesFake struct {
 	err       error
 	downloads int
+	keys      []string
+	urls      []string
 	events    *[]string
 }
 
-func (f *filesFake) Fetch(context.Context, string, string) (worker_runtime.Artifact, error) {
+func (f *filesFake) Fetch(_ context.Context, key, url string) (worker_runtime.Artifact, error) {
 	f.downloads++
+	f.keys = append(f.keys, key)
+	f.urls = append(f.urls, url)
 	*f.events = append(*f.events, "input")
-	return worker_runtime.Artifact{ID: "image", LocalPath: "/private/input.png", ChecksumSHA256: strings.Repeat("b", 64), SizeBytes: 12}, nil
+	return worker_runtime.Artifact{ID: "image", LocalPath: "/private/" + key + ".png", ChecksumSHA256: strings.Repeat("b", 64), SizeBytes: 12}, nil
 }
 func (f *filesFake) Verify(context.Context, worker_runtime.Artifact) error { return f.err }
 func setup(t *testing.T) (*Workflow, *checkpointFake, *generatorFake, *gatewayFake, *filesFake, *[]string, worker_runtime.Task) {
@@ -249,5 +253,66 @@ func TestChangedManifestFileCannotUpload(t *testing.T) {
 	files.err = errors.New("changed")
 	if _, err := flow.ExecuteContext(context.Background(), task); !errors.Is(err, worker_runtime.ErrExecutionPending) || gen.submits != 0 || gw.uploads != 0 {
 		t.Fatal("changed input submitted")
+	}
+}
+
+func TestMultiImageOrderAndRecoveryAfterLostSubmission(t *testing.T) {
+	w, store, gen, _, files, _, task := setup(t)
+	task.CapabilityKey = MultiImageCapabilityKey
+	task.Input["images"] = []any{"https://storage/first", "https://storage/second"}
+	gen.submitLost = true
+	if _, err := w.ExecuteContext(context.Background(), task); !errors.Is(err, worker_runtime.ErrExecutionPending) {
+		t.Fatal(err)
+	}
+	if files.downloads != 2 || files.keys[0] == files.keys[1] || !reflect.DeepEqual(files.urls, []string{"https://storage/first", "https://storage/second"}) {
+		t.Fatal("image input order or isolation lost", files)
+	}
+	if len(store.data.Intent.Images) != 2 || store.data.Intent.Images[0].LocalPath == store.data.Intent.Images[1].LocalPath {
+		t.Fatal("checkpoint image collision")
+	}
+	if len(gen.requests) != 1 || len(gen.requests[0].Images) != 2 || gen.requests[0].Images[1].Path != store.data.Intent.Images[1].LocalPath {
+		t.Fatal("submission lost image order")
+	}
+	if _, err := w.ExecuteContext(context.Background(), task); err != nil {
+		t.Fatal(err)
+	}
+	if gen.submits != 1 || files.downloads != 2 {
+		t.Fatal("recovery repeated generation or download")
+	}
+}
+func TestImageShapeRejectsBeforeDownload(t *testing.T) {
+	for _, tc := range []struct {
+		cap    string
+		images []string
+	}{{CapabilityKey, []string{"a", "b"}}, {MultiImageCapabilityKey, nil}, {MultiImageCapabilityKey, []string{"a", ""}}} {
+		w, _, gen, _, files, _, task := setup(t)
+		task.CapabilityKey = tc.cap
+		task.Input["images"] = tc.images
+		if _, err := w.ExecuteContext(context.Background(), task); err == nil {
+			t.Fatal("invalid input accepted")
+		}
+		if files.downloads != 0 || gen.submits != 0 {
+			t.Fatal("invalid input caused side effect")
+		}
+	}
+}
+
+func TestMultiImageSupportsThreeOrderedReferences(t *testing.T) {
+	w, store, gen, _, files, _, task := setup(t)
+	task.CapabilityKey = MultiImageCapabilityKey
+	urls := []string{"https://storage/one", "https://storage/two", "https://storage/three"}
+	task.Input["images"] = urls
+	if _, err := w.ExecuteContext(context.Background(), task); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(files.urls, urls) || len(store.data.Intent.Images) != 3 || len(gen.requests) != 1 || len(gen.requests[0].Images) != 3 {
+		t.Fatal("multi-image incorrectly constrained to two")
+	}
+	keys := map[string]bool{}
+	for _, key := range files.keys {
+		if keys[key] {
+			t.Fatal("image path collision")
+		}
+		keys[key] = true
 	}
 }

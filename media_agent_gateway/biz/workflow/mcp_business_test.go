@@ -164,3 +164,44 @@ func TestMCPRemoteRejectionsRemainDefinite(t *testing.T) {
 		})
 	}
 }
+
+type moduleMatrixAccess map[string]bool
+
+func (m moduleMatrixAccess) ModuleAllowed(_ context.Context, _ MCPContext, module string) (bool, error) {
+	return m[module], nil
+}
+func TestMaterialsSourceDoesNotRequireWorkflowAndRechecksRevocation(t *testing.T) {
+	f, repo, _, identity := testMCPFlow(t, "http://unused.test")
+	identity.scope.Kind = "user"
+	identity.scope.ActorID = "User:owner"
+	identity.scope.OrganizationID = "org"
+	identity.scope.CredentialID = "credential"
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := mcpdelegation.NewSigner(key, "issuer", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	access := moduleMatrixAccess{"materials": true, "workflow": false}
+	f.WithBusiness(&MCPBusiness{DefinitionID: "media-workflow", MaterialsDefinitionID: "media-materials", Access: access, Signer: signer})
+	for _, id := range []string{"media-workflow", "media-materials"} {
+		repo.Save(context.Background(), &d.Definition{ID: id, ServiceName: id, Endpoint: "http://worker.test/mcp", Transport: "streamable_http", AuthenticationType: "session_context", Status: "enabled", Version: 1}, 0)
+	}
+	sources, _, err := f.sources(context.Background(), identity.scope)
+	if err != nil || len(sources) != 1 || sources[0].definitionID != "media-materials" {
+		t.Fatalf("materials-only access failed: %v %v", sources, err)
+	}
+	headers, err := sources[0].backend.RequestHeaders(context.Background(), "tools/call", json.RawMessage(`{"name":"virtual_ips_list","arguments":{"items":[{"item_id":"list","params":{}}]}}`))
+	if err != nil || headers[mcpdelegation.MaterialsHeader] == "" || headers[mcpdelegation.WorkflowHeader] != "" {
+		t.Fatal("materials source obtained wrong target credentials", err)
+	}
+	access["materials"] = false
+	upstream := &businessUpstreamProbe{}
+	f.upstream = upstream
+	_, _, err = f.Call(context.Background(), MCPCredentials{}, "tools/call", []byte(`{"name":"media-materials__virtual_ips_list","arguments":{"items":[]}}`))
+	if !errors.Is(err, ErrMCPForbidden) || upstream.opens.Load() != 0 {
+		t.Fatal("revoked source connected or accepted stale tool", err)
+	}
+}

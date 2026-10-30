@@ -146,10 +146,17 @@ func (c *Client) AccountReady(ctx context.Context) error {
 	return ErrControl
 }
 func (c *Client) Submit(ctx context.Context, r doubao.Request) (doubao.Reference, error) {
-	if !validRef(r.Key) || r.Kind != doubao.Video || len(r.Images) != 1 || r.Prompt == "" || r.Model == "" || r.DurationSeconds < 4 || r.DurationSeconds > 15 || r.AspectRatio == "" {
+	if !validRef(r.Key) || r.Kind != doubao.Video || len(r.Images) == 0 || r.Prompt == "" || r.Model == "" || r.DurationSeconds < 4 || r.DurationSeconds > 15 || r.AspectRatio == "" {
 		return "", ErrControl
 	}
-	body := map[string]any{"prompt": r.Prompt, "images": []string{r.Images[0].Path}, "model": r.Model, "duration": strconv.Itoa(r.DurationSeconds) + "s", "aspectRatio": r.AspectRatio, "accountId": c.account}
+	images := make([]string, 0, len(r.Images))
+	for _, image := range r.Images {
+		if strings.TrimSpace(image.Path) == "" {
+			return "", ErrControl
+		}
+		images = append(images, image.Path)
+	}
+	body := map[string]any{"prompt": r.Prompt, "images": images, "model": r.Model, "duration": strconv.Itoa(r.DurationSeconds) + "s", "aspectRatio": r.AspectRatio, "accountId": c.account}
 	var out generationDTO
 	if _, err := c.json(ctx, "PUT", path(r.Key), body, &out); err != nil || !out.OK || out.Reference != r.Key {
 		return "", ErrControl

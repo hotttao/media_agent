@@ -1,6 +1,9 @@
 package mcp
 
-import "strings"
+import (
+	policy "media_agent/media_worker/biz/policy/media_management"
+	"strings"
+)
 
 type schema = map[string]any
 
@@ -14,6 +17,28 @@ func array(items schema) schema { return schema{"type": "array", "items": items}
 func paramsSchema(name string) schema {
 	p := schema{}
 	required := []string{}
+	if policy.MaterialsTool(name) {
+		if strings.HasSuffix(name, "_get") {
+			return object(schema{"id": nonempty()}, "id")
+		}
+		properties := schema{"scope": text(), "page": schema{"type": "integer", "minimum": 1, "maximum": 2147483647}, "page_size": schema{"type": "integer", "minimum": 1, "maximum": 100}}
+		switch name {
+		case "virtual_ips_list":
+			for _, key := range []string{"name", "status", "visibility"} {
+				properties[key] = text()
+			}
+		case "materials_list":
+			properties["asset_kind"] = text()
+			properties["visibility"] = text()
+			properties["only_mine"] = schema{"type": "boolean"}
+		case "generated_assets_list":
+			for _, key := range []string{"asset_kind", "job_id", "source_virtual_ip_id", "source_product_id"} {
+				properties[key] = text()
+			}
+		}
+		return object(properties)
+	}
+
 	if strings.HasSuffix(name, "_list") {
 		p["page"] = schema{"type": "integer", "minimum": 1, "maximum": 2147483647}
 		p["page_size"] = schema{"type": "integer", "minimum": 1, "maximum": 100}

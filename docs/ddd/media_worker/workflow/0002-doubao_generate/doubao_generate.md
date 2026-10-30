@@ -1,17 +1,17 @@
 ---
 name: doubao_generate
-description: 按稳定生成意图恢复首帧视频并交付确定产物
+description: 按稳定生成意图恢复首帧/多图参考视频并交付确定产物
 participants: [worker_runtime, doubao, WorkerGateway, studio]
 domains: [doubao]
 ---
 
 ## 一句话说明
 
-豆包独立 Executor 通过公共运行契约调用网关与 Studio：在专用实例容量内执行首帧视频，所有不确定副作用停留同一 Attempt。
+豆包独立 Executor 通过公共运行契约调用网关与 Studio：在专用实例容量内执行首帧/多图参考视频，所有不确定副作用停留同一 Attempt。
 
 ## 触发与结果
 
-仅 doubao.i2v.first_frame_prompt@1，prompt + 恰好一张图片。成功产生 VIDEO object_path 候选；人工、网络和不确定提交保留检查点，取消不提交失败以免触发新 Attempt。
+支持 doubao.i2v.first_frame_prompt@1（恰好一图）及 doubao.i2v.multi_image_prompt@1（至少一图），均使用 prompt + 有序图片列表。成功产生 VIDEO object_path 候选；人工、网络和不确定提交保留检查点，取消不提交失败以免触发新 Attempt。
 
 ## 执行时间线
 
@@ -28,7 +28,7 @@ sequenceDiagram
  G->>GW: Heartbeat(原 dispatch/attempt)，确认资格
  G->>C: Load
  alt 无检查点
-  G->>G: 限时限量下载一张图，校验 MIME，fsync
+  G->>G: 逐图限时限量下载，按位置隔离文件，校验 MIME，fsync
   G->>C: Save(身份、稳定 Key、已渲染意图)
  end
  G->>D: Lookup(Key)
@@ -74,3 +74,5 @@ studio stable Key 对应确定 task ID 和请求摘要，创建经过 TaskServic
 ## 结果事件
 
 无领域事件；输出脱敏阶段事件。真实生成、资格恢复、上传、审批分别记录验收证据。
+
+多图请求的全部图片按输入顺序写入 Intent 并参与摘要；下载第 0 项保持原目录身份，其余位置使用稳定派生键以避免覆盖。恢复不重新下载已持久化输入，复用原生成 Key。Studio 对每张图分别验证专用根目录、文件类型与大小。

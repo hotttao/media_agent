@@ -87,3 +87,5 @@ Gateway 对 Agent 提供 MCP Server 接口，对后端 MCP 实现承担客户端
 User 不伪造 Session，不暴露 Session 专属平台工具。Gateway 根据当前 use_workflow/use_materials 事实决定内部业务来源可见性，托管运行约束仍取交集。平台媒体来源不要求重复创建 Binding；第三方来源保留原流程。
 
 媒体工具统一批量参数，Gateway 只代理，不执行批次业务编排。Gateway 向 Worker 签发后端请求断言和面向 Workflow/Materials 的不同受众委托；Worker 直接访问资源 API，不回调 Gateway。资源服务验证身份/操作范围并执行原有 ACL。委托最长 60 秒，不承诺追溯撤销已提交操作。具体合约见媒体 MCP spec。
+
+2026-10-30：内置业务来源增加 media-materials，按 materials 权限独立选择，不依赖 workflow 权限。每个来源分别与固定 Binding 限制相交；素材来源仅获 Materials 委托，不能取得 Workflow 写入凭据。每次调用重新计算当前可用来源。

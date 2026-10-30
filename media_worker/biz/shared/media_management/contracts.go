@@ -29,19 +29,21 @@ type JobInput struct {
 	Assets, Materials      []MediaInput
 }
 type Params struct {
-	ID, Scope, Name, Description, Visibility, Status string
-	Page, PageSize, Version                          int
-	PromptBody, OutputAssetKind, CapabilityKey       string
-	CapabilityVersion, CandidateCount                int
-	NeedsConfirm                                     bool
-	Inputs                                           []Slot
-	InvocationMapping                                map[string]Expression
-	Steps                                            []Step
-	OutputStepKey                                    string
-	WorkflowID, IdempotencyKey                       string
-	WorkflowVersion                                  int
-	Input                                            JobInput
-	Provider, GenerationMethod, GenerationType       string
+	AssetKind, JobID, SourceVirtualIPID, SourceProductID string
+	OnlyMine                                             *bool
+	ID, Scope, Name, Description, Visibility, Status     string
+	Page, PageSize, Version                              int
+	PromptBody, OutputAssetKind, CapabilityKey           string
+	CapabilityVersion, CandidateCount                    int
+	NeedsConfirm                                         bool
+	Inputs                                               []Slot
+	InvocationMapping                                    map[string]Expression
+	Steps                                                []Step
+	OutputStepKey                                        string
+	WorkflowID, IdempotencyKey                           string
+	WorkflowVersion                                      int
+	Input                                                JobInput
+	Provider, GenerationMethod, GenerationType           string
 }
 type API interface {
 	Execute(context.Context, string, Params) (map[string]any, error)

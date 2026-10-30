@@ -64,3 +64,19 @@ R1 代码 review 已完成并修正：CLI 业务循环、具体 HTTPError 耦合
 ## 2026-10-26 结构更正
 
 用户明确移除 execution Domain：公共技术执行协议现位于 `biz/shared/worker_runtime`，Provider 检查点分别归各自 Domain。原 `workflow/generate` 正名为 `workflow/doubao_generate`，仓储正名为 `dal/repo/doubao_checkpoints`；物理检查点目录与格式保持兼容。GPT 成图独立实现，不能通过 Recipe 合入豆包流程。旧 P1 review 保留其当时审查记录，当前结构见 [运行契约](../ddd/media_worker/runtime.md)。
+
+## 多图扩展实施（2026-10-29）
+
+- 扩展现有 Worker 能力选择、逐图下载、检查点及 Studio 受控接口；保留单图限制和旧检查点兼容。
+- 放开 MCP 精确能力白名单与能力查询，保持全部原业务授权。
+- 回归首帧、多图顺序、恢复幂等与 Studio 错误输入；独立记录网页真实多图验收。
+
+### 多图扩展验收结果（2026-10-30）
+
+代码：真实 Worker 同时注册首帧与多图能力，多图至少一张，不限定两张。Go 回归覆盖三张有序引用与独立下载路径、提交丢回执恢复不重发；首帧仍拒绝多张。Studio 逐图验证根目录/文件大小/符号链接，发送确认改为权威按钮点击及输入框清空回读；自动观察不刷新、不反复弹窗，并能继续回读暂未发现 URL 的已提交会话。
+
+真实验收样本为两张图片，用户现场确认已上传两张。第一次 Job `job_11d132cb-4c1d-4396-9671-46c669f3c141` 因确认/观察 bug 超时，不能计为成功；其 Studio 视频已找回，参数确认由用户手动发送。独立自动回归 Job `job_be7b8aac-b252-44f6-90f8-8f5d7320cbcc` 已 SUCCEEDED，资产 `gen_af4b0230-37c2-49fb-bffc-c0019c076e79`；MCP 下载校验通过：H.264/AAC、720×1280、5.056009 秒、507,190 bytes，SHA256 `75c5c2b4146de3e1ec70a575612019ed03363e1f747302ac122369755e653598`。
+
+上传判定补强：input.files 数量与文件名匹配均不能独立证明完成，改为已加载可见预览数量增量、无 pending、连续稳定回读。补强后的 Studio 全量 validate 通过（62 文件/1161 tests；0 lint errors，148 个既有警告）。真实样本仍是两张；三张覆盖为代码回归，不宣称已经做过三张的网页生成。
+
+配套 Studio 修复已提交至本地 doubao-studio 的 main：`15e2e7e`（多图输入、确认发送与观察恢复）。部署本次 Worker 时须使用该提交或包含相同修复的后续版本。

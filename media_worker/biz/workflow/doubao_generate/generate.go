@@ -15,6 +15,7 @@ import (
 )
 
 const CapabilityKey = "doubao.i2v.first_frame_prompt"
+const MultiImageCapabilityKey = "doubao.i2v.multi_image_prompt"
 
 type Workflow struct {
 	Files                                   worker_runtime.ArtifactVerifier
@@ -28,7 +29,7 @@ type Workflow struct {
 }
 
 func (w *Workflow) AvailableCapabilities() []worker_runtime.Capability {
-	return []worker_runtime.Capability{{Key: CapabilityKey, Version: 1, Concurrency: 1}}
+	return []worker_runtime.Capability{{Key: CapabilityKey, Version: 1, Concurrency: 1}, {Key: MultiImageCapabilityKey, Version: 1, Concurrency: 1}}
 }
 func pending() error { return worker_runtime.ErrExecutionPending }
 func (w *Workflow) authorize(ctx context.Context, t worker_runtime.Task) error {
@@ -44,7 +45,7 @@ func (w *Workflow) authorize(ctx context.Context, t worker_runtime.Task) error {
 	return nil
 }
 func (w *Workflow) ExecuteContext(ctx context.Context, t worker_runtime.Task) (map[string]any, error) {
-	if t.CapabilityKey != CapabilityKey || t.CapabilityVersion != 1 {
+	if (t.CapabilityKey != CapabilityKey && t.CapabilityKey != MultiImageCapabilityKey) || t.CapabilityVersion != 1 {
 		return nil, errors.New("unsupported production capability")
 	}
 	if err := w.authorize(ctx, t); err != nil {
@@ -75,20 +76,34 @@ func (w *Workflow) ExecuteContext(ctx context.Context, t worker_runtime.Task) (m
 				images = append(images, image)
 			}
 		}
-		if len(images) != 1 {
+		if len(images) == 0 || (t.CapabilityKey == CapabilityKey && len(images) != 1) {
 			return nil, errors.New("first-frame video requires exactly one image")
 		}
 		identity, _ := json.Marshal([]any{w.Namespace, t.DispatchID, t.Attempt})
 		keySum := sha256.Sum256(identity)
 		key := hex.EncodeToString(keySum[:])
-		image, err := w.Inputs.Fetch(ctx, key, images[0])
-		if err != nil {
-			return nil, pending()
+		for _, image := range images {
+			if strings.TrimSpace(image) == "" {
+				return nil, errors.New("image reference required")
+			}
+		}
+		downloaded := make([]worker_runtime.Artifact, 0, len(images))
+		for index, image := range images {
+			inputKey := key
+			if index > 0 {
+				sum := sha256.Sum256([]byte(fmt.Sprintf("%s:input:%d", key, index)))
+				inputKey = hex.EncodeToString(sum[:])
+			}
+			artifact, err := w.Inputs.Fetch(ctx, inputKey, image)
+			if err != nil {
+				return nil, pending()
+			}
+			downloaded = append(downloaded, artifact)
 		}
 		// No signed URL or duplicated transport envelope survives this boundary.
 		task := t
 		task.Input = nil
-		intent := doubao.GenerationIntent{Prompt: prompt, Images: []worker_runtime.Artifact{image}, Model: w.Model, DurationSeconds: w.DurationSeconds, AspectRatio: w.AspectRatio}
+		intent := doubao.GenerationIntent{Prompt: prompt, Images: downloaded, Model: w.Model, DurationSeconds: w.DurationSeconds, AspectRatio: w.AspectRatio}
 		raw, _ := json.Marshal(intent)
 		digest := sha256.Sum256(raw)
 		cp = &doubao.Checkpoint{Task: task, GenerationKey: key, RequestDigest: hex.EncodeToString(digest[:]), Intent: intent}

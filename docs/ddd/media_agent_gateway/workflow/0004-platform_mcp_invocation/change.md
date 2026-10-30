@@ -26,3 +26,5 @@
 ## 2026-10-28 · User 接入与内部媒体工具
 
 新增 User MCP 入口，保持托管身份约束；统一业务授权和直接受众委托，媒体工具采用批量合同。无分级加载或 Gateway 业务回调。
+
+2026-10-30：按业务模块独立聚合 media-workflow 与 media-materials 内置来源；Materials-only 主体可发现/调用素材查询，每个来源保持固定 Binding 限制与实时撤权。素材来源仅签发 Materials 受众凭据。

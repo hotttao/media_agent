@@ -50,3 +50,5 @@ Gateway 验证入口与当前模块权限，Worker 验证后端请求断言并�
 ## 实现合同
 
 批次大小、Schema、工具/API 映射、受众与时限见 [规格](../../../../spec/media-worker-mcp-server.md)。不新增生成 Domain；doubao_generate/gpt_generate 独立执行。
+
+Materials 查询扩展：media-materials 来源单独提供虚拟形象、原始素材、生成素材的批量列表与详情六个工具，只转发原 Materials 业务查询，使用 Materials-only 委托，不以 Workflow 权限作为查询入口。与 media-workflow 工具共享技术批量编排，无新增事实表或 Domain。

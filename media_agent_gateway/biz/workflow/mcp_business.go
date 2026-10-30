@@ -14,13 +14,46 @@ type MCPModuleAccess interface {
 	ModuleAllowed(context.Context, MCPContext, string) (bool, error)
 }
 type MCPBusiness struct {
-	DefinitionID string
-	Access       MCPModuleAccess
-	Signer       *mcpdelegation.Signer
+	DefinitionID          string
+	MaterialsDefinitionID string
+	Access                MCPModuleAccess
+	Signer                *mcpdelegation.Signer
 }
 
 func (w *MCPGateway) WithBusiness(b *MCPBusiness) *MCPGateway { w.business = b; return w }
-func (w *MCPGateway) businessSource(ctx context.Context, scope MCPContext) (*mcpSource, error) {
+func (w *MCPGateway) businessModule(id string) (string, bool) {
+	if w.business == nil {
+		return "", false
+	}
+	if id == w.business.DefinitionID {
+		return "workflow", true
+	}
+	if id != "" && id == w.business.MaterialsDefinitionID {
+		return "materials", true
+	}
+	return "", false
+}
+func (w *MCPGateway) businessSources(ctx context.Context, scope MCPContext) ([]mcpSource, error) {
+	if w.business == nil {
+		return nil, nil
+	}
+	sources := []mcpSource{}
+	for _, id := range []string{w.business.DefinitionID, w.business.MaterialsDefinitionID} {
+		if id == "" {
+			continue
+		}
+		module, _ := w.businessModule(id)
+		source, err := w.businessSourceFor(ctx, scope, id, module)
+		if err != nil {
+			return nil, err
+		}
+		if source != nil {
+			sources = append(sources, *source)
+		}
+	}
+	return sources, nil
+}
+func (w *MCPGateway) businessSourceFor(ctx context.Context, scope MCPContext, definitionID, module string) (*mcpSource, error) {
 	b := w.business
 	if b == nil {
 		return nil, nil
@@ -28,7 +61,7 @@ func (w *MCPGateway) businessSource(ctx context.Context, scope MCPContext) (*mcp
 	if b.Access == nil || b.Signer == nil {
 		return nil, ErrMCPUnavailable
 	}
-	permitted, err := b.Access.ModuleAllowed(ctx, scope, "workflow")
+	permitted, err := b.Access.ModuleAllowed(ctx, scope, module)
 	if errors.Is(err, client.ErrMCPUserDenied) {
 		return nil, nil
 	}
@@ -38,7 +71,7 @@ func (w *MCPGateway) businessSource(ctx context.Context, scope MCPContext) (*mcp
 	if !permitted {
 		return nil, nil
 	}
-	definition, err := w.catalog.Get(ctx, b.DefinitionID)
+	definition, err := w.catalog.Get(ctx, definitionID)
 	if err != nil {
 		return nil, ErrMCPUnavailable
 	}
@@ -89,6 +122,14 @@ func (w *MCPGateway) businessSource(ctx context.Context, scope MCPContext) (*mcp
 		g.Method = ""
 		g.ArgumentsDigest = ""
 		g.Presenter = mcpdelegation.Backend
+		if module == "materials" {
+			g.Audience = mcpdelegation.Materials
+			headers[mcpdelegation.MaterialsHeader], err = b.Signer.Sign(g)
+			if err != nil {
+				return nil, ErrMCPUnavailable
+			}
+			return headers, nil
+		}
 		g.Audience = mcpdelegation.Workflow
 		headers[mcpdelegation.WorkflowHeader], err = b.Signer.Sign(g)
 		if err != nil {

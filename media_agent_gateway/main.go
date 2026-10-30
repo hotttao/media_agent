@@ -233,7 +233,7 @@ func main() {
 			users := &sharedclient.MCPUserAccess{Verifier: internaljwt.NewVerifier(d.GetEdgeJwksUrl(), d.GetEdgeIssuer(), "media-agent-gateway-mcp", nil), AuthURL: os.Getenv("MEDIA_AUTH_URL"), AuthCredential: os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN"), ControlURL: os.Getenv("MEDIA_CONTROL_URL"), ControlCredential: internalToken}
 			identity.WithUsers(users)
 			cataloghandler.ConfigureDelegationSigner(signer)
-			gateway.WithBusiness(&workflow.MCPBusiness{DefinitionID: mediaCfg.GetDefinitionId(), Access: users, Signer: signer})
+			gateway.WithBusiness(&workflow.MCPBusiness{DefinitionID: mediaCfg.GetDefinitionId(), MaterialsDefinitionID: "media-materials", Access: users, Signer: signer})
 		}
 		cataloghandler.Configure(catalogApplication, mcpprotocol.WithOrigins(mcpprotocol.NewHandler(cataloghandler.ProtocolFactory(identity, gateway)), cfg.GetMediaMcp().GetAllowedOrigins()))
 	}

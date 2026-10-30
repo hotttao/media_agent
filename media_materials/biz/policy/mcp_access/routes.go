@@ -6,6 +6,15 @@ func Allowed(operation, method, path string) bool {
 	if method != "GET" || !strings.HasPrefix(path, "/api/v1/") || strings.ContainsAny(path, "%\\?#") || strings.Contains(path, "..") {
 		return false
 	}
+	queries := map[string]string{"virtual_ips_list": "virtual-ips", "virtual_ips_get": "virtual-ips", "materials_list": "materials", "materials_get": "materials", "generated_assets_list": "generated-assets", "generated_assets_get": "generated-assets"}
+	if resource, ok := queries[operation]; ok {
+		route := "/api/v1/" + resource
+		if strings.HasSuffix(operation, "_list") {
+			return path == route
+		}
+		parts := strings.Split(strings.TrimPrefix(path, route+"/"), "/")
+		return strings.HasPrefix(path, route+"/") && len(parts) == 1 && parts[0] != "" && parts[0] != "by-source"
+	}
 	if operation != "jobs_submit" && operation != "jobs_get" {
 		return false
 	}

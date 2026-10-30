@@ -233,12 +233,13 @@ create/publish/submit 分开。已有 Workflow 版本查询 API 可读取历史�
 本期新增/发布/提交的可执行步骤仅限：
 
 - `doubao.i2v.first_frame_prompt@1`；
+- `doubao.i2v.multi_image_prompt@1`（2026-10-29 扩展，真实验收记录见 Worker 扩展计划）；
 - `gpt.t2i.text_prompt@1`；
 - `gpt.i2i.multi_image_prompt@1`。
 
-只读工具可以查看现有获准的其他模板/工作流/Job，不能把历史数据伪装成不存在。写能力范围检查在 Worker policy；Workflow 保持通用能力事实所有权。`capabilities_list` 对三个确切 key/version 分别查询已有版本 API，仅保留当前可读的 published 定义后计算本工具分页/total；缺失版本跳过，服务不可用必须报错。不扫描与本期无关的能力，不复用筛选前 total。
+只读工具可以查看现有获准的其他模板/工作流/Job，不能把历史数据伪装成不存在。写能力范围检查在 Worker policy；Workflow 保持通用能力事实所有权。`capabilities_list` 对四个确切 key/version 分别查询已有版本 API，仅保留当前可读的 published 定义后计算本工具分页/total；缺失版本跳过，服务不可用必须报错。不扫描与本期无关的能力，不复用筛选前 total。
 
-Job input 保持现有 `JobInput` 的 product/virtual_ip/asset/material 语义，不能设计一个当前 API 没有的顶层 `prompt`。提示词来自模板/输入映射。首期文件输入不接受本地文件路径、base64 或任意下载 URL：图片槽位以 object_path 表达已上传平台对象，Worker 用当前 User 的 Materials resolve API 得到 URL，再转换为现有 JobInput；TEXT content 原样传递。product/virtual_ip 使用 ID，经已有授权详情 API取得业务字段，不能由调用者伪造产品快照。asset/material 的 name/asset_kind 保持 Workflow 输入槽位定义，数组顺序不变。当前三个能力的媒体引用为图片，解析结果必须为 image/*；asset_ref 对应图片槽位不能绑定 CONST 字面 URL，也不能使用 content 替代 object_path，允许绑定上游 Step 输出。
+Job input 保持现有 `JobInput` 的 product/virtual_ip/asset/material 语义，不能设计一个当前 API 没有的顶层 `prompt`。提示词来自模板/输入映射。首期文件输入不接受本地文件路径、base64 或任意下载 URL：图片槽位以 object_path 表达已上传平台对象，Worker 用当前 User 的 Materials resolve API 得到 URL，再转换为现有 JobInput；TEXT content 原样传递。product/virtual_ip 使用 ID，经已有授权详情 API取得业务字段，不能由调用者伪造产品快照。asset/material 的 name/asset_kind 保持 Workflow 输入槽位定义，数组顺序不变。当前四个能力的媒体引用为图片，解析结果必须为 image/*；asset_ref 对应图片槽位不能绑定 CONST 字面 URL，也不能使用 content 替代 object_path，允许绑定上游 Step 输出。
 
 现有 `library-objects:resolve` 仅以企业成员身份和企业 object_path 命名空间授权，不是逐文件 Resource Grant。首期 object_path 输入沿用这项已有语义，并新增委托组织上限和模块检查；不能声称其具备私有资产级 ACL。若通过 generated_asset_id 读取产物，必须先经生成资产详情 API 的资源授权，不能用路径解析替代资产授权；不从不可读资产详情泄露 object_path。产品/虚拟形象使用各自对象 ACL。
 
@@ -312,3 +313,9 @@ Gateway 总处理预算维持既有 30 秒；Worker 每次下游请求取剩余�
 9. 外部普通 MCP 客户端通过标准列表完成 Template→发布→Workflow→校验/发布→Job→结果，真实 GPT 图片和豆包视频各一次，无模型工具动态加载依赖。
 
 已确认需求：统一 Gateway、统一业务模块授权、MCP 入口鉴权、内部外部 Agent 相同工具协议、暂不分级加载、所有媒体工具采用批量接口。已确认的本版具体方案：`mcp.access` 入口 scope；平台业务来源不要求额外 Binding；受众分离的直接委托及可信 Worker 转换边界；仅 tools 的首期工具/输入合同。正式 DDD Workflow/变更记录与实现同步推进；实现进度以 plan 为准，本文不宣称全部目标已实现。
+
+## Materials 查询扩展（2026-10-29，用户授权）
+
+保留 media-workflow 的 13 工具；新增独立平台来源 media-materials，共享同一内网 MCP 进程与公网入口。按实时 use_materials 权限决定是否连接、列出和调用；不要求用户同时拥有 Workflow 权限。各来源独立套用固定 Binding 限制。Materials 来源仅获得 Materials 受众委托，不签发 Workflow 凭据；调用时及目标 API 再检查当前授权，旧工具名不能绕过撤权。
+
+新增六个批量只读工具：virtual_ips_list/get、materials_list/get、generated_assets_list/get。前两组查询虚拟形象/原始素材，最后一组查询生成素材，可返回业务 API 当前授权范围内的 object_path 与实时产物链接。沿用 items/results、每批 20 项、列表每页 100 与总量 200、并发 4、30 秒期限。组织从已验证身份取得，Scope 为筛选，不接收 caller/owner 身份覆盖；保持原对象 ACL 与分页前授权过滤。不得把已有 Materials 业务 API 当作已经具备 MCP 工具。

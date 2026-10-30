@@ -101,3 +101,5 @@ _禁用替代词_：access check、permission check。
 ## MCP 业务委托
 
 MCP Worker 使用独立受众的短期委托和 Materials 专用服务凭据调用现有只读 API。Materials 逐请求读取当前企业/团队/Workspace 事实，检查 use_materials 后将已验证主体、企业及实时团队关系交给既有对象 ACL；不使用 JWT 中的团队列表。操作路由仅允许 Job 输入所需产品/虚拟形象详情、Job 产物详情与企业对象路径解析。路径解析仍是企业命名空间授权，不能代替生成资产详情的资源 ACL。
+
+2026-10-30：media-materials MCP 来源通过原公开业务 API 提供 Virtual IP、Material、Generated Asset 的批量列表/详情，保持原租户和对象 ACL。Materials admission 新增六个操作到只读 GET 路由的精确映射，不开放任何写入或内部 API。Gateway 独立按 use_materials 过滤素材工具。

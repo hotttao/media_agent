@@ -49,7 +49,7 @@ func run(path string) error {
 	if err != nil {
 		return err
 	}
-	operations := flow.Operations{API: workflow_api.Client{HTTP: workflowClient}, Objects: materials_api.Client{HTTP: materialsClient}}
+	operations := flow.Operations{API: workflow_api.Client{HTTP: workflowClient}, Objects: materials_api.Client{HTTP: materialsClient}, Queries: materials_api.Client{HTTP: materialsClient}}
 	endpoint, err := handler.New(flow.Management{API: operations}, internaljwt.NewVerifier(d.GetJwksUrl(), d.GetIssuer(), mcpdelegation.Backend, nil), internaljwt.NewVerifier(d.GetJwksUrl(), d.GetIssuer(), mcpdelegation.Workflow, nil), internaljwt.NewVerifier(d.GetJwksUrl(), d.GetIssuer(), mcpdelegation.Materials, nil))
 	if err != nil {
 		return err

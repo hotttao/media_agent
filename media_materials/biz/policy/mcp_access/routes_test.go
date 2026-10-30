@@ -23,3 +23,11 @@ func TestMaterialsDelegationAllowsOnlyRequiredReads(t *testing.T) {
 		}
 	}
 }
+
+func TestMaterialQueryRoutesAreReadOnlyAndOperationBound(t *testing.T) {
+	for op, route := range map[string]string{"virtual_ips_list": "virtual-ips", "virtual_ips_get": "virtual-ips/item", "materials_list": "materials", "materials_get": "materials/item", "generated_assets_list": "generated-assets", "generated_assets_get": "generated-assets/item"} {
+		if !Allowed(op, "GET", "/api/v1/"+route) || Allowed(op, "POST", "/api/v1/"+route) || Allowed(op, "GET", "/api/v1/products/item") || Allowed(op, "GET", "/api/v1/generated-assets/by-source") {
+			t.Fatal("query route widened", op)
+		}
+	}
+}

@@ -22,10 +22,17 @@ type Objects interface {
 // single business mutation. Only the resource API commits business facts.
 type Operations struct {
 	API     contract.API
+	Queries contract.API
 	Objects Objects
 }
 
 func (o Operations) Execute(ctx context.Context, name string, p contract.Params) (map[string]any, error) {
+	if policy.MaterialsTool(name) {
+		if o.Queries == nil {
+			return nil, &Failure{Code: "unavailable", Message: "Materials API unavailable", NotDispatched: true}
+		}
+		return o.Queries.Execute(ctx, name, p)
+	}
 	if o.API == nil {
 		return nil, &Failure{Code: "unavailable", Message: "Business API unavailable", NotDispatched: true}
 	}
@@ -257,7 +264,7 @@ func selectFields(value map[string]any, keys ...string) map[string]any {
 }
 func (o Operations) capabilities(ctx context.Context, p contract.Params) (map[string]any, error) {
 	found := []any{}
-	for _, key := range []string{"doubao.i2v.first_frame_prompt", "gpt.t2i.text_prompt", "gpt.i2i.multi_image_prompt"} {
+	for _, key := range []string{"doubao.i2v.first_frame_prompt", "doubao.i2v.multi_image_prompt", "gpt.t2i.text_prompt", "gpt.i2i.multi_image_prompt"} {
 		value, err := o.API.Execute(ctx, "capabilities_get", contract.Params{CapabilityKey: key, CapabilityVersion: 1})
 		if err != nil {
 			var failure *Failure

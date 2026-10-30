@@ -23,7 +23,7 @@ type Handler struct {
 
 func New(management flow.Management, backend, workflow, materials *internaljwt.Verifier) (http.Handler, error) {
 	h := &Handler{Flow: management, Backend: backend, Workflow: workflow, Materials: materials, validators: map[string]*mcpprotocol.Validator{}}
-	for _, name := range policy.Names {
+	for _, name := range policy.AllNames() {
 		v, err := mcpprotocol.CompileSchema(inputSchema(name))
 		if err != nil {
 			return nil, err
@@ -43,17 +43,26 @@ func (h *Handler) factory(ctx context.Context, headers http.Header) (mcpprotocol
 	}
 	creds := contract.Credentials{}
 	if g.Method == "tools/call" {
-		creds.Workflow = headers.Get(mcpdelegation.WorkflowHeader)
-		target, err := mcpdelegation.Verify(ctx, h.Workflow, creds.Workflow, mcpdelegation.Workflow)
+
+		audience, verifier, token := mcpdelegation.Workflow, h.Workflow, headers.Get(mcpdelegation.WorkflowHeader)
+		if g.SourceID == "media-materials" {
+			audience, verifier, token = mcpdelegation.Materials, h.Materials, headers.Get(mcpdelegation.MaterialsHeader)
+			creds.Materials = token
+		} else {
+			creds.Workflow = token
+		}
+		target, err := mcpdelegation.Verify(ctx, verifier, token, audience)
 		if err != nil || !mcpdelegation.SameInvocation(g, target) {
 			return nil, 401, mcpdelegation.ErrInvalid
 		}
-		if value := headers.Get(mcpdelegation.MaterialsHeader); value != "" {
-			target, err := mcpdelegation.Verify(ctx, h.Materials, value, mcpdelegation.Materials)
-			if err != nil || !mcpdelegation.SameInvocation(g, target) {
-				return nil, 401, mcpdelegation.ErrInvalid
+		if g.SourceID != "media-materials" {
+			if value := headers.Get(mcpdelegation.MaterialsHeader); value != "" {
+				target, err := mcpdelegation.Verify(ctx, h.Materials, value, mcpdelegation.Materials)
+				if err != nil || !mcpdelegation.SameInvocation(g, target) {
+					return nil, 401, mcpdelegation.ErrInvalid
+				}
+				creds.Materials = value
 			}
-			creds.Materials = value
 		}
 	}
 	return caller{h, g, creds}, 200, nil
@@ -71,7 +80,7 @@ func (c caller) Call(ctx context.Context, method string, raw []byte) ([]byte, bo
 	}
 	if method == "tools/list" {
 		entries := []any{}
-		for _, name := range policy.Names {
+		for _, name := range policy.SourceNames(c.grant.SourceID) {
 			entries = append(entries, map[string]any{"name": name, "description": toolDescription(name), "inputSchema": inputSchema(name), "outputSchema": outputSchema(name), "annotations": map[string]any{"readOnlyHint": policy.ReadOnly(name), "destructiveHint": false}})
 		}
 		body, err := json.Marshal(map[string]any{"tools": entries})
@@ -84,7 +93,7 @@ func (c caller) Call(ctx context.Context, method string, raw []byte) ([]byte, bo
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
 	}
-	if json.Unmarshal(raw, &request) != nil || request.Name != c.grant.Operation {
+	if json.Unmarshal(raw, &request) != nil || request.Name != c.grant.Operation || !policy.InSource(c.grant.SourceID, request.Name) {
 		return nil, true, invalid()
 	}
 	digest, err := mcpdelegation.ArgumentsDigest(request.Arguments)

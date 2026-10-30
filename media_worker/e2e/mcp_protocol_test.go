@@ -51,8 +51,9 @@ func TestMCPTransportBatchSubmission(t *testing.T) {
 	server := httptest.NewServer(serverHandler)
 	defer server.Close()
 	principal := mcpdelegation.Principal{Kind: "user", UserID: "u", ActorID: "User:u", CredentialID: "c", OrganizationID: "o", WorkspaceID: "w"}
+	sourceID := "media-workflow"
 	backend := mcpupstream.MCPBackend{Endpoint: server.URL, Transport: "streamable_http", RequestHeaders: func(ctx context.Context, method string, raw json.RawMessage) (map[string]string, error) {
-		grant := mcpdelegation.Grant{Principal: principal, Audience: mcpdelegation.Backend, CallID: "call", SourceID: "media-workflow", Method: method, ExpiresAt: time.Now().Add(time.Minute)}
+		grant := mcpdelegation.Grant{Principal: principal, Audience: mcpdelegation.Backend, CallID: "call", SourceID: sourceID, Method: method, ExpiresAt: time.Now().Add(time.Minute)}
 		if method == "tools/call" {
 			var p struct {
 				Name      string          `json:"name"`
@@ -77,7 +78,12 @@ func TestMCPTransportBatchSubmission(t *testing.T) {
 			grant.Presenter = mcpdelegation.Backend
 			grant.Method = ""
 			grant.ArgumentsDigest = ""
-			headers[mcpdelegation.WorkflowHeader], err = signer.Sign(grant)
+			header := mcpdelegation.WorkflowHeader
+			if sourceID == "media-materials" {
+				grant.Audience = mcpdelegation.Materials
+				header = mcpdelegation.MaterialsHeader
+			}
+			headers[header], err = signer.Sign(grant)
 		}
 		return headers, err
 	}}
@@ -118,6 +124,28 @@ func TestMCPTransportBatchSubmission(t *testing.T) {
 	var rejected *mcpupstream.MCPRemoteError
 	if !errors.As(err, &rejected) || rejected.Code != -32602 || api.calls.Load() != 2 {
 		t.Fatalf("invalid batch must be rejected before dispatch: %v, calls=%d", err, api.calls.Load())
+	}
+
+	sourceID = "media-materials"
+	materialPeer, err := (mcpupstream.MCPUpstream{}).Open(ctx, backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer materialPeer.Close()
+	listed, err = materialPeer.Call(ctx, "tools/list", []byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if json.Unmarshal(listed, &tools) != nil || len(tools.Tools) != 6 {
+		t.Fatalf("wrong material catalog: %s", listed)
+	}
+	_, err = materialPeer.Call(ctx, "tools/call", []byte(`{"name":"jobs_submit","arguments":{"items":[{"item_id":"forged","params":{"workflow_id":"wf","workflow_version":1,"idempotency_key":"forged","input":{}}}]}}`))
+	if !errors.As(err, &rejected) || api.calls.Load() != 2 {
+		t.Fatal("materials source invoked workflow mutation", err)
+	}
+	_, err = materialPeer.Call(ctx, "tools/call", []byte(`{"name":"virtual_ips_list","arguments":{"items":[{"item_id":"virtual","params":{}}]}}`))
+	if err != nil || api.calls.Load() != 3 {
+		t.Fatal("materials-only delegation failed", err)
 	}
 
 }

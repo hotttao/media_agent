@@ -51,6 +51,11 @@ type jobInput struct {
 	Materials   []mediaInput `json:"material"`
 }
 type parameters struct {
+	AssetKind         string                `json:"asset_kind"`
+	JobID             string                `json:"job_id"`
+	SourceVirtualIPID string                `json:"source_virtual_ip_id"`
+	SourceProductID   string                `json:"source_product_id"`
+	OnlyMine          *bool                 `json:"only_mine"`
 	ID                string                `json:"id"`
 	Scope             string                `json:"scope"`
 	Name              string                `json:"name"`
@@ -80,7 +85,7 @@ type parameters struct {
 }
 
 func (p parameters) command() contract.Params {
-	c := contract.Params{ID: p.ID, Scope: p.Scope, Name: p.Name, Description: p.Description, Visibility: p.Visibility, Status: p.Status, Page: p.Page, PageSize: p.PageSize, Version: p.Version, PromptBody: p.PromptBody, OutputAssetKind: p.OutputAssetKind, CapabilityKey: p.CapabilityKey, CapabilityVersion: p.CapabilityVersion, CandidateCount: p.CandidateCount, NeedsConfirm: p.NeedsConfirm, OutputStepKey: p.OutputStepKey, WorkflowID: p.WorkflowID, WorkflowVersion: p.WorkflowVersion, IdempotencyKey: p.IdempotencyKey, Provider: p.Provider, GenerationMethod: p.GenerationMethod, GenerationType: p.GenerationType, InvocationMapping: map[string]contract.Expression{}, Input: contract.JobInput{ProductID: p.Input.ProductID, VirtualIPID: p.Input.VirtualIPID}}
+	c := contract.Params{AssetKind: p.AssetKind, JobID: p.JobID, SourceVirtualIPID: p.SourceVirtualIPID, SourceProductID: p.SourceProductID, OnlyMine: p.OnlyMine, ID: p.ID, Scope: p.Scope, Name: p.Name, Description: p.Description, Visibility: p.Visibility, Status: p.Status, Page: p.Page, PageSize: p.PageSize, Version: p.Version, PromptBody: p.PromptBody, OutputAssetKind: p.OutputAssetKind, CapabilityKey: p.CapabilityKey, CapabilityVersion: p.CapabilityVersion, CandidateCount: p.CandidateCount, NeedsConfirm: p.NeedsConfirm, OutputStepKey: p.OutputStepKey, WorkflowID: p.WorkflowID, WorkflowVersion: p.WorkflowVersion, IdempotencyKey: p.IdempotencyKey, Provider: p.Provider, GenerationMethod: p.GenerationMethod, GenerationType: p.GenerationType, InvocationMapping: map[string]contract.Expression{}, Input: contract.JobInput{ProductID: p.Input.ProductID, VirtualIPID: p.Input.VirtualIPID}}
 	if c.Page == 0 {
 		c.Page = 1
 	}

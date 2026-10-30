@@ -84,28 +84,32 @@ func (w *MCPGateway) sources(ctx context.Context, scope MCPContext) ([]mcpSource
 	if len(access.Grants) > 128 || access.SnapshotVersion == "" || access.AuthorizationRevision == "" {
 		return nil, "", ErrMCPUnavailable
 	}
-	business, err := w.businessSource(ctx, scope)
+	businesses, err := w.businessSources(ctx, scope)
 	if err != nil {
 		return nil, "", err
 	}
-	if business != nil && slices.Contains(access.RestrictedDefinitionIDs, business.definitionID) {
-		granted := false
-		for _, grant := range access.Grants {
-			if grant.DefinitionID == business.definitionID {
-				granted = true
-				break
+	businessByID := map[string]*mcpSource{}
+	seen := map[string]bool{"platform": true}
+	for i := range businesses {
+		business := &businesses[i]
+		if slices.Contains(access.RestrictedDefinitionIDs, business.definitionID) {
+			granted := false
+			for _, grant := range access.Grants {
+				if grant.DefinitionID == business.definitionID {
+					granted = true
+					break
+				}
+			}
+			if !granted {
+				continue
 			}
 		}
-		if !granted {
-			business = nil
-		}
-	}
-	seen := map[string]bool{"platform": true}
-	if business != nil {
+		businessByID[business.definitionID] = business
 		sources = append(sources, *business)
 	}
 	for _, grant := range access.Grants {
-		if w.business != nil && grant.DefinitionID == w.business.DefinitionID {
+		if _, builtin := w.businessModule(grant.DefinitionID); builtin {
+			business := businessByID[grant.DefinitionID]
 			// A managed binding may only narrow the built-in business source.
 			// Do not silently apply a fixed binding to a different definition.
 			if seen[grant.DefinitionID] || grant.DefinitionVersion < 1 {
@@ -398,7 +402,8 @@ func (w *MCPGateway) Call(ctx context.Context, credentials MCPCredentials, metho
 		if json.Unmarshal(raw, &request) != nil {
 			return nil, true, ErrMCPArgument
 		}
-		if strings.HasPrefix(request.Name, w.business.DefinitionID+"__") {
+		sourceID, _, _ := strings.Cut(request.Name, "__")
+		if _, builtin := w.businessModule(sourceID); builtin {
 			if _, err := mcpdelegation.ArgumentsDigest(raw); err != nil {
 				return nil, true, ErrMCPArgument
 			}

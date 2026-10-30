@@ -35,3 +35,15 @@
 - 本次恢复的独立生成 Worker 使用 24 小时凭据（至 `2026-10-30T12:49:41Z`），长期运行需续签；不影响主 MCP Token 的 30 天期限。原有检查点与无关任务保留。
 
 Token 页面补充：真实 HTTP 浏览器验收发现 randomUUID 在非安全上下文不可用导致空白，现改用 getRandomValues 生成签发尝试标识；剪贴板不可用时显示手动复制提示。修复后真实浏览器创建返回 201，默认仅 mcp.access，关闭/刷新后明文消失，本地存储无 Secret，页面撤销返回 200，MCP 从 200 变为 401。已部署修复，组件回归 4 tests、TypeScript、构建、依赖检查通过。
+
+## 2026-10-30 多图与 Materials 查询扩展
+
+真实 Worker 已支持 doubao.i2v.multi_image_prompt@1，MCP 可用能力由三项增为四项；双图真实验收及修复过程见 [多图计划](media-worker-doubao.md)。工具数不因新增生成能力改变。
+
+新增平台来源 media-materials，复用私有 http://media-worker-mcp:8015/mcp，Gateway 以独立 materials 模块授权过滤并只签发 Materials 受众。来源已通过原 Catalog 应用服务注册；目标 Materials、MCP Worker、Gateway 已部署更新。公网标准 tools/list 共 19 项：media-workflow 13 项与 media-materials 6 项。没有素材权限时不连接素材来源；没有 Workflow 权限时仍可用获准的素材来源。固定 Binding 限制和调用时重新授权仍生效。
+
+新增只读批量工具 virtual_ips_list/get、materials_list/get、generated_assets_list/get。正常真实 User Token 经公网测试：虚拟形象列表 1 项、原始素材列表 16 项、生成素材列表 489 项（本次数据快照），三类列表与各取一个已授权对象的详情均成功。没有创建测试资源，也没有扩大用户角色或企业功能。各列表 total 仍由原业务 API 的授权过滤和分页产生，不自行拼接跨企业结果。
+
+本轮通过：Worker 全量 Go tests、Gateway workflow、Materials admission/policy、真实 SDK 双来源工具隔离与 Materials-only 委托、撤权拒绝旧工具名、目标只读路由白名单、定向 race/vet、Worker/Materials 架构检查。既有 Gateway 跨层架构问题仍保留在原记录，不宣称所有项目门禁通过。CLI 已打开的会话需重新连接 MCP 才能刷新工具目录。
+
+补充：公网无 Workspace 的 User 调用 media-materials__virtual_ips_list 已验证成功（200），查询只需组织与素材权限。生成 Worker 当前正常运行；临时 CDP 诊断端口已关闭，Studio ready/rendererReady 均为 true。

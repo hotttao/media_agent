@@ -128,7 +128,7 @@ Worker 启动后先注册能力，再按 Capability 并发轮询。任务只使�
 
 CLI 位于 `cmd/media_worker`，执行生命周期位于 `biz/workflow/execute`，能力选择和失败分类位于 `biz/policy/execution`。`biz/shared/worker_runtime` 定义公共技术执行、上传与结果交付端口；HTTP 和磁盘 DTO 分别位于 `biz/client/worker_gateway`、`biz/dal/repo/results`，保留 `.worker-state` 命名空间、权限与旧日志格式。生成检查点由独立 `biz/dal/repo/doubao_checkpoints` 实现，记录私有生成意图、引用、manifest 和已确认对象路径。
 
-`biz/domain/doubao` 定义可替换 Generator，`biz/client/doubao/studio` 实现专用实例的本机 Worker 协议。`biz/workflow/doubao_generate` 协调原 Attempt 资格确认、输入下载、稳定 Key 查询、提交、确切产物下载、manifest 和授权上传。生产仅支持 `doubao.i2v.first_frame_prompt@1`，要求恰好一张参考图，输出 VIDEO。
+`biz/domain/doubao` 定义可替换 Generator，`biz/client/doubao/studio` 实现专用实例的本机 Worker 协议。`biz/workflow/doubao_generate` 协调原 Attempt 资格确认、输入下载、稳定 Key 查询、提交、确切产物下载、manifest 和授权上传。真实适配支持 `doubao.i2v.first_frame_prompt@1`（恰好一张图）与 `doubao.i2v.multi_image_prompt@1`（至少一张有序参考图），输出 VIDEO。多图需要同步部署配套 Studio 受控接口扩展；真实验收状态见扩展计划。
 
 ## Studio 生产 profile
 
@@ -195,3 +195,9 @@ go run ./cmd/media_worker -config conf/local.yaml
 GPT Workflow 检查点位于凭证命名空间的 `gpt-checkpoints`，bridge 技术台账位于 `image-use`。发送意图先于浏览器动作，之后只恢复原 conversation/user turn；多出一轮用户消息、会话变更、无绑定或不确定发送会保留 needs_human。原会话与人工状态需要检查，不能清空状态目录或重新提交相同请求绕过。图片 manifest 通过大小、媒体类型、SHA-256 与私有文件校验后才上传；公开 Gateway 仍决定执行资格和对象路径。
 
 [GPT 设计](../docs/spec/media-worker-gpt-image-use.md) · [落地状态](../docs/plan/media-worker-gpt-image-use.md) · [公共运行契约](../docs/ddd/media_worker/runtime.md)。
+
+### Materials 查询 MCP（2026-10-30）
+
+同一个公网 `/mcp` 现在可按模块授权聚合两个来源：`media-workflow` 的 13 个批量工具，以及 `media-materials` 的 6 个只读批量工具：`virtual_ips_list/get`、`materials_list/get`、`generated_assets_list/get`。它们分别调用原 Materials 列表/详情 API，保持租户、对象 ACL 和分页语义。素材来源不依赖 Workflow 模块使用权限，且不会获得 Workflow 目标凭据。原 CLI MCP 配置无需改 URL；已打开的会话需要刷新/重连工具目录。
+
+多图执行请同步更新 Studio 配套代码。Worker 未设置能力 allowlist 时注册两个 Doubao 能力；若设置了 MEDIA_WORKER_CAPABILITIES，需显式包含 doubao.i2v.multi_image_prompt@1。不能只更新 MCP 白名单而继续运行旧的单图 Studio 接口。
