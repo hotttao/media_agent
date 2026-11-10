@@ -7,3 +7,7 @@ __pycache__/
 codex/.codex/config.toml
 claude/.mcp.json
 opencode/opencode.json
+# Local media workspace (keep the versioned directory guide only).
+codex/short-video/*
+!codex/short-video/README.md
+**/tools/__pycache__/

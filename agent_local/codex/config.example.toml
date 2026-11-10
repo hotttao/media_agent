@@ -1,10 +1,20 @@
-# 示例。实际配置位于 .codex/config.toml；不要把 Token 填进本示例后提交。
+# Project-local example; setup.py preserves an existing config and its servers.
+# Export these values before tools/launch.py. Never commit tokens.
 [mcp_servers.media]
 url = "http://mini-001.local:18080/mcp"
+bearer_token_env_var = "MEDIA_MCP_TOKEN"
 startup_timeout_sec = 30
 tool_timeout_sec = 40
-required = true
-[mcp_servers.media.http_headers]
-Authorization = "Bearer <User Token>"
-X-Media-Organization-ID = "<企业 ID>"
-X-Media-Workspace-ID = "<Workspace ID>"
+required = false
+[mcp_servers.media.env_http_headers]
+X-Media-Organization-ID = "MEDIA_ORGANIZATION_ID"
+X-Media-Workspace-ID = "MEDIA_WORKSPACE_ID"
+
+# launch.py reads the wx_channel downloads/.wx_channel_mcp_token into this
+# process environment. It does not put the token into config.toml or logs.
+[mcp_servers.wx-channel]
+url = "http://127.0.0.1:2027/mcp"
+bearer_token_env_var = "MEDIA_WX_CHANNEL_MCP_TOKEN"
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+required = false
