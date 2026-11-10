@@ -12,6 +12,9 @@ type capabilityCatalog struct{ calls []string }
 func (c *capabilityCatalog) Execute(_ context.Context, operation string, p contract.Params) (map[string]any, error) {
 	c.calls = append(c.calls, p.CapabilityKey)
 	provider := "gpt"
+	if strings.HasPrefix(p.CapabilityKey, "wx_channel.") {
+		provider = "wx_channel"
+	}
 	if strings.HasPrefix(p.CapabilityKey, "doubao.") {
 		provider = "doubao"
 	}
@@ -24,7 +27,7 @@ func TestCapabilityDiscoveryIncludesRealMultiImageVideo(t *testing.T) {
 		t.Fatal(err)
 	}
 	items := result["items"].([]any)
-	if len(api.calls) != 4 || len(items) != 2 || items[1].(map[string]any)["key"] != "doubao.i2v.multi_image_prompt" {
+	if len(api.calls) != 5 || len(items) != 2 || items[1].(map[string]any)["key"] != "doubao.i2v.multi_image_prompt" {
 		t.Fatal("multi-image video missing", result, api.calls)
 	}
 }

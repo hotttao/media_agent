@@ -542,6 +542,7 @@ message MediaWorkerConfig {
   string aspect_ratio = 8;
   int32 startup_timeout_seconds = 9;
   GPTImageUseConfig gpt_image_use = 10;
+  WXChannelConfig wx_channel = 11;
 }
 
 // ChatGPT browser generation. Backend is always web, never configurable.
@@ -573,4 +574,12 @@ message MediaMCPConfig {
  bool enabled = 1;
  string definition_id = 2;
  repeated string allowed_origins = 3;
+}
+
+// Client-side only: wx_channel owns login, capture, download and decryption.
+message WXChannelConfig {
+  bool enabled = 1;
+  string endpoint = 2;
+  string token_file = 3;
+  string downloads_directory = 4;
 }

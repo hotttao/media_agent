@@ -27,3 +27,5 @@
 **Media Management Batch（媒体管理批次）**：同一调用主体及组织范围下，针对同一种媒体管理操作提交的一组独立请求；每项独立授权和返回结果，批次不构成跨对象事务。
 
 2026-10-29 多图扩展：DoubaoGenerate 同时实现 first_frame_prompt（恰好一图）与 multi_image_prompt（至少一图）的真实适配代码，复用同一生命周期与检查点；是否真实网页验收通过以扩展记录为准。
+
+**Reference Import（参考视频获取）**：从本机 wx_channel 浏览记录获取已完成视频，经私有快照和平台授权上传交付；属于素材获取 Workflow，不属于生成 Domain。见 [reference_import](workflow/0005-reference_import/reference_import.md)。

@@ -24,7 +24,7 @@ func main() {
 	apiToken := flag.String("token", envOr("MEDIA_WORKER_API_TOKEN", ""), "opaque Personal Worker API Token")
 	workerID := flag.String("worker-id", envOr("MEDIA_WORKER_ID", defaultWorkerID()), "stable client worker id")
 	stateDir := flag.String("state-dir", envOr("MEDIA_WORKER_STATE_DIR", ".worker-state"), "private local directory for unconfirmed result replay")
-	profile := flag.String("profile", envOr("MEDIA_WORKER_PROFILE", ""), "execution profile: doubao_studio, gpt_image_use, media_ai_fixture or provider_fixture")
+	profile := flag.String("profile", envOr("MEDIA_WORKER_PROFILE", ""), "execution profile: wx_channel, doubao_studio, gpt_image_use, media_ai_fixture or provider_fixture")
 	fixtureConfig := flag.String("fixture-config", envOr("MEDIA_WORKER_FIXTURE_CONFIG", ""), "private Provider fixture JSON file with explicit Job/Step results")
 	capabilityList := flag.String("capabilities", envOr("MEDIA_WORKER_CAPABILITIES", ""), "comma-separated capability key@version allowlist")
 	fixtureAssetsURL := flag.String("fixture-assets-url", envOr("MEDIA_WORKER_FIXTURE_ASSETS_URL", "http://192.168.2.38"), "media_ai fixture asset service base URL (test profile only)")
@@ -43,10 +43,13 @@ func main() {
 	if *apiToken == "" {
 		log.Fatal("MEDIA_WORKER_API_TOKEN or -token is required")
 	}
-	if *profile == "doubao_studio" || *profile == "gpt_image_use" {
+	if *profile == "doubao_studio" || *profile == "gpt_image_use" || *profile == "wx_channel" {
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 		run := runDoubaoProduction
+		if *profile == "wx_channel" {
+			run = runWXChannelProduction
+		}
 		if *profile == "gpt_image_use" {
 			run = runGPTProduction
 		}
@@ -57,7 +60,7 @@ func main() {
 		return
 	}
 	if *profile != "media_ai_fixture" && *profile != fixture.ProviderProfile {
-		log.Fatal("execution requires doubao_studio, gpt_image_use, media_ai_fixture or provider_fixture profile")
+		log.Fatal("execution requires wx_channel, doubao_studio, gpt_image_use, media_ai_fixture or provider_fixture profile")
 	}
 	var executor *fixture.Executor
 	var err error

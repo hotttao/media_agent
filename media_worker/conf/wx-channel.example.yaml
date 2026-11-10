@@ -1,0 +1,10 @@
+app:
+  name: media_worker
+media_worker:
+  enabled: true
+  wx_channel:
+    enabled: true
+    endpoint: http://127.0.0.1:2027/mcp
+    # Token is read from disk, never submitted as a workflow input.
+    token_file: ${WX_CHANNEL_DOWNLOADS_DIR}/.wx_channel_mcp_token
+    downloads_directory: ${WX_CHANNEL_DOWNLOADS_DIR}

@@ -203,3 +203,15 @@ GPT Workflow 检查点位于凭证命名空间的 `gpt-checkpoints`，bridge 技
 多图执行请同步更新 Studio 配套代码。Worker 未设置能力 allowlist 时注册两个 Doubao 能力；若设置了 MEDIA_WORKER_CAPABILITIES，需显式包含 doubao.i2v.multi_image_prompt@1。不能只更新 MCP 白名单而继续运行旧的单图 Studio 接口。
 
 外部工具安装/更新见 [deploy](../deploy/README.md)：只维护 Studio、Chrome/GPT 工具和 Penpot 的新增部署元数据；已有服务继续使用原 Compose。工具安装在 `/home/tao/deploy`，新应用数据在 `/data`，不会自动迁移现有 Worker 状态。
+
+## 本机 wx_channel 参考视频
+
+wx_channel 已有下载和分析 MCP，Worker 通过其公开接口复用下载及解密，不在服务器运行微信。上游版本依据：`41ce178f8e1a27a3a67e6953c6be71d2933b3014`。
+
+1. 在运行微信的客户端启动 wx_channel，打开目标视频形成浏览记录；MCP 默认 `http://127.0.0.1:2027/mcp`，令牌文件为下载目录的 `.wx_channel_mcp_token`。
+2. 执行 workflow 数据库迁移 `000029`，重启服务。确认 `wx_channel.download.record@1` 已发布。迁移遵循现有已发布契约不可删除规则，回滚需要恢复备份或前向修复。
+3. 设置 `WX_CHANNEL_DOWNLOADS_DIR` 为 wx_channel 配置的真实下载目录，使用 `conf/wx-channel.example.yaml`。
+4. 在客户端运行：`go run ./cmd/media_worker -profile wx_channel -config conf/wx-channel.example.yaml -worker-id wx-channel-client`；另设现有 `MEDIA_GATEWAY_URL` 与 `MEDIA_WORKER_API_TOKEN`。
+5. 模板使用此能力、VIDEO 输出类型、`invocation_mapping={"record_id":{"op":"render_template"}}`，`prompt_body` 渲染为实际浏览记录 ID（可以直接填 ID）。通过现有模板/工作流发布和 jobs_submit 使用。签名下载 URL、微信会话、解密密钥均不是任务输入。
+
+进度保持 pending，已完成快照在 `.worker-state` 中保留并供上传重试使用。wx_channel 和 Worker 必须共享本机下载目录。商品详情/图片无已确认接口，返回 unsupported；不要把视频封面当商品素材。需要在有微信会话的机器验收真实下载、解密和上传。

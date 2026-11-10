@@ -48,7 +48,7 @@ func ReadOnly(name string) bool {
 }
 func NeedsWorkspace(name string) bool { return name == "workflows_create" || name == "jobs_submit" }
 func Supported(key string, version int) bool {
-	return version == 1 && (key == "doubao.i2v.first_frame_prompt" || key == "doubao.i2v.multi_image_prompt" || key == "gpt.t2i.text_prompt" || key == "gpt.i2i.multi_image_prompt")
+	return version == 1 && (key == "wx_channel.download.record" || key == "doubao.i2v.first_frame_prompt" || key == "doubao.i2v.multi_image_prompt" || key == "gpt.t2i.text_prompt" || key == "gpt.i2i.multi_image_prompt")
 }
 func Validate(name string, p contract.Params) error {
 	if !Known(name) {

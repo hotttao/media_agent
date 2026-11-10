@@ -137,7 +137,7 @@ func (o Operations) Execute(ctx context.Context, name string, p contract.Params)
 }
 func allowedTemplate(value map[string]any) error {
 	if !policy.Supported(textValue(value, "capability_key"), numberValue(value, "capability_version")) {
-		return &Failure{Code: "unsupported_capability", Message: "Only published Doubao video and GPT image capabilities are supported", NotDispatched: true}
+		return &Failure{Code: "unsupported_capability", Message: "Only supported published media capabilities are allowed", NotDispatched: true}
 	}
 	return nil
 }
@@ -264,7 +264,7 @@ func selectFields(value map[string]any, keys ...string) map[string]any {
 }
 func (o Operations) capabilities(ctx context.Context, p contract.Params) (map[string]any, error) {
 	found := []any{}
-	for _, key := range []string{"doubao.i2v.first_frame_prompt", "doubao.i2v.multi_image_prompt", "gpt.t2i.text_prompt", "gpt.i2i.multi_image_prompt"} {
+	for _, key := range []string{"wx_channel.download.record", "doubao.i2v.first_frame_prompt", "doubao.i2v.multi_image_prompt", "gpt.t2i.text_prompt", "gpt.i2i.multi_image_prompt"} {
 		value, err := o.API.Execute(ctx, "capabilities_get", contract.Params{CapabilityKey: key, CapabilityVersion: 1})
 		if err != nil {
 			var failure *Failure

@@ -31,7 +31,7 @@ func (s *Service) List(ctx context.Context, caller string, query ListQuery) (*Pa
 	if caller == "" {
 		return nil, ErrUnauthenticated
 	}
-	if query.Page < 0 || query.PageSize < 0 || query.PageSize > 200 || (query.ExecutionTarget != "" && !domain.ExecutionTarget(query.ExecutionTarget).Valid()) || (query.GenerationMethod != "" && domain.GenerationMethod(query.GenerationMethod).OutputMedia() == "") || (query.GenerationType != "" && query.GenerationType != string(domain.FirstFramePrompt) && query.GenerationType != string(domain.MultiImagePrompt) && query.GenerationType != string(domain.TextPrompt)) {
+	if query.Page < 0 || query.PageSize < 0 || query.PageSize > 200 || (query.ExecutionTarget != "" && !domain.ExecutionTarget(query.ExecutionTarget).Valid()) || (query.GenerationMethod != "" && domain.GenerationMethod(query.GenerationMethod).OutputMedia() == "") || (query.GenerationType != "" && query.GenerationType != string(domain.FirstFramePrompt) && query.GenerationType != string(domain.MultiImagePrompt) && query.GenerationType != string(domain.TextPrompt) && query.GenerationType != string(domain.Record)) {
 		return nil, ErrInvalidQuery
 	}
 	if query.Page == 0 {

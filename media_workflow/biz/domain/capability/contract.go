@@ -11,6 +11,8 @@ type GenerationMethod string
 type GenerationType string
 
 const (
+	Download         GenerationMethod = "download"
+	Record           GenerationType   = "record"
 	TextToImage      GenerationMethod = "t2i"
 	ImageToImage     GenerationMethod = "i2i"
 	TextToVideo      GenerationMethod = "t2v"
@@ -27,7 +29,7 @@ func (m GenerationMethod) OutputMedia() MediaType {
 	switch m {
 	case TextToImage, ImageToImage:
 		return MediaImage
-	case TextToVideo, ImageToVideo:
+	case TextToVideo, ImageToVideo, Download:
 		return MediaVideo
 	}
 	return ""
@@ -38,6 +40,10 @@ func ContractKey(platform string, method GenerationMethod, kind GenerationType, 
 		return "", ErrInvalidContract
 	}
 	switch kind {
+	case Record:
+		if platform != "wx_channel" || method != Download || target != ExecutionTargetPersonalWorker {
+			return "", ErrInvalidContract
+		}
 	case FirstFramePrompt, MultiImagePrompt:
 		if method != ImageToImage && method != ImageToVideo {
 			return "", ErrInvalidContract
@@ -73,6 +79,16 @@ func (c Capability) ValidateContract() error {
 	}
 	if (c.ExecutionTarget == ExecutionTargetPersonalWorker && c.ManagedPoolKey != "") || (c.ExecutionTarget == ExecutionTargetManagedWorker && strings.TrimSpace(c.ManagedPoolKey) == "") {
 		return ErrInvalidContract
+	}
+	if c.GenerationMethod == Download {
+		if c.Mode != "reference_import" || len(c.Inputs) != 1 {
+			return ErrInvalidContract
+		}
+		i := c.Inputs[0]
+		if i.Name != "record_id" || i.Type != InputString || !i.Required || i.MediaType != "" || i.MinItems != 0 || i.MaxItems != 0 {
+			return ErrInvalidContract
+		}
+		return nil
 	}
 	if (c.OutputMediaType == MediaImage && c.Mode != "image_generation") || (c.OutputMediaType == MediaVideo && c.Mode != "video_generation") {
 		return ErrInvalidContract
