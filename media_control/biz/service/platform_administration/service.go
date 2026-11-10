@@ -8,17 +8,21 @@ import (
 
 	"github.com/google/uuid"
 
-	"media_agent/media_control/biz/dal"
 	domain "media_agent/media_control/biz/domain/platform_administration"
 )
 
+// TxRunner is the transaction boundary required by this service.
+type TxRunner interface {
+	RunInTx(context.Context, func(context.Context) error) error
+}
+
 type Service struct {
 	repo domain.Repository
-	tx   dal.TxRunner
+	tx   TxRunner
 	now  func() time.Time
 }
 
-func New(repo domain.Repository, tx dal.TxRunner) *Service {
+func New(repo domain.Repository, tx TxRunner) *Service {
 	return &Service{repo: repo, tx: tx, now: func() time.Time { return time.Now().UTC() }}
 }
 func (s *Service) Create(ctx context.Context, actor domain.Actor, key, valueJSON string) (*domain.Setting, error) {

@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"media_agent/media_control/biz/dal"
 	domain "media_agent/media_control/biz/domain/workspace"
 	"media_agent/media_control/biz/shared/secret"
 )
@@ -28,15 +27,19 @@ type ModelConnections interface {
 	ValidateBinding(context.Context, string, string, string) error
 }
 
+type TxRunner interface {
+	RunInTx(context.Context, func(context.Context) error) error
+}
+
 type Service struct {
 	connections ModelConnections
 	repo        domain.AccessRepository
-	tx          dal.TxRunner
+	tx          TxRunner
 	cipher      *secret.Cipher
 	teams       domain.TeamAccess
 }
 
-func New(repo domain.AccessRepository, tx dal.TxRunner, cipher *secret.Cipher, teams domain.TeamAccess) *Service {
+func New(repo domain.AccessRepository, tx TxRunner, cipher *secret.Cipher, teams domain.TeamAccess) *Service {
 	return &Service{repo: repo, tx: tx, cipher: cipher, teams: teams}
 }
 

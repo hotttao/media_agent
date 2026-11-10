@@ -128,3 +128,27 @@ async def test_reconnect_after_done_flushes_buffer_and_exits() -> None:
     assert "session.started" in await anext(reader)
     with pytest.raises(StopAsyncIteration):
         await asyncio.wait_for(anext(reader), timeout=0.1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("load", [False, True])
+async def test_cancelled_preparation_destroys_unregistered_bridge(load: bool) -> None:
+    started = asyncio.Event()
+
+    class PreparingBridge(_Bridge):
+        async def start(self) -> None:
+            started.set()
+            await asyncio.Event().wait()
+
+    bridge = PreparingBridge("draft")
+    server = AcpServer(_Hooks(), lambda sid, key=None: bridge)
+    task = asyncio.create_task(
+        server.load_session("existing", None) if load else server.create_session(None)
+    )
+    await asyncio.wait_for(started.wait(), 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert bridge.destroyed
+    assert server.sessions == {}
+    assert server.bridges == {}

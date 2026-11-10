@@ -283,7 +283,7 @@ class AcpServer:
             if self.hooks.has_mcp_servers():
                 await bridge.wait_for_mcp_ready()
             session = await bridge.create_session(mcp_servers=mcp_servers)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             bridge.destroy()
             raise
         session.last_active = self.clock.now()
@@ -313,7 +313,7 @@ class AcpServer:
                 else self._gateway_servers(session_token)
             )
             session = await bridge.load_session(session_id, mcp_servers=mcp_servers)
-        except LoadSessionFailed:
+        except (LoadSessionFailed, asyncio.CancelledError):
             bridge.destroy()
             raise
         except Exception as err:

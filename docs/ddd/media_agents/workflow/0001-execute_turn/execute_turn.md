@@ -191,3 +191,5 @@ ACP load_session 可以回放原生历史，但新 Turn 开始前必须清空翻
 原生元数据解析接受固定的 media_plugin.mcp_binding 引用（ID、版本、校验和）；它是 Gateway 运行授权上下文，不下载或生成上游凭据。其他未知必需资源仍拒绝应用。
 
 ACP 返回标准 Authentication required 时，转换为安全的 model_authentication_required 错误分类，Turn failed 并维持暂停语义；不向浏览器回显原生错误详情或认证数据。
+
+原生会话准备（创建或恢复）期间的用户中断取消当前 Turn 的 prepare 任务，等待其清理未注册的 bridge，再以 interrupted 终态提交并暂停队列。不能向上轮的持久句柄发送取消后就认定本轮已中断；准备尚未完成时不启动模型输入。关闭进程导致的任务取消仍向上传播，不伪造用户中断终态。

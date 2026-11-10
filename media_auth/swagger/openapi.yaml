@@ -107,6 +107,243 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/applications:
+        get:
+            tags:
+                - ApplicationService
+            operationId: ApplicationService_ListApplications
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListApplicationsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - ApplicationService
+            operationId: ApplicationService_CreateApplication
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateApplicationRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplicationSecretResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/applications/{id}/mcp-targets/{definition_id}:
+        put:
+            tags:
+                - ApplicationService
+            operationId: ApplicationService_SetApplicationMCPTarget
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: definition_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApplicationMCPTargetRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Empty'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - ApplicationService
+            operationId: ApplicationService_DeleteApplicationMCPTarget
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: definition_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: origin
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Empty'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/applications/{id}/secret:
+        post:
+            tags:
+                - ApplicationService
+            operationId: ApplicationService_RotateApplicationSecret
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApplicationIDRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplicationSecretResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/applications/{id}/status:
+        patch:
+            tags:
+                - ApplicationService
+            operationId: ApplicationService_SetApplicationStatus
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetApplicationStatusRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Application'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/applications/{id}/teams/{team_id}:
+        put:
+            tags:
+                - ApplicationService
+            operationId: ApplicationService_SetApplicationTeamGrant
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: team_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApplicationTeamGrantRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplicationTeamGrant'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - ApplicationService
+            operationId: ApplicationService_DeleteApplicationTeamGrant
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: team_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: scopes
+                  in: query
+                  schema:
+                    type: array
+                    items:
+                        type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Empty'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/auth/.well-known/jwks.json:
         get:
             tags:
@@ -1769,6 +2006,109 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /apps/v1/me:
+        get:
+            tags:
+                - ApplicationService
+            description: Only the short-lived application Bearer credential is accepted here.
+            operationId: ApplicationService_GetApplicationUserInfo
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplicationUser'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/users/{external_id}:
+        get:
+            tags:
+                - ApplicationService
+            operationId: ApplicationService_GetApplicationUser
+            parameters:
+                - name: external_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplicationUser'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - ApplicationService
+            description: The next three operations accept only application HTTP Basic credentials, never a session.
+            operationId: ApplicationService_UpsertApplicationUser
+            parameters:
+                - name: external_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertApplicationUserRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplicationUser'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/users/{external_id}/token:
+        post:
+            tags:
+                - ApplicationService
+            operationId: ApplicationService_IssueApplicationUserToken
+            parameters:
+                - name: external_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/IssueApplicationTokenRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ApplicationTokenResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /internal/mcp-oauth/token:
         post:
             tags:
@@ -1987,22 +2327,110 @@ components:
                     type: string
                 username:
                     type: string
+                display_name:
+                    type: string
+                email:
+                    type: string
                 role:
                     type: string
-                    description: user | admin | system
                 auth_source:
                     type: string
-                    description: password | ldap | wecom —— 用于前端判断能否改密
-                default_prompt_id:
+                created_at:
                     type: string
-                auto_evolution:
-                    type: boolean
-            description: |-
-                ApiUser —— /me、登录响应的统一用户档案 DTO
-
-                 注意:default_prompt_id 为 opaque id(prompts 表留在 control_plane),
-                      不校验 FK;default_prompt_name 不在此返回,由网关层补,见
-                      docs/ddd/adr/0001-media-auth-extraction-and-token-verification.md
+                last_login_at:
+                    type: string
+                status:
+                    type: string
+                auth_version:
+                    type: string
+                deleted_at:
+                    type: string
+                deleted_by:
+                    type: string
+        Application:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
+                    type: string
+                status:
+                    type: string
+                credential_version:
+                    type: string
+                created_by:
+                    type: string
+                created_at:
+                    type: string
+        ApplicationIDRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+        ApplicationMCPTargetRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                definition_id:
+                    type: string
+                origin:
+                    type: string
+        ApplicationSecretResponse:
+            type: object
+            properties:
+                application:
+                    $ref: '#/components/schemas/Application'
+                client_secret:
+                    type: string
+        ApplicationTeamGrant:
+            type: object
+            properties:
+                application_id:
+                    type: string
+                team_id:
+                    type: string
+                organization_id:
+                    type: string
+                scopes:
+                    type: array
+                    items:
+                        type: string
+        ApplicationTeamGrantRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                team_id:
+                    type: string
+                scopes:
+                    type: array
+                    items:
+                        type: string
+        ApplicationTokenResponse:
+            type: object
+            properties:
+                access_token:
+                    type: string
+                token_type:
+                    type: string
+                expires_in:
+                    type: string
+                scope:
+                    type: string
+        ApplicationUser:
+            type: object
+            properties:
+                id:
+                    type: string
+                external_id:
+                    type: string
+                application_id:
+                    type: string
+                display_name:
+                    type: string
+                email:
+                    type: string
         ApproveAuthorizationRequest:
             type: object
             properties:
@@ -2095,6 +2523,13 @@ components:
                 api_token:
                     $ref: '#/components/schemas/ApiTokenRecord'
                 secret:
+                    type: string
+        CreateApplicationRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                name:
                     type: string
         CreateClientRequest:
             type: object
@@ -2205,6 +2640,9 @@ components:
                     type: boolean
                 server_origin:
                     type: string
+        Empty:
+            type: object
+            properties: {}
         EntitlementsResponse:
             type: object
             properties:
@@ -2272,14 +2710,24 @@ components:
         HandleCallbackResponse:
             type: object
             properties:
-                html:
+                redirect_to:
                     type: string
-                    description: 完整 HTML,前端无需修改
-                success:
-                    type: boolean
+                    description: 成功时为相对路径 /;失败时为 /login?error=xxx
             description: |-
-                HandleCallbackResponse —— handler 返回完整 HTML 字符串(200),HTML 含
-                 window.opener.postMessage(...) + window.close()。
+                HandleCallbackResponse —— 本 RPC 通过 HTTP 302 重定向闭环;
+                 本响应字段在成功路径上不被消费,handler 直接 c.redirect。
+                 保留结构以便未来支持纯 JSON 回调场景(API caller 拿到 redirect_url 自决)。
+        IssueApplicationTokenRequest:
+            type: object
+            properties:
+                external_id:
+                    type: string
+                team_id:
+                    type: string
+                scopes:
+                    type: array
+                    items:
+                        type: string
         JsonWebKey:
             type: object
             properties:
@@ -2302,6 +2750,13 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ApiTokenRecord'
+        ListApplicationsResponse:
+            type: object
+            properties:
+                applications:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Application'
         ListClientsResponse:
             type: object
             properties:
@@ -2329,7 +2784,7 @@ components:
                 members:
                     type: array
                     items:
-                        $ref: '#/components/schemas/ApiTeamMember'
+                        $ref: '#/components/schemas/ApiOrganizationMember'
         ListMyTeamsResponse:
             type: object
             properties:
@@ -2454,6 +2909,13 @@ components:
                 api_token:
                     $ref: '#/components/schemas/ApiTokenRecord'
                 secret:
+                    type: string
+        SetApplicationStatusRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                status:
                     type: string
         SetDefaultPromptRequest:
             type: object
@@ -2589,6 +3051,15 @@ components:
             properties:
                 success:
                     type: boolean
+        UpsertApplicationUserRequest:
+            type: object
+            properties:
+                external_id:
+                    type: string
+                display_name:
+                    type: string
+                email:
+                    type: string
         UsableTokenRequest:
             type: object
             properties:
@@ -2653,6 +3124,8 @@ components:
 tags:
     - name: AgentTokenService
     - name: ApiTokenService
+    - name: ApplicationService
+      description: Platform applications are distinct from OAuth clients. Management requires an admin session.
     - name: AuthService
       description: |-
         AuthService —— 本地账号 + LDAP 双路登录,以及当前用户/会话域。

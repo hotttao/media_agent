@@ -1,0 +1,161 @@
+{
+  "application_id": "deploy-20b6552b",
+  "checks": [
+    {
+      "check": "create isolated verification administrator",
+      "status": 201
+    },
+    {
+      "check": "Kratos browser login flow",
+      "status": 200
+    },
+    {
+      "check": "Kratos password login",
+      "status": 200
+    },
+    {
+      "check": "Oathkeeper admin application registration",
+      "status": 201
+    },
+    {
+      "check": "application user provisioning",
+      "status": 201
+    },
+    {
+      "check": "application token issuance",
+      "status": 200
+    },
+    {
+      "check": "application profile access",
+      "status": 200
+    },
+    {
+      "check": "profile token denied business access",
+      "status": 401
+    },
+    {
+      "check": "Gateway denies profile token despite browser cookie",
+      "status": 403
+    },
+    {
+      "check": "create verification organization",
+      "status": 201
+    },
+    {
+      "check": "grant organization membership",
+      "status": 200
+    },
+    {
+      "check": "grant workspace entitlement",
+      "status": 200
+    },
+    {
+      "check": "create verification team",
+      "status": 201
+    },
+    {
+      "check": "grant team membership",
+      "status": 201
+    },
+    {
+      "check": "application Team Grant",
+      "status": 200
+    },
+    {
+      "check": "business credential issuance",
+      "status": 200
+    },
+    {
+      "check": "create actual application Workspace",
+      "status": 201
+    },
+    {
+      "check": "idempotent ensureAgent",
+      "status": 200
+    },
+    {
+      "check": "read application Workspace",
+      "status": 200
+    },
+    {
+      "check": "Gateway application session list",
+      "status": 200
+    },
+    {
+      "check": "live SDK relay and actual Codex runtime session",
+      "result": {
+        "connection_id": "3db6a5ba-bd39-4624-aba3-9f3ed7a05176",
+        "connection_revoked": true,
+        "events": [
+          {
+            "id": 1,
+            "type": "turn.queued"
+          },
+          {
+            "id": 2,
+            "type": "turn.started"
+          },
+          {
+            "id": 3,
+            "type": "item.completed"
+          },
+          {
+            "id": 4,
+            "type": "session.ended"
+          },
+          {
+            "id": 5,
+            "type": "turn.completed"
+          }
+        ],
+        "history_verified": true,
+        "interrupt_events": [
+          {
+            "id": 6,
+            "type": "turn.queued"
+          },
+          {
+            "id": 7,
+            "type": "turn.started"
+          },
+          {
+            "id": 8,
+            "type": "session.ended"
+          },
+          {
+            "id": 9,
+            "type": "turn.interrupted"
+          }
+        ],
+        "interrupt_verified": true,
+        "model_inference_verified": true,
+        "reconnect_verified": true,
+        "session_id": "c1043ddf-34ee-4919-8aec-b8a3a6cbb2f7",
+        "turn_id": "084fabf1-0a9b-47a2-b7e1-f2377b4fbeb6",
+        "workspace_id": "5a7fe5c7-a2d3-4521-ad40-bd3fd4f06519"
+      }
+    },
+    {
+      "check": "revoke Team Grant",
+      "status": 200
+    },
+    {
+      "check": "business credential revoked on deployed Control",
+      "status": 401
+    },
+    {
+      "check": "disable application",
+      "status": 200
+    },
+    {
+      "check": "deployed credential revocation",
+      "status": 401
+    }
+  ],
+  "transport_note": "The container Go resolver cannot resolve the local mDNS name. A temporary loopback reverse proxy forwarded to the deployed gateway IP with its configured Host header; no auth or model responses were mocked.",
+  "runtime_cleanup": {
+    "container": "agent-3e972c3bd65a3a058d9b7bd0",
+    "stopped": true,
+    "session_auth_files_removed": true
+  }
+}

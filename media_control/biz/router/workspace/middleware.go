@@ -60,3 +60,38 @@ func _getworkspacepermissionsMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _appsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _v10Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _agent_workspacesMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _checkapplicationworkspaceMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _agentsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getapplicationagentMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _ensureapplicationagentMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

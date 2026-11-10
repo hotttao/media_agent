@@ -27,14 +27,16 @@ type MCPBackend struct {
 	Endpoint, Transport string
 	Headers             map[string]string
 	RequestHeaders      func(context.Context, string, json.RawMessage) (map[string]string, error)
+	IdentityHeaders     func(context.Context) (map[string]string, error)
 }
 type MCPUpstream struct{}
 type mcpHTTPTransport struct {
-	headers        map[string]string
-	transport      http.RoundTripper
-	reauth         *atomic.Bool
-	origin         *url.URL
-	requestHeaders func(context.Context, string, json.RawMessage) (map[string]string, error)
+	headers         map[string]string
+	transport       http.RoundTripper
+	reauth          *atomic.Bool
+	origin          *url.URL
+	requestHeaders  func(context.Context, string, json.RawMessage) (map[string]string, error)
+	identityHeaders func(context.Context) (map[string]string, error)
 }
 
 func (t mcpHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -45,6 +47,17 @@ func (t mcpHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	clone.Header = req.Header.Clone()
 	for key, value := range t.headers {
 		clone.Header.Set(key, value)
+	}
+	// Caller is trusted only when supplied by the configured identity callback.
+	clone.Header.Del("X-Platform-Caller")
+	if t.identityHeaders != nil {
+		headers, err := t.identityHeaders(req.Context())
+		if err != nil {
+			return nil, err
+		}
+		for key, value := range headers {
+			clone.Header.Set(key, value)
+		}
 	}
 	if t.requestHeaders != nil && req.Method == http.MethodPost {
 		if req.GetBody == nil {
@@ -120,7 +133,7 @@ func (MCPUpstream) Open(ctx context.Context, backend MCPBackend) (MCPPeer, error
 		return nil, ErrMCPUpstream
 	}
 	reauth := &atomic.Bool{}
-	httpClient := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }, Transport: mcpHTTPTransport{headers: backend.Headers, transport: http.DefaultTransport, reauth: reauth, origin: origin, requestHeaders: backend.RequestHeaders}}
+	httpClient := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }, Transport: mcpHTTPTransport{headers: backend.Headers, transport: http.DefaultTransport, reauth: reauth, origin: origin, requestHeaders: backend.RequestHeaders, identityHeaders: backend.IdentityHeaders}}
 	var transport mcp.Transport
 	switch backend.Transport {
 	case "streamable_http":

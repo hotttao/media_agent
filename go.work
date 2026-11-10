@@ -15,4 +15,5 @@ use (
 	./media_runtime_controller
 	./media_worker
 	./media_workflow
+	./packages/platform-go-sdk
 )

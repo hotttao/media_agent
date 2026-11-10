@@ -1,5 +1,25 @@
 http:
   routers:
+    application-admin:
+      rule: "PathPrefix(`/api/applications`)"
+      priority: 110
+      middlewares: [oathkeeper-forward-auth]
+      service: auth
+    application-users:
+      rule: "PathPrefix(`/apps/v1/users/`) || Path(`/apps/v1/me`)"
+      priority: 110
+      middlewares: [oathkeeper-forward-auth]
+      service: auth
+    application-agents:
+      rule: "PathPrefix(`/apps/v1/agents/`) || Path(`/apps/v1/model-connections`) || PathPrefix(`/apps/v1/model-connections/`)"
+      priority: 110
+      middlewares: [oathkeeper-forward-auth]
+      service: control
+    application-chat:
+      rule: "PathPrefix(`/apps/v1/chat/`) || Path(`/.well-known/application-caller-jwks.json`)"
+      priority: 110
+      middlewares: [oathkeeper-forward-auth]
+      service: agent-api
     ory-hydra:
       rule: "PathPrefix(`/ory/hydra`)"
       priority: 130

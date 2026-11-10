@@ -17,3 +17,9 @@
 # 2026-10-04 · 旧凭据验证退役
 
 普通业务认证移除旧ServiceToken Hash/远程`/api/auth/me`旁路与成功凭据缓存；失败Bearer不得降级Cookie。旧验证/Platform读取RPC退出IDL，Session introspection保留User当前状态与版本校验。独立Platform私有mTLS链路与API Token/Talos验证不变。
+
+## 2026-11-07 应用托管身份
+
+
+## 应用托管用户
+User.managed_by 引用唯一平台接入应用，创建后不可改。托管用户 role=user、password_hash 和 kratos_identity_id 为空。禁止本地/LDAP/企微/Kratos交互登录、设置密码、按邮箱自动并入Kratos身份以及Cookie Session校验。AuthSource=application。资料写入由受限 ManagedUsers 用例执行，停用/删除沿用现有auth_version与Outbox；恢复不复活旧应用访问凭证。

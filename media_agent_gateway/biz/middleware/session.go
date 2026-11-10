@@ -75,3 +75,8 @@ func InternalService() app.HandlerFunc {
 func matchesInternalToken(provided, configured string) bool {
 	return provided != "" && configured != "" && len(provided) == len(configured) && subtle.ConstantTimeCompare([]byte(provided), []byte(configured)) == 1
 }
+
+// WithApplicationUser is used only after online application and workspace authorization.
+func WithApplicationUser(ctx context.Context, user string) context.Context {
+	return context.WithValue(ctx, sessionKey{}, user)
+}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
-	"media_agent/media_control/biz/dal"
 	d "media_agent/media_control/biz/domain/afs_binding"
 	w "media_agent/media_control/biz/domain/workspace"
 	"strings"
@@ -13,13 +12,19 @@ import (
 
 type CreateCommand struct{ Owner, WorkspaceID, ExternalRef, DesiredState string }
 type MemberCommand struct{ Owner, BindingID, SubjectID, SubjectType, ExternalMemberRef string }
+
+// TxRunner is the transaction boundary required by this service.
+type TxRunner interface {
+	RunInTx(context.Context, func(context.Context) error) error
+}
+
 type Service struct {
 	repo d.Repository
-	tx   dal.TxRunner
+	tx   TxRunner
 	work w.Repository
 }
 
-func New(r d.Repository, tx dal.TxRunner, work w.Repository) *Service {
+func New(r d.Repository, tx TxRunner, work w.Repository) *Service {
 	return &Service{repo: r, tx: tx, work: work}
 }
 func (s *Service) Create(ctx context.Context, c CreateCommand) (*d.Binding, error) {

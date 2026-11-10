@@ -50,3 +50,43 @@ func _revokeconnectionMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _appsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _v10Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listapplicationconnectionsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _createapplicationconnectionMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _model_connections0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _updateapplicationconnectionMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _connection_id0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _revokeapplicationconnectionMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

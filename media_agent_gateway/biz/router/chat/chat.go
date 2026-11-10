@@ -50,4 +50,39 @@ func Register(r *server.Hertz) {
 			}
 		}
 	}
+	{
+		_apps := root.Group("/apps", _appsMw()...)
+		{
+			_v1 := _apps.Group("/v1", _v1Mw()...)
+			{
+				_chat0 := _v1.Group("/chat", _chat0Mw()...)
+				_chat0.GET("/sessions", append(_applicationlistsessionsMw(), chat.ApplicationListSessions)...)
+				_chat0.POST("/sessions", append(_applicationcreatesessionMw(), chat.ApplicationCreateSession)...)
+				{
+					_sessions0 := _chat0.Group("/sessions", _sessions0Mw()...)
+					{
+						_session_id0 := _sessions0.Group("/:session_id", _session_id0Mw()...)
+						_session_id0.GET("/events", append(_applicationsubscribeeventsMw(), chat.ApplicationSubscribeEvents)...)
+						_session_id0.POST("/interrupt", append(_applicationinterruptturnMw(), chat.ApplicationInterruptTurn)...)
+						_session_id0.GET("/messages", append(_applicationlistmessagesMw(), chat.ApplicationListMessages)...)
+						_session_id0.GET("/requests", append(_applicationlistagentrequestsMw(), chat.ApplicationListAgentRequests)...)
+						_session_id0.POST("/turns", append(_applicationrunturnMw(), chat.ApplicationRunTurn)...)
+						{
+							_turns0 := _session_id0.Group("/turns", _turns0Mw()...)
+							{
+								_turn_id0 := _turns0.Group("/:turn_id", _turn_id0Mw()...)
+								{
+									_requests0 := _turn_id0.Group("/requests", _requests0Mw()...)
+									{
+										_request_id0 := _requests0.Group("/:request_id", _request_id0Mw()...)
+										_request_id0.POST("/resolve", append(_applicationresolveagentrequestMw(), chat.ApplicationResolveAgentRequest)...)
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }

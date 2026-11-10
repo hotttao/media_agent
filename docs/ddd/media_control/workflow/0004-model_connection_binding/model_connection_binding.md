@@ -33,3 +33,6 @@ Agent 仅在 Turn prepare 时装配凭据，文件不属于 metadata bundle。�
 Workspace 明确更换连接时，同一事务写配置引用和历史，并沿用原 Release 的 Prompt/Skill/MCP 固定内容生成新 Release 与 Outbox；旧 Workspace 无 Release 时生成 none/空资源初始内容。不能因更换模型连接而升级资源。仅替换连接认证内容时不生成元数据 Release 或通知。
 
 Claude Code/Goose的模型调用设置变更复用同一配置更新事务及Release沿用规则，旧Session固定原协议/模型/地址。无个人连接的API Key路径也必须原子发布新配置版本；Gateway从固定版本加载非秘密设置，并把认证与调用目标按同一配置版本交给Runtime。
+
+
+应用入口先在线验证应用凭证与部门授权，再以凭证中的托管用户作为连接 owner。导入、更新、撤销沿用 Model Connection 单聚合用例；应用 Agent Ensure 沿用 Workspace 创建流程校验连接 owner、active 与 Codex 类型，再原子写入配置及应用绑定。配置摘要包含连接 ID，替换凭据不改变绑定身份。不同应用的用户映射不能共享连接所有权。

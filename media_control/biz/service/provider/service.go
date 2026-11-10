@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
-	"media_agent/media_control/biz/dal"
 	domain "media_agent/media_control/biz/domain/provider"
 	"strings"
 	"time"
@@ -19,12 +18,18 @@ type StatusCommand struct {
 	ProviderID, Status string
 	ExpectedVersion    int64
 }
-type Service struct {
-	repo domain.Repository
-	tx   dal.TxRunner
+
+// TxRunner is the transaction boundary required by this service.
+type TxRunner interface {
+	RunInTx(context.Context, func(context.Context) error) error
 }
 
-func New(repo domain.Repository, tx dal.TxRunner) *Service { return &Service{repo: repo, tx: tx} }
+type Service struct {
+	repo domain.Repository
+	tx   TxRunner
+}
+
+func New(repo domain.Repository, tx TxRunner) *Service { return &Service{repo: repo, tx: tx} }
 func (s *Service) Create(ctx context.Context, cmd CreateCommand) (*domain.Provider, error) {
 	n, t, e, c, err := domain.Validate(cmd.Name, cmd.ProviderType, cmd.Endpoint, cmd.CapabilitiesJSON)
 	if err != nil {

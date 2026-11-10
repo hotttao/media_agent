@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"media_agent/media_control/biz/dal"
 	credential "media_agent/media_control/biz/domain/credential_reference"
 	domain "media_agent/media_control/biz/domain/memory_store"
 	workspace "media_agent/media_control/biz/domain/workspace"
@@ -22,14 +21,20 @@ type StatusCommand struct {
 	StoreID, OwnerUserID, Status string
 	ExpectedVersion              int64
 }
+
+// TxRunner is the transaction boundary required by this service.
+type TxRunner interface {
+	RunInTx(context.Context, func(context.Context) error) error
+}
+
 type Service struct {
 	repo           domain.Repository
 	workspaceRepo  workspace.Repository
 	credentialRepo credential.Repository
-	tx             dal.TxRunner
+	tx             TxRunner
 }
 
-func New(repo domain.Repository, tx dal.TxRunner, workspaceRepo workspace.Repository, credentialRepo credential.Repository) *Service {
+func New(repo domain.Repository, tx TxRunner, workspaceRepo workspace.Repository, credentialRepo credential.Repository) *Service {
 	return &Service{repo: repo, tx: tx, workspaceRepo: workspaceRepo, credentialRepo: credentialRepo}
 }
 func (s *Service) validateRefs(ctx context.Context, owner, workspaceID, credentialID string) error {

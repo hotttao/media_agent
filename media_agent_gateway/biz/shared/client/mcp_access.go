@@ -19,7 +19,7 @@ type MCPScope struct {
 	Kind, ActorID, CredentialID                                                            string
 	ExpiresAt                                                                              time.Time
 	SessionID, UserID, WorkspaceID, AgentConfigID, AgentType, MetadataTargetContextVersion string
-	OrganizationID                                                                         string
+	OrganizationID, TeamID                                                                 string
 	ContextVersion                                                                         int64
 }
 type MCPGrant struct {

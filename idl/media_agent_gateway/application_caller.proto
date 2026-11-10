@@ -1,0 +1,11 @@
+syntax="proto3";
+package media_agent_gateway.application_caller;
+option go_package="media_agent_gateway/application_caller";
+import "api.proto";
+import "google/api/annotations.proto";
+service ApplicationCallerService {
+ rpc GetApplicationCallerKeys(Empty) returns(CallerJWKS){option(api.get)="/.well-known/application-caller-jwks.json";option(google.api.http)={get:"/.well-known/application-caller-jwks.json"};}
+}
+message Empty{}
+message CallerJWKS{repeated CallerJWK keys=1;}
+message CallerJWK{string kty=1;string use=2;string alg=3;string kid=4;string n=5;string e=6;}

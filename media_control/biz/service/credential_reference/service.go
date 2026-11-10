@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"media_agent/media_control/biz/dal"
 	domain "media_agent/media_control/biz/domain/credential_reference"
 	provider "media_agent/media_control/biz/domain/provider"
 	workspace "media_agent/media_control/biz/domain/workspace"
@@ -22,14 +21,20 @@ type RevokeCommand struct {
 	CredentialID, OwnerUserID string
 	ExpectedVersion           int64
 }
+
+// TxRunner is the transaction boundary required by this service.
+type TxRunner interface {
+	RunInTx(context.Context, func(context.Context) error) error
+}
+
 type Service struct {
 	repo          domain.Repository
 	workspaceRepo workspace.Repository
 	providerRepo  provider.Repository
-	tx            dal.TxRunner
+	tx            TxRunner
 }
 
-func New(repo domain.Repository, tx dal.TxRunner, workspaceRepo workspace.Repository, providerRepo provider.Repository) *Service {
+func New(repo domain.Repository, tx TxRunner, workspaceRepo workspace.Repository, providerRepo provider.Repository) *Service {
 	return &Service{repo: repo, tx: tx, workspaceRepo: workspaceRepo, providerRepo: providerRepo}
 }
 func (s *Service) validateRefs(ctx context.Context, owner, workspaceID, providerID string) error {

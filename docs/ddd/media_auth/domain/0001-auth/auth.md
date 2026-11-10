@@ -65,6 +65,7 @@ auth 负责平台账号的本地密码 / LDAP 双路登录、会话（JWT cookie
 | 字段 | 类型 | 含义 |
 |:---|:---|:---|
 | id | text PK | 稳定 User ID，删除后不复用 |
+| managed_by | text nullable | 唯一托管应用ID；非空时禁止交互身份 |
 | username | text UNIQUE | 登录名，删除后不释放 |
 | display_name | text | 展示名 |
 | email | text nullable | 邮箱 |
@@ -197,3 +198,6 @@ verifySession(cookie):
 
 ### 关联术语
 [Session](../../CONTEXT.md)、[User](../../CONTEXT.md)、[Auth Source](../../CONTEXT.md)、[Platform Token](../../CONTEXT.md)
+
+## 应用托管用户
+User.managed_by 引用唯一平台接入应用，创建后不可改。托管用户 role=user、password_hash 和 kratos_identity_id 为空。禁止本地/LDAP/企微/Kratos交互登录、设置密码、按邮箱自动并入Kratos身份以及Cookie Session校验。AuthSource=application。资料写入由受限 ManagedUsers 用例执行，停用/删除沿用现有auth_version与Outbox；恢复不复活旧应用访问凭证。

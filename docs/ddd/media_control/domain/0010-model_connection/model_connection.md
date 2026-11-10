@@ -13,3 +13,6 @@ Workspace 当前和历史配置只引用连接 ID，与 API Key 互斥；仅 Cod
 创建/替换/撤销是单聚合事务。绑定及运行加载跨 Workspace、个人连接和原生文件，见工作流0004-model_connection_binding。
 
 公开连接 version 用于 CAS；私有认证 revision 仅在导入/替换文件时变化。仅重命名不能使 Agent 覆盖已由原生 Codex 刷新的认证。
+
+
+应用托管用户通过应用凭证访问自己的连接，owner 只能取已验证的用户身份。应用连接列表需要 workspace.read，导入、替换与撤销需要 workspace.ensure，均要求有效部门授权。连接属于用户而非部门，部门仅约束调用权限；公开响应仍只返回元数据。

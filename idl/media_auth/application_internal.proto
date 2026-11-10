@@ -1,0 +1,18 @@
+syntax="proto3";
+package media_auth.application_internal;
+option go_package="media_auth/application_internal";
+import "api.proto";
+import "google/api/annotations.proto";
+service ApplicationInternalService {
+ rpc ResolveApplicationCaller(ResolveApplicationCallerRequest) returns(ResolvedApplicationCaller){option(api.post)="/internal/apps/caller";option(google.api.http)={post:"/internal/apps/caller" body:"*"};}
+
+ rpc VerifyApplicationAccess(VerifyApplicationAccessRequest) returns(VerifiedApplicationAccess) {
+ option(api.post)="/internal/apps/verify";
+ option(google.api.http)={post:"/internal/apps/verify" body:"*"};
+ }
+}
+message VerifyApplicationAccessRequest {string token=1[(api.body)="token"];string scope=2[(api.body)="scope"];}
+message VerifiedApplicationAccess {string application_id=1;string user_id=2;string external_id=3;string team_id=4;string organization_id=5;repeated string scopes=6;int64 expires_at=7;}
+
+message ResolveApplicationCallerRequest{string definition_id=1[(api.body)="definition_id"];string endpoint=2[(api.body)="endpoint"];string user_id=3[(api.body)="user_id"];string organization_id=4[(api.body)="organization_id"];string team_id=5[(api.body)="team_id"];}
+message ResolvedApplicationCaller{bool enabled=1;string application_id=2;string user_id=3;string external_id=4;}

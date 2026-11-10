@@ -1,0 +1,105 @@
+{
+  "application_id": "deploy-25be9653",
+  "checks": [
+    {
+      "check": "create isolated verification administrator",
+      "status": 201
+    },
+    {
+      "check": "Kratos browser login flow",
+      "status": 200
+    },
+    {
+      "check": "Kratos password login",
+      "status": 200
+    },
+    {
+      "check": "Oathkeeper admin application registration",
+      "status": 201
+    },
+    {
+      "check": "application user provisioning",
+      "status": 201
+    },
+    {
+      "check": "application token issuance",
+      "status": 200
+    },
+    {
+      "check": "application profile access",
+      "status": 200
+    },
+    {
+      "check": "profile token denied business access",
+      "status": 401
+    },
+    {
+      "check": "Gateway denies profile token despite browser cookie",
+      "status": 403
+    },
+    {
+      "check": "create verification organization",
+      "status": 201
+    },
+    {
+      "check": "grant organization membership",
+      "status": 200
+    },
+    {
+      "check": "grant workspace entitlement",
+      "status": 200
+    },
+    {
+      "check": "create verification team",
+      "status": 201
+    },
+    {
+      "check": "grant team membership",
+      "status": 201
+    },
+    {
+      "check": "application Team Grant",
+      "status": 200
+    },
+    {
+      "check": "business credential issuance",
+      "status": 200
+    },
+    {
+      "check": "create actual application Workspace",
+      "status": 201
+    },
+    {
+      "check": "idempotent ensureAgent",
+      "status": 200
+    },
+    {
+      "check": "read application Workspace",
+      "status": 200
+    },
+    {
+      "check": "Gateway application session list",
+      "status": 200
+    },
+    {
+      "check": "revoke Team Grant",
+      "status": 200
+    },
+    {
+      "check": "business credential revoked on deployed Control",
+      "status": 401
+    },
+    {
+      "check": "disable application",
+      "status": 200
+    },
+    {
+      "check": "deployed credential revocation",
+      "status": 401
+    },
+    {
+      "check": "deployed Caller public JWKS",
+      "status": 200
+    }
+  ]
+}

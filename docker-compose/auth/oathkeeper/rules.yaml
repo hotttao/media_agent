@@ -86,3 +86,201 @@
             "scope": "{{ print .Extra.scope }}",
             "auth_source": "{{ print .Extra.auth_source }}"
           }
+
+# Application administration is an interactive Kratos session path.
+# Auth resolves the Kratos identity and enforces current platform-admin status.
+- id: media-application-administration
+  upstream:
+    url: http://media_auth:8001
+  match:
+    url: http://mini-001.local:18080/api/applications<(/[a-z][a-z0-9_-]{0,63}/(status|secret))?>
+    methods: [GET, POST, PATCH]
+  authenticators:
+    - handler: cookie_session
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: id_token
+      config:
+        ttl: 1m
+        claims: |
+          {"aud": ["internal-api"], "principal_type": "user"}
+
+# Dedicated application protocol: routing only, NOT an authenticated User.
+# media_auth verifies Basic and mac_ credentials itself and never falls back to Cookie.
+# Do not extend these rules to /api, /internal, Agent or MCP routes.
+- id: media-application-users
+  upstream:
+    url: http://media_auth:8001
+  match:
+    url: http://mini-001.local:18080/apps/v1/users/<[^/]+>
+    methods: [GET, PUT]
+  authenticators:
+    - handler: noop
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop
+
+- id: media-application-token
+  upstream:
+    url: http://media_auth:8001
+  match:
+    url: http://mini-001.local:18080/apps/v1/users/<[^/]+>/token
+    methods: [POST]
+  authenticators:
+    - handler: noop
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop
+
+- id: media-application-userinfo
+  upstream:
+    url: http://media_auth:8001
+  match:
+    url: http://mini-001.local:18080/apps/v1/me
+    methods: [GET]
+  authenticators:
+    - handler: noop
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop
+
+# App business protocols remain online-authorized by their owning service.
+- id: media-application-team-grants
+  upstream:
+    url: http://media_auth:8001
+  match:
+    url: http://mini-001.local:18080/api/applications/<[a-z][a-z0-9_-]{0,63}>/teams/<[^/]+>
+    methods: [PUT, DELETE]
+  authenticators:
+    - handler: cookie_session
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: id_token
+      config:
+        ttl: 1m
+        claims: '{"aud": ["internal-api"], "principal_type": "user"}'
+
+- id: media-application-agents
+  upstream:
+    url: http://host.docker.internal:8007
+  match:
+    url: http://mini-001.local:18080/apps/v1/agents/<[a-z][a-z0-9_-]{0,63}>
+    methods: [GET, PUT]
+  authenticators:
+    - handler: noop
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop
+
+- id: media-application-chat-sessions
+  upstream:
+    url: http://host.docker.internal:8006
+  match:
+    url: http://mini-001.local:18080/apps/v1/chat/sessions
+    methods: [GET, POST]
+  authenticators:
+    - handler: noop
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop
+
+- id: media-application-chat-read
+  upstream:
+    url: http://host.docker.internal:8006
+  match:
+    url: http://mini-001.local:18080/apps/v1/chat/sessions/<[^/]+>/<(messages|events|requests)>
+    methods: [GET]
+  authenticators:
+    - handler: noop
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop
+
+- id: media-application-chat-write
+  upstream:
+    url: http://host.docker.internal:8006
+  match:
+    url: http://mini-001.local:18080/apps/v1/chat/sessions/<[^/]+>/<(turns|interrupt|turns/[^/]+/requests/[^/]+/resolve)>
+    methods: [POST]
+  authenticators:
+    - handler: noop
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop
+
+- id: media-application-mcp-targets
+  upstream:
+    url: http://media_auth:8001
+  match:
+    url: http://mini-001.local:18080/api/applications/<[a-z][a-z0-9_-]{0,63}>/mcp-targets/<[a-z][a-z0-9_-]{0,63}>
+    methods: [PUT, DELETE]
+  authenticators:
+    - handler: cookie_session
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: id_token
+      config:
+        ttl: 1m
+        claims: '{"aud": ["internal-api"], "principal_type": "user"}'
+
+- id: media-application-caller-keys
+  upstream:
+    url: http://host.docker.internal:8006
+  match:
+    url: http://mini-001.local:18080/.well-known/application-caller-jwks.json
+    methods: [GET]
+  authenticators:
+    - handler: noop
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop
+
+- id: media-application-model-connections-0
+  upstream:
+    url: http://host.docker.internal:8007
+  match:
+    url: http://mini-001.local:18080/apps/v1/model-connections
+    methods: [GET, POST]
+  authenticators:
+    - handler: noop
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop
+
+- id: media-application-model-connections-1
+  upstream:
+    url: http://host.docker.internal:8007
+  match:
+    url: http://mini-001.local:18080/apps/v1/model-connections/<[^/]+>
+    methods: [PUT]
+  authenticators:
+    - handler: noop
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop
+
+- id: media-application-model-connections-2
+  upstream:
+    url: http://host.docker.internal:8007
+  match:
+    url: http://mini-001.local:18080/apps/v1/model-connections/<[^/]+>/revoke
+    methods: [POST]
+  authenticators:
+    - handler: noop
+  authorizer:
+    handler: allow
+  mutators:
+    - handler: noop

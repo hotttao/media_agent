@@ -39,13 +39,14 @@ type MCPUpstreamPort interface {
 	Open(context.Context, client.MCPBackend) (client.MCPPeer, error)
 }
 type MCPGateway struct {
-	identity MCPIdentityPort
-	catalog  *catalog.Service
-	bindings MCPBindingAccess
-	upstream MCPUpstreamPort
-	keys     *sessioncredential.Ring
-	metadata MetadataControl
-	business *MCPBusiness
+	identity          MCPIdentityPort
+	catalog           *catalog.Service
+	bindings          MCPBindingAccess
+	upstream          MCPUpstreamPort
+	keys              *sessioncredential.Ring
+	metadata          MetadataControl
+	business          *MCPBusiness
+	applicationCaller *ApplicationCaller
 }
 
 func NewMCPGateway(identity MCPIdentityPort, c *catalog.Service, bindings MCPBindingAccess, upstream MCPUpstreamPort, keys *sessioncredential.Ring, metadata MetadataControl) *MCPGateway {
@@ -154,7 +155,9 @@ func (w *MCPGateway) sources(ctx context.Context, scope MCPContext) ([]mcpSource
 		}
 		headers := map[string]string{}
 		for key, value := range grant.UpstreamHeaders {
-			headers[key] = value
+			if !strings.EqualFold(key, "X-Platform-Caller") {
+				headers[key] = value
+			}
 		}
 		for key, value := range map[string]string{"X-Media-Context-Version": strconv.FormatInt(scope.ContextVersion, 10), "X-Media-Metadata-Target": scope.MetadataTargetContextVersion, "X-Media-Workspace-ID": scope.WorkspaceID, "X-Media-Session-ID": scope.SessionID, "X-Media-User-ID": scope.UserID, "X-Media-Agent-Configuration-ID": scope.AgentConfigID} {
 			headers[key] = value
@@ -166,7 +169,11 @@ func (w *MCPGateway) sources(ctx context.Context, scope MCPContext) ([]mcpSource
 		if grant.ProxyEndpoint != "" {
 			endpoint, transport = grant.ProxyEndpoint, "streamable_http"
 		}
-		sources = append(sources, mcpSource{definitionID: grant.DefinitionID, version: fixed.Version, currentVersion: current.Version, grant: grant, backend: client.MCPBackend{Endpoint: endpoint, Transport: transport, Headers: headers}})
+		backend := client.MCPBackend{Endpoint: endpoint, Transport: transport, Headers: headers}
+		if w.applicationCaller != nil && scope.Kind == "managed_agent" && grant.ProxyEndpoint == "" {
+			backend.IdentityHeaders = w.applicationCaller.Headers(scope, grant.DefinitionID, endpoint)
+		}
+		sources = append(sources, mcpSource{definitionID: grant.DefinitionID, version: fixed.Version, currentVersion: current.Version, grant: grant, backend: backend})
 	}
 	sort.Slice(sources, func(i, j int) bool { return sources[i].definitionID < sources[j].definitionID })
 	vector := access.SnapshotVersion + ":" + access.AuthorizationRevision

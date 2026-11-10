@@ -82,6 +82,7 @@ func main() {
 	}
 	defer platform.close()
 	InitDI(db, cfg, platform)
+	initApplications(db)
 
 	// 8.1 挂 session 鉴权中间件（cookie JWT 验签 + 注入 ctx + 滑动续期 + skip list）。
 	//     在业务路由注册前挂载，所有受保护路由经此鉴权。

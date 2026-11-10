@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"media_agent/hertz_infra/authn/resourceaccess"
-	"media_agent/media_control/biz/dal"
 	domain "media_agent/media_control/biz/domain/prompt"
 	"strings"
 	"time"
@@ -40,13 +39,19 @@ type View struct {
 	domain.Prompt
 	MyPermission string
 }
+
+// TxRunner is the transaction boundary required by this service.
+type TxRunner interface {
+	RunInTx(context.Context, func(context.Context) error) error
+}
+
 type Service struct {
 	repo   domain.Repository
-	tx     dal.TxRunner
+	tx     TxRunner
 	access Access
 }
 
-func New(repo domain.Repository, tx dal.TxRunner, access Access) *Service {
+func New(repo domain.Repository, tx TxRunner, access Access) *Service {
 	return &Service{repo, tx, access}
 }
 func (s *Service) facts(ctx context.Context, user, org string) (resourceaccess.Facts, error) {

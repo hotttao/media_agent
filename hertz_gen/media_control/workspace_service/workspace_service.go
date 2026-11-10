@@ -17,6 +17,12 @@ var (
 )
 
 type Client interface {
+	EnsureApplicationAgent(context context.Context, req *workspace.EnsureApplicationAgentRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error)
+
+	GetApplicationAgent(context context.Context, req *workspace.GetApplicationAgentRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error)
+
+	CheckApplicationWorkspace(context context.Context, req *workspace.GetWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error)
+
 	GetWorkspacePermissions(context context.Context, req *workspace.GetWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspacePermissions, rawResponse *protocol.Response, err error)
 
 	CreateWorkspace(context context.Context, req *workspace.CreateWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error)
@@ -43,6 +49,78 @@ func NewWorkspaceServiceClient(hostUrl string, ops ...Option) (Client, error) {
 	return &WorkspaceServiceClient{
 		client: cli,
 	}, nil
+}
+
+func (s *WorkspaceServiceClient) EnsureApplicationAgent(context context.Context, req *workspace.EnsureApplicationAgentRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &workspace.WorkspaceResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"name": req.GetName(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("PUT", "/apps/v1/agents/:name")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *WorkspaceServiceClient) GetApplicationAgent(context context.Context, req *workspace.GetApplicationAgentRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &workspace.WorkspaceResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"name": req.GetName(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/apps/v1/agents/:name")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *WorkspaceServiceClient) CheckApplicationWorkspace(context context.Context, req *workspace.GetWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &workspace.WorkspaceResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"workspace_id": req.GetWorkspaceId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/apps/v1/agent-workspaces/:workspace_id")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
 }
 
 func (s *WorkspaceServiceClient) GetWorkspacePermissions(context context.Context, req *workspace.GetWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspacePermissions, rawResponse *protocol.Response, err error) {
@@ -192,6 +270,18 @@ var defaultClient, _ = NewWorkspaceServiceClient("")
 func ConfigDefaultClient(ops ...Option) (err error) {
 	defaultClient, err = NewWorkspaceServiceClient("", ops...)
 	return
+}
+
+func EnsureApplicationAgent(context context.Context, req *workspace.EnsureApplicationAgentRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.EnsureApplicationAgent(context, req, reqOpt...)
+}
+
+func GetApplicationAgent(context context.Context, req *workspace.GetApplicationAgentRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.GetApplicationAgent(context, req, reqOpt...)
+}
+
+func CheckApplicationWorkspace(context context.Context, req *workspace.GetWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspaceResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.CheckApplicationWorkspace(context, req, reqOpt...)
 }
 
 func GetWorkspacePermissions(context context.Context, req *workspace.GetWorkspaceRequest, reqOpt ...config.RequestOption) (resp *workspace.WorkspacePermissions, rawResponse *protocol.Response, err error) {

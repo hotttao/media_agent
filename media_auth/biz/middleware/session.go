@@ -133,7 +133,7 @@ func SessionWithInternalJWT(signer *session.Signer, tokenSvc *tokenservice.Servi
 				return
 			}
 			u, err := repo.FindByID(ctx, userID)
-			if err != nil || !u.IsActive() {
+			if err != nil || !u.IsActive() || u.ManagedBy != "" {
 				abortUnauthorized(c, "inactive API Token subject")
 				return
 			}
@@ -153,7 +153,7 @@ func SessionWithInternalJWT(signer *session.Signer, tokenSvc *tokenservice.Servi
 			return
 		}
 		u, err := repo.ResolveKratosIdentity(ctx, identityID, email, name, platformAdmin)
-		if err != nil || !u.IsActive() {
+		if err != nil || !u.IsActive() || u.ManagedBy != "" {
 			abortUnauthorized(c, "inactive business user")
 			return
 		}

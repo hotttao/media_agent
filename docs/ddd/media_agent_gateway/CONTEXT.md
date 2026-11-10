@@ -89,3 +89,5 @@ _禁用替代词_：Business MCP、External MCP
 _禁用替代词_：Billing Ledger、Audit Log
 
 Turn、Queued Turn、Message、Universal Event、Live Event Frame、Session Sequence 和 Chat Status 使用 [media_agents 统一语言](../media_agents/CONTEXT.md)，其事实所有者均为 Agent。
+
+**Application Caller（应用回调身份声明）**：Gateway 从当前可信 Agent/Session 上下文及 Auth 应用映射生成的短时出站声明；专用 audience 为接收应用，包含平台 User 与 external_id。不是 API Token、MCP 业务委托或资源权限。见 [应用访问工作流](workflow/0012-application_access/application_access.md)。

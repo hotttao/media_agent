@@ -218,7 +218,8 @@ async def test_flow_executes_outside_state_transactions_and_drains_fifo() -> Non
 
 
 @pytest.mark.asyncio
-async def test_flow_maps_runtime_failure_and_interrupts_by_persisted_handle() -> None:
+@pytest.mark.parametrize("interrupt_first", [False, True])
+async def test_flow_maps_runtime_failure_and_prior_interrupt(interrupt_first: bool) -> None:
     service = ScriptService()
     runtime = ScriptRuntime([TurnStatus.FAILED])
     bus = InMemorySessionEventBus()
@@ -229,11 +230,13 @@ async def test_flow_maps_runtime_failure_and_interrupts_by_persisted_handle() ->
     )
     service.session = service.session.attach_runtime("runtime-1", now=datetime.now(UTC))
 
-    assert await flow.interrupt("session-1", "turn-1")
-    assert runtime.interrupted
+    if interrupt_first:
+        assert await flow.interrupt("session-1", "turn-1")
+        assert runtime.interrupted
     await flow.submit(SubmitTurn("session-1", "one", 1, {"message": "one"}))
     await flow.wait("session-1")
-    assert service.finalized == [("turn-1", TurnStatus.FAILED)]
+    expected = TurnStatus.INTERRUPTED if interrupt_first else TurnStatus.FAILED
+    assert service.finalized == [("turn-1", expected)]
 
 
 @pytest.mark.asyncio
@@ -355,3 +358,37 @@ async def test_model_authentication_failure_pauses_without_running_the_queue() -
     await flow.wait("session-1")
     assert service.finalized == [("turn-1", TurnStatus.FAILED)]
     assert service.terminal_turns[0].error_class == "model_authentication_required"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("existing_handle", [None, "runtime-1"])
+async def test_interrupt_cancels_native_preparation_without_executing(
+    existing_handle: str | None,
+) -> None:
+    service = ScriptService()
+    service.session = replace(service.session, runtime_session_id=existing_handle)
+    started = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    class PreparingRuntime(ScriptRuntime):
+        async def prepare(
+            self, session: RuntimeSession, turn: Turn, credentials: RuntimeCredentials
+        ) -> RuntimePreparation:
+            started.set()
+            try:
+                await asyncio.Event().wait()
+                raise AssertionError("preparation unexpectedly resumed")
+            finally:
+                cleaned.set()
+
+    runtime = PreparingRuntime([])
+    bus = InMemorySessionEventBus()
+    flow = ExecuteTurnFlow(service, runtime, lambda sid, tid: TurnEventSink(service, bus, sid, tid))
+    await flow.submit(SubmitTurn("session-1", "first", 1, {"message": "first"}))
+    await asyncio.wait_for(started.wait(), 1)
+    assert await flow.interrupt("session-1", "turn-1")
+    await asyncio.wait_for(flow.wait("session-1"), 1)
+    assert cleaned.is_set()
+    assert runtime.calls == []
+    assert not runtime.interrupted  # An old handle must not absorb this interruption.
+    assert service.finalized == [("turn-1", TurnStatus.INTERRUPTED)]

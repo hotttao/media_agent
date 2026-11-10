@@ -1,0 +1,111 @@
+{
+  "date": "2026-11-09",
+  "checks": [
+    {
+      "check": "live SDK personal model connection lifecycle",
+      "result": {
+        "connection_id": "14b3791a-bb96-4052-8aa8-e0858b4b8cf4",
+        "workspace_id": "a8bd227a-f921-4268-8357-c068f436fa67",
+        "import_list_bind_verified": true,
+        "mixed_auth_rejected": true,
+        "unknown_connection_rejected": true,
+        "cas_verified": true,
+        "connection_revoked": true,
+        "revoked_binding_rejected": true
+      }
+    }
+  ],
+  "control_tests_passed": true,
+  "postgres_binding_tests_passed": true,
+  "sdk_tests_passed": 10,
+  "model_inference_verified": true,
+  "managed_runtime_acceptance": [
+    {
+      "check": "live SDK relay and actual Codex runtime session",
+      "result": {
+        "connection_id": "eb5a93df-00ab-431e-9184-3e51b67083ab",
+        "workspace_id": "9cfa74cd-a488-4d9d-af36-4ca97b8fff95",
+        "session_id": "f1ecebfb-3a0f-4ccc-bbeb-746c64f3c812",
+        "turn": {
+          "turn_id": "2c20d0ff-bac3-428f-992a-a77649b82ff5",
+          "status": "running"
+        },
+        "events": [
+          {
+            "id": 1,
+            "type": "turn.queued"
+          },
+          {
+            "id": 2,
+            "type": "turn.started"
+          },
+          {
+            "id": 3,
+            "type": "item.completed"
+          },
+          {
+            "id": 4,
+            "type": "session.ended"
+          },
+          {
+            "id": 5,
+            "type": "turn.completed"
+          }
+        ],
+        "model_inference_verified": true,
+        "reconnect_verified": true,
+        "history_verified": true,
+        "followup_events": [
+          {
+            "id": 6,
+            "type": "turn.queued"
+          },
+          {
+            "id": 7,
+            "type": "turn.started"
+          },
+          {
+            "id": 8,
+            "type": "item.completed"
+          },
+          {
+            "id": 9,
+            "type": "session.ended"
+          },
+          {
+            "id": 10,
+            "type": "turn.completed"
+          }
+        ],
+        "followup_verified": true,
+        "interrupt": {
+          "turn_id": "eb6429a8-91bb-45cf-bf70-f9e95584b78f",
+          "status": "interrupting"
+        },
+        "interrupt_events": [
+          {
+            "id": 11,
+            "type": "turn.queued"
+          },
+          {
+            "id": 12,
+            "type": "turn.started"
+          },
+          {
+            "id": 13,
+            "type": "session.ended"
+          },
+          {
+            "id": 14,
+            "type": "turn.interrupted"
+          }
+        ],
+        "connection_revoked": true
+      }
+    }
+  ],
+  "python_tests": {
+    "passed": 125,
+    "skipped": 12
+  }
+}

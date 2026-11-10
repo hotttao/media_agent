@@ -10,6 +10,7 @@ import "time"
 // 可空字段用指针（password_hash 空=LDAP/企微派生账号不可改密；email/default_prompt_id/last_login_at 可空）。
 // id 由应用层 generateId() 产生（text 短随机），非自增。
 type User struct {
+	ManagedBy        *string    `gorm:"column:managed_by"`
 	ID               string     `gorm:"column:id;primaryKey"`
 	KratosIdentityID *string    `gorm:"column:kratos_identity_id"`
 	Username         string     `gorm:"column:username;not null"`

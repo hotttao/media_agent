@@ -8,6 +8,10 @@ import "google/api/annotations.proto";
 option go_package = "media_control/workspace";
 
 service WorkspaceService {
+ rpc EnsureApplicationAgent(EnsureApplicationAgentRequest) returns(WorkspaceResponse){option(api.put)="/apps/v1/agents/:name";option(google.api.http)={put:"/apps/v1/agents/{name}" body:"*"};}
+ rpc GetApplicationAgent(GetApplicationAgentRequest) returns(WorkspaceResponse){option(api.get)="/apps/v1/agents/:name";option(google.api.http)={get:"/apps/v1/agents/{name}"};}
+ rpc CheckApplicationWorkspace(GetWorkspaceRequest) returns(WorkspaceResponse){option(api.get)="/apps/v1/agent-workspaces/:workspace_id";option(google.api.http)={get:"/apps/v1/agent-workspaces/{workspace_id}"};}
+
  rpc GetWorkspacePermissions(GetWorkspaceRequest) returns(WorkspacePermissions) {
   option(api.get)="/api/v1/workspaces/:workspace_id/permissions";
   option(google.api.http)={get:"/api/v1/workspaces/{workspace_id}/permissions"};
@@ -112,3 +116,6 @@ message RuntimeContextResponse {
 }
 
 message WorkspacePermissions { bool can_view=1;bool can_manage=2; }
+
+message EnsureApplicationAgentRequest {string name=1[(api.path)="name"];string display_name=2[(api.body)="display_name"];string agent_type=3[(api.body)="agent_type"];string api_key=4[(api.body)="api_key"];string model_protocol=5[(api.body)="model_protocol"];string model_name=6[(api.body)="model_name"];string model_base_url=7[(api.body)="model_base_url"];string model_connection_id=8[(api.body)="model_connection_id"];}
+message GetApplicationAgentRequest {string name=1[(api.path)="name"];}

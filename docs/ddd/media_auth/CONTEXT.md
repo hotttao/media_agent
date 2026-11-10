@@ -195,3 +195,21 @@ _禁用替代词_：invitation、share link。
 **Last Admin Protection（末位管理员保护）**:
 team 必须始终至少保留一名 admin 的不变量——降级 / 移除 / 退团最后一任 admin 一律拒绝（须删 team 或先提拔他人），由 `team` domain 在写前校验。
 _禁用替代词_：single admin lock、final admin guard。
+
+### 平台应用接入
+
+**Platform Application（平台接入应用）**:
+由平台管理员注册、可管理自身托管用户的受信业务应用，独立于媒体微服务与 OAuth Client。
+_禁用替代词_：Team、Service、OAuth Client
+
+**Application Managed User（应用托管用户）**:
+由唯一平台接入应用管理的业务 User，通过该应用的稳定外部用户标识关联，不具备交互登录身份。
+_禁用替代词_：Agent、System User、Kratos Identity
+
+**Application Access Credential（应用访问凭证）**:
+应用代表自己托管的 User 访问指定应用用户接口的短期凭证，具有独立的用途与撤销边界。
+_禁用替代词_：API Token、Web Session、Platform Token、OAuth Access Token
+
+**Application Team Grant（应用部门授权）**:
+平台管理员授予接入应用在指定部门中代表其托管用户执行明确操作的权限上限，与用户自身成员权限分别判定。
+_禁用替代词_：Membership、Team Admin、Resource Grant

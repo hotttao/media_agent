@@ -17,6 +17,22 @@ var (
 )
 
 type Client interface {
+	ApplicationCreateSession(context context.Context, req *chat.CreateSessionRequest, reqOpt ...config.RequestOption) (resp *chat.SessionResponse, rawResponse *protocol.Response, err error)
+
+	ApplicationListSessions(context context.Context, req *chat.ListSessionsRequest, reqOpt ...config.RequestOption) (resp *chat.ListSessionsResponse, rawResponse *protocol.Response, err error)
+
+	ApplicationListMessages(context context.Context, req *chat.ListMessagesRequest, reqOpt ...config.RequestOption) (resp *chat.ListMessagesResponse, rawResponse *protocol.Response, err error)
+
+	ApplicationRunTurn(context context.Context, req *chat.RunTurnRequest, reqOpt ...config.RequestOption) (resp *chat.RunTurnResponse, rawResponse *protocol.Response, err error)
+
+	ApplicationInterruptTurn(context context.Context, req *chat.InterruptTurnRequest, reqOpt ...config.RequestOption) (resp *chat.InterruptTurnResponse, rawResponse *protocol.Response, err error)
+
+	ApplicationSubscribeEvents(context context.Context, req *chat.SubscribeEventsRequest, reqOpt ...config.RequestOption) (resp *chat.SubscribeEventsResponse, rawResponse *protocol.Response, err error)
+
+	ApplicationListAgentRequests(context context.Context, req *chat.ListAgentRequestsRequest, reqOpt ...config.RequestOption) (resp *chat.ListAgentRequestsResponse, rawResponse *protocol.Response, err error)
+
+	ApplicationResolveAgentRequest(context context.Context, req *chat.ResolveAgentRequestRequest, reqOpt ...config.RequestOption) (resp *chat.AgentRequestResponse, rawResponse *protocol.Response, err error)
+
 	CreateSession(context context.Context, req *chat.CreateSessionRequest, reqOpt ...config.RequestOption) (resp *chat.SessionResponse, rawResponse *protocol.Response, err error)
 
 	ListSessions(context context.Context, req *chat.ListSessionsRequest, reqOpt ...config.RequestOption) (resp *chat.ListSessionsResponse, rawResponse *protocol.Response, err error)
@@ -49,6 +65,202 @@ func NewChatServiceClient(hostUrl string, ops ...Option) (Client, error) {
 	return &ChatServiceClient{
 		client: cli,
 	}, nil
+}
+
+func (s *ChatServiceClient) ApplicationCreateSession(context context.Context, req *chat.CreateSessionRequest, reqOpt ...config.RequestOption) (resp *chat.SessionResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.SessionResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/apps/v1/chat/sessions")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *ChatServiceClient) ApplicationListSessions(context context.Context, req *chat.ListSessionsRequest, reqOpt ...config.RequestOption) (resp *chat.ListSessionsResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.ListSessionsResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{
+			"workspace_id": req.GetWorkspaceId(),
+		}).
+		setPathParams(map[string]string{}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/apps/v1/chat/sessions")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *ChatServiceClient) ApplicationListMessages(context context.Context, req *chat.ListMessagesRequest, reqOpt ...config.RequestOption) (resp *chat.ListMessagesResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.ListMessagesResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"session_id": req.GetSessionId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/apps/v1/chat/sessions/:session_id/messages")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *ChatServiceClient) ApplicationRunTurn(context context.Context, req *chat.RunTurnRequest, reqOpt ...config.RequestOption) (resp *chat.RunTurnResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.RunTurnResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"session_id": req.GetSessionId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/apps/v1/chat/sessions/:session_id/turns")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *ChatServiceClient) ApplicationInterruptTurn(context context.Context, req *chat.InterruptTurnRequest, reqOpt ...config.RequestOption) (resp *chat.InterruptTurnResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.InterruptTurnResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"session_id": req.GetSessionId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/apps/v1/chat/sessions/:session_id/interrupt")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *ChatServiceClient) ApplicationSubscribeEvents(context context.Context, req *chat.SubscribeEventsRequest, reqOpt ...config.RequestOption) (resp *chat.SubscribeEventsResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.SubscribeEventsResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{
+			"after_sequence": req.GetAfterSequence(),
+		}).
+		setPathParams(map[string]string{
+			"session_id": req.GetSessionId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/apps/v1/chat/sessions/:session_id/events")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *ChatServiceClient) ApplicationListAgentRequests(context context.Context, req *chat.ListAgentRequestsRequest, reqOpt ...config.RequestOption) (resp *chat.ListAgentRequestsResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.ListAgentRequestsResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{
+			"turn_id": req.GetTurnId(),
+		}).
+		setPathParams(map[string]string{
+			"session_id": req.GetSessionId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("GET", "/apps/v1/chat/sessions/:session_id/requests")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
+}
+
+func (s *ChatServiceClient) ApplicationResolveAgentRequest(context context.Context, req *chat.ResolveAgentRequestRequest, reqOpt ...config.RequestOption) (resp *chat.AgentRequestResponse, rawResponse *protocol.Response, err error) {
+	httpResp := &chat.AgentRequestResponse{}
+	ret, err := s.client.r().
+		setContext(context).
+		setQueryParams(map[string]interface{}{}).
+		setPathParams(map[string]string{
+			"session_id": req.GetSessionId(),
+			"turn_id":    req.GetTurnId(),
+			"request_id": req.GetRequestId(),
+		}).
+		addHeaders(map[string]string{}).
+		setFormParams(map[string]string{}).
+		setFormFileParams(map[string]string{}).
+		setBodyParam(req).
+		setRequestOption(reqOpt...).
+		setResult(httpResp).
+		execute("POST", "/apps/v1/chat/sessions/:session_id/turns/:turn_id/requests/:request_id/resolve")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	resp = httpResp
+	rawResponse = ret.rawResponse
+	return resp, rawResponse, nil
 }
 
 func (s *ChatServiceClient) CreateSession(context context.Context, req *chat.CreateSessionRequest, reqOpt ...config.RequestOption) (resp *chat.SessionResponse, rawResponse *protocol.Response, err error) {
@@ -274,6 +486,38 @@ var defaultClient, _ = NewChatServiceClient("")
 func ConfigDefaultClient(ops ...Option) (err error) {
 	defaultClient, err = NewChatServiceClient("", ops...)
 	return
+}
+
+func ApplicationCreateSession(context context.Context, req *chat.CreateSessionRequest, reqOpt ...config.RequestOption) (resp *chat.SessionResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.ApplicationCreateSession(context, req, reqOpt...)
+}
+
+func ApplicationListSessions(context context.Context, req *chat.ListSessionsRequest, reqOpt ...config.RequestOption) (resp *chat.ListSessionsResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.ApplicationListSessions(context, req, reqOpt...)
+}
+
+func ApplicationListMessages(context context.Context, req *chat.ListMessagesRequest, reqOpt ...config.RequestOption) (resp *chat.ListMessagesResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.ApplicationListMessages(context, req, reqOpt...)
+}
+
+func ApplicationRunTurn(context context.Context, req *chat.RunTurnRequest, reqOpt ...config.RequestOption) (resp *chat.RunTurnResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.ApplicationRunTurn(context, req, reqOpt...)
+}
+
+func ApplicationInterruptTurn(context context.Context, req *chat.InterruptTurnRequest, reqOpt ...config.RequestOption) (resp *chat.InterruptTurnResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.ApplicationInterruptTurn(context, req, reqOpt...)
+}
+
+func ApplicationSubscribeEvents(context context.Context, req *chat.SubscribeEventsRequest, reqOpt ...config.RequestOption) (resp *chat.SubscribeEventsResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.ApplicationSubscribeEvents(context, req, reqOpt...)
+}
+
+func ApplicationListAgentRequests(context context.Context, req *chat.ListAgentRequestsRequest, reqOpt ...config.RequestOption) (resp *chat.ListAgentRequestsResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.ApplicationListAgentRequests(context, req, reqOpt...)
+}
+
+func ApplicationResolveAgentRequest(context context.Context, req *chat.ResolveAgentRequestRequest, reqOpt ...config.RequestOption) (resp *chat.AgentRequestResponse, rawResponse *protocol.Response, err error) {
+	return defaultClient.ApplicationResolveAgentRequest(context, req, reqOpt...)
 }
 
 func CreateSession(context context.Context, req *chat.CreateSessionRequest, reqOpt ...config.RequestOption) (resp *chat.SessionResponse, rawResponse *protocol.Response, err error) {

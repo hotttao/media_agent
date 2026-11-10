@@ -8,6 +8,48 @@ import "google/api/annotations.proto";
 option go_package = "media_agent_gateway/chat";
 
 service ChatService {
+  rpc ApplicationCreateSession(CreateSessionRequest) returns (SessionResponse) {
+    option (api.post) = "/apps/v1/chat/sessions";
+    option (google.api.http) = { post: "/apps/v1/chat/sessions" body: "*" };
+  }
+  rpc ApplicationListSessions(ListSessionsRequest) returns (ListSessionsResponse) {
+    option (api.get) = "/apps/v1/chat/sessions";
+    option (google.api.http) = { get: "/apps/v1/chat/sessions" };
+  }
+  rpc ApplicationListMessages(ListMessagesRequest) returns (ListMessagesResponse) {
+    option (api.get) = "/apps/v1/chat/sessions/:session_id/messages";
+    option (google.api.http) = { get: "/apps/v1/chat/sessions/{session_id}/messages" };
+  }
+  rpc ApplicationRunTurn(RunTurnRequest) returns (RunTurnResponse) {
+    option (api.post) = "/apps/v1/chat/sessions/:session_id/turns";
+    option (google.api.http) = {
+      post: "/apps/v1/chat/sessions/{session_id}/turns"
+      body: "*"
+    };
+  }
+  rpc ApplicationInterruptTurn(InterruptTurnRequest) returns (InterruptTurnResponse) {
+    option (api.post) = "/apps/v1/chat/sessions/:session_id/interrupt";
+    option (google.api.http) = {
+      post: "/apps/v1/chat/sessions/{session_id}/interrupt"
+      body: "*"
+    };
+  }
+  rpc ApplicationSubscribeEvents(SubscribeEventsRequest) returns (SubscribeEventsResponse) {
+    option (api.get) = "/apps/v1/chat/sessions/:session_id/events";
+    option (google.api.http) = { get: "/apps/v1/chat/sessions/{session_id}/events" };
+  }
+  rpc ApplicationListAgentRequests(ListAgentRequestsRequest) returns (ListAgentRequestsResponse) {
+    option (api.get) = "/apps/v1/chat/sessions/:session_id/requests";
+    option (google.api.http) = { get: "/apps/v1/chat/sessions/{session_id}/requests" };
+  }
+  rpc ApplicationResolveAgentRequest(ResolveAgentRequestRequest) returns (AgentRequestResponse) {
+    option (api.post) = "/apps/v1/chat/sessions/:session_id/turns/:turn_id/requests/:request_id/resolve";
+    option (google.api.http) = {
+      post: "/apps/v1/chat/sessions/{session_id}/turns/{turn_id}/requests/{request_id}/resolve"
+      body: "*"
+    };
+  }
+
   rpc CreateSession(CreateSessionRequest) returns (SessionResponse) {
     option (api.post) = "/api/chat/sessions";
     option (google.api.http) = { post: "/api/chat/sessions" body: "*" };

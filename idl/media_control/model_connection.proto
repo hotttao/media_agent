@@ -10,4 +10,9 @@ service ModelConnectionService {
 rpc CreateConnection(Command)returns(Connection){option(api.post)="/api/v1/model-connections";option(google.api.http)={post:"/api/v1/model-connections" body:"*"};}
 rpc ListConnections(Query)returns(Connections){option(api.get)="/api/v1/model-connections";option(google.api.http)={get:"/api/v1/model-connections"};}
 rpc UpdateConnection(Command)returns(Connection){option(api.put)="/api/v1/model-connections/:connection_id";option(google.api.http)={put:"/api/v1/model-connections/{connection_id}" body:"*"};}
-rpc RevokeConnection(Command)returns(Connection){option(api.post)="/api/v1/model-connections/:connection_id/revoke";option(google.api.http)={post:"/api/v1/model-connections/{connection_id}/revoke" body:"*"};}}
+rpc RevokeConnection(Command)returns(Connection){option(api.post)="/api/v1/model-connections/:connection_id/revoke";option(google.api.http)={post:"/api/v1/model-connections/{connection_id}/revoke" body:"*"};}
+rpc CreateApplicationConnection(Command)returns(Connection){option(api.post)="/apps/v1/model-connections";option(google.api.http)={post:"/apps/v1/model-connections" body:"*"};}
+rpc ListApplicationConnections(Query)returns(Connections){option(api.get)="/apps/v1/model-connections";option(google.api.http)={get:"/apps/v1/model-connections"};}
+rpc UpdateApplicationConnection(Command)returns(Connection){option(api.put)="/apps/v1/model-connections/:connection_id";option(google.api.http)={put:"/apps/v1/model-connections/{connection_id}" body:"*"};}
+rpc RevokeApplicationConnection(Command)returns(Connection){option(api.post)="/apps/v1/model-connections/:connection_id/revoke";option(google.api.http)={post:"/apps/v1/model-connections/{connection_id}/revoke" body:"*"};}
+}

@@ -25,6 +25,62 @@
 
 ## 目录结构
 
+### 仓库级 SDK 与共享包
+
+跨服务的客户端 SDK 放在仓库根目录 `packages/<package-name>/`，以独立包管理依赖、运行环境、公共导出、文档及测试。当前平台服务端 SDK 包括 `packages/platform-go-sdk/`（Go）和 `packages/platform-server-sdk/`（JavaScript）；它是外部应用接入平台的客户端库，不属于某个服务的 Domain、Service 或 Workflow。
+
+```text
+packages/
+└── platform-server-sdk/
+    ├── package.json          # 包名称、运行环境与公共导出
+    ├── index.js              # 服务端 HTTP 客户端
+    ├── index.d.ts            # 公共协议类型
+    ├── session-relay.js      # 应用服务端的会话中继适配
+    ├── *.test.js
+    ├── examples/
+    └── README.md
+```
+
+**依赖与职责边界**：
+
+- SDK 只通过平台公开 HTTP 协议访问服务；允许依赖语言运行时及通用传输、协议处理库。
+- 禁止导入或复制服务内部 `biz/domain`、`biz/service`、`biz/workflow`、DAL、repository、数据库模型；禁止直接连接平台数据库或使用内部服务凭证调用私有接口。
+- 公共协议以 `idl/` 为来源。Go SDK 复用仓库级 `hertz_gen` 生成 client，在 `biz/shared/client/` 内构造生成请求并将响应转为 SDK 自有结果类型；不得重复手写普通 HTTP 路由或编辑生成代码。其他语言使用对应语言协议适配。`hertz_gen` 是共享协议模块，不是服务内部业务模型。
+- SDK 可以处理协议序列化、应用凭证交换与缓存、超时、取消、错误映射和事件流；业务事实、权限决策与持久化仍由平台服务负责，SDK 校验不能替代服务端鉴权。
+- Server SDK 仅供应用服务端使用，不得进入浏览器构建产物。应用密钥、模型认证材料和平台访问凭证不得透传至浏览器或写入日志；浏览器通过应用自己的会话中继访问平台能力。
+- 会话中继通过显式回调接收应用登录身份和 Workspace 映射，不依赖具体 UI、应用数据库或服务内部实现；示例应用也必须遵守上述边界。
+- 独立服务内部的下游 Go client 仍放在 `<app>/biz/shared/client/`；跨项目复用的 SDK 放在 `packages/`，不将两者混用。
+
+**Go SDK 分层**：遵循本仓库按职责变化组织的 `biz` 规则，不为客户端库虚构 domain、service 或 DAL。
+
+```text
+packages/platform-go-sdk/
+├── go.mod                    # 独立 Go module；仓库 go.work 组合共享模块
+├── client.go / options.go    # 公共门面、配置和实例装配
+├── relay.go / caller.go      # 公共入口
+├── types.go                  # SDK 自有契约的公开别名，不导出生成 DTO
+├── biz/
+│   ├── handler/session_relay/          # HTTP 绑定、响应与 SSE 转发
+│   ├── workflow/application_access/    # 应用身份、授权上下文与凭证交换
+│   ├── workflow/agent_access/          # Agent 与模型连接调用编排
+│   ├── workflow/session_relay/         # 会话操作与 Workspace 绑定检查
+│   └── shared/
+│       ├── client/           # 唯一生成 client / DTO 适配入口
+│       ├── contract/         # SDK 自有输入、结果、协议错误
+│       ├── credential/       # 实例级凭证缓存与并发合并
+│       └── caller/           # 可信 Caller 签名验证
+├── examples/
+└── e2e/                      # 真实传输与适配器组合测试
+```
+
+- workflow 在消费侧声明窄接口；具体 client 由根入口装配，不能从 workflow 直接依赖生成 client。
+- `biz/shared/client` 复用 `hertz_infra/clienthertz` 治理入口；SDK client 和缓存必须按实例隔离，不沿用服务进程级全局 client 变量，不重置宿主的全局日志或 tracing。
+- SSE 是明确的流式传输扩展：生成 JSON client 无法提供持续响应体时，在同一 client 适配层实现；不在 workflow / handler 重写上游协议。
+- handler 使用标准 `net/http` 作为可嵌入适配器，遵守薄 handler 约束；业务权限仍由平台服务判定。
+- 当前 module path 使用仓库内部命名，由 `go.work` 解析；发布到外部模块仓库需要同时解决共享协议和基础设施模块版本，不能将本地 workspace 可编译视为已发布。
+
+**检查要求**：SDK 变更运行包内测试与公共类型检查，并审查依赖、公共导出及与 IDL 的一致性。现有 Go `arch-check` 只检查 Go 依赖，不能据此宣称 JavaScript/TypeScript SDK 的依赖边界已自动验证。
+
 ### Hertz Base
 
 ```text
@@ -176,17 +232,18 @@ biz/dal/
 
 ##### 事务（TxRunner + ctx 传递）
 
-事务边界由 `dal.TxRunner` 统一开启，通过 `context.Context` 隐式传递 tx，`*gorm.DB` 不泄漏给上层。
+事务由用例决定开启边界，由 DAL 实现执行；通过 `context.Context` 隐式传递 tx，`*gorm.DB` 不泄漏给上层。service / workflow 在消费侧声明最小 `TxRunner` 接口，不能为了引用事务接口而 import `biz/dal`。初始化代码调用 `dal.NewTxRunner(db)` 并注入；Go 的结构化接口无需 DAL 反向依赖 service / workflow。
 
 ```go
-// dal/transaction.go
+// service/<domain>/service.go 或 workflow/<flow>：消费侧接口
 type TxRunner interface {
     // RunInTx 在一个 DB 事务内执行 fn；fn 返回 error 回滚，nil 提交。
     // tx 经 ctx 向下传递，repo 用 dal.FromContext(ctx, db) 取连接。
     RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
-// repo 取连接：ctx 带 tx 用 tx，否则用默认 *gorm.DB（非事务读）。
+// dal/transaction.go：实现事务、将 tx 放入 ctx。
+// dal/repo 取连接：ctx 带 tx 用 tx，否则用默认 *gorm.DB（非事务读）。
 func FromContext(ctx context.Context, db *gorm.DB) *gorm.DB
 ```
 
@@ -306,7 +363,7 @@ biz/service/
 
 应用层稳定通用类型：分页、Clock 接口、ID 生成器、可复用辅助类型。
 
-包含 `client/` 子目录：业务级下游 client 实例装配层（`clients.go` 声明全局变量、`init.go` / `init_<downstream_app>.go` 初始化），消费 `hertz_infra/clienthertz` 的治理能力。详见 [`contributing/client-cn.md`](client-cn.md) §7。
+包含 `client/` 子目录：业务级下游 client 实例装配层（`clients.go` 声明全局变量、`init.go` / `init_<downstream_app>.go` 初始化），消费 `hertz_infra/clienthertz` 的治理能力。详见 [`contributing/client.md`](client.md) §7。
 
 **命名规则**：用具体名字（`clock.go` / `id.go` / `pagination.go`），禁止 `utils.go` / `common.go` / `helper.go`。
 
@@ -397,13 +454,13 @@ service  ─X→ model / handler / 具体 dal / dal query / dal model / 其它 s
 handler  ─X→ 其它 handler service 包 / dal / dal query / dal model
 workflow ─X→ handler / model / 原始 SQL / dal query / dal model
 dal      ─X→ handler / model / service / workflow
-shared   ─X→ domain / policy / service / workflow / dal / handler / model（不允许反向依赖任何业务层）
+shared   ─X→ domain / policy / service / workflow / dal / handler（不允许反向依赖任何业务层；仅 shared/client 可使用生成协议 model）
 ```
 
 #### Rules of Thumb
 
 - 任何文件 import `biz/dal/query` 或 `biz/dal/model` → 必须位于 `biz/dal/repo` 或 `biz/dal` 初始化代码
-- 任何文件 import `hertz_gen/model/**`（API DTO）→ 仅 `biz/handler/**` 允许
+- 任何文件 import `hertz_gen/model/**`（API DTO）→ 仅入口 `biz/handler/**` 与出站适配器 `biz/shared/client/**` 允许；出站 DTO 必须在适配器内转换，不得泄漏到 workflow / service / domain
 - 任何文件 import `hertz_gen/<app>/**`（下游 client stub）→ 仅 `<app>/biz/shared/client/` 允许（实例装配层）；`hertz_infra/clienthertz/` 只提供治理能力，不 import client stub
 - `domain` 不出现 JSON / query / form / ORM tag；不依赖日志、配置、框架
 - `policy` 不查 DB / Redis / 外部 API；只接收 service 加载好的事实做决策

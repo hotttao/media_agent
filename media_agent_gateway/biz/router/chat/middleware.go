@@ -95,3 +95,88 @@ func _resolveagentrequestMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _appsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _v1Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _chat0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _applicationlistsessionsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _applicationcreatesessionMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _sessions0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _session_id0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _applicationsubscribeeventsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _applicationinterruptturnMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _applicationlistmessagesMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _applicationlistagentrequestsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _applicationrunturnMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _turns0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _turn_id0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _requests0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _request_id0Mw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _applicationresolveagentrequestMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

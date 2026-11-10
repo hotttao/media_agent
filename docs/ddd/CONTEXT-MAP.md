@@ -19,6 +19,8 @@ Runtime Controller 是 Agent 资源创建的环境实现：Gateway 使用 Kubern
 
 ## 上下文关系
 
+- `media_auth/application` 持有平台接入应用信任与短期代表凭证；User 与外部身份继续归 auth、identity，由本地 Workflow 原子建立托管关系。应用注册不创建 Organization、Team、Workspace 或 Agent。
+
 - `media_auth` 是 Organization、Team 及成员关系的权威来源；Organization 表达企业及其可用功能上限，Team 表达企业内部门。
 - `media_control` 为 Team 创建和管理 Workspace；每个 Workspace 只属于一个 Team，并由该 Team 的 Organization 确定企业归属。
 - `media_auth` 是 API Token 管理与验证的业务入口，保存 Token 元数据和 Talos Key 引用；Talos 持有 Secret 生命周期，Edge/Gateway 将有效 API Token 换成短时 Internal Identity JWT。
@@ -48,3 +50,5 @@ Runtime Controller 是 Agent 资源创建的环境实现：Gateway 使用 Kubern
 - 直接调用服务身份与被代表用户身份是两个独立维度。
 - Internal Identity JWT 的 `sub` 表示被代表主体；委托调用使用 RFC 8693 `act.sub` 表示当前 Agent/Worker Actor。API Token Credential、Actor、Worker Instance 与 Kratos Identity 是独立审计维度，不得混为授权主体。
 - 资源所属上下文执行最终资源授权。
+
+应用协议跨域协作：Auth/application持有应用信任、Team Grant和MCP Target；Control/workspace持有不可变Application Agent Binding；Gateway复用Session/Turn并签发出站Application Caller。见 [应用访问工作流](media_agent_gateway/workflow/0012-application_access/application_access.md) 与 [Agent绑定工作流](media_control/workflow/0005-application_agent_binding/application_agent_binding.md)。

@@ -6,6 +6,24 @@ info:
     title: ""
     version: 0.0.1
 paths:
+    /.well-known/application-caller-jwks.json:
+        get:
+            tags:
+                - ApplicationCallerService
+            operationId: ApplicationCallerService_GetApplicationCallerKeys
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CallerJWKS'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /.well-known/mcp-jwks.json:
         get:
             tags:
@@ -910,6 +928,232 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /apps/v1/chat/sessions:
+        get:
+            tags:
+                - ChatService
+            operationId: ChatService_ApplicationListSessions
+            parameters:
+                - name: workspace_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSessionsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - ChatService
+            operationId: ChatService_ApplicationCreateSession
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSessionRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SessionResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/chat/sessions/{session_id}/events:
+        get:
+            tags:
+                - ChatService
+            operationId: ChatService_ApplicationSubscribeEvents
+            parameters:
+                - name: session_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: after_sequence
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SubscribeEventsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/chat/sessions/{session_id}/interrupt:
+        post:
+            tags:
+                - ChatService
+            operationId: ChatService_ApplicationInterruptTurn
+            parameters:
+                - name: session_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/InterruptTurnRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InterruptTurnResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/chat/sessions/{session_id}/messages:
+        get:
+            tags:
+                - ChatService
+            operationId: ChatService_ApplicationListMessages
+            parameters:
+                - name: session_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMessagesResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/chat/sessions/{session_id}/requests:
+        get:
+            tags:
+                - ChatService
+            operationId: ChatService_ApplicationListAgentRequests
+            parameters:
+                - name: session_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: turn_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAgentRequestsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/chat/sessions/{session_id}/turns:
+        post:
+            tags:
+                - ChatService
+            operationId: ChatService_ApplicationRunTurn
+            parameters:
+                - name: session_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RunTurnRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RunTurnResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/chat/sessions/{session_id}/turns/{turn_id}/requests/{request_id}/resolve:
+        post:
+            tags:
+                - ChatService
+            operationId: ChatService_ApplicationResolveAgentRequest
+            parameters:
+                - name: session_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: turn_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: request_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ResolveAgentRequestRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentRequestResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /health:
         get:
             tags:
@@ -1388,6 +1632,28 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/BatchRunItemResponse'
+        CallerJWK:
+            type: object
+            properties:
+                kty:
+                    type: string
+                use:
+                    type: string
+                alg:
+                    type: string
+                kid:
+                    type: string
+                n:
+                    type: string
+                e:
+                    type: string
+        CallerJWKS:
+            type: object
+            properties:
+                keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CallerJWK'
         CancelBatchRunRequest:
             type: object
             properties:
@@ -1985,6 +2251,7 @@ tags:
     - name: AgentRuntimeService
     - name: AgentTaskService
     - name: AgentWorkloadService
+    - name: ApplicationCallerService
     - name: BatchRunService
     - name: ChatService
     - name: HealthService

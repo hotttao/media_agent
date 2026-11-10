@@ -145,6 +145,8 @@ func normalizeArchPath(rel string) string {
 func checkLayerRules(from GoPackage, fromRel string, imp string, toRel string, isInternal bool) []Violation {
 	var violations []Violation
 
+	violations = append(violations, checkSDKRules(from, imp)...)
+
 	for _, rule := range hertzArchitectureRules() {
 		if !hasPathPrefix(fromRel, rule.FromPrefix) {
 			continue
@@ -620,4 +622,30 @@ func printViolations(modulePath string, violations []Violation, idlViolations []
 func fail(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)
+}
+
+// SDK adapters may use shared generated protocols, never another service's implementation.
+func checkSDKRules(from GoPackage, imp string) []Violation {
+	const prefix = "media_agent/packages/platform-go-sdk"
+	if from.ImportPath != prefix && !strings.HasPrefix(from.ImportPath, prefix+"/") {
+		return nil
+	}
+	rel := strings.TrimPrefix(from.ImportPath, prefix+"/")
+	reason := ""
+	if strings.HasPrefix(imp, "media_agent/hertz_gen/") && !hasPathPrefix(rel, "biz/shared/client") {
+		reason = "generated protocols are confined to SDK shared/client"
+	}
+	if strings.HasPrefix(imp, "media_agent/") && strings.Contains(imp, "/biz/") && !strings.HasPrefix(imp, prefix+"/") {
+		reason = "SDK must not import service business implementations"
+	}
+	if hasPathPrefix(rel, "biz/shared") && strings.HasPrefix(imp, prefix+"/biz/") && !strings.HasPrefix(imp, prefix+"/biz/shared/") {
+		reason = "SDK shared packages must not depend on business layers"
+	}
+	if hasPathPrefix(rel, "biz/workflow") && hasPathPrefix(strings.TrimPrefix(imp, prefix+"/"), "biz/shared/client") {
+		reason = "SDK workflows consume ports, not concrete clients"
+	}
+	if reason == "" {
+		return nil
+	}
+	return []Violation{{RuleName: "platform-go-sdk-boundary", Comment: reason, FromPkg: from.ImportPath, FromDir: from.Dir, ToImport: imp}}
 }

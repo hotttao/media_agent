@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	domainauth "media_agent/media_auth/biz/domain/auth"
 	domainidentity "media_agent/media_auth/biz/domain/identity"
@@ -36,6 +37,7 @@ type Identity struct {
 
 // 用例错误（handler 据此映射 HTTP 状态）。
 var (
+	ErrProtected    = domainidentity.ErrProtected
 	ErrNotFound     = domainidentity.ErrNotFound
 	ErrAlreadyBound = domainidentity.ErrAlreadyBound
 )
@@ -55,6 +57,9 @@ func (s *Service) ListIdentities(ctx context.Context, userID string) ([]Identity
 
 // DeleteIdentity 删 (user, provider) 绑定。0 行 → ErrNotFound（handler 404）。
 func (s *Service) DeleteIdentity(ctx context.Context, userID, provider string) error {
+	if strings.HasPrefix(provider, "app:") {
+		return domainidentity.ErrProtected
+	}
 	return s.repo.Delete(ctx, userID, domainidentity.Provider(provider))
 }
 
@@ -81,6 +86,9 @@ func (s *Service) FindUserIDentity(ctx context.Context, provider, externalID str
 //
 // displayName 空串=不设；metadata 为 raw JSON（可空）。
 func (s *Service) BindIdentity(ctx context.Context, userID, provider, externalID, displayName string, metadata json.RawMessage) error {
+	if strings.HasPrefix(provider, "app:") {
+		return domainidentity.ErrProtected
+	}
 	// 1. 预检：(provider, external_id) 是否已属别人。
 	if existing, err := s.repo.FindByExternal(ctx, domainidentity.Provider(provider), externalID); err == nil {
 		if existing.UserID != userID {
@@ -125,4 +133,10 @@ func toIdentity(r domainidentity.Identity) Identity {
 		DisplayName: r.DisplayName,
 		CreatedAt:   r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
+}
+
+// CreateApplicationIdentity is only used by the authenticated provisioning workflow; never overwrites an identity.
+func (s *Service) CreateApplicationIdentity(ctx context.Context, userID, applicationID, externalID string) error {
+	_, err := s.repo.Create(ctx, domainidentity.Identity{UserID: userID, Provider: domainidentity.Provider("app:" + applicationID), ExternalID: externalID})
+	return err
 }

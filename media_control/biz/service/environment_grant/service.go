@@ -3,17 +3,21 @@ package environment_grant
 import (
 	"context"
 	"github.com/google/uuid"
-	"media_agent/media_control/biz/dal"
 	d "media_agent/media_control/biz/domain/environment_grant"
 	"time"
 )
 
-type Service struct {
-	repo d.Repository
-	tx   dal.TxRunner
+// TxRunner is the transaction boundary required by this service.
+type TxRunner interface {
+	RunInTx(context.Context, func(context.Context) error) error
 }
 
-func New(r d.Repository, tx dal.TxRunner) *Service { return &Service{repo: r, tx: tx} }
+type Service struct {
+	repo d.Repository
+	tx   TxRunner
+}
+
+func New(r d.Repository, tx TxRunner) *Service { return &Service{repo: r, tx: tx} }
 func (s *Service) Create(ctx context.Context, env, sub, typ, perm string) (*d.Grant, error) {
 	if !s.repo.EnvironmentExists(ctx, env) {
 		return nil, d.ErrNotFound

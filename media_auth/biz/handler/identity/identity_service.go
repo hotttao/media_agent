@@ -66,6 +66,10 @@ func DeleteIdentity(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	if err := IdentitySvc.DeleteIdentity(ctx, userID, req.GetProvider()); err != nil {
+		if errors.Is(err, identityservice.ErrProtected) {
+			c.JSON(consts.StatusForbidden, map[string]string{"error": "application identity is immutable"})
+			return
+		}
 		if errors.Is(err, identityservice.ErrNotFound) {
 			c.JSON(consts.StatusNotFound, map[string]string{"error": "identity not found"})
 			return

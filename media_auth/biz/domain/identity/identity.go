@@ -50,6 +50,7 @@ type IdentityRepo interface {
 
 // domain 错误。
 var (
+	ErrProtected    = errSentinel("application identity is immutable")
 	ErrNotFound     = errSentinel("identity not found")
 	ErrAlreadyBound = errSentinel("external identity already bound to another user")
 )

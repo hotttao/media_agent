@@ -66,6 +66,9 @@ func (r *repo) ResolveKratosIdentity(ctx context.Context, identityID, email, dis
 		var row model.User
 		err := tx.Where("kratos_identity_id = ?", identityID).First(&row).Error
 		if err == nil {
+			if row.ManagedBy != nil {
+				return domainauth.ErrManagedUser
+			}
 			updates := map[string]any{"last_login_at": time.Now()}
 			if platformAdmin {
 				updates["role"] = "admin"
@@ -90,7 +93,7 @@ func (r *repo) ResolveKratosIdentity(ctx context.Context, identityID, email, dis
 		}
 
 		if email != "" {
-			err = tx.Where("lower(email) = lower(?) OR lower(username) = lower(?)", email, email).First(&row).Error
+			err = tx.Where("managed_by IS NULL").Where("lower(email) = lower(?) OR lower(username) = lower(?)", email, email).First(&row).Error
 			if err == nil {
 				if row.KratosIdentityID != nil && *row.KratosIdentityID != identityID {
 					return errors.New("email is already linked to another Kratos identity")
@@ -147,6 +150,9 @@ func (r *repo) Upsert(ctx context.Context, username, displayName, email string) 
 	// 先查是否存在（按 username）。
 	existing, err := q.User.WithContext(ctx).Where(q.User.Username.Eq(username)).First()
 	if err == nil {
+		if existing.ManagedBy != nil {
+			return domainauth.User{}, domainauth.ErrManagedUser
+		}
 		// 已存在：更新 display_name/email/last_login_at。
 		now := time.Now()
 		updates := map[string]any{
@@ -315,6 +321,13 @@ func (r *repo) CountActiveAdmins(ctx context.Context) (int, error) {
 
 // SetPassword 更新 password_hash（改密）。
 func (r *repo) SetPassword(ctx context.Context, id, passwordHash string) error {
+	u, err := r.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if u.ManagedBy != "" {
+		return domainauth.ErrManagedUser
+	}
 	q := r.q(ctx)
 	res, err := q.User.WithContext(ctx).Where(q.User.ID.Eq(id)).UpdateColumn(q.User.PasswordHash, passwordHash)
 	if err != nil {
@@ -374,6 +387,7 @@ func (r *repo) UpdateLastLogin(ctx context.Context, id string) error {
 func rowToDomain(u *model.User) domainauth.User {
 	d := domainauth.User{
 		ID:               u.ID,
+		ManagedBy:        ptrStr(u.ManagedBy),
 		KratosIdentityID: ptrStr(u.KratosIdentityID),
 		Username:         u.Username,
 		DisplayName:      u.DisplayName,

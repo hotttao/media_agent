@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
-	"media_agent/media_control/biz/dal"
 	w "media_agent/media_control/biz/domain/workspace"
 	d "media_agent/media_control/biz/domain/workspace_metadata"
 	"time"
@@ -16,13 +15,19 @@ type UpdateCommand struct {
 	ExpectedVersion        int64
 }
 type AssociationCommand struct{ Owner, TagID, WorkspaceID, ResourceType, ResourceID string }
+
+// TxRunner is the transaction boundary required by this service.
+type TxRunner interface {
+	RunInTx(context.Context, func(context.Context) error) error
+}
+
 type Service struct {
 	repo d.Repository
-	tx   dal.TxRunner
+	tx   TxRunner
 	work w.Repository
 }
 
-func New(r d.Repository, tx dal.TxRunner, work w.Repository) *Service {
+func New(r d.Repository, tx TxRunner, work w.Repository) *Service {
 	return &Service{repo: r, tx: tx, work: work}
 }
 func (s *Service) Create(ctx context.Context, c CreateCommand) (*d.Tag, error) {

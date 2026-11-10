@@ -137,6 +137,7 @@ func main() {
 	workspaceApplication.WithModelConnections(modelConnections)
 	workspacehandler.ConfigureModelConnections(modelConnections)
 	workspacehandler.Configure(workspaceApplication, internalToken)
+	initApplicationAgents(db, workspaceApplication, mediaAuthURL, mediaAuthInternalToken, cfg.GetAgentMetadata().GetEnabled())
 	if cfg.GetAgentMetadata().GetEnabled() {
 		workspacehandler.ConfigureCreation(&workspacecreation.Flow{Workspaces: workspaceApplication, Metadata: metadataservice.New(metadatarepo.New(db), dal.NewTxRunner(db)), Tx: dal.NewTxRunner(db)})
 	}

@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -100,6 +101,9 @@ func (r *repo) Create(ctx context.Context, id domainidentity.Identity) (domainid
 // PK 是 (provider, external_id)。service 层在调用前用 FindByExternal 预检：若 (provider,
 // external_id) 已属别人则 ErrAlreadyBound。此处仍可能因并发遇到 PK 冲突 → ErrAlreadyBound。
 func (r *repo) Upsert(ctx context.Context, id domainidentity.Identity) (domainidentity.Identity, error) {
+	if strings.HasPrefix(string(id.Provider), "app:") {
+		return domainidentity.Identity{}, domainidentity.ErrProtected
+	}
 	q := r.q(ctx)
 	row := model.UserIdentity{
 		UserID:      id.UserID,
@@ -124,6 +128,9 @@ func (r *repo) Upsert(ctx context.Context, id domainidentity.Identity) (domainid
 
 // Delete 按 (user_id, provider) 删。0 行返回 ErrNotFound。
 func (r *repo) Delete(ctx context.Context, userID string, provider domainidentity.Provider) error {
+	if strings.HasPrefix(string(provider), "app:") {
+		return domainidentity.ErrProtected
+	}
 	q := r.q(ctx)
 	res, err := q.UserIdentity.WithContext(ctx).
 		Where(q.UserIdentity.UserID.Eq(userID), q.UserIdentity.Provider.Eq(string(provider))).Delete()

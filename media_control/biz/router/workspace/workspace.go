@@ -35,4 +35,19 @@ func Register(r *server.Hertz) {
 			}
 		}
 	}
+	{
+		_apps := root.Group("/apps", _appsMw()...)
+		{
+			_v10 := _apps.Group("/v1", _v10Mw()...)
+			{
+				_agent_workspaces := _v10.Group("/agent-workspaces", _agent_workspacesMw()...)
+				_agent_workspaces.GET("/:workspace_id", append(_checkapplicationworkspaceMw(), workspace.CheckApplicationWorkspace)...)
+			}
+			{
+				_agents := _v10.Group("/agents", _agentsMw()...)
+				_agents.GET("/:name", append(_getapplicationagentMw(), workspace.GetApplicationAgent)...)
+				_agents.PUT("/:name", append(_ensureapplicationagentMw(), workspace.EnsureApplicationAgent)...)
+			}
+		}
+	}
 }

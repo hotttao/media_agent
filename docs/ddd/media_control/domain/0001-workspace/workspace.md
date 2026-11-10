@@ -83,3 +83,6 @@ Organization/Team 查询失败时 fail closed。Workspace 创建时验证 Team �
 - 内部 `POST /internal/workspaces:check` 按 Workspace 真实归属执行相同判定，供资源服务验证 Workspace 边界；必须使用内部服务凭证。
 
 启用元数据时，Workspace 创建 Workflow 在同一事务内发布 none/空资源初始 Release；配置版本从1推进至2并返回当前版本。初始配置不读取库最新版本，已有配置和会话不受此初始化行为影响。
+
+## 应用Agent绑定
+ApplicationAgentBinding由(application_id,user_id,team_id,name)唯一确定Workspace，绑定不可转移；第一次ensure固定configuration_digest，重放不同参数409。application_agent_bindings保存application_id/user_id/team_id/name/workspace_id/digest，Workspace只绑定一项；application/user/team为跨服务逻辑引用，无跨库外键。读取还要通过当前User对Workspace的授权并匹配组织/部门/owner；应用凭证不能读取runtime secrets。

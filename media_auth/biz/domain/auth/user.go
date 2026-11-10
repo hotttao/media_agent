@@ -10,6 +10,7 @@ import (
 //
 // PasswordHash 为空表示该账号无本地密码（LDAP/企微派生），不可改密。
 type User struct {
+	ManagedBy        string
 	ID               string
 	KratosIdentityID string
 	Username         string
@@ -44,6 +45,9 @@ func (u User) HasPassword() bool { return u.PasswordHash != "" }
 // wecom 分支需查 user_identities（只读，经 AuthSourceResolver），避免 domain 直接依赖 identity domain。
 // resolver 返回 "" 或 "ldap" 时回退 ldap（spec §5.1：修正 control-plane 对企微账号误报 ldap）。
 func (u User) AuthSource(resolver AuthSourceResolver) string {
+	if u.ManagedBy != "" {
+		return "application"
+	}
 	if u.HasPassword() {
 		return "password"
 	}

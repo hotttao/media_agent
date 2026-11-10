@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"log"
+	"media_agent/hertz_infra/authn/appcredential"
+	"media_agent/hertz_infra/authn/applicationcaller"
+	callerhandler "media_agent/media_agent_gateway/biz/handler/application_caller"
 	"os"
 	"path/filepath"
 	"time"
@@ -221,6 +224,18 @@ func main() {
 		}
 		identity := workflow.NewMCPIdentity(sessionService, credentialVerifier, agentAuthority, execution)
 		gateway := workflow.NewMCPGateway(identity, catalogApplication, access, sharedclient.MCPUpstream{}, credentialKeys, sharedclient.NewMetadataControlClient(os.Getenv("MEDIA_CONTROL_URL"), internalToken, cfg.GetAgentMetadata().GetGatewayCredential()))
+		if path := os.Getenv("APPLICATION_CALLER_SIGNING_KEY_FILE"); path != "" {
+			signer, e := applicationcaller.Load(path, os.Getenv("APPLICATION_CALLER_ISSUER"))
+			if e != nil {
+				log.Fatal("invalid application Caller signing configuration")
+			}
+			if os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN") == "" {
+				log.Fatal("application Caller requires Auth service credential")
+			}
+			callerhandler.Configure(signer)
+			gateway.WithApplicationCaller(&workflow.ApplicationCaller{Signer: signer, Authority: sharedclient.ApplicationCaller{BaseURL: envOr("MEDIA_AUTH_URL", "http://127.0.0.1:8001"), Secret: os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN")}})
+		}
+
 		if mediaCfg := cfg.GetMediaMcp(); mediaCfg.GetEnabled() {
 			d := cfg.GetMcpDelegation()
 			if !d.GetEnabled() || d.GetEdgeJwksUrl() == "" || d.GetEdgeIssuer() == "" || mediaCfg.GetDefinitionId() == "" {
@@ -296,6 +311,7 @@ func main() {
 		turnWorkflow.WithRouting(routing)
 	}
 	chathandler.Configure(sessionService, turnWorkflow, eventSource)
+	chathandler.ConfigureApplications(&workflow.ApplicationChat{Authority: appcredential.New(envOr("MEDIA_AUTH_URL", "http://127.0.0.1:8001"), os.Getenv("MEDIA_AUTH_INTERNAL_TOKEN")), Workspaces: sharedclient.ApplicationWorkspace{BaseURL: envOr("MEDIA_CONTROL_URL", "http://127.0.0.1:8007")}, Sessions: sessionService})
 
 	h := suite.NewServer()
 	register(h)

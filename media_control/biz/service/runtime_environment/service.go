@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/google/uuid"
-	"media_agent/media_control/biz/dal"
 	d "media_agent/media_control/biz/domain/runtime_environment"
 	w "media_agent/media_control/biz/domain/workspace"
 	"path/filepath"
@@ -20,14 +19,20 @@ type UpdateCommand struct {
 	ID, Name, Endpoint, CapacityJSON, Status string
 	ExpectedVersion                          int64
 }
+
+// TxRunner is the transaction boundary required by this service.
+type TxRunner interface {
+	RunInTx(context.Context, func(context.Context) error) error
+}
+
 type Service struct {
 	repo       d.Repository
-	tx         dal.TxRunner
+	tx         TxRunner
 	work       w.Repository
 	issueToken func() (string, error)
 }
 
-func New(repo d.Repository, tx dal.TxRunner, work w.Repository) *Service {
+func New(repo d.Repository, tx TxRunner, work w.Repository) *Service {
 	return &Service{repo: repo, tx: tx, work: work, issueToken: generateEnvironmentToken}
 }
 

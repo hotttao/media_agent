@@ -33,4 +33,20 @@ func Register(r *server.Hertz) {
 			}
 		}
 	}
+	{
+		_apps := root.Group("/apps", _appsMw()...)
+		{
+			_v10 := _apps.Group("/v1", _v10Mw()...)
+			_v10.GET("/model-connections", append(_listapplicationconnectionsMw(), model_connection.ListApplicationConnections)...)
+			_v10.POST("/model-connections", append(_createapplicationconnectionMw(), model_connection.CreateApplicationConnection)...)
+			{
+				_model_connections0 := _v10.Group("/model-connections", _model_connections0Mw()...)
+				_model_connections0.PUT("/:connection_id", append(_updateapplicationconnectionMw(), model_connection.UpdateApplicationConnection)...)
+				{
+					_connection_id0 := _model_connections0.Group("/:connection_id", _connection_id0Mw()...)
+					_connection_id0.POST("/revoke", append(_revokeapplicationconnectionMw(), model_connection.RevokeApplicationConnection)...)
+				}
+			}
+		}
+	}
 }

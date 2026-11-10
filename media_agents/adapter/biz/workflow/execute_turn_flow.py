@@ -139,6 +139,7 @@ class ExecuteTurnFlow:
         self._credentials: dict[str, RuntimeCredentials] = {}
         self._turn_sessions: dict[str, str] = {}
         self._interrupt_requested: set[str] = set()
+        self._preparations: dict[str, asyncio.Task[RuntimePreparation]] = {}
         self._session_locks: dict[str, asyncio.Lock] = {}
         self._request_waiters: dict[str, asyncio.Future[dict[str, object]]] = {}
         self._early_responses: dict[str, dict[str, object]] = {}
@@ -162,6 +163,10 @@ class ExecuteTurnFlow:
     async def interrupt(self, session_id: str, turn_id: str) -> bool:
         execution = await self._service.execution(session_id, turn_id)
         self._interrupt_requested.add(turn_id)
+        preparation = self._preparations.get(turn_id)
+        if preparation is not None:
+            preparation.cancel()
+            return True
         handle = execution.session.runtime_session_id
         if handle is None:
             return True
@@ -287,9 +292,7 @@ class ExecuteTurnFlow:
                     credentials = await self._fresh_credentials(
                         session_id, current_turn_id, execution.session.execution_epoch
                     )
-                preparation = await self._runtime.prepare(
-                    execution.session, execution.turn, credentials
-                )
+                preparation = await self._prepare(execution.session, execution.turn, credentials)
                 session = execution.session
                 if session.runtime_session_id is None:
                     session = await self._service.attach_runtime(
@@ -297,6 +300,8 @@ class ExecuteTurnFlow:
                     )
                 elif session.runtime_session_id != preparation.handle:
                     raise InvalidTurn("Runtime returned a different persisted handle")
+                if current_turn_id in self._interrupt_requested:
+                    raise _InterruptedBeforePreparation()
                 runtime_task = asyncio.create_task(
                     self._runtime.execute(
                         preparation,
@@ -373,6 +378,22 @@ class ExecuteTurnFlow:
             return await waiter
         finally:
             self._request_waiters.pop(request.request_id, None)
+
+    async def _prepare(
+        self, session: RuntimeSession, turn: Turn, credentials: RuntimeCredentials
+    ) -> RuntimePreparation:
+        if turn.turn_id in self._interrupt_requested:
+            raise _InterruptedBeforePreparation()
+        task = asyncio.create_task(self._runtime.prepare(session, turn, credentials))
+        self._preparations[turn.turn_id] = task
+        try:
+            return await task
+        except asyncio.CancelledError:
+            if turn.turn_id in self._interrupt_requested:
+                raise _InterruptedBeforePreparation() from None
+            raise
+        finally:
+            self._preparations.pop(turn.turn_id, None)
 
     async def _fresh_credentials(
         self, session_id: str, turn_id: str, epoch: int

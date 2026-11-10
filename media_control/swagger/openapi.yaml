@@ -3372,6 +3372,184 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /apps/v1/agent-workspaces/{workspace_id}:
+        get:
+            tags:
+                - WorkspaceService
+            operationId: WorkspaceService_CheckApplicationWorkspace
+            parameters:
+                - name: workspace_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkspaceResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/agents/{name}:
+        get:
+            tags:
+                - WorkspaceService
+            operationId: WorkspaceService_GetApplicationAgent
+            parameters:
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkspaceResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        put:
+            tags:
+                - WorkspaceService
+            operationId: WorkspaceService_EnsureApplicationAgent
+            parameters:
+                - name: name
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/EnsureApplicationAgentRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkspaceResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/model-connections:
+        get:
+            tags:
+                - ModelConnectionService
+            operationId: ModelConnectionService_ListApplicationConnections
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Connections'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - ModelConnectionService
+            operationId: ModelConnectionService_CreateApplicationConnection
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Command'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Connection'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/model-connections/{connection_id}:
+        put:
+            tags:
+                - ModelConnectionService
+            operationId: ModelConnectionService_UpdateApplicationConnection
+            parameters:
+                - name: connection_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Command'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Connection'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /apps/v1/model-connections/{connection_id}/revoke:
+        post:
+            tags:
+                - ModelConnectionService
+            operationId: ModelConnectionService_RevokeApplicationConnection
+            parameters:
+                - name: connection_id
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Command'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Connection'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /health:
         get:
             tags:
@@ -4113,6 +4291,25 @@ components:
                 resource_type:
                     type: string
                 resource_id:
+                    type: string
+        EnsureApplicationAgentRequest:
+            type: object
+            properties:
+                name:
+                    type: string
+                display_name:
+                    type: string
+                agent_type:
+                    type: string
+                api_key:
+                    type: string
+                model_protocol:
+                    type: string
+                model_name:
+                    type: string
+                model_base_url:
+                    type: string
+                model_connection_id:
                     type: string
         EnsureWorkspaceRuntimeDirectoryRequest:
             type: object

@@ -92,3 +92,5 @@ ACP 会话仅依赖 prompt/cancel/is_alive 结构契约；Clock 与 draft ID 纯
 - 真实 Goose MCP 验收发现完成响应可抢先于 SDK 异步通知落地，导致最终 Message 截断。
 - 适配器按顺序处理通知，并在 new/load/prompt 响应后等待此前通知排空，再重置回放状态或收尾；保持权限请求并发。
 - 不改变 delta 不落库、Session 串行执行及既有终态规则。
+
+2026-11-09：补齐原生会话准备期间的中断；取消 prepare 并清理未注册 bridge，避免已有句柄吸收中断而新一轮继续等待。

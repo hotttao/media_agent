@@ -113,5 +113,9 @@ Control 保存的 Agent 承载资源期望，关联配置与 Placement，并确�
 _禁用替代词_：Pod 状态、Session Binding、Gateway 配置缓存
 
 **Model Connection（个人模型连接）**:
-用户拥有的可复用模型认证配置，Workspace 通过明确选择引用。
+用户（包括应用托管用户）拥有的可复用模型认证配置，Workspace 通过明确选择引用。
 _禁用替代词_：企业资源、CredentialReference、模型本身。
+
+**Application Agent Binding（应用Agent绑定）**:
+应用、托管用户、部门与应用内Agent名称共同确定的稳定Workspace和Agent配置关联。
+_禁用替代词_：Application User、Session、Agent Type

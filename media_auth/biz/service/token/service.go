@@ -23,5 +23,5 @@ func (s *Service) ValidateSession(ctx context.Context, sess domainauth.Session) 
 		return false
 	}
 	u, err := s.userRepo.FindByID(ctx, sess.Sub)
-	return err == nil && u.IsActive() && u.AuthVersion == sess.AuthVersion
+	return err == nil && u.ManagedBy == "" && u.IsActive() && u.AuthVersion == sess.AuthVersion
 }

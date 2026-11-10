@@ -1,0 +1,95 @@
+syntax = "proto3";
+package media_auth.application;
+option go_package = "media_auth/application";
+import "api.proto";
+import "google/api/annotations.proto";
+
+// Platform applications are distinct from OAuth clients. Management requires an admin session.
+service ApplicationService {
+ rpc SetApplicationMCPTarget(ApplicationMCPTargetRequest) returns(Empty){option(api.put)="/api/applications/:id/mcp-targets/:definition_id";option(google.api.http)={put:"/api/applications/{id}/mcp-targets/{definition_id}" body:"*"};}
+ rpc DeleteApplicationMCPTarget(ApplicationMCPTargetRequest) returns(Empty){option(api.delete)="/api/applications/:id/mcp-targets/:definition_id";option(google.api.http)={delete:"/api/applications/{id}/mcp-targets/{definition_id}"};}
+
+ rpc SetApplicationTeamGrant(ApplicationTeamGrantRequest) returns(ApplicationTeamGrant) {
+ option(api.put)="/api/applications/:id/teams/:team_id";
+ option(google.api.http)={put:"/api/applications/{id}/teams/{team_id}" body:"*"};
+ }
+ rpc DeleteApplicationTeamGrant(ApplicationTeamGrantRequest) returns(Empty) {
+ option(api.delete)="/api/applications/:id/teams/:team_id";
+ option(google.api.http)={delete:"/api/applications/{id}/teams/{team_id}"};
+ }
+
+ rpc CreateApplication(CreateApplicationRequest) returns (ApplicationSecretResponse) {
+  option (api.post)="/api/applications";
+  option (google.api.http)={post:"/api/applications" body:"*"};
+ }
+ rpc ListApplications(Empty) returns (ListApplicationsResponse) {
+  option (api.get)="/api/applications";
+  option (google.api.http)={get:"/api/applications"};
+ }
+ rpc SetApplicationStatus(SetApplicationStatusRequest) returns (Application) {
+  option (api.patch)="/api/applications/:id/status";
+  option (google.api.http)={patch:"/api/applications/{id}/status" body:"*"};
+ }
+ rpc RotateApplicationSecret(ApplicationIDRequest) returns (ApplicationSecretResponse) {
+  option (api.post)="/api/applications/:id/secret";
+  option (google.api.http)={post:"/api/applications/{id}/secret" body:"*"};
+ }
+ // The next three operations accept only application HTTP Basic credentials, never a session.
+ rpc UpsertApplicationUser(UpsertApplicationUserRequest) returns (ApplicationUser) {
+  option (api.put)="/apps/v1/users/:external_id";
+  option (google.api.http)={put:"/apps/v1/users/{external_id}" body:"*"};
+ }
+ rpc GetApplicationUser(ApplicationUserRequest) returns (ApplicationUser) {
+  option (api.get)="/apps/v1/users/:external_id";
+  option (google.api.http)={get:"/apps/v1/users/{external_id}"};
+ }
+ rpc IssueApplicationUserToken(IssueApplicationTokenRequest) returns (ApplicationTokenResponse) {
+  option (api.post)="/apps/v1/users/:external_id/token";
+  option (google.api.http)={post:"/apps/v1/users/{external_id}/token" body:"*"};
+ }
+ // Only the short-lived application Bearer credential is accepted here.
+ rpc GetApplicationUserInfo(Empty) returns (ApplicationUser) {
+  option (api.get)="/apps/v1/me";
+  option (google.api.http)={get:"/apps/v1/me"};
+ }
+}
+message Empty {}
+message Application {
+ string id=1;
+ string name=2;
+ string status=3;
+ int64 credential_version=4;
+ string created_by=5;
+ string created_at=6;
+}
+message CreateApplicationRequest {
+ string id=1 [(api.body)="id"];
+ string name=2 [(api.body)="name"];
+}
+message ApplicationIDRequest {string id=1 [(api.path)="id"];}
+message SetApplicationStatusRequest {
+ string id=1 [(api.path)="id"];
+ string status=2 [(api.body)="status"];
+}
+message ApplicationSecretResponse {Application application=1; string client_secret=2;}
+message ListApplicationsResponse {repeated Application applications=1;}
+message UpsertApplicationUserRequest {
+ string external_id=1 [(api.path)="external_id"];
+ string display_name=2 [(api.body)="display_name"];
+ string email=3 [(api.body)="email"];
+}
+message ApplicationUserRequest {string external_id=1 [(api.path)="external_id"];}
+message ApplicationUser {
+ string id=1;
+ string external_id=2;
+ string application_id=3;
+ string display_name=4;
+ string email=5;
+}
+message ApplicationTokenResponse {string access_token=1; string token_type=2; int64 expires_in=3; string scope=4;}
+
+message ApplicationTeamGrantRequest {string id=1[(api.path)="id"];string team_id=2[(api.path)="team_id"];repeated string scopes=3[(api.body)="scopes"];}
+message ApplicationTeamGrant {string application_id=1;string team_id=2;string organization_id=3;repeated string scopes=4;}
+message IssueApplicationTokenRequest {string external_id=1[(api.path)="external_id"];string team_id=2[(api.body)="team_id"];repeated string scopes=3[(api.body)="scopes"];}
+
+message ApplicationMCPTargetRequest {string id=1[(api.path)="id"];string definition_id=2[(api.path)="definition_id"];string origin=3[(api.body)="origin"];}
